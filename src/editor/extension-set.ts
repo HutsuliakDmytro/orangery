@@ -40,6 +40,7 @@ import {
 import { PastePlainText } from './extensions/paste-plain-text'
 import { SmartTyping } from './extensions/smart-typing'
 import { TabIndent } from './extensions/tab-indent'
+import { TabStops } from './extensions/tab-stops'
 
 /**
  * The editor's extension set, in one place.
@@ -89,6 +90,7 @@ export function buildExtensions(): Extensions {
     PageGaps,
     Pagination,
     TabIndent,
+    TabStops,
     Table.extend({
       addAttributes() {
         return {

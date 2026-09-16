@@ -15,6 +15,8 @@ import { resolveThemeFont } from './fonts'
 import { imageNode, parseDrawing } from './image'
 import { parseIntAttribute as parseInt2 } from './units'
 import { parseTable } from './table'
+import { parseTabs } from './tabs'
+import type { TabStop } from './tabs'
 import type { ThemeFonts } from './fonts'
 import {
   halfPointsToPoints,
@@ -220,6 +222,7 @@ interface ParagraphProperties {
   indentFirstLine: number | null
   numbering: { numId: number; level: number } | null
   /** Pagination toggles. Null means the paragraph says nothing either way. */
+  tabs: TabStop[]
   keepNext: boolean | null
   keepLines: boolean | null
   pageBreakBefore: boolean | null
@@ -254,6 +257,7 @@ const MODELLED_PARAGRAPH_PROPERTIES = new Set([
   'w:spacing',
   'w:ind',
   'w:numPr',
+  'w:tabs',
   'w:keepNext',
   'w:keepLines',
   'w:pageBreakBefore',
@@ -273,6 +277,7 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
     indentRight: null,
     indentFirstLine: null,
     numbering: null,
+    tabs: [],
     keepNext: null,
     keepLines: null,
     pageBreakBefore: null,
@@ -337,6 +342,9 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
         if (numId !== null) result.numbering = { numId, level: level ?? 0 }
         break
       }
+      case 'w:tabs':
+        result.tabs = parseTabs(property)
+        break
       case 'w:keepNext':
       case 'w:keepLines':
       case 'w:pageBreakBefore':
@@ -538,6 +546,7 @@ function parseParagraph(
   for (const [, name] of PAGINATION_PROPERTIES) {
     if (properties[name] !== null) attrs[name] = properties[name]
   }
+  if (properties.tabs.length > 0) attrs['tabs'] = properties.tabs
   if (properties.preserved.length > 0) attrs['preservedPPr'] = properties.preserved.join('')
   if (properties.numbering !== null) attrs['numbering'] = properties.numbering
 
@@ -713,6 +722,7 @@ export function paragraphSignature(attrs: Record<string, unknown>): string {
     attrs['indentRight'] ?? null,
     attrs['indentFirstLine'] ?? null,
     attrs['numbering'] ?? null,
+    attrs['tabs'] ?? null,
     attrs['keepNext'] ?? null,
     attrs['keepLines'] ?? null,
     attrs['pageBreakBefore'] ?? null,

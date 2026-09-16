@@ -5,6 +5,8 @@ import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse
 import type { ParsedDocument, ProseMirrorNodeJson } from './parse-document'
 import { footnoteReferenceRun } from './footnotes'
 import { buildDrawing } from './image'
+import { serializeTabs } from './tabs'
+import type { TabStop } from './tabs'
 import type { ImageWrap } from './image'
 import { serializeTable } from './table'
 import { buildTocField } from './toc-field'
@@ -224,6 +226,13 @@ function buildParagraphProperties(node: ProseMirrorNodeJson): XmlNode | null {
         ]),
       )
     }
+  }
+
+  // `w:tabs` sits after the numbering and before the spacing.
+  const tabs = attrs?.['tabs']
+  if (Array.isArray(tabs)) {
+    const stops = serializeTabs(tabs as TabStop[])
+    if (stops !== null) properties.push(stops)
   }
 
   const spacingAttributes: Record<string, string> = {}

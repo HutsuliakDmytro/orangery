@@ -1,6 +1,8 @@
 import { useCurrentEditor } from '@tiptap/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useViewStore } from '../store/view-store'
+import { tabStopsOf } from '../editor/extensions/tab-stops'
+import type { TabAlignment, TabStop } from '../ooxml/tabs'
 
 /**
  * Horizontal ruler with draggable page margins and paragraph indents.
@@ -27,6 +29,7 @@ export function Ruler() {
     ? editor.getAttributes('heading')
     : (editor?.getAttributes('paragraph') ?? {})
   const indentLeft = typeof attributes['indentLeft'] === 'number' ? attributes['indentLeft'] : 0
+  const stops = tabStopsOf(attributes)
   const firstLine =
     typeof attributes['indentFirstLine'] === 'number' ? attributes['indentFirstLine'] : 0
 
@@ -105,6 +108,21 @@ export function Ruler() {
     setDragging(handle)
   }
 
+  /**
+   * Clicking the empty track adds a stop where the click landed.
+   *
+   * Word's ruler works this way, and the alternative — a dialog to type a
+   * position into — makes the ruler decorative.
+   */
+  const addStop = (event: React.MouseEvent) => {
+    if (!editor || event.target !== trackRef.current) return
+
+    const position = Math.round(pointsFromEvent(event.clientX) - section.margins.left)
+    if (position <= 0) return
+
+    editor.chain().focus().setTabStop({ position, alignment: 'left', leader: 'none' }).run()
+  }
+
   return (
     <div className="flex justify-center border-b border-border bg-surface py-1">
       <div
@@ -112,6 +130,7 @@ export function Ruler() {
         role="presentation"
         className="relative h-5"
         style={{ width: `${String(toPixels(section.width))}px` }}
+        onClick={addStop}
       >
         {/* The text column, lighter than the margins around it. */}
         <div
@@ -121,6 +140,20 @@ export function Ruler() {
             right: `${String(toPixels(section.margins.right))}px`,
           }}
         />
+
+        {stops.map((stop) => (
+          <TabStopHandle
+            key={stop.position}
+            stop={stop}
+            left={toPixels(section.margins.left + stop.position)}
+            onCycle={() => {
+              editor?.chain().focus().setTabStop(cycled(stop)).run()
+            }}
+            onRemove={() => {
+              editor?.chain().focus().clearTabStop(stop.position).run()
+            }}
+          />
+        ))}
 
         {marks.map((inch) => (
           <span
@@ -161,6 +194,58 @@ export function Ruler() {
         />
       </div>
     </div>
+  )
+}
+
+/** The order a stop cycles through when its marker is clicked, as in Word. */
+function cycled(stop: TabStop): TabStop {
+  const order: TabAlignment[] = ['left', 'center', 'right', 'decimal']
+  const next = order[(order.indexOf(stop.alignment) + 1) % order.length] ?? 'left'
+
+  return { ...stop, alignment: next }
+}
+
+const STOP_GLYPHS: Readonly<Record<string, string>> = {
+  left: '\u2514',
+  center: '\u2534',
+  right: '\u2518',
+  decimal: '\u253B',
+  bar: '\u2502',
+}
+
+function TabStopHandle({
+  stop,
+  left,
+  onCycle,
+  onRemove,
+}: {
+  stop: TabStop
+  left: number
+  onCycle: () => void
+  onRemove: () => void
+}) {
+  const description = `${stop.alignment} tab stop${stop.leader === 'none' ? '' : ` with ${stop.leader} leader`}`
+
+  return (
+    <button
+      type="button"
+      aria-label={description}
+      title={`${description} — click to change, double-click to remove`}
+      onClick={(event) => {
+        // The track adds a stop where it is clicked; a click on a marker is
+        // about that marker.
+        event.stopPropagation()
+        onCycle()
+      }}
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        onRemove()
+      }}
+      className="absolute bottom-0 h-3 w-3 -translate-x-1/2 text-[10px] leading-none text-accent"
+      style={{ left: `${String(left)}px` }}
+    >
+      <span aria-hidden>{STOP_GLYPHS[stop.alignment] ?? '\u2514'}</span>
+    </button>
   )
 }
 

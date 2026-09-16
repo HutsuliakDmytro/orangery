@@ -188,7 +188,9 @@ export function buildExtensions(): Extensions {
       },
     }),
     Footnote,
-    TableOfContents,
+    TableOfContents.configure({
+      scheme: () => useViewStore.getState().headingNumbering,
+    }),
     PassthroughBlock,
     PassthroughInline,
     PreservedRunProperties,

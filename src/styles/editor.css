@@ -337,6 +337,12 @@
 
 .editor-surface .toc-entry {
   padding: 1pt 0;
+  /* Clicking an entry goes to its heading, so it has to read as clickable. */
+  cursor: pointer;
+}
+
+.editor-surface .toc-entry:hover {
+  text-decoration: underline;
 }
 
 .editor-surface .toc-entry[data-level='2'] {

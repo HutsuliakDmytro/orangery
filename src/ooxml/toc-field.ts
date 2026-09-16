@@ -19,6 +19,8 @@ import type { XmlNode } from './xml'
 export interface TocEntry {
   level: number
   text: string
+  /** The heading's own number, when the document numbers its headings. */
+  number?: string
 }
 
 /**
@@ -51,10 +53,15 @@ function entryParagraph(entry: TocEntry, before: XmlNode[] = [], after: XmlNode[
   // Word styles TOC entries by level: TOC1, TOC2, and so on.
   const style = `TOC${String(Math.min(9, Math.max(1, entry.level)))}`
 
+  // Word separates a heading's number from its text with a tab, which the TOC
+  // styles have a stop for. The whole entry is the cached result of the field,
+  // so Word replaces it the moment anyone updates the table.
+  const label = entry.number === undefined ? entry.text : `${entry.number}\t${entry.text}`
+
   return element('w:p', {}, [
     element('w:pPr', {}, [element('w:pStyle', { 'w:val': style })]),
     ...before,
-    run([element('w:t', { 'xml:space': 'preserve' }, [textNode(entry.text)])]),
+    run([element('w:t', { 'xml:space': 'preserve' }, [textNode(label)])]),
     ...after,
   ])
 }

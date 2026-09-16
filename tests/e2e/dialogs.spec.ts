@@ -105,3 +105,30 @@ test('switches the interface language', async ({ page }) => {
   await dialog.getByLabel('Interface language').selectOption('uk')
   await expect(page.getByRole('dialog', { name: 'Налаштування' })).toBeVisible()
 })
+
+test('numbers the headings and carries the numbers into the contents', async ({ page }) => {
+  await page.locator(editor).click()
+
+  await page.keyboard.type('First')
+  await page.getByLabel('Paragraph style').selectOption('Heading1')
+  await page.locator(editor).click()
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Under')
+  await page.getByLabel('Paragraph style').selectOption('Heading2')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Number Headings 1')
+  await page.keyboard.press('Enter')
+
+  // The number beside the heading and the number in the contents come from the
+  // same computation, so this checks both at once.
+  await expect(page.locator(`${editor} .heading-number`).first()).toHaveText('1.')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Table of Contents')
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator(`${editor} .toc-entry`)).toHaveCount(2)
+  await expect(page.locator(`${editor} .toc-entry`).nth(1)).toHaveText('1.1. Under')
+})

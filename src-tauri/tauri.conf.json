@@ -1,0 +1,103 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Orangery Docs",
+  "version": "0.0.0",
+  "identifier": "com.orangery.docs",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Orangery Docs",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "theme": "Dark",
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": null,
+      "entitlements": null,
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 220
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 220
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        }
+      }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["docx"],
+        "name": "Word Document",
+        "description": "Microsoft Word Document",
+        "role": "Editor",
+        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      },
+      {
+        "ext": ["odt"],
+        "name": "OpenDocument Text",
+        "description": "OpenDocument Text Document",
+        "role": "Editor",
+        "mimeType": "application/vnd.oasis.opendocument.text"
+      },
+      {
+        "ext": ["rtf"],
+        "name": "Rich Text Document",
+        "description": "Rich Text Format Document",
+        "role": "Editor",
+        "mimeType": "application/rtf"
+      },
+      {
+        "ext": ["txt", "md"],
+        "name": "Text Document",
+        "description": "Plain Text Document",
+        "role": "Editor",
+        "mimeType": "text/plain"
+      }
+    ],
+    "category": "Productivity",
+    "shortDescription": "Word processor that writes real DOCX",
+    "longDescription": "Orangery Docs is a desktop word processor that uses DOCX as its native format. Opening a document and saving it without edits leaves the file byte-for-byte as Word wrote it.",
+    "copyright": "© Dmytro",
+    "publisher": "Orangery"
+  },
+  "plugins": {
+    "updater": {
+      "active": false,
+      "dialog": true,
+      "endpoints": ["https://releases.orangery.example/{{target}}/{{arch}}/{{current_version}}"],
+      "pubkey": ""
+    }
+  }
+}

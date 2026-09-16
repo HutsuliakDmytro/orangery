@@ -14,6 +14,13 @@ export function ToolbarButton({ id, icon: Icon }: { id: string; icon: LucideIcon
   return (
     <button
       type="button"
+      // The editor keeps focus: a toolbar button that takes it leaves the next
+      // keystroke going to the button instead of the document. Pressing Enter
+      // after clicking would re-activate the button rather than start a new
+      // paragraph.
+      onMouseDown={(event) => {
+        event.preventDefault()
+      }}
       onClick={run}
       disabled={!isEnabled}
       aria-label={label}

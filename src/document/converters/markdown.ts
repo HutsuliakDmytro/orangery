@@ -15,7 +15,7 @@ import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
 
 const HEADING = /^(#{1,6})\s+(.*)$/u
 const BULLET = /^\s*[-*+]\s+(.*)$/u
-const ORDERED = /^\s*\d+[.)]\s+(.*)$/u
+const ORDERED = /^\s*(\d+)[.)]\s+(.*)$/u
 const QUOTE = /^>\s?(.*)$/u
 const RULE = /^\s*(?:---+|\*\*\*+|___+)\s*$/u
 
@@ -74,22 +74,58 @@ export function parseInline(line: string): ProseMirrorNodeJson[] {
   return nodes
 }
 
+/** A list currently being read, and where a sibling list would go beside it. */
+interface OpenList {
+  indent: number
+  type: 'bulletList' | 'orderedList'
+  node: ProseMirrorNodeJson
+  siblings: ProseMirrorNodeJson[]
+}
+
+/**
+ * How far a line is indented, in columns.
+ *
+ * A tab advances to the next four-column stop rather than counting as one
+ * character, which is how Markdown measures indentation.
+ */
+function listIndent(line: string): number {
+  const leading = /^[ \t]*/u.exec(line)?.[0] ?? ''
+
+  let columns = 0
+  for (let index = 0; index < leading.length; index += 1) {
+    columns += leading[index] === '\t' ? 4 - (columns % 4) : 1
+  }
+
+  return columns
+}
+
+function itemsOf(list: ProseMirrorNodeJson): ProseMirrorNodeJson[] {
+  if (list.content === undefined) list.content = []
+  return list.content
+}
+
+/** The blocks of the last item, which is what a deeper list nests inside. */
+function contentOfLastItem(list: ProseMirrorNodeJson): ProseMirrorNodeJson[] {
+  const items = itemsOf(list)
+
+  let last = items[items.length - 1]
+  if (last === undefined) {
+    last = { type: 'listItem', content: [] }
+    items.push(last)
+  }
+  if (last.content === undefined) last.content = []
+
+  return last.content
+}
+
 export function parseMarkdown(text: string): ConversionResult {
   const lines = text.split(/\r\n|\r|\n/u)
   const content: ProseMirrorNodeJson[] = []
 
-  let listItems: ProseMirrorNodeJson[] = []
-  let listType: 'bulletList' | 'orderedList' | null = null
-
-  const flushList = () => {
-    if (listType === null || listItems.length === 0) {
-      listItems = []
-      listType = null
-      return
-    }
-    content.push({ type: listType, content: listItems })
-    listItems = []
-    listType = null
+  // One entry per open nesting level, shallowest first.
+  const open: OpenList[] = []
+  const closeLists = () => {
+    open.length = 0
   }
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -103,7 +139,7 @@ export function parseMarkdown(text: string): ConversionResult {
 
       const rows = parseMarkdownTable(lines.slice(index, end))
       if (rows !== null) {
-        flushList()
+        closeLists()
         content.push(tableFromRows(rows))
         index = end - 1
         continue
@@ -111,14 +147,14 @@ export function parseMarkdown(text: string): ConversionResult {
     }
 
     if (RULE.test(line)) {
-      flushList()
+      closeLists()
       content.push({ type: 'horizontalRule' })
       continue
     }
 
     const heading = HEADING.exec(line)
     if (heading?.[1] !== undefined && heading[2] !== undefined) {
-      flushList()
+      closeLists()
       content.push({
         type: 'heading',
         attrs: { level: heading[1].length },
@@ -129,18 +165,48 @@ export function parseMarkdown(text: string): ConversionResult {
 
     const bullet = BULLET.exec(line)
     const ordered = ORDERED.exec(line)
-    if (bullet?.[1] !== undefined || ordered?.[1] !== undefined) {
-      const wanted = bullet ? 'bulletList' : 'orderedList'
-      if (listType !== wanted) flushList()
-      listType = wanted
-      listItems.push({
+    if (bullet?.[1] !== undefined || ordered?.[2] !== undefined) {
+      const type = bullet ? 'bulletList' : 'orderedList'
+      const indent = listIndent(line)
+
+      // A line pulled back to the left ends every list deeper than it.
+      while (open.length > 0 && indent < (open[open.length - 1]?.indent ?? 0)) open.pop()
+
+      let current = open[open.length - 1]
+
+      if (current !== undefined && current.indent === indent && current.type !== type) {
+        // Same depth, different marker: a new list beside the old one, not
+        // inside it.
+        open.pop()
+        const list: ProseMirrorNodeJson = { type, content: [] }
+        current.siblings.push(list)
+        current = { indent, type, node: list, siblings: current.siblings }
+        open.push(current)
+      } else if (current === undefined || indent > current.indent) {
+        const siblings = current === undefined ? content : contentOfLastItem(current.node)
+        const list: ProseMirrorNodeJson = { type, content: [] }
+        siblings.push(list)
+        current = { indent, type, node: list, siblings }
+        open.push(current)
+      }
+
+      // The first item decides where a numbered list starts counting.
+      const start = Number.parseInt(ordered?.[1] ?? '1', 10)
+      if (type === 'orderedList' && itemsOf(current.node).length === 0 && start > 1) {
+        current.node.attrs = { start }
+      }
+
+      itemsOf(current.node).push({
         type: 'listItem',
-        content: [{ type: 'paragraph', content: parseInline(bullet?.[1] ?? ordered?.[1] ?? '') }],
+        content: [{ type: 'paragraph', content: parseInline(bullet?.[1] ?? ordered?.[2] ?? '') }],
       })
       continue
     }
 
-    flushList()
+    // A blank line inside a list does not end it; anything else does.
+    if (line.trim() === '') continue
+
+    closeLists()
 
     const quote = QUOTE.exec(line)
     if (quote?.[1] !== undefined) {
@@ -151,14 +217,8 @@ export function parseMarkdown(text: string): ConversionResult {
       continue
     }
 
-    if (line.trim() === '') {
-      continue
-    }
-
     content.push({ type: 'paragraph', content: parseInline(line) })
   }
-
-  flushList()
 
   return { doc: docOf(content), warnings: [] }
 }
@@ -199,6 +259,45 @@ function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
     .join('')
 }
 
+/**
+ * A list as lines of Markdown.
+ *
+ * A nested list is indented by the width of its parent's marker, which is the
+ * least indentation that still counts as content of that item — four spaces
+ * past it would be read as a code block instead.
+ */
+function listLines(list: ProseMirrorNodeJson, indent: string): string[] {
+  const lines: string[] = []
+  const ordered = list.type === 'orderedList'
+
+  const startAttr = list.attrs?.['start']
+  const first = typeof startAttr === 'number' && startAttr > 0 ? startAttr : 1
+
+  ;(list.content ?? []).forEach((item, index) => {
+    const marker = ordered ? `${String(first + index)}. ` : '- '
+    const inner = ' '.repeat(marker.length)
+    const blocks = item.content ?? []
+
+    // An item holding nothing but a nested list still needs a marker of its own,
+    // or the nesting has nothing to hang from.
+    let started = !blocks.some((child) => child.type !== 'bulletList' && child.type !== 'orderedList')
+    if (started) lines.push(`${indent}${marker}`)
+
+    for (const child of blocks) {
+      if (child.type === 'bulletList' || child.type === 'orderedList') {
+        lines.push(...listLines(child, indent + inner))
+        continue
+      }
+
+      const text = serializeInline(child.content ?? [])
+      lines.push(started ? `${indent}${inner}${text}` : `${indent}${marker}${text}`)
+      started = true
+    }
+  })
+
+  return lines
+}
+
 export function serializeMarkdown(doc: ProseMirrorNodeJson): string {
   const blocks: string[] = []
 
@@ -219,17 +318,11 @@ export function serializeMarkdown(doc: ProseMirrorNodeJson): string {
         }
         break
       case 'bulletList':
-      case 'orderedList': {
-        const ordered = node.type === 'orderedList'
-        ;(node.content ?? []).forEach((item, index) => {
-          const marker = ordered ? `${String(index + 1)}. ` : '- '
-          const text = (item.content ?? [])
-            .map((child) => serializeInline(child.content ?? []))
-            .join(' ')
-          blocks.push(`${marker}${text}`)
-        })
+      case 'orderedList':
+        // One block, not one per item: a blank line between items makes the
+        // list loose, and a nested list has to stay attached to its item.
+        blocks.push(listLines(node, '').join('\n'))
         break
-      }
       case 'table': {
         const flat = flattenTable(node, (block) => serializeInline(block.content ?? []))
         const rendered = toMarkdownTable(flat)

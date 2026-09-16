@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { escapeMarkdown, parseInline, parseMarkdown, serializeMarkdown } from './markdown'
+import { textContentOf } from './types'
 import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
 
 const first = (text: string): ProseMirrorNodeJson | undefined =>
@@ -127,12 +128,16 @@ describe('serializeMarkdown', () => {
     expect(roundTrip('## Section')).toBe('## Section')
   })
 
-  it('round-trips a bulleted list', () => {
-    expect(roundTrip('- one\n- two')).toBe('- one\n\n- two')
+  it('round-trips a bulleted list as one tight list', () => {
+    expect(roundTrip('- one\n- two')).toBe('- one\n- two')
   })
 
-  it('renumbers an ordered list from one', () => {
-    expect(roundTrip('3. a\n4. b')).toBe('1. a\n\n2. b')
+  it('keeps the number a list starts counting from', () => {
+    expect(roundTrip('3. a\n4. b')).toBe('3. a\n4. b')
+  })
+
+  it('renumbers from the start value rather than copying each marker', () => {
+    expect(roundTrip('1. a\n5. b\n9. c')).toBe('1. a\n2. b\n3. c')
   })
 
   it('round-trips inline marks', () => {
@@ -259,5 +264,108 @@ describe('markdown images', () => {
 
     expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['src']).toBe(PIXEL)
     expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['alt']).toBe('A cat')
+  })
+})
+
+describe('markdown nested lists', () => {
+  it('keeps a list nested inside an item', () => {
+    const { doc } = parseMarkdown('- outer\n  - inner')
+
+    const outer = doc.content?.[0]
+    expect(outer?.type).toBe('bulletList')
+
+    const item = outer?.content?.[0]
+    expect(item?.content?.[0]?.type).toBe('paragraph')
+    expect(item?.content?.[1]?.type).toBe('bulletList')
+    expect(textContentOf(item?.content?.[1] ?? { type: 'x' })).toBe('inner')
+  })
+
+  it('closes the inner list when the indentation comes back out', () => {
+    const { doc } = parseMarkdown('- one\n  - deep\n- two')
+
+    const items = doc.content?.[0]?.content ?? []
+    expect(items).toHaveLength(2)
+    expect(items[1]?.content?.[0]?.content?.[0]?.text).toBe('two')
+  })
+
+  it('nests three levels deep', () => {
+    const { doc } = parseMarkdown('- a\n  - b\n    - c')
+
+    const second = doc.content?.[0]?.content?.[0]?.content?.[1]
+    const third = second?.content?.[0]?.content?.[1]
+    expect(third?.type).toBe('bulletList')
+    expect(textContentOf(third ?? { type: 'x' })).toBe('c')
+  })
+
+  it('starts a new list when the marker changes at the same depth', () => {
+    const { doc } = parseMarkdown('- one\n1. two')
+
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+    expect(doc.content?.[1]?.type).toBe('orderedList')
+  })
+
+  it('changes list type inside a nesting level without escaping it', () => {
+    const { doc } = parseMarkdown('- outer\n  - a\n  1. b')
+
+    const item = doc.content?.[0]?.content?.[0]
+    expect(item?.content?.[1]?.type).toBe('bulletList')
+    expect(item?.content?.[2]?.type).toBe('orderedList')
+  })
+
+  it('counts a tab as an indent, not as one character', () => {
+    const { doc } = parseMarkdown('- outer\n\t- inner')
+
+    expect(doc.content?.[0]?.content?.[0]?.content?.[1]?.type).toBe('bulletList')
+  })
+
+  it('keeps a list going across a blank line', () => {
+    const { doc } = parseMarkdown('- one\n\n- two')
+
+    expect(doc.content).toHaveLength(1)
+    expect(doc.content?.[0]?.content).toHaveLength(2)
+  })
+
+  it('writes a nested list back indented under its item', () => {
+    const markdown = serializeMarkdown(parseMarkdown('- outer\n  - inner').doc)
+    expect(markdown).toBe('- outer\n  - inner')
+  })
+
+  it('indents past a numbered marker, which is one column wider', () => {
+    const markdown = serializeMarkdown(parseMarkdown('1. outer\n   - inner').doc)
+    expect(markdown).toBe('1. outer\n   - inner')
+  })
+
+  it('round-trips three levels', () => {
+    const source = '- a\n  - b\n    - c\n- d'
+    expect(serializeMarkdown(parseMarkdown(source).doc)).toBe(source)
+  })
+
+  it('gives an item that holds only a nested list a marker of its own', () => {
+    const markdown = serializeMarkdown({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'bulletList',
+                  content: [
+                    {
+                      type: 'listItem',
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'only' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(markdown).toBe('- \n  - only')
   })
 })

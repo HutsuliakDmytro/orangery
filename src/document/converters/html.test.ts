@@ -189,3 +189,56 @@ describe('serializeHtml', () => {
     expect(serializeHtml(doc)).not.toContain('w:tbl')
   })
 })
+
+describe('html images', () => {
+  const PIXEL = 'data:image/png;base64,iVBORw=='
+
+  it('reads an image with its alt text and size', () => {
+    const { doc } = parseHtml(`<p>before<img src="${PIXEL}" alt="A cat" width="96"></p>`)
+
+    const image = doc.content?.[0]?.content?.[1]
+    expect(image?.type).toBe('image')
+    expect(image?.attrs?.['src']).toBe(PIXEL)
+    expect(image?.attrs?.['alt']).toBe('A cat')
+    // HTML sizes in pixels, the editor in points.
+    expect(image?.attrs?.['width']).toBe(72)
+  })
+
+  it('reads an image that stands on its own', () => {
+    const { doc } = parseHtml(`<img src="${PIXEL}">`)
+
+    expect(doc.content?.[0]?.type).toBe('paragraph')
+    expect(doc.content?.[0]?.content?.[0]?.type).toBe('image')
+  })
+
+  it('drops an image whose address could run something, and says so', () => {
+    const { doc, warnings } = parseHtml('<p><img src="javascript:alert(1)"></p>')
+
+    expect(JSON.stringify(doc)).not.toContain('javascript')
+    expect(warnings.some((warning) => warning.tag === 'img')).toBe(true)
+  })
+
+  it('writes an image back', () => {
+    const html = serializeHtml({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'image', attrs: { src: PIXEL, alt: 'A "cat"', width: 72 } }],
+        },
+      ],
+    })
+
+    expect(html).toContain(`<img src="${PIXEL}"`)
+    expect(html).toContain('alt="A &quot;cat&quot;"')
+    expect(html).toContain('width="96"')
+  })
+
+  it('round-trips an image through both directions', () => {
+    const { doc } = parseHtml(`<p><img src="${PIXEL}" alt="x" width="48"></p>`)
+    const again = parseHtml(serializeHtml(doc))
+
+    expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['src']).toBe(PIXEL)
+    expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['width']).toBe(36)
+  })
+})

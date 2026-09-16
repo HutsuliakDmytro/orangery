@@ -1,4 +1,5 @@
 import { normalizeUrl } from '../../editor/links'
+import { pixelsToPoints, pointsToPixels, safeImageSource } from './image-source'
 import { flattenTable, tableFromRows } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
@@ -7,8 +8,8 @@ import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-docume
 /**
  * HTML import and export.
  *
- * Import is also the clipboard path, so the input is untrusted: pasted HTML can
- * carry scripts, event handlers and `javascript:` links. Rather than stripping
+ * An HTML file is untrusted input: it can carry scripts, event handlers and
+ * `javascript:` addresses. Rather than stripping
  * dangerous constructs from a parsed tree — which is a blocklist, and blocklists
  * leak — only known-good elements and attributes are carried over. Everything
  * else contributes its text and nothing more.
@@ -74,6 +75,37 @@ function inlineFrom(
 
   if (tag === 'BR') return [{ type: 'hardBreak' }]
 
+  if (tag === 'IMG') {
+    const src = element.getAttribute('src')
+    const safe = src === null ? null : safeImageSource(src)
+
+    if (safe === null) {
+      warnings.push({
+        tag: 'img',
+        message:
+          src === null
+            ? 'An image was removed because it has no address.'
+            : `An image was removed because its address is not a supported kind (${src.slice(0, 40)}).`,
+      })
+      return []
+    }
+
+    const width = pixelsToPoints(element.getAttribute('width'))
+    const height = pixelsToPoints(element.getAttribute('height'))
+
+    return [
+      {
+        type: 'image',
+        attrs: {
+          src: safe,
+          alt: element.getAttribute('alt') ?? '',
+          ...(width === null ? {} : { width }),
+          ...(height === null ? {} : { height }),
+        },
+      },
+    ]
+  }
+
   const nextMarks = [...marks]
   const markType = MARK_FOR_TAG[tag]
   if (markType !== undefined) nextMarks.push({ type: markType })
@@ -110,6 +142,13 @@ function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[]
   if (DROPPED.has(tag)) return []
 
   if (tag === 'HR') return [{ type: 'horizontalRule' }]
+
+  // An image has no children, so the walk below would find nothing inside it
+  // and drop it. It is the element itself that carries the content.
+  if (tag === 'IMG') {
+    const image = inlineFrom(element, [], warnings)
+    return image.length > 0 ? [{ type: 'paragraph', content: image }] : []
+  }
 
   if (/^H[1-6]$/u.test(tag)) {
     return [
@@ -182,10 +221,28 @@ export function escapeHtml(text: string): string {
     .replace(/"/gu, '&quot;')
 }
 
+function imageTag(node: ProseMirrorNodeJson): string {
+  const src = node.attrs?.['src']
+  if (typeof src !== 'string' || src === '') return ''
+
+  const alt = node.attrs?.['alt']
+  const width = node.attrs?.['width']
+
+  return [
+    `<img src="${escapeHtml(src)}"`,
+    ` alt="${escapeHtml(typeof alt === 'string' ? alt : '')}"`,
+    // The editor sizes in points, which is what the document formats use; HTML
+    // has no unit on the attribute, so it is pixels.
+    typeof width === 'number' && width > 0 ? ` width="${String(pointsToPixels(width))}"` : '',
+    '>',
+  ].join('')
+}
+
 function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
   return nodes
     .map((node) => {
       if (node.type === 'hardBreak') return '<br>'
+      if (node.type === 'image') return imageTag(node)
       if (node.type !== 'text') return ''
 
       const marks = markNames(node)
@@ -235,6 +292,8 @@ function serializeBlock(node: ProseMirrorNodeJson): string {
         .join('')
       return rows === '' ? '' : `<table><tbody>${rows}</tbody></table>`
     }
+    case 'image':
+      return imageTag(node)
     case 'horizontalRule':
     case 'pageBreak':
       return '<hr>'

@@ -207,3 +207,57 @@ describe('serializeMarkdown', () => {
     expect(serializeMarkdown(doc)).toBe('x')
   })
 })
+
+describe('markdown images', () => {
+  const PIXEL = 'data:image/png;base64,iVBORw=='
+
+  it('reads an image rather than a link with a stray bang', () => {
+    const { doc } = parseMarkdown(`![A cat](${PIXEL})`)
+
+    const image = doc.content?.[0]?.content?.[0]
+    expect(image?.type).toBe('image')
+    expect(image?.attrs?.['alt']).toBe('A cat')
+    expect(image?.attrs?.['src']).toBe(PIXEL)
+    expect(doc.content?.[0]?.content).toHaveLength(1)
+  })
+
+  it('still reads a plain link', () => {
+    const { doc } = parseMarkdown('[a site](https://example.com)')
+
+    const text = doc.content?.[0]?.content?.[0]
+    expect(text?.type).toBe('text')
+    expect(text?.marks?.[0]?.attrs?.['href']).toBe('https://example.com')
+  })
+
+  it('reads an image sitting inside a sentence', () => {
+    const { doc } = parseMarkdown(`before ![x](${PIXEL}) after`)
+
+    const content = doc.content?.[0]?.content ?? []
+    expect(content.map((node) => node.type)).toEqual(['text', 'image', 'text'])
+  })
+
+  it('drops an image whose address could run something', () => {
+    const { doc } = parseMarkdown('![x](javascript:alert(1))')
+
+    expect(JSON.stringify(doc)).not.toContain('javascript')
+  })
+
+  it('writes an image back', () => {
+    const markdown = serializeMarkdown({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'image', attrs: { src: PIXEL, alt: 'A cat' } }] },
+      ],
+    })
+
+    expect(markdown).toBe(`![A cat](${PIXEL})`)
+  })
+
+  it('round-trips an image', () => {
+    const { doc } = parseMarkdown(`![A cat](${PIXEL})`)
+    const again = parseMarkdown(serializeMarkdown(doc))
+
+    expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['src']).toBe(PIXEL)
+    expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['alt']).toBe('A cat')
+  })
+})

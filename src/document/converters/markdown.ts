@@ -1,3 +1,4 @@
+import { safeImageSource } from './image-source'
 import { flattenTable, parseMarkdownTable, tableFromRows, toMarkdownTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
@@ -23,10 +24,17 @@ interface InlineToken {
   marks: string[]
 }
 
-/** Parses `**bold**`, `*italic*`, `~~strike~~`, `` `code` `` and `[text](url)`. */
+/**
+ * Parses `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `[text](url)` and
+ * `![alt](src)`.
+ *
+ * The image alternative is matched at the `!`, which comes one character before
+ * the `[` a link would match at — so the leftmost-match rule picks the image
+ * without needing to look behind.
+ */
 export function parseInline(line: string): ProseMirrorNodeJson[] {
   const pattern =
-    /(\*\*|__)(?=\S)([\s\S]*?\S)\1|(\*|_)(?=\S)([\s\S]*?\S)\3|(~~)(?=\S)([\s\S]*?\S)\5|`([^`]+)`|\[([^\]]*)\]\(([^)\s]+)\)/gu
+    /(\*\*|__)(?=\S)([\s\S]*?\S)\1|(\*|_)(?=\S)([\s\S]*?\S)\3|(~~)(?=\S)([\s\S]*?\S)\5|`([^`]+)`|\[([^\]]*)\]\(([^)\s]+)\)|!\[([^\]]*)\]\((\S+)\)/gu
 
   const nodes: ProseMirrorNodeJson[] = []
   let cursor = 0
@@ -48,7 +56,10 @@ export function parseInline(line: string): ProseMirrorNodeJson[] {
     else if (match[4] !== undefined) push({ text: match[4], marks: ['italic'] })
     else if (match[6] !== undefined) push({ text: match[6], marks: ['strike'] })
     else if (match[7] !== undefined) push({ text: match[7], marks: ['code'] })
-    else if (match[8] !== undefined && match[9] !== undefined) {
+    else if (match[10] !== undefined && match[11] !== undefined) {
+      const src = safeImageSource(match[11])
+      if (src !== null) nodes.push({ type: 'image', attrs: { src, alt: match[10] } })
+    } else if (match[8] !== undefined && match[9] !== undefined) {
       nodes.push({
         type: 'text',
         text: match[8],
@@ -157,9 +168,18 @@ export function escapeMarkdown(text: string): string {
   return text.replace(/([\\`*_[\]])/gu, '\\$1')
 }
 
+function imageMarkup(node: ProseMirrorNodeJson): string {
+  const src = node.attrs?.['src']
+  if (typeof src !== 'string' || src === '') return ''
+
+  const alt = node.attrs?.['alt']
+  return `![${escapeMarkdown(typeof alt === 'string' ? alt : '')}](${src})`
+}
+
 function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
   return nodes
     .map((node) => {
+      if (node.type === 'image') return imageMarkup(node)
       if (node.type !== 'text') return ''
 
       const marks = markNames(node)
@@ -214,6 +234,11 @@ export function serializeMarkdown(doc: ProseMirrorNodeJson): string {
         const flat = flattenTable(node, (block) => serializeInline(block.content ?? []))
         const rendered = toMarkdownTable(flat)
         if (rendered !== '') blocks.push(rendered)
+        break
+      }
+      case 'image': {
+        const markup = imageMarkup(node)
+        if (markup !== '') blocks.push(`${prefix}${markup}`)
         break
       }
       case 'horizontalRule':

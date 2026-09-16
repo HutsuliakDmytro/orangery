@@ -1,0 +1,420 @@
+/* Editor surface. The document page stays white in both themes (CLAUDE.md). */
+
+/* Page geometry lives on the wrapper in `editor-surface.tsx`, which reads it
+   from the document's own section properties. */
+.editor-surface {
+  min-height: 100%;
+  color: var(--page-text);
+
+  /* Document defaults mirror Google Docs. */
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: 1.15;
+  outline: none;
+}
+
+.editor-surface p {
+  margin: 0 0 8pt;
+}
+
+.editor-surface h1,
+.editor-surface h2,
+.editor-surface h3 {
+  margin: 16pt 0 4pt;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.editor-surface h1 {
+  font-size: 20pt;
+}
+
+.editor-surface h2 {
+  font-size: 16pt;
+}
+
+.editor-surface h3 {
+  font-size: 14pt;
+}
+
+/* Orange caret and selection — the accent marks where the user is. */
+.editor-surface {
+  caret-color: var(--accent);
+}
+
+.editor-surface ::selection {
+  background: var(--accent-soft);
+}
+
+/* Paragraph styles Word and Docs treat as named styles rather than headings. */
+.editor-surface .doc-style-title {
+  margin: 0 0 3pt;
+  font-size: 26pt;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.editor-surface .doc-style-subtitle {
+  margin: 0 0 16pt;
+  color: #666666;
+  font-size: 15pt;
+  font-weight: 400;
+}
+
+.editor-surface h4,
+.editor-surface h5,
+.editor-surface h6 {
+  margin: 14pt 0 4pt;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.editor-surface h4 {
+  font-size: 12pt;
+}
+
+.editor-surface h5 {
+  font-size: 11pt;
+}
+
+.editor-surface h6 {
+  font-size: 11pt;
+  font-style: italic;
+}
+
+.editor-surface blockquote {
+  margin: 8pt 0 8pt 18pt;
+  padding-left: 12pt;
+  border-left: 3px solid #cccccc;
+  color: #444444;
+}
+
+.editor-surface hr {
+  margin: 12pt 0;
+  border: none;
+  border-top: 1px solid #cccccc;
+}
+
+.editor-surface ul,
+.editor-surface ol {
+  margin: 0 0 8pt;
+  padding-left: 24pt;
+}
+
+.editor-surface li p {
+  margin: 0;
+}
+
+/* Checklist: the marker is a real checkbox, so the default bullet goes. */
+.editor-surface ul[data-type='taskList'] {
+  padding-left: 4pt;
+  list-style: none;
+}
+
+.editor-surface ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6pt;
+}
+
+.editor-surface ul[data-type='taskList'] li > label {
+  margin-top: 2pt;
+  user-select: none;
+}
+
+.editor-surface ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: #888888;
+  text-decoration: line-through;
+}
+
+/* Page break: a labelled rule until real page-flow layout exists (post-MVP). */
+.editor-surface .page-break {
+  position: relative;
+  height: 0;
+  margin: 18pt 0;
+  border-top: 1px dashed #b0b0b0;
+}
+
+.editor-surface .page-break::after {
+  position: absolute;
+  top: -7pt;
+  left: 50%;
+  padding: 0 6pt;
+  background: var(--page);
+  color: #999999;
+  content: 'Page break';
+  font-family: var(--font-ui);
+  font-size: 8pt;
+  transform: translateX(-50%);
+}
+
+@media print {
+  .editor-surface .page-break {
+    border-top: none;
+  }
+
+  .editor-surface .page-break::after {
+    content: '';
+  }
+}
+
+/* Links. Orange marks them, as it does every other interactive affordance. */
+.editor-surface a {
+  color: #0b57d0;
+  text-decoration: underline;
+  cursor: text;
+}
+
+/* Find & Replace matches are decorations, so they never enter the document. */
+.editor-surface .find-match {
+  background: rgb(255 214 0 / 45%);
+  border-radius: 2px;
+}
+
+.editor-surface .find-match-active {
+  background: var(--accent);
+  color: #000000;
+}
+
+/* Content preserved verbatim from the source file. Marked as not editable
+   because we cannot round-trip a change to XML we do not model. */
+.editor-surface .passthrough-block {
+  margin: 8pt 0;
+  padding: 6pt 8pt;
+  border: 1px dashed #b0b0b0;
+  border-radius: 3px;
+  background: #fafafa;
+  color: #666666;
+  font-family: var(--font-ui);
+  font-size: 9pt;
+}
+
+.editor-surface .passthrough-block::before {
+  content: 'Preserved content';
+}
+
+.editor-surface .passthrough-inline {
+  padding: 0 2px;
+  border-bottom: 1px dotted #b0b0b0;
+  background: #f0f0f0;
+}
+
+.editor-surface .passthrough-inline::before {
+  content: '⌘';
+  color: #999999;
+  font-size: 0.85em;
+}
+
+/* Tables. Word's default look: thin grey grid, header row shaded. */
+.editor-surface table {
+  width: 100%;
+  margin: 8pt 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  overflow: hidden;
+}
+
+.editor-surface table td,
+.editor-surface table th {
+  position: relative;
+  padding: 4pt 6pt;
+  border: 1px solid #bfbfbf;
+  vertical-align: top;
+}
+
+.editor-surface table th {
+  background: #f2f2f2;
+  font-weight: 700;
+  text-align: left;
+}
+
+.editor-surface table p {
+  margin: 0;
+}
+
+/* Column resize handle, shown while dragging a border. */
+.editor-surface .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.editor-surface .selectedCell::after {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-soft);
+  content: '';
+  pointer-events: none;
+}
+
+.editor-surface.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Images. Selected pictures get an orange outline and a corner drag handle. */
+.editor-surface .document-image {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.editor-surface .document-image img {
+  max-width: 100%;
+  height: auto;
+}
+
+.editor-surface .document-image[data-selected='true'] img {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.editor-surface .document-image-handle {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  border: 1px solid #ffffff;
+  border-radius: 2px;
+  background: var(--accent);
+  cursor: nwse-resize;
+}
+
+/* Table of contents. Generated, so it reads as a block rather than as text the
+   user typed — but prints as ordinary content. */
+.editor-surface .table-of-contents {
+  margin: 12pt 0;
+  padding: 8pt 10pt;
+  border-left: 3px solid var(--accent);
+  background: #fafafa;
+}
+
+.editor-surface .table-of-contents:empty::before {
+  color: #999999;
+  content: 'Table of contents — add headings, then refresh';
+  font-family: var(--font-ui);
+  font-size: 9pt;
+}
+
+.editor-surface .toc-entry {
+  padding: 1pt 0;
+}
+
+.editor-surface .toc-entry[data-level='2'] {
+  padding-left: 18pt;
+}
+
+.editor-surface .toc-entry[data-level='3'] {
+  padding-left: 36pt;
+}
+
+.editor-surface .toc-entry[data-level='4'],
+.editor-surface .toc-entry[data-level='5'],
+.editor-surface .toc-entry[data-level='6'] {
+  padding-left: 54pt;
+}
+
+@media print {
+  .editor-surface .table-of-contents {
+    padding: 0;
+    border-left: none;
+    background: transparent;
+  }
+}
+
+/* Footnote markers. Numbered by document order, so the number is generated
+   rather than typed — see `footnote.ts`. */
+.editor-surface .footnote-marker {
+  padding: 0 1px;
+  color: var(--accent);
+  cursor: default;
+  font-size: 0.75em;
+  vertical-align: super;
+}
+
+.editor-surface .footnote-marker::before {
+  content: '[' counter(footnote-counter) ']';
+  counter-increment: footnote-counter;
+}
+
+.editor-surface {
+  counter-reset: footnote-counter;
+}
+
+/* A page break.
+   Three bands: the bottom margin of the page above, the desk showing through,
+   and the top margin of the page below. The margins come from the document's
+   own section properties via custom properties set on the page element. */
+.editor-surface .page-gap {
+  /* Cancels the page's own side padding so the desk spans the full sheet. */
+  margin: 0 calc(-1 * var(--page-margin-right, 72pt)) 0 calc(-1 * var(--page-margin-left, 72pt));
+  user-select: none;
+}
+
+.editor-surface .page-gap-margin:first-child {
+  height: var(--page-margin-bottom, 72pt);
+}
+
+.editor-surface .page-gap-margin:last-child {
+  height: var(--page-margin-top, 72pt);
+}
+
+.editor-surface .page-gap-band {
+  position: relative;
+  height: 24px;
+  background: var(--surface-2);
+  box-shadow:
+    inset 0 6px 6px -6px rgb(0 0 0 / 35%),
+    inset 0 -6px 6px -6px rgb(0 0 0 / 35%);
+}
+
+.editor-surface .page-gap-label {
+  position: absolute;
+  top: 50%;
+  right: var(--page-margin-right, 72pt);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 8pt;
+  letter-spacing: 0.04em;
+  transform: translateY(-50%);
+}
+
+@media print {
+  /* The printer paginates; these are a screen aid only. */
+  .editor-surface .page-gap {
+    display: none !important;
+  }
+}
+
+/* Text wrapping. `float` is the CSS equivalent of Word's square and tight wrap;
+   `wrapNone` — the image behind the text — has none, so it stays passthrough. */
+.editor-surface .document-image[data-wrap='left'] {
+  float: left;
+  margin: 0 9pt 6pt 0;
+}
+
+.editor-surface .document-image[data-wrap='right'] {
+  float: right;
+  margin: 0 0 6pt 9pt;
+}
+
+.editor-surface .document-image[data-wrap='topAndBottom'] {
+  display: block;
+  clear: both;
+  margin: 6pt auto;
+  text-align: center;
+}
+
+/* Inside borders come from the table's own `w:tblBorders`, passed down as
+   custom properties so each cell does not carry a copy of the definition. */
+.editor-surface table td,
+.editor-surface table th {
+  border-top: var(--cell-border-h, 1px solid #bfbfbf);
+  border-bottom: var(--cell-border-h, 1px solid #bfbfbf);
+  border-left: var(--cell-border-v, 1px solid #bfbfbf);
+  border-right: var(--cell-border-v, 1px solid #bfbfbf);
+}

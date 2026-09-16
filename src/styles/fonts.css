@@ -1,0 +1,129 @@
+/**
+ * Bundled fonts.
+ *
+ * A document must look the same on every OS (CLAUDE.md "Known hard problems").
+ * Two families ship with the app:
+ *
+ *   Inter — the chrome font, so the interface does not change shape between
+ *   macOS, Windows and Linux.
+ *
+ *   Liberation Sans / Serif / Mono — metric-compatible with Arial, Times New
+ *   Roman and Courier New. A document that names Arial keeps its line breaks on
+ *   a machine that has never had Arial installed, which an arbitrary substitute
+ *   would not achieve.
+ *
+ * Licences ship alongside the files in `public/fonts/`: Inter under the SIL Open
+ * Font License, Liberation under the SIL OFL as of 2.1.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Inter-Italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Inter-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Inter-BoldItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LiberationSans-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LiberationSans-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/LiberationSans-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/LiberationSans-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LiberationSerif-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LiberationSerif-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/LiberationSerif-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/LiberationSerif-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LiberationMono-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/LiberationMono-Bold.ttf') format('truetype');
+}

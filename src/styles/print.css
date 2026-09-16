@@ -1,0 +1,113 @@
+/**
+ * Print stylesheet.
+ *
+ * Printing is the one place where the app's chrome must disappear entirely and
+ * the page geometry has to be the document's own, not the screen's. The same
+ * sheet drives PDF export, which goes through the webview's print pipeline.
+ */
+
+@media print {
+  /* Nothing outside the document belongs on paper. */
+  header,
+  footer,
+  aside,
+  [role='toolbar'],
+  [role='dialog'],
+  [role='alertdialog'],
+  [role='status'],
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  /* The grey desk around the page is screen-only. */
+  main,
+  main > div {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .document-page {
+    /* Margins come from @page; the element must not add its own on top. */
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    /* Zoom is a screen affordance and would scale the printed output. */
+    transform: none !important;
+  }
+
+  .editor-surface {
+    max-width: none !important;
+    color: #000000;
+  }
+
+  /* The page gaps are a screen aid; the printer paginates. */
+  .page-gap {
+    display: none !important;
+  }
+
+  /* Search highlighting is editor state, not document content. */
+  .find-match,
+  .find-match-active {
+    background: transparent !important;
+    color: inherit !important;
+  }
+
+  /* Preserved content prints as it renders, without the placeholder framing. */
+  .passthrough-block {
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .passthrough-block::before,
+  .passthrough-inline::before {
+    content: '' !important;
+  }
+
+  /* A heading alone at the foot of a page reads badly. */
+  .editor-surface h1,
+  .editor-surface h2,
+  .editor-surface h3,
+  .editor-surface h4,
+  .editor-surface h5,
+  .editor-surface h6,
+  .editor-surface .doc-style-title,
+  .editor-surface .doc-style-subtitle {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .editor-surface p,
+  .editor-surface li {
+    /* Word's default: never leave one line stranded. */
+    orphans: 2;
+    widows: 2;
+  }
+
+  .editor-surface table,
+  .editor-surface img {
+    break-inside: avoid;
+  }
+
+  .editor-surface tr {
+    break-inside: avoid;
+  }
+
+  /* A link's target is invisible on paper, so it is spelled out. */
+  .editor-surface a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    color: #555555;
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+}

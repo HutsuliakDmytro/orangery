@@ -66,6 +66,18 @@ export async function documentKey(pathOrSession: string): Promise<string> {
   return invoke<string>('document_key', { path: pathOrSession })
 }
 
+/**
+ * The directory a document's snapshot lives in.
+ *
+ * Keyed by the editing session and never by the file path. A document that was
+ * never saved has no path to key by, and one saved under a new name would have
+ * its snapshot written under the old key and cleared under the new one — so the
+ * old snapshot would survive and be offered as recoverable at every launch.
+ */
+export function snapshotKey(sessionId: string): Promise<string> {
+  return documentKey(sessionId)
+}
+
 async function directoryFor(key: string): Promise<string> {
   return join(await autosaveDir(), key)
 }
@@ -96,17 +108,29 @@ export async function clearSnapshot(key: string): Promise<void> {
   await invoke('clear_autosave', { directory: await directoryFor(key) })
 }
 
+/**
+ * A snapshot together with the directory it was found in.
+ *
+ * The key travels with it because it cannot be derived again: it is the id of
+ * an editing session that has since ended, and nothing in the snapshot records
+ * it. Without it, discarding has no directory to delete.
+ */
+export interface RecoverableSnapshot {
+  key: string
+  snapshot: Snapshot
+}
+
 /** Snapshots left behind by a session that did not exit cleanly. */
-export async function listRecoverable(): Promise<Snapshot[]> {
+export async function listRecoverable(): Promise<RecoverableSnapshot[]> {
   if (!isTauri()) return []
 
   const keys = await invoke<string[]>('list_autosaves', { root: await autosaveDir() })
-  const snapshots: Snapshot[] = []
+  const found: RecoverableSnapshot[] = []
 
   for (const key of keys) {
     const snapshot = await readSnapshot(key)
-    if (snapshot) snapshots.push(snapshot)
+    if (snapshot) found.push({ key, snapshot })
   }
 
-  return snapshots
+  return found
 }

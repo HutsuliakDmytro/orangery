@@ -1,5 +1,5 @@
 import { fileNameOf } from '../document/formats'
-import type { Snapshot } from '../document/autosave'
+import type { RecoverableSnapshot } from '../document/autosave'
 
 /**
  * Crash recovery offer. A banner rather than a modal: the user may well prefer
@@ -11,9 +11,9 @@ export function RecoveryBanner({
   onDiscard,
   onDiscardAll,
 }: {
-  candidates: Snapshot[]
-  onRecover: (snapshot: Snapshot) => void
-  onDiscard: (snapshot: Snapshot) => void
+  candidates: RecoverableSnapshot[]
+  onRecover: (entry: RecoverableSnapshot) => void
+  onDiscard: (entry: RecoverableSnapshot) => void
   onDiscardAll: () => void
 }) {
   if (candidates.length === 0) return null
@@ -39,19 +39,17 @@ export function RecoveryBanner({
       </div>
 
       <ul className="flex flex-col gap-1">
-        {candidates.map((snapshot) => (
-          <li
-            key={`${snapshot.path ?? 'untitled'}-${snapshot.savedAt}`}
-            className="flex items-center gap-2 text-xs"
-          >
+        {candidates.map((entry) => (
+          <li key={entry.key} className="flex items-center gap-2 text-xs">
             <span className="text-muted">
-              {fileNameOf(snapshot.path)}
-              {snapshot.savedAt !== '' && ` — ${new Date(snapshot.savedAt).toLocaleString()}`}
+              {fileNameOf(entry.snapshot.path)}
+              {entry.snapshot.savedAt !== '' &&
+                ` — ${new Date(entry.snapshot.savedAt).toLocaleString()}`}
             </span>
             <button
               type="button"
               onClick={() => {
-                onRecover(snapshot)
+                onRecover(entry)
               }}
               className="rounded bg-accent px-2 py-0.5 text-black"
             >
@@ -60,7 +58,7 @@ export function RecoveryBanner({
             <button
               type="button"
               onClick={() => {
-                onDiscard(snapshot)
+                onDiscard(entry)
               }}
               className="rounded border border-border px-2 py-0.5"
             >

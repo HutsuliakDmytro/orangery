@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useState } from 'react'
+import { clearSnapshot, snapshotKey } from '../document/autosave'
 import { fileOperations } from '../editor/commands/file-actions'
 import { isTauri } from '../platform/os'
 import { useDocumentStore } from '../store/document-store'
@@ -41,7 +42,13 @@ export function useCloseGuard(): { prompting: boolean; resolve: (choice: CloseCh
     if (choice === 'cancel') return
 
     if (choice === 'discard') {
-      void invoke('confirm_close')
+      void (async () => {
+        // The user chose to throw this work away. Leaving the snapshot would
+        // offer it back as unrecovered at the next launch, which is the
+        // opposite of what they just said.
+        await clearSnapshot(await snapshotKey(useDocumentStore.getState().sessionId))
+        await invoke('confirm_close')
+      })()
       return
     }
 

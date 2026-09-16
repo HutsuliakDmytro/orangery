@@ -2,8 +2,8 @@ import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useState } from 'react'
 import { isTauri } from '../platform/os'
 import { useDocumentStore } from '../store/document-store'
-import { clearSnapshot, documentKey, listRecoverable } from './autosave'
-import type { Snapshot } from './autosave'
+import { clearSnapshot, listRecoverable } from './autosave'
+import type { RecoverableSnapshot } from './autosave'
 import { openDocumentFrom } from './file-operations'
 import { getSession, setSession } from './session'
 import { createDocument } from './file-operations'
@@ -15,13 +15,13 @@ import { createDocument } from './file-operations'
  * — so anything still on disk at startup means the previous run died mid-edit.
  */
 export function useCrashRecovery(): {
-  candidates: Snapshot[]
-  recover: (snapshot: Snapshot) => void
-  discard: (snapshot: Snapshot) => void
+  candidates: RecoverableSnapshot[]
+  recover: (entry: RecoverableSnapshot) => void
+  discard: (entry: RecoverableSnapshot) => void
   discardAll: () => void
 } {
   const { editor } = useCurrentEditor()
-  const [candidates, setCandidates] = useState<Snapshot[]>([])
+  const [candidates, setCandidates] = useState<RecoverableSnapshot[]>([])
 
   useEffect(() => {
     if (!isTauri()) return
@@ -30,15 +30,21 @@ export function useCrashRecovery(): {
     })()
   }, [])
 
-  const forget = (snapshot: Snapshot) => {
-    setCandidates((current) => current.filter((entry) => entry !== snapshot))
-    void (async () => {
-      await clearSnapshot(await documentKey(snapshot.path ?? ''))
-    })()
+  /**
+   * Removes the offer and the snapshot behind it.
+   *
+   * The key comes from the listing rather than from the snapshot's path: a
+   * document that was never saved has no path, and deriving a key from one that
+   * does would point at a directory that was never written.
+   */
+  const forget = (entry: RecoverableSnapshot) => {
+    setCandidates((current) => current.filter((candidate) => candidate !== entry))
+    void clearSnapshot(entry.key)
   }
 
-  const recover = (snapshot: Snapshot) => {
+  const recover = (entry: RecoverableSnapshot) => {
     if (!editor) return
+    const { snapshot } = entry
 
     void (async () => {
       // The package still lives in the original file; the snapshot only carries
@@ -66,12 +72,15 @@ export function useCrashRecovery(): {
       // Recovered content differs from whatever is on disk, so it is unsaved.
       useDocumentStore.getState().markDirty()
 
-      setCandidates((current) => current.filter((entry) => entry !== snapshot))
+      // The recovered text now belongs to this session, which writes its own
+      // snapshot. Leaving the old one would offer the same work again at every
+      // launch, however many times it was recovered.
+      forget(entry)
     })()
   }
 
   const discardAll = () => {
-    for (const snapshot of candidates) forget(snapshot)
+    for (const entry of candidates) forget(entry)
   }
 
   return { candidates, recover, discard: forget, discardAll }

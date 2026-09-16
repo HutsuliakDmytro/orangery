@@ -6,7 +6,7 @@ import {
   AUTOSAVE_INTERVAL_MS,
   buildSnapshot,
   clearSnapshot,
-  documentKey,
+  snapshotKey,
   writeSnapshot,
 } from './autosave'
 
@@ -31,7 +31,7 @@ export function useAutosave(): void {
 
     const write = () => {
       void (async () => {
-        const key = await documentKey(path ?? sessionId)
+        const key = await snapshotKey(sessionId)
         await writeSnapshot(key, buildSnapshot(path, editor.getJSON() as ProseMirrorNodeJson))
       })()
     }
@@ -56,7 +56,7 @@ export function useAutosave(): void {
     if (lastSaved === null) return
 
     void (async () => {
-      await clearSnapshot(await documentKey(path ?? sessionId))
+      await clearSnapshot(await snapshotKey(sessionId))
     })()
   }, [lastSaved, path, sessionId])
 }

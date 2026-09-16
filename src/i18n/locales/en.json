@@ -1,0 +1,98 @@
+{
+  "app": {
+    "name": "Orangery Docs",
+    "untitled": "Untitled document",
+    "edited": "Edited"
+  },
+  "toolbar": {
+    "formatting": "Formatting",
+    "zoom": "Zoom",
+    "paragraphStyle": "Paragraph style",
+    "font": "Font",
+    "fontSize": "Font size",
+    "defaultFont": "Default font"
+  },
+  "styles": {
+    "normal": "Normal text",
+    "title": "Title",
+    "subtitle": "Subtitle",
+    "heading": "Heading {{level}}"
+  },
+  "outline": {
+    "title": "Outline",
+    "empty": "Headings you add to the document will appear here.",
+    "untitledHeading": "Untitled heading"
+  },
+  "status": {
+    "words_one": "{{count}} word",
+    "words_other": "{{count}} words",
+    "characters": "{{count}} characters",
+    "pages_one": "~{{count}} page",
+    "pages_other": "~{{count}} pages",
+    "pagesEstimate": "Estimated — the MVP renders a continuous view, not real pages"
+  },
+  "warnings": {
+    "banner": "Some content may not display correctly. It is preserved and will be saved unchanged.",
+    "details": "Details ({{count}})",
+    "hide": "Hide details",
+    "dismiss": "Dismiss warning"
+  },
+  "recovery": {
+    "one": "A document was not saved before Orangery Docs last closed.",
+    "many": "{{count}} documents were not saved before Orangery Docs last closed.",
+    "recover": "Recover",
+    "discard": "Discard",
+    "discardAll": "Discard all"
+  },
+  "close": {
+    "title": "Save changes?",
+    "message": "Do you want to save the changes you made to {{name}}? Your changes will be lost if you don't save them.",
+    "save": "Save",
+    "dontSave": "Don't Save",
+    "cancel": "Cancel"
+  },
+  "pageSetup": {
+    "title": "Page setup",
+    "paperSize": "Paper size",
+    "custom": "Custom",
+    "orientation": "Orientation",
+    "portrait": "Portrait",
+    "landscape": "Landscape",
+    "margins": "Margins (inches)",
+    "top": "Top",
+    "bottom": "Bottom",
+    "left": "Left",
+    "right": "Right",
+    "apply": "Apply",
+    "cancel": "Cancel"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeSystem": "Match system",
+    "language": "Interface language",
+    "defaultFont": "Default font",
+    "defaultFontSize": "Default size (pt)",
+    "autosave": "Save recovery snapshots while editing",
+    "backups": "Keep a .bak copy when overwriting a file",
+    "done": "Done"
+  },
+  "welcome": {
+    "title": "Orangery Docs",
+    "subtitle": "Start a new document or pick up where you left off.",
+    "blank": "Blank document",
+    "letter": "Letter",
+    "report": "Report",
+    "recent": "Recent documents",
+    "open": "Open…",
+    "noRecent": "Documents you open will be listed here."
+  },
+  "palette": {
+    "search": "Search commands",
+    "placeholder": "Search commands…",
+    "empty": "No matching command",
+    "label": "Command palette"
+  }
+}

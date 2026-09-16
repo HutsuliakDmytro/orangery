@@ -463,3 +463,166 @@ describe('rtf pictures', () => {
     ])
   })
 })
+
+describe('rtf character formatting', () => {
+  const markOf = (doc: ProseMirrorNodeJson, type: string) =>
+    doc.content?.[0]?.content?.[0]?.marks?.find((mark) => mark.type === type)
+
+  it('resolves a colour through the colour table', () => {
+    const { doc } = parseRtf(
+      '{\\rtf1\\ansi{\\colortbl ;\\red255\\green0\\blue0;\\red0\\green0\\blue255;}\\cf2 blue\\par}',
+    )
+
+    expect(markOf(doc, 'textStyle')?.attrs?.['color']).toBe('#0000FF')
+  })
+
+  it('treats the first colour table entry as the reader default', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi{\\colortbl ;\\red255\\green0\\blue0;}\\cf0 plain\\par}')
+    expect(markOf(doc, 'textStyle')).toBeUndefined()
+  })
+
+  it('resolves a font through the font table', () => {
+    const { doc } = parseRtf(
+      '{\\rtf1\\ansi{\\fonttbl{\\f0\\fnil Arial;}{\\f1\\froman Georgia;}}\\f1 text\\par}',
+    )
+
+    expect(markOf(doc, 'textStyle')?.attrs?.['fontFamily']).toBe('Georgia')
+  })
+
+  it('reads a size stated in half-points', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\fs28 text\\par}')
+    expect(markOf(doc, 'textStyle')?.attrs?.['fontSize']).toBe(14)
+  })
+
+  it('reads a highlight', () => {
+    const { doc } = parseRtf(
+      '{\\rtf1\\ansi{\\colortbl ;\\red255\\green255\\blue0;}\\highlight1 text\\par}',
+    )
+
+    expect(markOf(doc, 'highlight')?.attrs?.['color']).toBe('#FFFF00')
+  })
+
+  it('declares in the header the colours and fonts the body turned out to use', () => {
+    const rtf = serializeRtf({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'x',
+              marks: [{ type: 'textStyle', attrs: { color: '#FF0000', fontFamily: 'Georgia' } }],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(rtf).toContain('{\\colortbl ;\\red255\\green0\\blue0;}')
+    expect(rtf).toContain('{\\f1 Georgia;}')
+    expect(rtf).toContain('\\cf1 ')
+    expect(rtf).toContain('\\f1 ')
+  })
+
+  it('declares a colour used twice only once', () => {
+    const rtf = serializeRtf({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'a', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+            { type: 'text', text: 'b', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+          ],
+        },
+      ],
+    })
+
+    expect(rtf.match(/\\red255/gu)).toHaveLength(1)
+  })
+
+  it('round-trips colour, family, size and highlight', () => {
+    const source: ProseMirrorNodeJson = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'x',
+              marks: [
+                { type: 'textStyle', attrs: { color: '#FF0000', fontFamily: 'Georgia', fontSize: 14 } },
+                { type: 'highlight', attrs: { color: '#FFFF00' } },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const { doc } = parseRtf(serializeRtf(source))
+    const attrs = markOf(doc, 'textStyle')?.attrs
+
+    expect(attrs?.['color']).toBe('#FF0000')
+    expect(attrs?.['fontFamily']).toBe('Georgia')
+    expect(attrs?.['fontSize']).toBe(14)
+    expect(markOf(doc, 'highlight')?.attrs?.['color']).toBe('#FFFF00')
+  })
+
+  it('resets a run so the formatting does not run on into the next one', () => {
+    const { doc } = parseRtf(
+      serializeRtf({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'red', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+              { type: 'text', text: 'plain' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const second = doc.content?.[0]?.content?.[1]
+    expect(second?.text).toBe('plain')
+    expect(second?.marks?.some((mark) => mark.type === 'textStyle')).not.toBe(true)
+  })
+})
+
+describe('rtf alignment', () => {
+  it('reads an alignment control word', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\qc centred\\par}')
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('center')
+  })
+
+  it('does not carry the alignment into the next paragraph', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\qc one\\par\\pard two\\par}')
+
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('center')
+    expect(doc.content?.[1]?.attrs?.['textAlign']).toBeUndefined()
+  })
+
+  it('round-trips an aligned paragraph and an aligned heading', () => {
+    const source: ProseMirrorNodeJson = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: 'a' }] },
+        {
+          type: 'heading',
+          attrs: { level: 2, textAlign: 'center' },
+          content: [{ type: 'text', text: 'b' }],
+        },
+      ],
+    }
+
+    const { doc } = parseRtf(serializeRtf(source))
+
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('right')
+    expect(doc.content?.[1]?.type).toBe('heading')
+    expect(doc.content?.[1]?.attrs?.['textAlign']).toBe('center')
+  })
+})

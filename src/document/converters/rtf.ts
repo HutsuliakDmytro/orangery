@@ -18,8 +18,6 @@ import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-docume
  */
 
 const IGNORED_DESTINATIONS = new Set([
-  'fonttbl',
-  'colortbl',
   'stylesheet',
   'info',
   'object',
@@ -73,6 +71,11 @@ interface RunState {
   strike: boolean
   superscript: boolean
   subscript: boolean
+  color: string | null
+  highlight: string | null
+  fontFamily: string | null
+  /** In points; RTF states it in half-points. */
+  fontSize: number | null
 }
 
 const CLEAN_STATE: RunState = {
@@ -82,17 +85,49 @@ const CLEAN_STATE: RunState = {
   strike: false,
   superscript: false,
   subscript: false,
+  color: null,
+  highlight: null,
+  fontFamily: null,
+  fontSize: null,
 }
 
-function marksFor(state: RunState): { type: string }[] {
-  const marks: { type: string }[] = []
+/** RTF states a font size in half-points, as OOXML does. */
+const HALF_POINTS_PER_POINT = 2
+
+/** Alignment control words, named after the edge the text is pushed to. */
+const ALIGNMENTS: Readonly<Record<string, string>> = {
+  ql: 'left',
+  qr: 'right',
+  qc: 'center',
+  qj: 'justify',
+}
+
+function marksFor(state: RunState): { type: string; attrs?: Record<string, unknown> }[] {
+  const marks: { type: string; attrs?: Record<string, unknown> }[] = []
   if (state.bold) marks.push({ type: 'bold' })
   if (state.italic) marks.push({ type: 'italic' })
   if (state.underline) marks.push({ type: 'underline' })
   if (state.strike) marks.push({ type: 'strike' })
   if (state.superscript) marks.push({ type: 'superscript' })
   if (state.subscript) marks.push({ type: 'subscript' })
+  if (state.highlight !== null) marks.push({ type: 'highlight', attrs: { color: state.highlight } })
+
+  // Colour, family and size are one mark with three attributes, matching the
+  // run properties the document formats keep them in.
+  const attrs: Record<string, unknown> = {}
+  if (state.color !== null) attrs['color'] = state.color
+  if (state.fontFamily !== null) attrs['fontFamily'] = state.fontFamily
+  if (state.fontSize !== null) attrs['fontSize'] = state.fontSize
+  if (Object.keys(attrs).length > 0) marks.push({ type: 'textStyle', attrs })
+
   return marks
+}
+
+function rgbToHex(channels: { red: number; green: number; blue: number }): string {
+  const part = (value: number) =>
+    Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0').toUpperCase()
+
+  return `#${part(channels.red)}${part(channels.green)}${part(channels.blue)}`
 }
 
 /** A picture's bytes, written as hex, as something the webview can display. */
@@ -183,6 +218,20 @@ export function parseRtf(text: string): ConversionResult {
 
   const lists = listBuilder(content)
 
+  // The colour and font tables, which every run refers to by index.
+  const colors: (string | null)[] = []
+  const fonts = new Map<number, string>()
+
+  let colorDepth: number | null = null
+  let channels = { red: 0, green: 0, blue: 0 }
+  let colorDeclared = false
+
+  let fontDepth: number | null = null
+  let fontId: number | null = null
+  let fontName = ''
+
+  let paragraphAlign: string | null = null
+
   // Set while reading a `\pict` group: the hex bytes, the encoding, and the
   // size the writer wants it displayed at.
   let pictureDepth: number | null = null
@@ -210,7 +259,34 @@ export function parseRtf(text: string): ConversionResult {
   let unicodeSkip = 1
   let skipCharacters = 0
 
+  const endColor = () => {
+    // An entry with no channels is the "automatic" colour, which means the
+    // reader's default rather than black.
+    colors.push(colorDeclared ? rgbToHex(channels) : null)
+    channels = { red: 0, green: 0, blue: 0 }
+    colorDeclared = false
+  }
+
+  const endFont = () => {
+    const name = fontName.trim().replace(/;$/u, '')
+    if (fontId !== null && name !== '') fonts.set(fontId, name)
+    fontName = ''
+  }
+
   const emit = (value: string) => {
+    if (colorDepth !== null) {
+      for (const char of value) if (char === ';') endColor()
+      return
+    }
+
+    if (fontDepth !== null) {
+      for (const char of value) {
+        if (char === ';') endFont()
+        else fontName += char
+      }
+      return
+    }
+
     // Inside a picture the stream is hex bytes, not text. Anything that is not
     // a hex digit there is whitespace the writer used to wrap long lines.
     if (pictureDepth !== null) {
@@ -276,6 +352,7 @@ export function parseRtf(text: string): ConversionResult {
 
     const paragraph: ProseMirrorNodeJson = {
       type: 'paragraph',
+      ...(paragraphAlign === null ? {} : { attrs: { textAlign: paragraphAlign } }),
       ...(current.length > 0 ? { content: current } : {}),
     }
 
@@ -287,7 +364,10 @@ export function parseRtf(text: string): ConversionResult {
       if (headingLevel !== null) {
         content.push({
           type: 'heading',
-          attrs: { level: headingLevel },
+          attrs: {
+            level: headingLevel,
+            ...(paragraphAlign === null ? {} : { textAlign: paragraphAlign }),
+          },
           ...(current.length > 0 ? { content: current } : {}),
         })
       } else {
@@ -300,6 +380,7 @@ export function parseRtf(text: string): ConversionResult {
     marker = null
     itemLevel = null
     itemIndent = null
+    paragraphAlign = null
   }
 
   while (index < text.length) {
@@ -314,6 +395,12 @@ export function parseRtf(text: string): ConversionResult {
 
     if (char === '}') {
       flushText()
+      if (colorDepth !== null && depth <= colorDepth) colorDepth = null
+      if (fontDepth !== null) {
+        // The inner group closes one font; the outer one closes the table.
+        endFont()
+        if (depth <= fontDepth) fontDepth = null
+      }
       if (pictureDepth !== null && depth <= pictureDepth) {
         pictureDepth = null
         endPicture()
@@ -377,6 +464,34 @@ export function parseRtf(text: string): ConversionResult {
         // The fallback characters that follow are for readers that cannot do
         // Unicode; appending them would duplicate the character as `?`.
         skipCharacters = unicodeSkip
+        continue
+      }
+
+      if (word === 'colortbl') {
+        colorDepth = depth
+        continue
+      }
+
+      if (word === 'fonttbl') {
+        fontDepth = depth
+        continue
+      }
+
+      if (colorDepth !== null) {
+        if (word === 'red' && parameter !== null) channels.red = parameter
+        else if (word === 'green' && parameter !== null) channels.green = parameter
+        else if (word === 'blue' && parameter !== null) channels.blue = parameter
+        else continue
+        colorDeclared = true
+        continue
+      }
+
+      if (fontDepth !== null) {
+        // Each font sits in its own group; `\f` opens one and the name follows.
+        if (word === 'f' && parameter !== null) {
+          endFont()
+          fontId = parameter
+        }
         continue
       }
 
@@ -451,6 +566,7 @@ export function parseRtf(text: string): ConversionResult {
           marker = null
           itemLevel = null
           itemIndent = null
+          paragraphAlign = null
           break
         case 'ilvl':
           if (parameter !== null && parameter >= 0) itemLevel = parameter
@@ -489,6 +605,33 @@ export function parseRtf(text: string): ConversionResult {
         case 'nosupersub':
           flushText()
           state = { ...state, superscript: false, subscript: false }
+          break
+        case 'cf':
+          flushText()
+          state = { ...state, color: parameter === null ? null : (colors[parameter] ?? null) }
+          break
+        case 'cb':
+        case 'highlight':
+          flushText()
+          state = { ...state, highlight: parameter === null ? null : (colors[parameter] ?? null) }
+          break
+        case 'f':
+          flushText()
+          state = { ...state, fontFamily: parameter === null ? null : (fonts.get(parameter) ?? null) }
+          break
+        case 'fs':
+          flushText()
+          state = {
+            ...state,
+            fontSize:
+              parameter === null || parameter <= 0 ? null : parameter / HALF_POINTS_PER_POINT,
+          }
+          break
+        case 'ql':
+        case 'qr':
+        case 'qc':
+        case 'qj':
+          paragraphAlign = ALIGNMENTS[word] ?? null
           break
         case 'outlinelevel':
           if (parameter !== null && parameter >= 0 && parameter <= 5) {
@@ -564,7 +707,109 @@ export function escapeRtf(text: string): string {
   return result
 }
 
-function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
+/**
+ * The colour and font tables a document needs.
+ *
+ * RTF states both up front and every run refers to them by index, so the body
+ * cannot be written until everything it uses is known. The tables are filled in
+ * while the body is built and the header is composed afterwards.
+ */
+interface RtfTables {
+  colorIndex: (hex: string) => number
+  fontIndex: (family: string) => number
+  header: () => string
+}
+
+const DEFAULT_FONT = 'Arial'
+/** The document default, in points, which a run with its own size resets to. */
+const DEFAULT_SIZE = 11
+
+function createTables(): RtfTables {
+  // Index zero is the reader's own colour, which is what a run resets to.
+  const colors: string[] = []
+  const fonts: string[] = [DEFAULT_FONT]
+
+  return {
+    colorIndex(hex) {
+      const existing = colors.indexOf(hex)
+      if (existing !== -1) return existing + 1
+
+      colors.push(hex)
+      return colors.length
+    },
+
+    fontIndex(family) {
+      const existing = fonts.indexOf(family)
+      if (existing !== -1) return existing
+
+      fonts.push(family)
+      return fonts.length - 1
+    },
+
+    header() {
+      const fontTable = fonts
+        .map((family, index) => `{\\f${String(index)} ${escapeRtf(family)};}`)
+        .join('')
+
+      const colorTable = colors
+        .map((hex) => {
+          const channel = (offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16) || 0
+          return `\\red${String(channel(1))}\\green${String(channel(3))}\\blue${String(channel(5))};`
+        })
+        .join('')
+
+      return `{\\fonttbl${fontTable}}{\\colortbl ;${colorTable}}`
+    },
+  }
+}
+
+/** Control words for a run's colour, font and size, and what resets them. */
+function runProperties(
+  node: ProseMirrorNodeJson,
+  tables: RtfTables,
+): { open: string[]; close: string[] } {
+  const textStyle = node.marks?.find((mark) => mark.type === 'textStyle')?.attrs
+  const highlight = node.marks?.find((mark) => mark.type === 'highlight')?.attrs?.['color']
+
+  const open: string[] = []
+  const close: string[] = []
+
+  const color = textStyle?.['color']
+  if (typeof color === 'string' && /^#[0-9a-f]{6}$/iu.test(color)) {
+    open.push(`\\cf${String(tables.colorIndex(color.toUpperCase()))} `)
+    close.push('\\cf0 ')
+  }
+
+  if (typeof highlight === 'string' && /^#[0-9a-f]{6}$/iu.test(highlight)) {
+    open.push(`\\highlight${String(tables.colorIndex(highlight.toUpperCase()))} `)
+    close.push('\\highlight0 ')
+  }
+
+  const family = textStyle?.['fontFamily']
+  if (typeof family === 'string' && family !== '') {
+    open.push(`\\f${String(tables.fontIndex(family))} `)
+    close.push('\\f0 ')
+  }
+
+  const size = textStyle?.['fontSize']
+  if (typeof size === 'number' && size > 0) {
+    open.push(`\\fs${String(Math.round(size * HALF_POINTS_PER_POINT))} `)
+    close.push(`\\fs${String(DEFAULT_SIZE * HALF_POINTS_PER_POINT)} `)
+  }
+
+  return { open, close }
+}
+
+/** The alignment control word for a block, or nothing when it has none. */
+function alignmentOf(node: ProseMirrorNodeJson): string {
+  const align = node.attrs?.['textAlign']
+  if (typeof align !== 'string') return ''
+
+  const word = Object.entries(ALIGNMENTS).find(([, name]) => name === align)?.[0]
+  return word === undefined ? '' : `\\${word}`
+}
+
+function serializeInline(nodes: readonly ProseMirrorNodeJson[], tables: RtfTables): string {
   return nodes
     .map((node) => {
       if (node.type === 'pageBreak') return '\\page '
@@ -573,8 +818,7 @@ function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
       if (node.type !== 'text') return ''
 
       const marks = markNames(node)
-      const open: string[] = []
-      const close: string[] = []
+      const { open, close } = runProperties(node, tables)
 
       if (marks.has('bold')) {
         open.push('\\b ')
@@ -624,7 +868,7 @@ const COLUMN_WIDTH = 9360
  * the ones that ignore the numbering table entirely and would otherwise show
  * the list as unindented body text.
  */
-function listParagraphs(list: ProseMirrorNodeJson, level: number): string[] {
+function listParagraphs(list: ProseMirrorNodeJson, level: number, tables: RtfTables): string[] {
   const lines: string[] = []
   const ordered = list.type === 'orderedList'
 
@@ -641,13 +885,13 @@ function listParagraphs(list: ProseMirrorNodeJson, level: number): string[] {
 
     for (const child of item.content ?? []) {
       if (child.type === 'bulletList' || child.type === 'orderedList') {
-        lines.push(...listParagraphs(child, level + 1))
+        lines.push(...listParagraphs(child, level + 1, tables))
         continue
       }
 
       // No space before the text: after a closing brace a space is literal, and
       // the marker group already separates it from the indent control words.
-      lines.push(`\\pard${indent}${marker}${serializeInline(child.content ?? [])}\\par`)
+      lines.push(`\\pard${indent}${marker}${serializeInline(child.content ?? [], tables)}\\par`)
     }
   })
 
@@ -655,8 +899,8 @@ function listParagraphs(list: ProseMirrorNodeJson, level: number): string[] {
 }
 
 /** A table as RTF rows. Cells are laid out evenly across the text column. */
-function tableRows(node: ProseMirrorNodeJson): string {
-  const flat = flattenTable(node, (block) => serializeInline(block.content ?? []))
+function tableRows(node: ProseMirrorNodeJson, tables: RtfTables): string {
+  const flat = flattenTable(node, (block) => serializeInline(block.content ?? [], tables))
   // `flattenTable` pads ragged rows, so every row is as wide as the widest.
   const columns = flat.rows[0]?.length ?? 0
   if (columns === 0) return ''
@@ -676,29 +920,32 @@ function tableRows(node: ProseMirrorNodeJson): string {
 
 export function serializeRtf(doc: ProseMirrorNodeJson): string {
   const blocks: string[] = []
+  const tables = createTables()
 
   for (const block of doc.content ?? []) {
     switch (block.type) {
-      case 'bulletList':
-      case 'orderedList':
-        blocks.push(listParagraphs(block, 1).join('\n'))
-        break
-      case 'table': {
-        const rendered = tableRows(block)
-        if (rendered !== '') blocks.push(rendered)
-        break
-      }
       case 'heading': {
         const level = block.attrs?.['level']
         const outline = typeof level === 'number' ? level - 1 : 0
         blocks.push(
-          `\\pard\\outlinelevel${String(outline)}\\b ${serializeInline(block.content ?? [])}\\b0\\par`,
+          `\\pard\\outlinelevel${String(outline)}${alignmentOf(block)}\\b ${serializeInline(block.content ?? [], tables)}\\b0\\par`,
         )
         break
       }
       case 'paragraph':
-        blocks.push(`\\pard ${serializeInline(block.content ?? [])}\\par`)
+        blocks.push(
+          `\\pard${alignmentOf(block)} ${serializeInline(block.content ?? [], tables)}\\par`,
+        )
         break
+      case 'bulletList':
+      case 'orderedList':
+        blocks.push(listParagraphs(block, 1, tables).join('\n'))
+        break
+      case 'table': {
+        const rendered = tableRows(block, tables)
+        if (rendered !== '') blocks.push(rendered)
+        break
+      }
       case 'image':
         blocks.push(`\\pard ${pictureGroup(block)}\\par`)
         break
@@ -715,7 +962,9 @@ export function serializeRtf(doc: ProseMirrorNodeJson): string {
     }
   }
 
-  return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs22\n${blocks.join('\n')}\n}`
+  // The header comes last: it declares the colours and fonts the body turned
+  // out to use, which are only known once the body is written.
+  return `{\\rtf1\\ansi\\deff0${tables.header()}\\fs${String(DEFAULT_SIZE * HALF_POINTS_PER_POINT)}\n${blocks.join('\n')}\n}`
 }
 
 export const rtfConverter: Converter = { parse: parseRtf, serialize: serializeRtf }

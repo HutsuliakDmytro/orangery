@@ -466,3 +466,35 @@
   margin-right: 0.5em;
   user-select: none;
 }
+
+/* A tab, widened after layout to reach its stop. `pre` keeps the character
+   itself from collapsing; the width is what actually places the text. */
+.editor-surface .doc-tab {
+  display: inline-block;
+  white-space: pre;
+  vertical-align: baseline;
+  background-repeat: repeat-x;
+  /* Just above the baseline, where a leader sits in print. */
+  background-position: 0 0.78em;
+}
+
+.editor-surface .doc-tab[data-leader='dot'] {
+  background-image: radial-gradient(circle, currentColor 0.5px, transparent 0.6px);
+  background-size: 4px 1px;
+}
+
+.editor-surface .doc-tab[data-leader='middleDot'] {
+  background-image: radial-gradient(circle, currentColor 0.8px, transparent 0.9px);
+  background-size: 6px 1px;
+  background-position: 0 0.6em;
+}
+
+.editor-surface .doc-tab[data-leader='hyphen'] {
+  background-image: linear-gradient(to right, currentColor 50%, transparent 50%);
+  background-size: 6px 1px;
+}
+
+.editor-surface .doc-tab[data-leader='underscore'] {
+  background-image: linear-gradient(to right, currentColor, currentColor);
+  background-size: 100% 1px;
+}

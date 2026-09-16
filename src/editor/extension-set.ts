@@ -40,6 +40,7 @@ import {
 import { PastePlainText } from './extensions/paste-plain-text'
 import { SmartTyping } from './extensions/smart-typing'
 import { TabIndent } from './extensions/tab-indent'
+import { TabRendering } from './extensions/tab-rendering'
 import { TabStops } from './extensions/tab-stops'
 
 /**
@@ -91,6 +92,7 @@ export function buildExtensions(): Extensions {
     Pagination,
     TabIndent,
     TabStops,
+    TabRendering,
     Table.extend({
       addAttributes() {
         return {

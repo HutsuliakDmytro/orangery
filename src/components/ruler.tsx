@@ -1,8 +1,8 @@
-import { useCurrentEditor } from '@tiptap/react'
+import { useCurrentEditor, useEditorState } from '@tiptap/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useViewStore } from '../store/view-store'
 import { tabStopsOf } from '../editor/extensions/tab-stops'
-import type { TabAlignment, TabStop } from '../ooxml/tabs'
+import type { TabAlignment, TabLeader, TabStop } from '../ooxml/tabs'
 
 /**
  * Horizontal ruler with draggable page margins and paragraph indents.
@@ -25,9 +25,23 @@ export function Ruler() {
   const [dragging, setDragging] = useState<Handle | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
 
-  const attributes = editor?.isActive('heading')
-    ? editor.getAttributes('heading')
-    : (editor?.getAttributes('paragraph') ?? {})
+  /**
+   * The block properties the markers stand for.
+   *
+   * Subscribed to rather than read at render time: nothing else re-renders the
+   * ruler when the cursor moves into a paragraph with different indents, or
+   * when a tab stop is added to the one it is already in.
+   */
+  const attributes = useEditorState({
+    editor: editor ?? null,
+    selector: ({ editor: instance }) => {
+      if (!instance) return {}
+      return instance.isActive('heading')
+        ? instance.getAttributes('heading')
+        : instance.getAttributes('paragraph')
+    },
+    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  }) ?? {}
   const indentLeft = typeof attributes['indentLeft'] === 'number' ? attributes['indentLeft'] : 0
   const stops = tabStopsOf(attributes)
   const firstLine =
@@ -115,7 +129,10 @@ export function Ruler() {
    * position into — makes the ruler decorative.
    */
   const addStop = (event: React.MouseEvent) => {
-    if (!editor || event.target !== trackRef.current) return
+    // Anything but a handle: the ticks and the column background sit over the
+    // track, so the click rarely lands on the track element itself.
+    const onHandle = event.target instanceof HTMLElement && event.target.closest('button') !== null
+    if (!editor || onHandle) return
 
     const position = Math.round(pointsFromEvent(event.clientX) - section.margins.left)
     if (position <= 0) return
@@ -146,8 +163,12 @@ export function Ruler() {
             key={stop.position}
             stop={stop}
             left={toPixels(section.margins.left + stop.position)}
-            onCycle={() => {
-              editor?.chain().focus().setTabStop(cycled(stop)).run()
+            onCycle={(leader) => {
+              editor
+                ?.chain()
+                .focus()
+                .setTabStop(leader ? withNextLeader(stop) : cycled(stop))
+                .run()
             }}
             onRemove={() => {
               editor?.chain().focus().clearTabStop(stop.position).run()
@@ -205,6 +226,14 @@ function cycled(stop: TabStop): TabStop {
   return { ...stop, alignment: next }
 }
 
+/** What fills the gap in front of the stop, cycled by holding Alt. */
+function withNextLeader(stop: TabStop): TabStop {
+  const order: TabLeader[] = ['none', 'dot', 'hyphen', 'underscore']
+  const next = order[(order.indexOf(stop.leader) + 1) % order.length] ?? 'none'
+
+  return { ...stop, leader: next }
+}
+
 const STOP_GLYPHS: Readonly<Record<string, string>> = {
   left: '\u2514',
   center: '\u2534',
@@ -221,7 +250,8 @@ function TabStopHandle({
 }: {
   stop: TabStop
   left: number
-  onCycle: () => void
+  /** True when the leader is being cycled rather than the alignment. */
+  onCycle: (leader: boolean) => void
   onRemove: () => void
 }) {
   const description = `${stop.alignment} tab stop${stop.leader === 'none' ? '' : ` with ${stop.leader} leader`}`
@@ -230,12 +260,12 @@ function TabStopHandle({
     <button
       type="button"
       aria-label={description}
-      title={`${description} — click to change, double-click to remove`}
+      title={`${description} — click to change alignment, Alt-click to change the leader, double-click to remove`}
       onClick={(event) => {
         // The track adds a stop where it is clicked; a click on a marker is
         // about that marker.
         event.stopPropagation()
-        onCycle()
+        onCycle(event.altKey)
       }}
       onDoubleClick={(event) => {
         event.stopPropagation()

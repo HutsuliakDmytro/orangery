@@ -148,3 +148,54 @@ test('picks the quotation marks from the language being typed', async ({ page })
 
   await expect(page.locator(`${editor} p`).first()).toHaveText('він сказав «привіт»')
 })
+
+/**
+ * A tab stop only means anything once the page is laid out: the width of a tab
+ * is measured from where the character actually landed, which nothing below a
+ * browser can tell us.
+ */
+test('widens a tab to reach its stop and draws the leader', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('Chapter one')
+  await page.keyboard.press('Tab')
+  await page.keyboard.type('5')
+
+  const tab = page.locator(`${editor} .doc-tab`)
+  await expect(tab).toHaveCount(1)
+
+  const widthOf = () => tab.evaluate((node: Element) => node.getBoundingClientRect().width)
+
+  // With no stop of its own the paragraph falls back to the regular interval.
+  // Awaited rather than read at once: the width is measured after layout, so it
+  // lands a frame behind the character.
+  await expect(tab).toHaveAttribute('data-leader', 'none')
+  const fallback = await widthOf()
+
+  // A stop far to the right, clicked onto the ruler where Word puts them.
+  const track = page.locator('[aria-label="Left margin"]').locator('..')
+  const bounds = await track.boundingBox()
+  await track.click({ position: { x: (bounds?.width ?? 600) * 0.8, y: 2 } })
+
+  const marker = page.getByRole('button', { name: /tab stop/ })
+  await expect(marker).toHaveCount(1)
+
+  // Alt-click changes what fills the gap; a plain click changes the alignment.
+  await marker.click({ modifiers: ['Alt'] })
+  await expect(page.getByRole('button', { name: /with dot leader/ })).toHaveCount(1)
+
+  await expect(tab).toHaveAttribute('data-leader', 'dot')
+  expect(await widthOf()).toBeGreaterThan(fallback)
+})
+
+test('types a tab in the middle of a line and indents at its start', async ({ page }) => {
+  await page.locator(editor).click()
+
+  // At the start of a paragraph Tab indents, as it does in Word.
+  await page.keyboard.press('Tab')
+  await expect(page.locator(`${editor} .doc-tab`)).toHaveCount(0)
+  await expect(page.locator(`${editor} p[style*="margin-left"]`)).toHaveCount(1)
+
+  await page.keyboard.type('text')
+  await page.keyboard.press('Tab')
+  await expect(page.locator(`${editor} .doc-tab`)).toHaveCount(1)
+})

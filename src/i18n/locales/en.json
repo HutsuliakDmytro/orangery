@@ -76,6 +76,7 @@
     "defaultFont": "Default font",
     "defaultFontSize": "Default size (pt)",
     "autosave": "Save recovery snapshots while editing",
+    "smartTyping": "Replace quotes, dashes and the ellipsis while typing",
     "backups": "Keep a .bak copy when overwriting a file",
     "done": "Done"
   },

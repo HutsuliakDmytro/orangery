@@ -130,3 +130,21 @@ test('counts words in the status bar once typing pauses', async ({ page }) => {
   // The count is deferred so it does not run on every keystroke.
   await expect(page.getByText('4 words')).toBeVisible({ timeout: 5000 })
 })
+
+test('replaces quotes, dashes and the ellipsis while typing', async ({ page }) => {
+  await page.locator(editor).click()
+  // Typed through the browser's own input, which is the only place the rules
+  // fire: they run on text input and deliberately not on paste.
+  await page.keyboard.type('he said "hello" wait... a--b')
+
+  await expect(page.locator(`${editor} p`).first()).toHaveText(
+    'he said “hello” wait… a—b',
+  )
+})
+
+test('picks the quotation marks from the language being typed', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('він сказав "привіт"')
+
+  await expect(page.locator(`${editor} p`).first()).toHaveText('він сказав «привіт»')
+})

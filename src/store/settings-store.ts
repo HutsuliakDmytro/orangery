@@ -24,6 +24,8 @@ export interface Settings {
   defaultFontSize: number
   autosaveEnabled: boolean
   keepBackups: boolean
+  /** Typographic substitutions while typing — quotes, dashes, the ellipsis. */
+  smartTyping: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultFontSize: DEFAULT_FONT_SIZE,
   autosaveEnabled: true,
   keepBackups: true,
+  smartTyping: true,
 }
 
 /** Rejects anything not recognised rather than trusting the file on disk. */
@@ -73,6 +76,10 @@ export function parseSettings(contents: string): Settings {
       typeof candidate['keepBackups'] === 'boolean'
         ? candidate['keepBackups']
         : DEFAULT_SETTINGS.keepBackups,
+    smartTyping:
+      typeof candidate['smartTyping'] === 'boolean'
+        ? candidate['smartTyping']
+        : DEFAULT_SETTINGS.smartTyping,
   }
 }
 
@@ -88,6 +95,8 @@ export function effectiveTheme(preference: ThemePreference): 'dark' | 'light' {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 
+const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
+
 export interface SettingsState extends Settings {
   loaded: boolean
   update: (patch: Partial<Settings>) => void
@@ -100,16 +109,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   update: (patch) => {
     set(patch)
-    const { theme, language, defaultFontFamily, defaultFontSize, autosaveEnabled, keepBackups } =
-      get()
-    void persist({
-      theme,
-      language,
-      defaultFontFamily,
-      defaultFontSize,
-      autosaveEnabled,
-      keepBackups,
-    })
+
+    // Picked by the keys of the defaults rather than destructured by hand: a
+    // setting added to `Settings` is then persisted without anyone having to
+    // remember to list it here, which is how one gets silently dropped.
+    const state = get()
+    const settings = Object.fromEntries(
+      SETTING_KEYS.map((key) => [key, state[key]]),
+    ) as unknown as Settings
+
+    void persist(settings)
   },
 
   load: async () => {

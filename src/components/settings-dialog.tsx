@@ -89,6 +89,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <label className="flex items-center gap-2 text-sm text-text">
           <input
             type="checkbox"
+            checked={settings.smartTyping}
+            onChange={(event) => {
+              update({ smartTyping: event.target.checked })
+            }}
+            className="accent-accent"
+          />
+          {t('settings.smartTyping')}
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-text">
+          <input
+            type="checkbox"
             checked={settings.autosaveEnabled}
             onChange={(event) => {
               update({ autosaveEnabled: event.target.checked })

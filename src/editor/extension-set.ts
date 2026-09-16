@@ -16,6 +16,7 @@ import TextStyle from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
 import StarterKit from '@tiptap/starter-kit'
 import type { Editor, Extensions } from '@tiptap/core'
+import { useSettingsStore } from '../store/settings-store'
 import { CommandKeymap } from './commands/keymap'
 import { FindReplace } from './extensions/find-replace'
 import { Footnote } from './extensions/footnote'
@@ -35,6 +36,7 @@ import {
   PreservedRunProperties,
 } from './extensions/passthrough'
 import { PastePlainText } from './extensions/paste-plain-text'
+import { SmartTyping } from './extensions/smart-typing'
 import { TabIndent } from './extensions/tab-indent'
 
 /**
@@ -195,6 +197,12 @@ export function buildExtensions(): Extensions {
     }),
     CharacterCount,
     FindReplace,
+    SmartTyping.configure({
+      // Read through the store rather than captured: the extension list is
+      // built once, and the setting can change at any time after that.
+      enabled: () => useSettingsStore.getState().smartTyping,
+      fallbackLanguage: () => useSettingsStore.getState().language,
+    }),
     PastePlainText,
     CommandKeymap,
   ]

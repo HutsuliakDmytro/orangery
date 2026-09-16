@@ -1,4 +1,5 @@
 import { normalizeUrl } from '../../editor/links'
+import { cssColor, cssFontFamily, cssLengthToPoints, cssProperties } from './css-values'
 import { pixelsToPoints, pointsToPixels, safeImageSource } from './image-source'
 import { flattenTable, tableFromRows } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
@@ -56,6 +57,69 @@ const MARK_FOR_TAG: Readonly<Record<string, string>> = {
 /** Elements whose content is never text to display. */
 const DROPPED = new Set(['SCRIPT', 'STYLE', 'HEAD', 'TITLE', 'META', 'LINK', 'NOSCRIPT', 'IFRAME'])
 
+const ALIGNMENTS = new Set(['left', 'right', 'center', 'justify'])
+
+/** The alignment an element declares, in CSS or in the older attribute. */
+function alignmentOf(element: Element): string | null {
+  const declared =
+    cssProperties(element.getAttribute('style')).get('text-align') ??
+    element.getAttribute('align') ??
+    ''
+
+  const value = declared.trim().toLowerCase()
+  // `start` and `end` depend on the writing direction; in a left-to-right
+  // document they are the sides the editor names.
+  const named = value === 'start' ? 'left' : value === 'end' ? 'right' : value
+
+  return ALIGNMENTS.has(named) ? named : null
+}
+
+/**
+ * The marks an element's inline styles stand for.
+ *
+ * Read as properties rather than carried through as CSS: what ends up in the
+ * document is decided here, the same way the element allowlist decides which
+ * elements survive.
+ */
+function stylesOf(element: Element): { type: string; attrs?: Record<string, unknown> }[] {
+  const properties = cssProperties(element.getAttribute('style'))
+  if (properties.size === 0) return []
+
+  const marks: { type: string; attrs?: Record<string, unknown> }[] = []
+
+  const weight = properties.get('font-weight')
+  if (weight === 'bold' || weight === 'bolder' || Number.parseInt(weight ?? '', 10) >= 600) {
+    marks.push({ type: 'bold' })
+  }
+
+  const style = properties.get('font-style')
+  if (style === 'italic' || style === 'oblique') marks.push({ type: 'italic' })
+
+  const decoration = properties.get('text-decoration') ?? properties.get('text-decoration-line')
+  if (decoration?.includes('underline')) marks.push({ type: 'underline' })
+  if (decoration?.includes('line-through')) marks.push({ type: 'strike' })
+
+  const highlight = cssColor(properties.get('background-color') ?? properties.get('background'))
+  if (highlight !== null) marks.push({ type: 'highlight', attrs: { color: highlight } })
+
+  // Colour, family and size are one mark with three attributes, matching the
+  // run properties the document formats keep them in.
+  const attrs: Record<string, unknown> = {}
+
+  const color = cssColor(properties.get('color'))
+  if (color !== null) attrs['color'] = color
+
+  const family = cssFontFamily(properties.get('font-family'))
+  if (family !== null) attrs['fontFamily'] = family
+
+  const size = cssLengthToPoints(properties.get('font-size'))
+  if (size !== null) attrs['fontSize'] = size
+
+  if (Object.keys(attrs).length > 0) marks.push({ type: 'textStyle', attrs })
+
+  return marks
+}
+
 function inlineFrom(
   node: Node,
   marks: { type: string; attrs?: Record<string, unknown> }[],
@@ -109,6 +173,7 @@ function inlineFrom(
   const nextMarks = [...marks]
   const markType = MARK_FOR_TAG[tag]
   if (markType !== undefined) nextMarks.push({ type: markType })
+  nextMarks.push(...stylesOf(element))
 
   if (tag === 'A') {
     const href = element.getAttribute('href')
@@ -151,10 +216,14 @@ function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[]
   }
 
   if (/^H[1-6]$/u.test(tag)) {
+    const align = alignmentOf(element)
     return [
       {
         type: 'heading',
-        attrs: { level: Number.parseInt(tag.slice(1), 10) },
+        attrs: {
+          level: Number.parseInt(tag.slice(1), 10),
+          ...(align === null ? {} : { textAlign: align }),
+        },
         content: [...element.childNodes].flatMap((child) => inlineFrom(child, [], warnings)),
       },
     ]
@@ -199,7 +268,10 @@ function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[]
   }
 
   const inline = [...element.childNodes].flatMap((child) => inlineFrom(child, [], warnings))
-  return inline.length > 0 ? [{ type: 'paragraph', content: inline }] : []
+  if (inline.length === 0) return []
+
+  const align = alignmentOf(element)
+  return [{ type: 'paragraph', ...(align === null ? {} : { attrs: { textAlign: align } }), content: inline }]
 }
 
 export function parseHtml(html: string): ConversionResult {
@@ -238,6 +310,33 @@ function imageTag(node: ProseMirrorNodeJson): string {
   ].join('')
 }
 
+/** The inline styles a run's marks stand for, as one `style` attribute. */
+function styleAttribute(node: ProseMirrorNodeJson): string {
+  const textStyle = node.marks?.find((mark) => mark.type === 'textStyle')?.attrs
+  const highlight = node.marks?.find((mark) => mark.type === 'highlight')?.attrs?.['color']
+
+  const color = textStyle?.['color']
+  const family = textStyle?.['fontFamily']
+  const size = textStyle?.['fontSize']
+
+  const declarations = [
+    typeof color === 'string' ? `color: ${color}` : '',
+    typeof family === 'string' ? `font-family: ${family}` : '',
+    // The editor sizes in points, which CSS states directly.
+    typeof size === 'number' ? `font-size: ${String(size)}pt` : '',
+    typeof highlight === 'string' ? `background-color: ${highlight}` : '',
+  ].filter((declaration) => declaration !== '')
+
+  return declarations.join('; ')
+}
+
+/** The `style` attribute for an aligned block, or nothing when it is not. */
+function alignAttribute(node: ProseMirrorNodeJson): string {
+  const align = node.attrs?.['textAlign']
+  if (typeof align !== 'string' || !ALIGNMENTS.has(align)) return ''
+  return ` style="text-align: ${align}"`
+}
+
 function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
   return nodes
     .map((node) => {
@@ -256,6 +355,13 @@ function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
       if (marks.has('superscript')) html = `<sup>${html}</sup>`
       if (marks.has('subscript')) html = `<sub>${html}</sub>`
 
+      // A highlight with no colour of its own still marks the text, which is
+      // what `<mark>` means; one with a colour is carried in the style instead.
+      if (marks.has('highlight') && styleAttribute(node) === '') html = `<mark>${html}</mark>`
+
+      const style = styleAttribute(node)
+      if (style !== '') html = `<span style="${escapeHtml(style)}">${html}</span>`
+
       const href = node.marks?.find((mark) => mark.type === 'link')?.attrs?.['href']
       if (typeof href === 'string') {
         html = `<a href="${escapeHtml(href)}" rel="noopener noreferrer">${html}</a>`
@@ -271,10 +377,10 @@ function serializeBlock(node: ProseMirrorNodeJson): string {
     case 'heading': {
       const level = node.attrs?.['level']
       const tag = `h${String(typeof level === 'number' ? level : 1)}`
-      return `<${tag}>${serializeInline(node.content ?? [])}</${tag}>`
+      return `<${tag}${alignAttribute(node)}>${serializeInline(node.content ?? [])}</${tag}>`
     }
     case 'paragraph':
-      return `<p>${serializeInline(node.content ?? [])}</p>`
+      return `<p${alignAttribute(node)}>${serializeInline(node.content ?? [])}</p>`
     case 'blockquote':
       return `<blockquote>${(node.content ?? []).map(serializeBlock).join('')}</blockquote>`
     case 'bulletList':

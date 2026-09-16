@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { escapeHtml, parseHtml, serializeHtml } from './html'
+import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
 import { textContentOf } from './types'
 
 const first = (html: string) => parseHtml(html).doc.content?.[0]
@@ -240,5 +241,120 @@ describe('html images', () => {
 
     expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['src']).toBe(PIXEL)
     expect(again.doc.content?.[0]?.content?.[0]?.attrs?.['width']).toBe(36)
+  })
+})
+
+describe('html character formatting', () => {
+  const markOf = (doc: ProseMirrorNodeJson, type: string) =>
+    doc.content?.[0]?.content?.[0]?.marks?.find((mark) => mark.type === type)
+
+  it('reads colour, family and size as one mark', () => {
+    const { doc } = parseHtml(
+      '<p><span style="color: #ff0000; font-family: Georgia; font-size: 14pt">x</span></p>',
+    )
+
+    const attrs = markOf(doc, 'textStyle')?.attrs
+    expect(attrs?.['color']).toBe('#FF0000')
+    expect(attrs?.['fontFamily']).toBe('Georgia')
+    expect(attrs?.['fontSize']).toBe(14)
+  })
+
+  it('reads a background colour as a highlight', () => {
+    const { doc } = parseHtml('<p><span style="background-color: rgb(255,255,0)">x</span></p>')
+    expect(markOf(doc, 'highlight')?.attrs?.['color']).toBe('#FFFF00')
+  })
+
+  it('reads weight and decoration declared in CSS rather than by tag', () => {
+    const { doc } = parseHtml(
+      '<p><span style="font-weight: 700; text-decoration: underline line-through">x</span></p>',
+    )
+
+    const types = (markOf(doc, 'bold') ? ['bold'] : []).concat(
+      markOf(doc, 'underline') ? ['underline'] : [],
+      markOf(doc, 'strike') ? ['strike'] : [],
+    )
+    expect(types).toEqual(['bold', 'underline', 'strike'])
+  })
+
+  it('writes the marks back as one style attribute', () => {
+    const html = serializeHtml({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: 'x',
+              marks: [
+                { type: 'textStyle', attrs: { color: '#FF0000', fontSize: 14 } },
+                { type: 'highlight', attrs: { color: '#FFFF00' } },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(html).toContain('color: #FF0000')
+    expect(html).toContain('font-size: 14pt')
+    expect(html).toContain('background-color: #FFFF00')
+  })
+
+  it('round-trips colour, family, size and highlight', () => {
+    const source =
+      '<p><span style="color: #FF0000; font-family: Georgia; font-size: 14pt; background-color: #FFFF00">x</span></p>'
+    const { doc } = parseHtml(serializeHtml(parseHtml(source).doc))
+
+    expect(markOf(doc, 'textStyle')?.attrs?.['fontFamily']).toBe('Georgia')
+    expect(markOf(doc, 'highlight')?.attrs?.['color']).toBe('#FFFF00')
+  })
+
+  it('keeps a plain mark element as a highlight with no colour of its own', () => {
+    const { doc } = parseHtml('<p><mark>x</mark></p>')
+    expect(markOf(doc, 'highlight')).toBeDefined()
+    expect(serializeHtml(doc)).toContain('<mark>')
+  })
+})
+
+describe('html alignment', () => {
+  it('reads alignment from CSS and from the older attribute', () => {
+    expect(parseHtml('<p style="text-align: center">x</p>').doc.content?.[0]?.attrs?.['textAlign']).toBe(
+      'center',
+    )
+    expect(parseHtml('<p align="right">x</p>').doc.content?.[0]?.attrs?.['textAlign']).toBe('right')
+  })
+
+  it('reads the direction-relative names as the sides the editor names', () => {
+    expect(parseHtml('<p style="text-align: end">x</p>').doc.content?.[0]?.attrs?.['textAlign']).toBe(
+      'right',
+    )
+  })
+
+  it('round-trips an aligned heading', () => {
+    const { doc } = parseHtml(
+      serializeHtml({
+        type: 'doc',
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 2, textAlign: 'center' },
+            content: [{ type: 'text', text: 'Title' }],
+          },
+        ],
+      }),
+    )
+
+    expect(doc.content?.[0]?.type).toBe('heading')
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('center')
+  })
+
+  it('leaves an unaligned paragraph without a style attribute', () => {
+    const html = serializeHtml({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
+    })
+
+    expect(html).toContain('<p>x</p>')
   })
 })

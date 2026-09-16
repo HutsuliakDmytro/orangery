@@ -1,4 +1,5 @@
 import { contentTypeFor } from '../ooxml/image'
+import { dataUrlFrom } from './data-url'
 import { CONTENT_TYPES_PART, getPartText, setPartText } from '../ooxml/package'
 import type { DocxPackage } from '../ooxml/package'
 import {
@@ -78,6 +79,12 @@ export class UnsupportedImageError extends Error {
   override readonly name = 'UnsupportedImageError'
 }
 
+/** The message shown when a picture is of a kind no document format can hold. */
+export function unsupportedImageMessage(fileName: string): string {
+  const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
+  return `A document cannot hold ${extension === '' || extension === fileName.toLowerCase() ? 'this file type' : `.${extension}`} images.`
+}
+
 /**
  * Adds an image to the package and returns the relationship that points at it.
  */
@@ -85,11 +92,7 @@ export function addImage(pkg: DocxPackage, fileName: string, bytes: Uint8Array):
   const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
   const contentType = contentTypeFor(fileName)
 
-  if (contentType === null) {
-    throw new UnsupportedImageError(
-      `Word cannot embed ${extension === '' ? 'this file type' : `.${extension}`} images.`,
-    )
-  }
+  if (contentType === null) throw new UnsupportedImageError(unsupportedImageMessage(fileName))
 
   const name = nextMediaName(pkg, extension)
   const path = `word/media/${name}`
@@ -107,14 +110,7 @@ export function addImage(pkg: DocxPackage, fileName: string, bytes: Uint8Array):
 /** Data URL for a media part, so the webview can display it. */
 export function mediaDataUrl(pkg: DocxPackage, path: string): string | null {
   const part = pkg.parts.get(path)
-  if (!part) return null
-
-  const contentType = contentTypeFor(path)
-  if (contentType === null) return null
-
-  let binary = ''
-  for (const byte of part.bytes) binary += String.fromCharCode(byte)
-  return `data:${contentType};base64,${btoa(binary)}`
+  return part === undefined ? null : dataUrlFrom(part.bytes, path)
 }
 
 /** How long to wait for a picture to report its size before giving up. */

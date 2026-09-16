@@ -1,3 +1,4 @@
+import { decodeDataUrl } from './data-url'
 import { addImage, UnsupportedImageError } from './media'
 import { addPicture } from './odt-file'
 import type { DocxPackage } from '../ooxml/package'
@@ -35,35 +36,6 @@ export type MeasureImage = (src: string) => Promise<{ width: number; height: num
  * turns into a warning.
  */
 export type StoreImage = (bytes: Uint8Array, extension: string) => Record<string, unknown>
-
-const DATA_URL = /^data:([a-z0-9.+/-]+);base64,(.*)$/isu
-
-/** Bytes and an extension for a data URL, or null when it is not one. */
-export function decodeDataUrl(src: string): { bytes: Uint8Array; extension: string } | null {
-  const match = DATA_URL.exec(src.trim())
-  if (match?.[1] === undefined || match[2] === undefined) return null
-
-  const subtype = match[1].split('/')[1]?.toLowerCase()
-  if (subtype === undefined || subtype === '') return null
-
-  let binary: string
-  try {
-    binary = atob(match[2])
-  } catch {
-    // A truncated or mistyped data URL; the picture is reported, not written.
-    return null
-  }
-
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-
-  return {
-    bytes,
-    // `image/jpeg` is stored as `.jpg`, which is the extension Word writes and
-    // the one `contentTypeFor` maps back.
-    extension: subtype === 'jpeg' ? 'jpg' : subtype === 'svg+xml' ? 'svg' : subtype,
-  }
-}
 
 /**
  * Rewrites every picture in the document to point at part of a package.

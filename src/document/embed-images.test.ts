@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createNewDocx } from './docx-file'
-import { decodeDataUrl, embedImagesInto } from './embed-images'
+import { embedImagesInto } from './embed-images'
 import { parseSection } from '../ooxml/section'
 import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
 
@@ -15,29 +15,6 @@ function docWith(image: Record<string, unknown>): ProseMirrorNodeJson {
     content: [{ type: 'paragraph', content: [{ type: 'image', attrs: image }] }],
   }
 }
-
-describe('decodeDataUrl', () => {
-  it('reads the bytes and the extension', () => {
-    const decoded = decodeDataUrl(PNG)
-    expect(decoded?.extension).toBe('png')
-    // The PNG signature, so the bytes really were decoded.
-    expect([...(decoded?.bytes.slice(0, 4) ?? [])]).toEqual([137, 80, 78, 71])
-  })
-
-  it('names a JPEG the way Word does', () => {
-    expect(decodeDataUrl('data:image/jpeg;base64,/9j/')?.extension).toBe('jpg')
-    expect(decodeDataUrl('data:image/svg+xml;base64,PHN2Zy8+')?.extension).toBe('svg')
-  })
-
-  it('returns nothing for an address that is not a data URL', () => {
-    expect(decodeDataUrl('https://example.com/a.png')).toBeNull()
-    expect(decodeDataUrl('Pictures/a.png')).toBeNull()
-  })
-
-  it('returns nothing for a data URL whose payload is damaged', () => {
-    expect(decodeDataUrl('data:image/png;base64,!!!!')).toBeNull()
-  })
-})
 
 describe('embedImagesInto', () => {
   it('adds the bytes to the package and points the node at them', async () => {

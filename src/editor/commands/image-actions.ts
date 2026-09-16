@@ -1,7 +1,15 @@
 import type { Editor } from '@tiptap/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { readDocumentFile } from '../../document/file-operations'
-import { addImage, naturalSize, UnsupportedImageError } from '../../document/media'
+import type { OpenSession } from '../../document/file-operations'
+import { dataUrlFrom, extensionFor } from '../../document/data-url'
+import {
+  addImage,
+  naturalSize,
+  UnsupportedImageError,
+  unsupportedImageMessage,
+} from '../../document/media'
+import { addPicture } from '../../document/odt-file'
 import { getSession } from '../../document/session'
 import { fitWithin } from '../../ooxml/image'
 import { isTauri } from '../../platform/os'
@@ -12,27 +20,48 @@ import { useViewStore } from '../../store/view-store'
 /**
  * Inserting an image.
  *
- * The bytes go into the package and a relationship is created before the node is
- * inserted: a node pointing at a relationship that does not exist would produce
- * a file Word offers to repair.
+ * The bytes go into the package before the node is inserted: a node pointing at
+ * a relationship that does not exist would produce a file Word offers to repair.
+ *
+ * A document converted from a flat format has no package to put them in. There
+ * the picture travels in the document as a data URL and is written into a
+ * package when the file is saved, which is what `embedImages` does.
  */
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'webp']
 
+/**
+ * Stores the bytes where the open document keeps its pictures, and returns what
+ * the node needs to find them again.
+ */
+function storeInSession(
+  session: OpenSession,
+  fileName: string,
+  bytes: Uint8Array,
+): Record<string, unknown> {
+  switch (session.kind) {
+    case 'docx':
+      return { relationshipId: addImage(session.docx.pkg, fileName, bytes).relationshipId }
+    case 'odt': {
+      const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
+      return { href: addPicture(session.odt.pkg, extensionFor(extension), bytes) }
+    }
+    case 'flat':
+      // Nothing to store: there is no package until the document is saved.
+      return {}
+  }
+}
+
 /** Shared tail of every insert path: package first, then the node. */
 async function embed(editor: Editor, fileName: string, bytes: Uint8Array): Promise<void> {
   const session = getSession()
-  if (session?.kind !== 'docx') {
-    useDocumentStore
-      .getState()
-      .addWarnings([{ tag: 'image', message: 'Images can only be added to Word documents.' }])
-    return
-  }
+  if (!session) return
 
   try {
-    const added = addImage(session.docx.pkg, fileName, bytes)
-    const { mediaDataUrl } = await import('../../document/media')
-    const src = mediaDataUrl(session.docx.pkg, added.path) ?? ''
+    const src = dataUrlFrom(bytes, fileName)
+    if (src === null) throw new UnsupportedImageError(unsupportedImageMessage(fileName))
+
+    const stored = storeInSession(session, fileName, bytes)
 
     const natural = await naturalSize(src)
     const size = fitWithin(natural, contentWidth(useViewStore.getState().section))
@@ -47,7 +76,8 @@ async function embed(editor: Editor, fileName: string, bytes: Uint8Array): Promi
           alt: '',
           width: size.width,
           height: size.height,
-          relationshipId: added.relationshipId,
+          wrap: 'inline',
+          ...stored,
           imageId: Date.now() % 100000,
         },
       })
@@ -82,14 +112,6 @@ export const imageActions = {
   },
 
   async insertFromFile(editor: Editor, path?: string): Promise<void> {
-    const session = getSession()
-    if (session?.kind !== 'docx') {
-      useDocumentStore
-        .getState()
-        .addWarnings([{ tag: 'image', message: 'Images can only be added to Word documents.' }])
-      return
-    }
-
     let target = path
     if (target === undefined) {
       if (!isTauri()) return

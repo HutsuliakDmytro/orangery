@@ -82,7 +82,7 @@ describe('addImage', () => {
     expect(second.path).not.toBe(first.path)
   })
 
-  it('rejects a format Word cannot embed, by name', async () => {
+  it('rejects a format no document can hold, by name', async () => {
     const pkg = await fixture()
     expect(() => addImage(pkg, 'photo.heic', PNG)).toThrow(UnsupportedImageError)
     expect(() => addImage(pkg, 'photo.heic', PNG)).toThrow(/\.heic/u)

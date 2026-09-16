@@ -12,7 +12,7 @@ import {
   isTextNode,
 } from '../../ooxml/xml'
 import type { XmlNode } from '../../ooxml/xml'
-import { contentTypeFor } from '../../ooxml/image'
+import { dataUrlFrom } from '../data-url'
 import { docOf, markNames } from './types'
 import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-document'
 
@@ -955,14 +955,7 @@ export function serializeOdtContent(
 /** Data URL for a picture in the package, so the webview can display it. */
 export function odtMediaDataUrl(pkg: OdtPackage, href: string): string | null {
   const part = pkg.parts.get(href)
-  if (!part) return null
-
-  const contentType = contentTypeFor(href)
-  if (contentType === null) return null
-
-  let binary = ''
-  for (const byte of part.bytes) binary += String.fromCharCode(byte)
-  return `data:${contentType};base64,${btoa(binary)}`
+  return part === undefined ? null : dataUrlFrom(part.bytes, href)
 }
 
 export async function openOdt(bytes: Uint8Array): Promise<OpenOdt> {

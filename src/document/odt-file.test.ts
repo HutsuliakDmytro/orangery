@@ -93,3 +93,27 @@ describe('manifestFor', () => {
     )
   })
 })
+
+describe('inserting into an open ODT', () => {
+  it('writes a picture added to the package back into the saved file', async () => {
+    const fresh = await createNewOdt()
+    const href = addPicture(fresh.pkg, 'png', new Uint8Array([137, 80, 78, 71]))
+
+    const saved = await saveOdt(fresh, {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'image', attrs: { src: '', href, width: 72, height: 36 } }],
+        },
+      ],
+    })
+
+    const zip = await JSZip.loadAsync(saved)
+    const content = await zip.file('content.xml')?.async('string')
+
+    expect(zip.file(href)).not.toBeNull()
+    expect(content).toContain(`xlink:href="${href}"`)
+    expect(content).toContain('svg:width="72pt"')
+  })
+})

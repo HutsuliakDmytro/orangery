@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { readDocumentFile } from '../../document/file-operations'
-import { addImage, UnsupportedImageError } from '../../document/media'
+import { addImage, naturalSize, UnsupportedImageError } from '../../document/media'
 import { getSession } from '../../document/session'
 import { fitWithin } from '../../ooxml/image'
 import { isTauri } from '../../platform/os'
@@ -18,21 +18,6 @@ import { useViewStore } from '../../store/view-store'
  */
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'webp']
-
-/** Reads the natural size of an image, in points at 96dpi. */
-async function naturalSize(dataUrl: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
-    const image = new Image()
-    image.onload = () => {
-      resolve({ width: image.naturalWidth * (72 / 96), height: image.naturalHeight * (72 / 96) })
-    }
-    // A picture we cannot measure still gets inserted, at the column width.
-    image.onerror = () => {
-      resolve({ width: 0, height: 0 })
-    }
-    image.src = dataUrl
-  })
-}
 
 /** Shared tail of every insert path: package first, then the node. */
 async function embed(editor: Editor, fileName: string, bytes: Uint8Array): Promise<void> {

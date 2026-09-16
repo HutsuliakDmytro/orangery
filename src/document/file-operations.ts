@@ -4,6 +4,8 @@ import { isTauri } from '../platform/os'
 import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
 import type { SectionProperties } from '../ooxml/section'
 import { converterFor } from './converters'
+import { embedImagesInto } from './embed-images'
+import { naturalSize } from './media'
 import { openOdt, saveOdt } from './converters/odt'
 import type { OpenOdt } from './converters/odt'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
@@ -28,6 +30,8 @@ export interface LoadedDocument {
 export interface SaveResult {
   path: string
   backupPath: string | null
+  /** Anything the conversion could not carry across, for the warning banner. */
+  warnings?: ParseWarning[]
 }
 
 export class UnsupportedFormatError extends Error {
@@ -141,8 +145,22 @@ export async function saveDocumentTo(
   // Saving a DOCX as DOCX writes the preserved package back. Saving it as
   // anything else is a conversion, and the package is left behind — the format
   // list marks which targets preserve and which do not.
-  if (format === 'docx' && session.kind === 'docx') {
-    return writeDocumentFile(path, await saveDocx(session.docx, doc, section))
+  if (format === 'docx') {
+    if (session.kind === 'docx') {
+      return writeDocumentFile(path, await saveDocx(session.docx, doc, section))
+    }
+
+    // Converting into the native format. The document starts from the template
+    // a new file would use, and the pictures have to be moved into it before
+    // the body is written, or the drawings point at nothing.
+    const fresh = await createNewDocx()
+    const embedded = await embedImagesInto(fresh.pkg, doc, {
+      section: section ?? fresh.section,
+      measure: naturalSize,
+    })
+
+    const result = await writeDocumentFile(path, await saveDocx(fresh, embedded.doc, section))
+    return embedded.warnings.length > 0 ? { ...result, warnings: embedded.warnings } : result
   }
 
   if (format === 'odt' && session.kind === 'odt') {

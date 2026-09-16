@@ -148,6 +148,8 @@ export const fileOperations = {
           useViewStore.getState().section,
         )
         useDocumentStore.getState().markSaved(result.path, format)
+        // A conversion may have left something behind; the banner says what.
+        if (result.warnings) useDocumentStore.getState().addWarnings(result.warnings)
       } catch (error) {
         reportFailure('Saving', error)
       }
@@ -177,6 +179,7 @@ export const fileOperations = {
           useViewStore.getState().section,
         )
         useDocumentStore.getState().markSaved(result.path, targetFormat)
+        if (result.warnings) useDocumentStore.getState().addWarnings(result.warnings)
         await rememberRecent(result.path)
       } catch (error) {
         reportFailure('Saving', error)

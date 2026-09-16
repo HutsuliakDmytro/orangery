@@ -116,3 +116,42 @@ export function mediaDataUrl(pkg: DocxPackage, path: string): string | null {
   for (const byte of part.bytes) binary += String.fromCharCode(byte)
   return `data:${contentType};base64,${btoa(binary)}`
 }
+
+/** How long to wait for a picture to report its size before giving up. */
+const MEASURE_TIMEOUT_MS = 2000
+
+/**
+ * The natural size of a picture, in points at 96 dpi.
+ *
+ * Resolves to zeroes rather than rejecting when the picture cannot be read, and
+ * gives up after a moment: a malformed data URL fires neither event, and a save
+ * must not hang on one.
+ */
+export function naturalSize(dataUrl: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const unknown = { width: 0, height: 0 }
+
+    if (typeof Image !== 'function') {
+      resolve(unknown)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      resolve(unknown)
+    }, MEASURE_TIMEOUT_MS)
+
+    const settle = (size: { width: number; height: number }) => {
+      clearTimeout(timer)
+      resolve(size)
+    }
+
+    const image = new Image()
+    image.onload = () => {
+      settle({ width: image.naturalWidth * (72 / 96), height: image.naturalHeight * (72 / 96) })
+    }
+    image.onerror = () => {
+      settle(unknown)
+    }
+    image.src = dataUrl
+  })
+}

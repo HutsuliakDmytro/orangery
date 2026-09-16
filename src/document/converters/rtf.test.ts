@@ -626,3 +626,66 @@ describe('rtf alignment', () => {
     expect(doc.content?.[1]?.attrs?.['textAlign']).toBe('center')
   })
 })
+
+describe('rtf paragraph properties', () => {
+  it('reads indents and spacing stated in twips', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\li720\\ri240\\fi-360\\sb120\\sa240 x\\par}')
+
+    const attrs = doc.content?.[0]?.attrs
+    expect(attrs?.['indentLeft']).toBe(36)
+    expect(attrs?.['indentRight']).toBe(12)
+    expect(attrs?.['indentFirstLine']).toBe(-18)
+    expect(attrs?.['spaceBefore']).toBe(6)
+    expect(attrs?.['spaceAfter']).toBe(12)
+  })
+
+  it('reads a line height stated as a multiple of a line', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\sl360\\slmult1 x\\par}')
+    expect(doc.content?.[0]?.attrs?.['lineHeight']).toBe(1.5)
+  })
+
+  it('leaves an exact line height alone, since it depends on the font', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\sl360\\slmult0 x\\par}')
+    expect(doc.content?.[0]?.attrs?.['lineHeight']).toBeUndefined()
+  })
+
+  it('does not read a list item’s marker indent as the user’s own', () => {
+    const { doc } = parseRtf(
+      "{\\rtf1\\ansi\\pard\\fi-360\\li720{\\pntext\\f0 \\'b7\\tab}Item\\par}",
+    )
+
+    const item = doc.content?.[0]?.content?.[0]?.content?.[0]
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+    expect(item?.attrs?.['indentLeft']).toBeUndefined()
+    expect(item?.attrs?.['indentFirstLine']).toBeUndefined()
+  })
+
+  it('round-trips indents, spacing and line height', () => {
+    const source: ProseMirrorNodeJson = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            textAlign: 'center',
+            indentLeft: 36,
+            indentFirstLine: -18,
+            spaceAfter: 6,
+            lineHeight: 1.5,
+          },
+          content: [{ type: 'text', text: 'x' }],
+        },
+      ],
+    }
+
+    const { doc } = parseRtf(serializeRtf(source))
+    expect(doc.content?.[0]?.attrs).toEqual(source.content?.[0]?.attrs)
+  })
+
+  it('does not carry the spacing into the next paragraph', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\sa240 one\\par\\pard two\\par}')
+
+    expect(doc.content?.[0]?.attrs?.['spaceAfter']).toBe(12)
+    expect(doc.content?.[1]?.attrs).toBeUndefined()
+  })
+})

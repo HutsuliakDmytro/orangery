@@ -735,3 +735,65 @@ describe('odt paragraph alignment', () => {
     expect(xml).not.toContain('style:family="paragraph"')
   })
 })
+
+describe('odt paragraph properties', () => {
+  const withStyle = (properties: string) =>
+    CONTENT(
+      '<text:p text:style-name="P1">text</text:p>',
+      `<style:style style:name="P1" style:family="paragraph"><style:paragraph-properties ${properties}/></style:style>`,
+    )
+
+  it('reads indents and spacing as points', () => {
+    const { doc } = parseOdtContent(
+      withStyle(
+        'fo:margin-left="0.5in" fo:margin-right="12pt" fo:text-indent="-18pt" fo:margin-top="6pt" fo:margin-bottom="0.25cm"',
+      ),
+    )
+
+    const attrs = doc.content?.[0]?.attrs
+    expect(attrs?.['indentLeft']).toBe(36)
+    expect(attrs?.['indentRight']).toBe(12)
+    expect(attrs?.['indentFirstLine']).toBe(-18)
+    expect(attrs?.['spaceBefore']).toBe(6)
+    expect(attrs?.['spaceAfter']).toBe(7.09)
+  })
+
+  it('reads a line height stated as a share of one line', () => {
+    const { doc } = parseOdtContent(withStyle('fo:line-height="150%"'))
+    expect(doc.content?.[0]?.attrs?.['lineHeight']).toBe(1.5)
+  })
+
+  it('leaves a line height given as a length alone', () => {
+    const { doc } = parseOdtContent(withStyle('fo:line-height="18pt"'))
+    expect(doc.content?.[0]?.attrs?.['lineHeight']).toBeUndefined()
+  })
+
+  it('round-trips indents, spacing and line height', () => {
+    const source = parseOdtContent(
+      withStyle(
+        'fo:text-align="center" fo:margin-left="36pt" fo:text-indent="-18pt" fo:margin-bottom="6pt" fo:line-height="150%"',
+      ),
+    )
+    const again = parseOdtContent(
+      serializeOdtContent(source.doc, { contentAttributes: source.contentAttributes }),
+    )
+
+    expect(again.doc.content?.[0]?.attrs).toEqual(source.doc.content?.[0]?.attrs)
+  })
+
+  it('declares one paragraph style per combination in use', () => {
+    const xml = serializeOdtContent(
+      {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', attrs: { indentLeft: 36 }, content: [{ type: 'text', text: 'a' }] },
+          { type: 'paragraph', attrs: { indentLeft: 36 }, content: [{ type: 'text', text: 'b' }] },
+          { type: 'paragraph', attrs: { indentLeft: 72 }, content: [{ type: 'text', text: 'c' }] },
+        ],
+      },
+      { contentAttributes: {} },
+    )
+
+    expect(xml.match(/style:family="paragraph"/gu)).toHaveLength(2)
+  })
+})

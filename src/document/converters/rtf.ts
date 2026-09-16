@@ -1,5 +1,7 @@
 import { dataUrlFrom, decodeDataUrl } from '../data-url'
 import { listBuilder } from './list-nesting'
+import { attributesFor, hasProperties, propertiesOf } from './paragraph-properties'
+import type { ParagraphProperties } from './paragraph-properties'
 import type { ListKind } from './list-nesting'
 import { flattenTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
@@ -93,6 +95,12 @@ const CLEAN_STATE: RunState = {
 
 /** RTF states a font size in half-points, as OOXML does. */
 const HALF_POINTS_PER_POINT = 2
+
+/** RTF measures indents and spacing in twips, twenty to the point. */
+const TWIPS = 20
+
+/** A line height is stated in 240ths of a line, as `w:line` is in OOXML. */
+const LINE_UNITS = 240
 
 /** Alignment control words, named after the edge the text is pushed to. */
 const ALIGNMENTS: Readonly<Record<string, string>> = {
@@ -230,7 +238,26 @@ export function parseRtf(text: string): ConversionResult {
   let fontId: number | null = null
   let fontName = ''
 
-  let paragraphAlign: string | null = null
+  let paragraph: ParagraphProperties = {
+    textAlign: null,
+    indentLeft: null,
+    indentRight: null,
+    indentFirstLine: null,
+    spaceBefore: null,
+    spaceAfter: null,
+    lineHeight: null,
+  }
+  const resetParagraph = () => {
+    paragraph = {
+      textAlign: null,
+      indentLeft: null,
+      indentRight: null,
+      indentFirstLine: null,
+      spaceBefore: null,
+      spaceAfter: null,
+      lineHeight: null,
+    }
+  }
 
   // Set while reading a `\pict` group: the hex bytes, the encoding, and the
   // size the writer wants it displayed at.
@@ -350,28 +377,35 @@ export function parseRtf(text: string): ConversionResult {
 
     closeTable()
 
-    const paragraph: ProseMirrorNodeJson = {
+    const isItem = marker !== null && headingLevel === null
+
+    // On a list item the left indent and the hanging indent place the marker,
+    // not the text; reading them as the user's own indent would double them.
+    const properties = isItem
+      ? { ...paragraph, indentLeft: null, indentFirstLine: null }
+      : { ...paragraph, indentLeft: itemIndent === null ? null : itemIndent / TWIPS }
+
+    const attrs = attributesFor(properties)
+
+    const block: ProseMirrorNodeJson = {
       type: 'paragraph',
-      ...(paragraphAlign === null ? {} : { attrs: { textAlign: paragraphAlign } }),
+      ...(Object.keys(attrs).length > 0 ? { attrs } : {}),
       ...(current.length > 0 ? { content: current } : {}),
     }
 
-    if (marker !== null && headingLevel === null) {
-      lists.addItem(kindOf(marker), levelOf(itemLevel, itemIndent), [paragraph], startOf(marker))
+    if (isItem) {
+      lists.addItem(kindOf(marker ?? ''), levelOf(itemLevel, itemIndent), [block], startOf(marker ?? ''))
     } else {
       lists.close()
 
       if (headingLevel !== null) {
         content.push({
           type: 'heading',
-          attrs: {
-            level: headingLevel,
-            ...(paragraphAlign === null ? {} : { textAlign: paragraphAlign }),
-          },
+          attrs: { level: headingLevel, ...attrs },
           ...(current.length > 0 ? { content: current } : {}),
         })
       } else {
-        content.push(paragraph)
+        content.push(block)
       }
     }
 
@@ -380,7 +414,7 @@ export function parseRtf(text: string): ConversionResult {
     marker = null
     itemLevel = null
     itemIndent = null
-    paragraphAlign = null
+    resetParagraph()
   }
 
   while (index < text.length) {
@@ -566,13 +600,16 @@ export function parseRtf(text: string): ConversionResult {
           marker = null
           itemLevel = null
           itemIndent = null
-          paragraphAlign = null
+          resetParagraph()
           break
         case 'ilvl':
           if (parameter !== null && parameter >= 0) itemLevel = parameter
           break
         case 'li':
           if (parameter !== null && parameter >= 0) itemIndent = parameter
+          break
+        case 'fi':
+          if (parameter !== null) paragraph.indentFirstLine = parameter / TWIPS
           break
         case 'b':
           flushText()
@@ -631,7 +668,24 @@ export function parseRtf(text: string): ConversionResult {
         case 'qr':
         case 'qc':
         case 'qj':
-          paragraphAlign = ALIGNMENTS[word] ?? null
+          paragraph.textAlign = ALIGNMENTS[word] ?? null
+          break
+        case 'ri':
+          if (parameter !== null) paragraph.indentRight = parameter / TWIPS
+          break
+        case 'sb':
+          if (parameter !== null) paragraph.spaceBefore = parameter / TWIPS
+          break
+        case 'sa':
+          if (parameter !== null) paragraph.spaceAfter = parameter / TWIPS
+          break
+        case 'sl':
+          // A positive value with `\slmult1` is a multiple of a line; the exact
+          // and at-least forms depend on the font and are left alone.
+          if (parameter !== null && parameter > 0) paragraph.lineHeight = parameter / LINE_UNITS
+          break
+        case 'slmult':
+          if (parameter === 0) paragraph.lineHeight = null
           break
         case 'outlinelevel':
           if (parameter !== null && parameter >= 0 && parameter <= 5) {
@@ -800,13 +854,30 @@ function runProperties(
   return { open, close }
 }
 
-/** The alignment control word for a block, or nothing when it has none. */
-function alignmentOf(node: ProseMirrorNodeJson): string {
-  const align = node.attrs?.['textAlign']
-  if (typeof align !== 'string') return ''
+/** The control words for a block's own alignment, indents and spacing. */
+function blockProperties(node: ProseMirrorNodeJson): string {
+  const properties = propertiesOf(node)
+  if (!hasProperties(properties)) return ''
 
-  const word = Object.entries(ALIGNMENTS).find(([, name]) => name === align)?.[0]
-  return word === undefined ? '' : `\\${word}`
+  const twips = (value: number) => String(Math.round(value * TWIPS))
+  const alignment =
+    properties.textAlign === null
+      ? undefined
+      : Object.entries(ALIGNMENTS).find(([, name]) => name === properties.textAlign)?.[0]
+
+  return [
+    alignment === undefined ? '' : `\\${alignment}`,
+    properties.indentLeft === null ? '' : `\\li${twips(properties.indentLeft)}`,
+    properties.indentRight === null ? '' : `\\ri${twips(properties.indentRight)}`,
+    properties.indentFirstLine === null ? '' : `\\fi${twips(properties.indentFirstLine)}`,
+    properties.spaceBefore === null ? '' : `\\sb${twips(properties.spaceBefore)}`,
+    properties.spaceAfter === null ? '' : `\\sa${twips(properties.spaceAfter)}`,
+    // `\slmult1` is what makes the value a multiple of a line rather than an
+    // exact height in twips.
+    properties.lineHeight === null
+      ? ''
+      : `\\sl${String(Math.round(properties.lineHeight * LINE_UNITS))}\\slmult1`,
+  ].join('')
 }
 
 function serializeInline(nodes: readonly ProseMirrorNodeJson[], tables: RtfTables): string {
@@ -928,13 +999,13 @@ export function serializeRtf(doc: ProseMirrorNodeJson): string {
         const level = block.attrs?.['level']
         const outline = typeof level === 'number' ? level - 1 : 0
         blocks.push(
-          `\\pard\\outlinelevel${String(outline)}${alignmentOf(block)}\\b ${serializeInline(block.content ?? [], tables)}\\b0\\par`,
+          `\\pard\\outlinelevel${String(outline)}${blockProperties(block)}\\b ${serializeInline(block.content ?? [], tables)}\\b0\\par`,
         )
         break
       }
       case 'paragraph':
         blocks.push(
-          `\\pard${alignmentOf(block)} ${serializeInline(block.content ?? [], tables)}\\par`,
+          `\\pard${blockProperties(block)} ${serializeInline(block.content ?? [], tables)}\\par`,
         )
         break
       case 'bulletList':

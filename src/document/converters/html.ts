@@ -1,5 +1,7 @@
 import { normalizeUrl } from '../../editor/links'
 import { cssColor, cssFontFamily, cssLengthToPoints, cssProperties } from './css-values'
+import { attributesFor, hasProperties, propertiesOf } from './paragraph-properties'
+import type { ParagraphProperties } from './paragraph-properties'
 import { pixelsToPoints, pointsToPixels, safeImageSource } from './image-source'
 import { flattenTable, tableFromRows } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
@@ -60,11 +62,8 @@ const DROPPED = new Set(['SCRIPT', 'STYLE', 'HEAD', 'TITLE', 'META', 'LINK', 'NO
 const ALIGNMENTS = new Set(['left', 'right', 'center', 'justify'])
 
 /** The alignment an element declares, in CSS or in the older attribute. */
-function alignmentOf(element: Element): string | null {
-  const declared =
-    cssProperties(element.getAttribute('style')).get('text-align') ??
-    element.getAttribute('align') ??
-    ''
+function alignmentOf(element: Element, properties: Map<string, string>): string | null {
+  const declared = properties.get('text-align') ?? element.getAttribute('align') ?? ''
 
   const value = declared.trim().toLowerCase()
   // `start` and `end` depend on the writing direction; in a left-to-right
@@ -72,6 +71,38 @@ function alignmentOf(element: Element): string | null {
   const named = value === 'start' ? 'left' : value === 'end' ? 'right' : value
 
   return ALIGNMENTS.has(named) ? named : null
+}
+
+/**
+ * A line height as a share of one line.
+ *
+ * CSS allows a bare number, which already is one, and a percentage. A length
+ * depends on the font size of a rule this converter does not resolve, so it is
+ * left alone rather than approximated.
+ */
+function lineHeightOf(value: string | undefined): number | null {
+  if (value === undefined) return null
+
+  const text = value.trim()
+  const percentage = /^([\d.]+)%$/u.exec(text)
+  const amount = percentage?.[1] === undefined ? Number(text) : Number(percentage[1]) / 100
+
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : null
+}
+
+/** The paragraph properties an element's styles declare. */
+function blockPropertiesOf(element: Element): ParagraphProperties {
+  const properties = cssProperties(element.getAttribute('style'))
+
+  return {
+    textAlign: alignmentOf(element, properties),
+    indentLeft: cssLengthToPoints(properties.get('margin-left')),
+    indentRight: cssLengthToPoints(properties.get('margin-right')),
+    indentFirstLine: cssLengthToPoints(properties.get('text-indent')),
+    spaceBefore: cssLengthToPoints(properties.get('margin-top')),
+    spaceAfter: cssLengthToPoints(properties.get('margin-bottom')),
+    lineHeight: lineHeightOf(properties.get('line-height')),
+  }
 }
 
 /**
@@ -216,13 +247,12 @@ function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[]
   }
 
   if (/^H[1-6]$/u.test(tag)) {
-    const align = alignmentOf(element)
     return [
       {
         type: 'heading',
         attrs: {
           level: Number.parseInt(tag.slice(1), 10),
-          ...(align === null ? {} : { textAlign: align }),
+          ...attributesFor(blockPropertiesOf(element)),
         },
         content: [...element.childNodes].flatMap((child) => inlineFrom(child, [], warnings)),
       },
@@ -270,8 +300,10 @@ function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[]
   const inline = [...element.childNodes].flatMap((child) => inlineFrom(child, [], warnings))
   if (inline.length === 0) return []
 
-  const align = alignmentOf(element)
-  return [{ type: 'paragraph', ...(align === null ? {} : { attrs: { textAlign: align } }), content: inline }]
+  const attrs = attributesFor(blockPropertiesOf(element))
+  return [
+    { type: 'paragraph', ...(Object.keys(attrs).length > 0 ? { attrs } : {}), content: inline },
+  ]
 }
 
 export function parseHtml(html: string): ConversionResult {
@@ -330,11 +362,27 @@ function styleAttribute(node: ProseMirrorNodeJson): string {
   return declarations.join('; ')
 }
 
-/** The `style` attribute for an aligned block, or nothing when it is not. */
-function alignAttribute(node: ProseMirrorNodeJson): string {
-  const align = node.attrs?.['textAlign']
-  if (typeof align !== 'string' || !ALIGNMENTS.has(align)) return ''
-  return ` style="text-align: ${align}"`
+/** The `style` attribute for a block with properties of its own. */
+function blockStyleAttribute(node: ProseMirrorNodeJson): string {
+  const properties = propertiesOf(node)
+  if (properties.textAlign !== null && !ALIGNMENTS.has(properties.textAlign)) {
+    properties.textAlign = null
+  }
+  if (!hasProperties(properties)) return ''
+
+  const points = (value: number) => `${String(value)}pt`
+  const declarations = [
+    properties.textAlign === null ? '' : `text-align: ${properties.textAlign}`,
+    properties.indentLeft === null ? '' : `margin-left: ${points(properties.indentLeft)}`,
+    properties.indentRight === null ? '' : `margin-right: ${points(properties.indentRight)}`,
+    properties.indentFirstLine === null ? '' : `text-indent: ${points(properties.indentFirstLine)}`,
+    properties.spaceBefore === null ? '' : `margin-top: ${points(properties.spaceBefore)}`,
+    properties.spaceAfter === null ? '' : `margin-bottom: ${points(properties.spaceAfter)}`,
+    // A bare number is a share of one line, which is how the editor holds it.
+    properties.lineHeight === null ? '' : `line-height: ${String(properties.lineHeight)}`,
+  ].filter((declaration) => declaration !== '')
+
+  return ` style="${escapeHtml(declarations.join('; '))}"`
 }
 
 function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
@@ -377,10 +425,10 @@ function serializeBlock(node: ProseMirrorNodeJson): string {
     case 'heading': {
       const level = node.attrs?.['level']
       const tag = `h${String(typeof level === 'number' ? level : 1)}`
-      return `<${tag}${alignAttribute(node)}>${serializeInline(node.content ?? [])}</${tag}>`
+      return `<${tag}${blockStyleAttribute(node)}>${serializeInline(node.content ?? [])}</${tag}>`
     }
     case 'paragraph':
-      return `<p${alignAttribute(node)}>${serializeInline(node.content ?? [])}</p>`
+      return `<p${blockStyleAttribute(node)}>${serializeInline(node.content ?? [])}</p>`
     case 'blockquote':
       return `<blockquote>${(node.content ?? []).map(serializeBlock).join('')}</blockquote>`
     case 'bulletList':

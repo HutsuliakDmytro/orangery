@@ -14,6 +14,13 @@ import {
 } from '../../ooxml/xml'
 import type { XmlNode } from '../../ooxml/xml'
 import { dataUrlFrom } from '../data-url'
+import {
+  attributesFor,
+  hasProperties,
+  NO_PARAGRAPH_PROPERTIES,
+  propertiesOf as paragraphPropertiesOf,
+} from './paragraph-properties'
+import type { ParagraphProperties } from './paragraph-properties'
 import { docOf, markNames } from './types'
 import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-document'
 
@@ -52,7 +59,7 @@ export interface OpenOdt {
 /** Everything the block walk needs: styles to resolve against, warnings to add to. */
 interface OdtContext {
   styles: Map<string, OdtStyle>
-  paragraphStyles: Map<string, OdtParagraphStyle>
+  paragraphStyles: Map<string, ParagraphProperties>
   listStyles: Map<string, OdtListStyle>
   graphicStyles: Map<string, OdtGraphicStyle>
   warnings: ParseWarning[]
@@ -73,9 +80,17 @@ interface OdtStyle {
   fontSize: number | null
 }
 
-/** The paragraph properties we model. */
-interface OdtParagraphStyle {
-  textAlign: string | null
+/** A line height stated as a share of one line, or null when it is a length. */
+function odfLineHeight(value: string | undefined): number | null {
+  if (value === undefined) return null
+
+  const percentage = /^\s*([\d.]+)%\s*$/u.exec(value)
+  if (percentage?.[1] === undefined) return null
+
+  const amount = Number.parseFloat(percentage[1])
+  // A line height given as a length depends on the font size of a style this
+  // converter does not resolve, so it is left alone rather than approximated.
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) / 100 : null
 }
 
 /** ODF names the edges of the text rather than the sides of the page. */
@@ -402,10 +417,10 @@ function parseFrame(node: XmlNode, ctx: OdtContext): ProseMirrorNodeJson | null 
  */
 function parseTextStyles(root: XmlNode): {
   text: Map<string, OdtStyle>
-  paragraph: Map<string, OdtParagraphStyle>
+  paragraph: Map<string, ParagraphProperties>
 } {
   const text = new Map<string, OdtStyle>()
-  const paragraph = new Map<string, OdtParagraphStyle>()
+  const paragraph = new Map<string, ParagraphProperties>()
 
   // A font name points at a declaration rather than naming the family, so the
   // declarations are read first.
@@ -453,6 +468,12 @@ function parseTextStyles(root: XmlNode): {
       if (paragraphProperties) {
         paragraph.set(name, {
           textAlign: alignmentFrom(attribute(paragraphProperties, 'fo:text-align')),
+          indentLeft: lengthToPoints(attribute(paragraphProperties, 'fo:margin-left')),
+          indentRight: lengthToPoints(attribute(paragraphProperties, 'fo:margin-right')),
+          indentFirstLine: lengthToPoints(attribute(paragraphProperties, 'fo:text-indent')),
+          spaceBefore: lengthToPoints(attribute(paragraphProperties, 'fo:margin-top')),
+          spaceAfter: lengthToPoints(attribute(paragraphProperties, 'fo:margin-bottom')),
+          lineHeight: odfLineHeight(attribute(paragraphProperties, 'fo:line-height')),
         })
       }
     }
@@ -634,18 +655,17 @@ function parseBlock(
     const inline = children(node).flatMap((child) => inlineFrom(child, ctx, []))
 
     const styleName = attribute(node, 'text:style-name')
-    const align =
-      styleName === undefined ? null : (ctx.paragraphStyles.get(styleName)?.textAlign ?? null)
+    const properties =
+      (styleName === undefined ? undefined : ctx.paragraphStyles.get(styleName)) ??
+      NO_PARAGRAPH_PROPERTIES
+    const attrs = attributesFor(properties)
 
     if (tag === HEADING_TAG) {
       const level = Number.parseInt(attribute(node, 'text:outline-level') ?? '1', 10)
       return [
         {
           type: 'heading',
-          attrs: {
-            level: Number.isFinite(level) ? Math.min(6, Math.max(1, level)) : 1,
-            ...(align === null ? {} : { textAlign: align }),
-          },
+          attrs: { level: Number.isFinite(level) ? Math.min(6, Math.max(1, level)) : 1, ...attrs },
           ...(inline.length > 0 ? { content: inline } : {}),
         },
       ]
@@ -654,7 +674,7 @@ function parseBlock(
     return [
       {
         type: 'paragraph',
-        ...(align === null ? {} : { attrs: { textAlign: align } }),
+        ...(Object.keys(attrs).length > 0 ? { attrs } : {}),
         ...(inline.length > 0 ? { content: inline } : {}),
       },
     ]
@@ -784,14 +804,17 @@ function propertiesOf(node: ProseMirrorNodeJson): TextProperties | null {
 interface StyleRegistry {
   /** A style name for these run properties, or null when there are none. */
   forText: (node: ProseMirrorNodeJson) => string | null
-  /** A style name for a paragraph that is aligned, or null when it is not. */
-  forParagraph: (parent: string, textAlign: unknown) => string | null
+  /** A style name for a paragraph with properties of its own, else null. */
+  forParagraph: (parent: string, node: ProseMirrorNodeJson) => string | null
   declarations: () => XmlNode[]
 }
 
 function createStyles(): StyleRegistry {
   const text = new Map<string, { name: string; properties: TextProperties }>()
-  const paragraph = new Map<string, { name: string; parent: string; textAlign: string }>()
+  const paragraph = new Map<
+    string,
+    { name: string; parent: string; properties: ParagraphProperties }
+  >()
 
   return {
     forText(node) {
@@ -807,15 +830,19 @@ function createStyles(): StyleRegistry {
       return name
     },
 
-    forParagraph(parent, textAlign) {
-      if (typeof textAlign !== 'string' || alignmentFrom(textAlign) === null) return null
+    forParagraph(parent, node) {
+      const properties = paragraphPropertiesOf(node)
+      if (properties.textAlign !== null && alignmentFrom(properties.textAlign) === null) {
+        properties.textAlign = null
+      }
+      if (!hasProperties(properties)) return null
 
-      const key = `${parent}|${textAlign}`
+      const key = `${parent}|${JSON.stringify(properties)}`
       const existing = paragraph.get(key)
       if (existing) return existing.name
 
       const name = `OD_P${String(paragraph.size + 1)}`
-      paragraph.set(key, { name, parent, textAlign })
+      paragraph.set(key, { name, parent, properties })
       return name
     },
 
@@ -847,12 +874,38 @@ function createStyles(): StyleRegistry {
         )
       }
 
-      for (const { name, parent, textAlign } of paragraph.values()) {
+      for (const { name, parent, properties } of paragraph.values()) {
+        const attributes: Record<string, string> = {}
+
+        if (properties.textAlign !== null) {
+          attributes['fo:text-align'] = alignmentTo(properties.textAlign)
+        }
+        if (properties.indentLeft !== null) {
+          attributes['fo:margin-left'] = `${String(properties.indentLeft)}pt`
+        }
+        if (properties.indentRight !== null) {
+          attributes['fo:margin-right'] = `${String(properties.indentRight)}pt`
+        }
+        if (properties.indentFirstLine !== null) {
+          attributes['fo:text-indent'] = `${String(properties.indentFirstLine)}pt`
+        }
+        if (properties.spaceBefore !== null) {
+          attributes['fo:margin-top'] = `${String(properties.spaceBefore)}pt`
+        }
+        if (properties.spaceAfter !== null) {
+          attributes['fo:margin-bottom'] = `${String(properties.spaceAfter)}pt`
+        }
+        if (properties.lineHeight !== null) {
+          // Stated as a share of one line, which is how the editor holds it and
+          // the only form that survives a change of font size.
+          attributes['fo:line-height'] = `${String(Math.round(properties.lineHeight * 100))}%`
+        }
+
         nodes.push(
           element(
             'style:style',
             { 'style:name': name, 'style:family': 'paragraph', 'style:parent-style-name': parent },
-            [element('style:paragraph-properties', { 'fo:text-align': alignmentTo(textAlign) })],
+            [element('style:paragraph-properties', attributes)],
           ),
         )
       }
@@ -1037,7 +1090,7 @@ export function serializeOdtContent(
           element(
             HEADING_TAG,
             {
-              'text:style-name': styles.forParagraph(parent, node.attrs?.['textAlign']) ?? parent,
+              'text:style-name': styles.forParagraph(parent, node) ?? parent,
               'text:outline-level': String(typeof level === 'number' ? level : 1),
             },
             serializeInline(node.content ?? [], styles, images),
@@ -1049,8 +1102,7 @@ export function serializeOdtContent(
           element(
             PARAGRAPH_TAG,
             {
-              'text:style-name':
-                styles.forParagraph('Standard', node.attrs?.['textAlign']) ?? 'Standard',
+              'text:style-name': styles.forParagraph('Standard', node) ?? 'Standard',
             },
             serializeInline(node.content ?? [], styles, images),
           ),

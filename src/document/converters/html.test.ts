@@ -358,3 +358,37 @@ describe('html alignment', () => {
     expect(html).toContain('<p>x</p>')
   })
 })
+
+describe('html paragraph properties', () => {
+  it('reads indents, spacing and line height', () => {
+    const { doc } = parseHtml(
+      '<p style="margin-left: 36pt; text-indent: -18pt; margin-bottom: 6pt; line-height: 1.5">x</p>',
+    )
+
+    const attrs = doc.content?.[0]?.attrs
+    expect(attrs?.['indentLeft']).toBe(36)
+    expect(attrs?.['indentFirstLine']).toBe(-18)
+    expect(attrs?.['spaceAfter']).toBe(6)
+    expect(attrs?.['lineHeight']).toBe(1.5)
+  })
+
+  it('reads a line height given as a percentage', () => {
+    expect(parseHtml('<p style="line-height: 150%">x</p>').doc.content?.[0]?.attrs?.['lineHeight']).toBe(
+      1.5,
+    )
+  })
+
+  it('leaves a line height given as a length alone', () => {
+    expect(
+      parseHtml('<p style="line-height: 18pt">x</p>').doc.content?.[0]?.attrs?.['lineHeight'],
+    ).toBeUndefined()
+  })
+
+  it('round-trips indents, spacing and alignment', () => {
+    const source = '<p style="text-align: center; margin-left: 36pt; margin-top: 6pt">x</p>'
+    const first = parseHtml(source).doc
+    const again = parseHtml(serializeHtml(first)).doc
+
+    expect(again.content?.[0]?.attrs).toEqual(first.content?.[0]?.attrs)
+  })
+})

@@ -1,0 +1,77 @@
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide the state of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS universal (unsigned)
+            target: universal-apple-darwin
+            bundles: app,dmg
+          - os: ubuntu-latest
+            label: Linux
+            target: ''
+            bundles: deb,appimage
+          - os: windows-latest
+            label: Windows
+            target: ''
+            bundles: nsis
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # Signing and notarization land in Phase 5; this only proves the app builds.
+      - run: pnpm tauri build ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --bundles ${{ matrix.bundles }}
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orangery-docs-${{ matrix.os }}
+          path: |
+            src-tauri/target/*/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.exe
+          if-no-files-found: warn

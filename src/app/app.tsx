@@ -8,6 +8,7 @@ import { FootnotesPanel } from '../components/footnotes-panel'
 import { HeaderFooterEditor } from '../components/header-footer-editor'
 import { FormatPickers } from '../components/format-pickers'
 import { OutlinePanel } from '../components/outline-panel'
+import { PageNumbersDialog } from '../components/page-numbers-dialog'
 import { PageSetupDialog } from '../components/page-setup-dialog'
 import { RecentFilesMenu } from '../components/recent-files-menu'
 import { RecoveryBanner } from '../components/recovery-banner'
@@ -150,6 +151,17 @@ function Shell() {
 
       <CommandPalette />
       <FormatPickers />
+
+      {openPicker === 'page-numbers' && (
+        <PageNumbersDialog
+          section={section}
+          onApply={(next) => {
+            setSection(next)
+            markDirty()
+          }}
+          onClose={closePicker}
+        />
+      )}
 
       {openPicker === 'page-setup' && (
         <PageSetupDialog

@@ -18,6 +18,7 @@ export type PickerKind =
   | 'link'
   | 'find-replace'
   | 'page-setup'
+  | 'page-numbers'
   | 'settings'
   | 'image-alt'
   | 'special-characters'

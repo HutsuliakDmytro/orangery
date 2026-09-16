@@ -61,6 +61,15 @@ export const viewCommands: readonly Command[] = [
     },
   },
   {
+    id: 'file.page-numbers',
+    label: 'Page Numbers…',
+    group: 'file',
+    keywords: ['numbering', 'roman', 'start at', 'title page'],
+    run: () => {
+      requestPicker('page-numbers')
+    },
+  },
+  {
     id: 'file.print',
     label: 'Print…',
     group: 'file',

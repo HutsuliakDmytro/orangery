@@ -1,6 +1,6 @@
 import { attribute, children, element, parseXml, serializeNode, tagName } from './xml'
 import type { XmlNode } from './xml'
-import { parseIntAttribute, pointsToTwips, twipsToPoints } from './units'
+import { parseIntAttribute, parseToggle, pointsToTwips, twipsToPoints } from './units'
 
 /**
  * Section properties — OOXML `w:sectPr`.
@@ -23,15 +23,78 @@ export interface PageMargins {
   gutter: number
 }
 
+/** The numbering systems `w:pgNumType` can state. */
+export type PageNumberFormat =
+  | 'decimal'
+  | 'upperRoman'
+  | 'lowerRoman'
+  | 'upperLetter'
+  | 'lowerLetter'
+
+export interface PageNumbering {
+  format: PageNumberFormat
+  /** The number the section starts at, or null to carry on from the last one. */
+  start: number | null
+}
+
 export interface SectionProperties {
   /** Page width in points. */
   width: number
   height: number
   orientation: PageOrientation
   margins: PageMargins
+  /** Null when the file says nothing, which means decimal and carrying on. */
+  pageNumbering: PageNumbering | null
+  /**
+   * Whether the first page has a header and footer of its own.
+   *
+   * With no first-page part to go with it, that page simply has none — which is
+   * how a title page is left unnumbered.
+   */
+  differentFirstPage: boolean
   /** Children of `w:sectPr` we do not model, serialised and written back as-is. */
   preserved: string[]
 }
+
+const PAGE_NUMBER_FORMATS = new Set<string>([
+  'decimal',
+  'upperRoman',
+  'lowerRoman',
+  'upperLetter',
+  'lowerLetter',
+])
+
+/**
+ * The order `w:sectPr` requires its children in.
+ *
+ * Word repairs a file whose section properties are out of order, and the header
+ * references have to come first of all — so the preserved children cannot
+ * simply be appended after the ones this module rebuilds.
+ */
+const SECTION_ORDER = [
+  'w:headerReference',
+  'w:footerReference',
+  'w:footnotePr',
+  'w:endnotePr',
+  'w:type',
+  'w:pgSz',
+  'w:pgMar',
+  'w:paperSrc',
+  'w:pgBorders',
+  'w:lnNumType',
+  'w:pgNumType',
+  'w:cols',
+  'w:formProt',
+  'w:vAlign',
+  'w:noEndnote',
+  'w:titlePg',
+  'w:textDirection',
+  'w:bidi',
+  'w:rtlGutter',
+  'w:docGrid',
+  'w:printerSettings',
+  'w:sectPrChange',
+]
 
 /** Common page sizes, in points. Letter is Word's default in US locales. */
 export const PAGE_SIZES = [
@@ -61,10 +124,12 @@ export const DEFAULT_SECTION: SectionProperties = {
   height: 792,
   orientation: 'portrait',
   margins: DEFAULT_MARGINS,
+  pageNumbering: null,
+  differentFirstPage: false,
   preserved: [],
 }
 
-const MODELLED = new Set(['w:pgSz', 'w:pgMar'])
+const MODELLED = new Set(['w:pgSz', 'w:pgMar', 'w:pgNumType', 'w:titlePg'])
 
 /** Matches a known page size within half a point, which covers rounding in twips. */
 export function pageSizeIdFor(width: number, height: number): PageSizeId | null {
@@ -120,6 +185,23 @@ export function parseSection(xml: string | null): SectionProperties {
       continue
     }
 
+    if (tag === 'w:pgNumType') {
+      const format = attribute(child, 'w:fmt') ?? 'decimal'
+      const start = parseIntAttribute(attribute(child, 'w:start'))
+
+      section.pageNumbering = {
+        format: PAGE_NUMBER_FORMATS.has(format) ? (format as PageNumberFormat) : 'decimal',
+        // No start value means the section carries on from the one before it.
+        start,
+      }
+      continue
+    }
+
+    if (tag === 'w:titlePg') {
+      section.differentFirstPage = parseToggle(attribute(child, 'w:val'))
+      continue
+    }
+
     if (tag !== null && !MODELLED.has(tag)) section.preserved.push(serializeNode(child))
   }
 
@@ -129,8 +211,6 @@ export function parseSection(xml: string | null): SectionProperties {
 export function serializeSection(section: SectionProperties): string {
   const nodes: XmlNode[] = []
 
-  // Word writes pgSz and pgMar first; the preserved children follow in their
-  // original order.
   nodes.push(
     element('w:pgSz', {
       'w:w': String(pointsToTwips(section.width)),
@@ -151,11 +231,43 @@ export function serializeSection(section: SectionProperties): string {
     }),
   )
 
+  if (section.pageNumbering !== null) {
+    nodes.push(
+      element('w:pgNumType', {
+        ...(section.pageNumbering.start === null
+          ? {}
+          : { 'w:start': String(section.pageNumbering.start) }),
+        'w:fmt': section.pageNumbering.format,
+      }),
+    )
+  }
+
+  // Written only when set: the element's absence is what "every page the same"
+  // means, and `w:val="0"` says the same thing more loudly than Word does.
+  if (section.differentFirstPage) nodes.push(element('w:titlePg'))
+
   for (const preserved of section.preserved) {
     nodes.push(...parseXml(preserved))
   }
 
-  return serializeNode(element('w:sectPr', {}, nodes))
+  return serializeNode(element('w:sectPr', {}, inSchemaOrder(nodes)))
+}
+
+/**
+ * Puts the children in the order the schema requires.
+ *
+ * A stable sort, so anything the schema does not name keeps the position it had
+ * relative to its neighbours rather than being shuffled about.
+ */
+function inSchemaOrder(nodes: readonly XmlNode[]): XmlNode[] {
+  return nodes
+    .map((node, index) => ({ node, index, rank: SECTION_ORDER.indexOf(tagName(node) ?? '') }))
+    .sort((a, b) => {
+      const left = a.rank === -1 ? SECTION_ORDER.length : a.rank
+      const right = b.rank === -1 ? SECTION_ORDER.length : b.rank
+      return left - right || a.index - b.index
+    })
+    .map((entry) => entry.node)
 }
 
 /** Swaps width and height, which is what "rotate the page" means in OOXML. */

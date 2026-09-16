@@ -143,3 +143,30 @@ describe('createNewDocx', () => {
     expect(describeDifferences(compareXml(before, after))).toBe('no differences')
   })
 })
+
+describe('page numbering in the package', () => {
+  const doc = { type: 'doc', content: [{ type: 'paragraph' }] }
+
+  it('round-trips the format, the starting number and the title page', async () => {
+    const document = await createNewDocx()
+    const section = {
+      ...document.section,
+      pageNumbering: { format: 'lowerRoman' as const, start: 3 },
+      differentFirstPage: true,
+    }
+
+    const reopened = await openDocx(await saveDocx(document, doc, { section }))
+
+    expect(reopened.section.pageNumbering).toEqual({ format: 'lowerRoman', start: 3 })
+    expect(reopened.section.differentFirstPage).toBe(true)
+  })
+
+  it('leaves a document that states neither without either element', async () => {
+    const document = await createNewDocx()
+    const saved = await saveDocx(document, doc)
+    const reopened = await openDocx(saved)
+
+    expect(reopened.section.pageNumbering).toBeNull()
+    expect(reopened.section.differentFirstPage).toBe(false)
+  })
+})

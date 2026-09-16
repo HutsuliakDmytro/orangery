@@ -150,3 +150,87 @@ describe('content area', () => {
     expect(contentHeight(parseSection(LETTER))).toBe(648)
   })
 })
+
+describe('page numbering', () => {
+  const sectPr = (body: string) =>
+    `<w:sectPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${body}</w:sectPr>`
+
+  it('says nothing when the file says nothing', () => {
+    // Absent means decimal and carrying on from the section before, which is
+    // not the same as a file that states either.
+    expect(parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>')).pageNumbering).toBeNull()
+  })
+
+  it('reads the format and the number to start at', () => {
+    const section = parseSection(sectPr('<w:pgNumType w:start="3" w:fmt="lowerRoman"/>'))
+
+    expect(section.pageNumbering?.format).toBe('lowerRoman')
+    expect(section.pageNumbering?.start).toBe(3)
+  })
+
+  it('reads a format it does not know as plain numbers', () => {
+    expect(parseSection(sectPr('<w:pgNumType w:fmt="chicago"/>')).pageNumbering?.format).toBe(
+      'decimal',
+    )
+  })
+
+  it('leaves the start empty when the section carries on', () => {
+    expect(parseSection(sectPr('<w:pgNumType w:fmt="decimal"/>')).pageNumbering?.start).toBeNull()
+  })
+
+  it('reads a first page of its own', () => {
+    expect(parseSection(sectPr('<w:titlePg/>')).differentFirstPage).toBe(true)
+    expect(parseSection(sectPr('<w:titlePg w:val="0"/>')).differentFirstPage).toBe(false)
+  })
+
+  it('round-trips both', () => {
+    const source = sectPr(
+      '<w:pgSz w:w="12240" w:h="15840"/><w:pgNumType w:start="5" w:fmt="upperRoman"/><w:titlePg/>',
+    )
+    const again = parseSection(serializeSection(parseSection(source)))
+
+    expect(again.pageNumbering).toEqual({ format: 'upperRoman', start: 5 })
+    expect(again.differentFirstPage).toBe(true)
+  })
+
+  it('writes nothing for a document that has neither', () => {
+    const xml = serializeSection(parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>')))
+
+    expect(xml).not.toContain('w:pgNumType')
+    expect(xml).not.toContain('w:titlePg')
+  })
+})
+
+describe('the order of the section properties', () => {
+  const sectPr = (body: string) =>
+    `<w:sectPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${body}</w:sectPr>`
+
+  it('puts the header reference first, wherever it was read from', () => {
+    // Appended after the page size it would be out of order, and Word offers to
+    // repair a section whose properties are not in the sequence the schema sets.
+    const xml = serializeSection(
+      parseSection(
+        sectPr('<w:pgSz w:w="12240" w:h="15840"/><w:headerReference w:type="default" r:id="rId4"/>'),
+      ),
+    )
+
+    expect(xml.indexOf('w:headerReference')).toBeLessThan(xml.indexOf('w:pgSz'))
+  })
+
+  it('puts the ones it writes where the schema wants them', () => {
+    const xml = serializeSection(
+      parseSection(sectPr('<w:titlePg/><w:pgNumType w:fmt="decimal"/><w:cols w:num="2"/>')),
+    )
+
+    const order = ['w:pgMar', 'w:pgNumType', 'w:cols', 'w:titlePg'].map((tag) => xml.indexOf(tag))
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+  })
+
+  it('keeps two unknown children in the order they arrived', () => {
+    const xml = serializeSection(
+      parseSection(sectPr('<w:unknownOne w:val="1"/><w:unknownTwo w:val="2"/>')),
+    )
+
+    expect(xml.indexOf('w:unknownOne')).toBeLessThan(xml.indexOf('w:unknownTwo'))
+  })
+})

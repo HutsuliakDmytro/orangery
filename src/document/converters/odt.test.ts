@@ -1,7 +1,13 @@
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
 import { textContentOf } from './types'
-import { openOdt, parseOdtContent, saveOdt, serializeOdtContent } from './odt'
+import {
+  openOdt,
+  parseOdtContent,
+  parseOdtListStyles,
+  saveOdt,
+  serializeOdtContent,
+} from './odt'
 
 const CONTENT = (body: string, styles = '') => `<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -9,14 +15,177 @@ const CONTENT = (body: string, styles = '') => `<?xml version="1.0" encoding="UT
 <office:body><office:text>${body}</office:text></office:body>
 </office:document-content>`
 
-async function packageOf(content: string): Promise<Uint8Array> {
+async function packageOf(content: string, styles = '<office:document-styles/>'): Promise<Uint8Array> {
   const zip = new JSZip()
   zip.file('mimetype', 'application/vnd.oasis.opendocument.text')
   zip.file('content.xml', content)
-  zip.file('styles.xml', '<office:document-styles/>')
+  zip.file('styles.xml', styles)
   zip.file('META-INF/manifest.xml', '<manifest:manifest/>')
   return zip.generateAsync({ type: 'uint8array' })
 }
+
+const STYLES = (listStyles: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0">
+<office:styles>${listStyles}</office:styles>
+</office:document-styles>`
+
+const NUMBERED = `<text:list-style style:name="WWNum1">
+  <text:list-level-style-number text:level="1" style:num-format="1"/>
+  <text:list-level-style-number text:level="2" style:num-format="a"/>
+</text:list-style>`
+
+describe('list styles', () => {
+  it('reads the kind from the list style rather than its name', () => {
+    const { doc } = parseOdtContent(
+      CONTENT('<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      { listStyles: parseOdtListStyles(STYLES(NUMBERED)) },
+    )
+
+    expect(doc.content?.[0]?.type).toBe('orderedList')
+  })
+
+  it('reads a bulleted style declared with the same shape of name', () => {
+    const bullet = `<text:list-style style:name="WWNum1"><text:list-level-style-bullet text:level="1" text:bullet-char="\u2022"/></text:list-style>`
+
+    const { doc } = parseOdtContent(
+      CONTENT('<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      { listStyles: parseOdtListStyles(STYLES(bullet)) },
+    )
+
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+  })
+
+  it('takes a nested list kind from the level it sits at', () => {
+    const mixed = `<text:list-style style:name="L1">
+      <text:list-level-style-bullet text:level="1" text:bullet-char="\u2022"/>
+      <text:list-level-style-number text:level="2" style:num-format="1"/>
+    </text:list-style>`
+
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:list text:style-name="L1"><text:list-item><text:p>one</text:p>' +
+          '<text:list><text:list-item><text:p>deep</text:p></text:list-item></text:list>' +
+          '</text:list-item></text:list>',
+      ),
+      { listStyles: parseOdtListStyles(STYLES(mixed)) },
+    )
+
+    const outer = doc.content?.[0]
+    expect(outer?.type).toBe('bulletList')
+    expect(outer?.content?.[0]?.content?.[1]?.type).toBe('orderedList')
+  })
+
+  it('treats a level with no number format as unmarked rather than numbered', () => {
+    const none = `<text:list-style style:name="L1"><text:list-level-style-number text:level="1" style:num-format=""/></text:list-style>`
+
+    const { doc } = parseOdtContent(
+      CONTENT('<text:list text:style-name="L1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      { listStyles: parseOdtListStyles(STYLES(none)) },
+    )
+
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+  })
+
+  it('repeats the deepest declared level for lists nested past it', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:list text:style-name="WWNum1"><text:list-item>' +
+          '<text:list><text:list-item><text:list><text:list-item><text:p>deep</text:p></text:list-item></text:list></text:list-item></text:list>' +
+          '</text:list-item></text:list>',
+      ),
+      { listStyles: parseOdtListStyles(STYLES(NUMBERED)) },
+    )
+
+    const second = doc.content?.[0]?.content?.[0]?.content?.[0]
+    expect(second?.content?.[0]?.content?.[0]?.type).toBe('orderedList')
+  })
+
+  it('prefers a list style redeclared in content.xml', () => {
+    const inContent = `<text:list-style style:name="WWNum1"><text:list-level-style-bullet text:level="1" text:bullet-char="\u2022"/></text:list-style>`
+
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>',
+        inContent,
+      ),
+      { listStyles: parseOdtListStyles(STYLES(NUMBERED)) },
+    )
+
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+  })
+
+  it('falls back to the name when nothing in the package declares the style', () => {
+    const { doc } = parseOdtContent(
+      CONTENT('<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+    )
+
+    expect(doc.content?.[0]?.type).toBe('orderedList')
+  })
+
+  it('reads a start value off the first item', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:list text:style-name="WWNum1"><text:list-item text:start-value="5"><text:p>five</text:p></text:list-item></text:list>',
+      ),
+      { listStyles: parseOdtListStyles(STYLES(NUMBERED)) },
+    )
+
+    expect(doc.content?.[0]?.attrs?.['start']).toBe(5)
+  })
+
+  it('keeps the text of a list header instead of dropping it', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:list text:style-name="L1"><text:list-header><text:p>intro</text:p></text:list-header>' +
+          '<text:list-item><text:p>one</text:p></text:list-item></text:list>',
+      ),
+    )
+
+    expect(textContentOf(doc)).toContain('intro')
+  })
+
+  it('declares the list style it references on export', () => {
+    const xml = serializeOdtContent(
+      {
+        type: 'doc',
+        content: [
+          {
+            type: 'orderedList',
+            attrs: { start: 3 },
+            content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }],
+          },
+        ],
+      },
+      { contentAttributes: {} },
+    )
+
+    expect(xml).toContain('<text:list-style style:name="OD_Number"')
+    expect(xml).toContain('text:style-name="OD_Number"')
+    expect(xml).toContain('text:start-value="3"')
+  })
+
+  it('round-trips a numbered list as numbered', () => {
+    const first = serializeOdtContent(
+      {
+        type: 'doc',
+        content: [
+          {
+            type: 'orderedList',
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'one' }] }],
+              },
+            ],
+          },
+        ],
+      },
+      { contentAttributes: {} },
+    )
+
+    expect(parseOdtContent(first).doc.content?.[0]?.type).toBe('orderedList')
+  })
+})
 
 describe('parseOdtContent', () => {
   it('reads paragraphs', () => {
@@ -212,6 +381,19 @@ describe('serializeOdtContent', () => {
 })
 
 describe('package handling', () => {
+  it('resolves a list style declared in styles.xml', async () => {
+    const document = await openOdt(
+      await packageOf(
+        CONTENT(
+          '<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>',
+        ),
+        STYLES(NUMBERED),
+      ),
+    )
+
+    expect(document.doc.content?.[0]?.type).toBe('orderedList')
+  })
+
   it('opens a package and reads its content', async () => {
     const document = await openOdt(await packageOf(CONTENT('<text:p>hello</text:p>')))
     expect(textContentOf(document.doc)).toBe('hello')

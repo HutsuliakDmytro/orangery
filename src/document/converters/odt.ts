@@ -42,6 +42,13 @@ export interface OpenOdt {
   contentAttributes: Record<string, string>
 }
 
+/** Everything the block walk needs: styles to resolve against, warnings to add to. */
+interface OdtContext {
+  styles: Map<string, OdtStyle>
+  listStyles: Map<string, OdtListStyle>
+  warnings: ParseWarning[]
+}
+
 /** Style properties we model; anything else keeps the style reference as-is. */
 interface OdtStyle {
   bold: boolean
@@ -54,20 +61,132 @@ const HEADING_TAG = 'text:h'
 const PARAGRAPH_TAG = 'text:p'
 const LIST_TAG = 'text:list'
 const LIST_ITEM_TAG = 'text:list-item'
+const LIST_HEADER_TAG = 'text:list-header'
 const TABLE_TAG = 'table:table'
 const TABLE_ROW_TAG = 'table:table-row'
 const TABLE_CELL_TAG = 'table:table-cell'
 
 /**
- * ODT does not distinguish bulleted from numbered lists on the list element —
- * the distinction lives in the list style it names. Without reading styles.xml
- * we cannot tell, and guessing wrong turns every numbered list into bullets. A
- * name containing a digit is how LibreOffice writes ordered lists, which is the
- * best signal available from content.xml alone.
+ * One level of a list style.
+ *
+ * ODT puts no type on the list element itself: `<text:list>` names a
+ * `<text:list-style>`, and that style declares, per nesting level, whether the
+ * marker is a bullet, a number or an image. The level is not written down
+ * either — it is how deeply the list is nested.
  */
-function listKind(node: XmlNode): 'bulletList' | 'orderedList' {
-  const styleName = attribute(node, 'text:style-name') ?? ''
-  return /^(L|WWNum)\d+$/u.test(styleName) && /num/iu.test(styleName) ? 'orderedList' : 'bulletList'
+export interface OdtListLevel {
+  kind: 'bulletList' | 'orderedList'
+  start: number
+}
+
+export type OdtListStyle = Map<number, OdtListLevel>
+
+/** Sections that may declare styles. The body is skipped — lists live there. */
+const STYLE_CONTAINERS = new Set([
+  'office:automatic-styles',
+  'office:styles',
+  'office:master-styles',
+])
+
+function levelFrom(node: XmlNode): { level: number; definition: OdtListLevel } | null {
+  const tag = tagName(node)
+
+  let kind: OdtListLevel['kind']
+  if (tag === 'text:list-level-style-number') {
+    // An empty number format is how "no marker" is written. Structurally it is
+    // still a numbering definition, but nothing is numbered on screen, so the
+    // bulleted list is the closer of the two nodes we have.
+    kind = (attribute(node, 'style:num-format') ?? '') === '' ? 'bulletList' : 'orderedList'
+  } else if (tag === 'text:list-level-style-bullet' || tag === 'text:list-level-style-image') {
+    kind = 'bulletList'
+  } else {
+    return null
+  }
+
+  const level = Number.parseInt(attribute(node, 'text:level') ?? '1', 10)
+  const start = Number.parseInt(attribute(node, 'text:start-value') ?? '1', 10)
+
+  return {
+    level: Number.isFinite(level) && level > 0 ? level : 1,
+    definition: { kind, start: Number.isFinite(start) && start > 0 ? start : 1 },
+  }
+}
+
+function collectListStyles(root: XmlNode, into: Map<string, OdtListStyle>): void {
+  for (const section of children(root)) {
+    const sectionTag = tagName(section)
+    if (sectionTag === null || !STYLE_CONTAINERS.has(sectionTag)) continue
+
+    for (const style of children(section)) {
+      if (tagName(style) !== 'text:list-style') continue
+
+      const name = attribute(style, 'style:name')
+      if (name === undefined) continue
+
+      const levels: OdtListStyle = new Map()
+      for (const child of children(style)) {
+        const parsed = levelFrom(child)
+        if (parsed) levels.set(parsed.level, parsed.definition)
+      }
+
+      if (levels.size > 0) into.set(name, levels)
+    }
+  }
+}
+
+/**
+ * List styles declared in `styles.xml`.
+ *
+ * Word's ODT export puts them there and leaves `content.xml` referencing them
+ * by name, so a converter that reads only `content.xml` sees every list as
+ * untyped and has to guess.
+ */
+export function parseOdtListStyles(xml: string): Map<string, OdtListStyle> {
+  const styles = new Map<string, OdtListStyle>()
+
+  const root = parseXml(xml).find((node) => tagName(node) === 'office:document-styles')
+  if (root) collectListStyles(root, styles)
+
+  return styles
+}
+
+/**
+ * The list kind for a nesting level.
+ *
+ * A nested list usually omits `text:style-name` and inherits the outer one, so
+ * the name is threaded down rather than read from each element.
+ */
+function listLevel(
+  styles: Map<string, OdtListStyle>,
+  styleName: string | null,
+  level: number,
+): OdtListLevel {
+  const style = styleName === null ? undefined : styles.get(styleName)
+
+  // Levels beyond the deepest declared one repeat the last declaration, which
+  // is what readers do rather than falling back to a bullet.
+  const declared = style?.get(level) ?? lastLevel(style)
+  if (declared) return declared
+
+  // No definition anywhere in the package: LibreOffice names ordered lists
+  // after the numbering they use, which is the only signal left.
+  const ordered = styleName !== null && /num/iu.test(styleName)
+  return { kind: ordered ? 'orderedList' : 'bulletList', start: 1 }
+}
+
+function lastLevel(style: OdtListStyle | undefined): OdtListLevel | undefined {
+  if (!style || style.size === 0) return undefined
+
+  let deepest: OdtListLevel | undefined
+  let deepestLevel = 0
+  for (const [level, definition] of style) {
+    if (level > deepestLevel) {
+      deepestLevel = level
+      deepest = definition
+    }
+  }
+
+  return deepest
 }
 
 function parseAutomaticStyles(root: XmlNode): Map<string, OdtStyle> {
@@ -158,31 +277,55 @@ function inlineFrom(
   }
 }
 
-/** A list and everything nested inside it. */
+/**
+ * A list and everything nested inside it.
+ *
+ * `level` is the nesting depth, which is what selects the level definition in
+ * the list style; `inheritedName` carries the outer list's style down, because
+ * a nested `<text:list>` normally names none.
+ */
 function parseList(
   node: XmlNode,
-  styles: Map<string, OdtStyle>,
-  warnings: ParseWarning[],
+  ctx: OdtContext,
+  level: number,
+  inheritedName: string | null,
 ): ProseMirrorNodeJson {
+  const styleName = attribute(node, 'text:style-name') ?? inheritedName
+  const definition = listLevel(ctx.listStyles, styleName, level)
+
   const items = children(node)
-    .filter((child) => tagName(child) === LIST_ITEM_TAG)
+    .filter((child) => {
+      const tag = tagName(child)
+      // A list header holds the text that precedes the first numbered item.
+      // There is no node for it, so it becomes an ordinary item rather than
+      // being dropped along with its content.
+      return tag === LIST_ITEM_TAG || tag === LIST_HEADER_TAG
+    })
     .map((item) => ({
       type: 'listItem',
-      content: children(item).flatMap((child) => parseBlock(child, styles, warnings)),
+      content: children(item).flatMap((child) =>
+        parseBlock(child, ctx, { level: level + 1, styleName }),
+      ),
     }))
 
+  // Word restarts a list by putting the number on the first item rather than in
+  // the style, so the item overrides the level's own start value.
+  const firstItem = children(node).find((child) => tagName(child) === LIST_ITEM_TAG)
+  const override = Number.parseInt(
+    (firstItem === undefined ? undefined : attribute(firstItem, 'text:start-value')) ?? '',
+    10,
+  )
+  const start = Number.isFinite(override) && override > 0 ? override : definition.start
+
   return {
-    type: listKind(node),
+    type: definition.kind,
+    ...(definition.kind === 'orderedList' && start !== 1 ? { attrs: { start } } : {}),
     content: items.length > 0 ? items : [{ type: 'listItem', content: [{ type: 'paragraph' }] }],
   }
 }
 
 /** A table. ODT has no grid element, so column widths come from the styles. */
-function parseOdtTable(
-  node: XmlNode,
-  styles: Map<string, OdtStyle>,
-  warnings: ParseWarning[],
-): ProseMirrorNodeJson {
+function parseOdtTable(node: XmlNode, ctx: OdtContext): ProseMirrorNodeJson {
   const rows = children(node)
     .filter((child) => tagName(child) === TABLE_ROW_TAG)
     .map((row) => ({
@@ -192,7 +335,7 @@ function parseOdtTable(
         .map((cell) => {
           const span = Number.parseInt(attribute(cell, 'table:number-columns-spanned') ?? '1', 10)
           const rowSpan = Number.parseInt(attribute(cell, 'table:number-rows-spanned') ?? '1', 10)
-          const content = children(cell).flatMap((child) => parseBlock(child, styles, warnings))
+          const content = children(cell).flatMap((child) => parseBlock(child, ctx))
 
           return {
             type: 'tableCell',
@@ -215,14 +358,14 @@ function parseOdtTable(
 /** One block of body content: paragraph, heading, list, table or passthrough. */
 function parseBlock(
   node: XmlNode,
-  styles: Map<string, OdtStyle>,
-  warnings: ParseWarning[],
+  ctx: OdtContext,
+  nested?: { level: number; styleName: string | null },
 ): ProseMirrorNodeJson[] {
   const tag = tagName(node)
   if (tag === null || isTextNode(node)) return []
 
   if (tag === PARAGRAPH_TAG || tag === HEADING_TAG) {
-    const inline = children(node).flatMap((child) => inlineFrom(child, styles, [], warnings))
+    const inline = children(node).flatMap((child) => inlineFrom(child, ctx.styles, [], ctx.warnings))
 
     if (tag === HEADING_TAG) {
       const level = Number.parseInt(attribute(node, 'text:outline-level') ?? '1', 10)
@@ -238,14 +381,19 @@ function parseBlock(
     return [{ type: 'paragraph', ...(inline.length > 0 ? { content: inline } : {}) }]
   }
 
-  if (tag === LIST_TAG) return [parseList(node, styles, warnings)]
-  if (tag === TABLE_TAG) return [parseOdtTable(node, styles, warnings)]
+  if (tag === LIST_TAG) {
+    return [parseList(node, ctx, nested?.level ?? 1, nested?.styleName ?? null)]
+  }
+  if (tag === TABLE_TAG) return [parseOdtTable(node, ctx)]
 
-  warnings.push({ tag, message: `<${tag}> is preserved but cannot be edited yet.` })
+  ctx.warnings.push({ tag, message: `<${tag}> is preserved but cannot be edited yet.` })
   return [{ type: 'passthroughBlock', attrs: { xml: serializeNode(node), tag } }]
 }
 
-export function parseOdtContent(xml: string): {
+export function parseOdtContent(
+  xml: string,
+  options: { listStyles?: Map<string, OdtListStyle> } = {},
+): {
   doc: ProseMirrorNodeJson
   warnings: ParseWarning[]
   automaticStyles: string | null
@@ -263,48 +411,18 @@ export function parseOdtContent(xml: string): {
     }
   }
 
-  const styles = parseAutomaticStyles(root)
+  // Styles from the package come first; a list style redeclared in content.xml
+  // is an automatic style and overrides the named one it is based on.
+  const listStyles = new Map(options.listStyles ?? [])
+  collectListStyles(root, listStyles)
+
+  const ctx: OdtContext = { styles: parseAutomaticStyles(root), listStyles, warnings }
   const automatic = children(root).find((node) => tagName(node) === 'office:automatic-styles')
 
   const body = children(root).find((node) => tagName(node) === 'office:body')
   const text = body ? children(body).find((node) => tagName(node) === 'office:text') : undefined
 
-  const content: ProseMirrorNodeJson[] = []
-
-  for (const node of text ? children(text) : []) {
-    const tag = tagName(node)
-
-    if (tag === PARAGRAPH_TAG || tag === HEADING_TAG) {
-      const inline = children(node).flatMap((child) => inlineFrom(child, styles, [], warnings))
-
-      if (tag === HEADING_TAG) {
-        const level = Number.parseInt(attribute(node, 'text:outline-level') ?? '1', 10)
-        content.push({
-          type: 'heading',
-          attrs: { level: Number.isFinite(level) ? Math.min(6, Math.max(1, level)) : 1 },
-          ...(inline.length > 0 ? { content: inline } : {}),
-        })
-      } else {
-        content.push({ type: 'paragraph', ...(inline.length > 0 ? { content: inline } : {}) })
-      }
-      continue
-    }
-
-    if (tag === LIST_TAG) {
-      content.push(parseList(node, styles, warnings))
-      continue
-    }
-
-    if (tag === TABLE_TAG) {
-      content.push(parseOdtTable(node, styles, warnings))
-      continue
-    }
-
-    if (tag === null || isTextNode(node)) continue
-
-    warnings.push({ tag, message: `<${tag}> is preserved but cannot be edited yet.` })
-    content.push({ type: 'passthroughBlock', attrs: { xml: serializeNode(node), tag } })
-  }
+  const content = (text ? children(text) : []).flatMap((node) => parseBlock(node, ctx))
 
   const attributes: Record<string, string> = {}
   const raw = root[':@']
@@ -344,6 +462,60 @@ function buildTextProperties(name: string): XmlNode {
   ])
 }
 
+const BULLET_NAME = 'OD_Bullet'
+const NUMBER_NAME = 'OD_Number'
+
+/** How far each level is indented, in centimetres — LibreOffice's own step. */
+const INDENT_STEP = 0.635
+const LEVELS = 9
+
+/** The bullet characters Word and LibreOffice cycle through by depth. */
+const BULLET_CHARS = ['\u2022', '\u25E6', '\u25AA']
+
+/**
+ * A list style covering every level.
+ *
+ * Written even when the document only nests one deep: the reference has to
+ * resolve, and a `<text:list>` naming a style that was never declared renders
+ * without any marker at all.
+ */
+function buildListStyle(name: string): XmlNode {
+  const ordered = name === NUMBER_NAME
+
+  const levels = Array.from({ length: LEVELS }, (_unused, index) => {
+    const level = index + 1
+    const indent = `${(INDENT_STEP * level).toFixed(3)}cm`
+
+    const properties = element('style:list-level-properties', {
+      'text:space-before': indent,
+      'text:min-label-width': `${INDENT_STEP.toFixed(3)}cm`,
+    })
+
+    if (ordered) {
+      return element(
+        'text:list-level-style-number',
+        {
+          'text:level': String(level),
+          'style:num-suffix': '.',
+          'style:num-format': '1',
+        },
+        [properties],
+      )
+    }
+
+    return element(
+      'text:list-level-style-bullet',
+      {
+        'text:level': String(level),
+        'text:bullet-char': BULLET_CHARS[index % BULLET_CHARS.length] ?? '\u2022',
+      },
+      [properties],
+    )
+  })
+
+  return element('text:list-style', { 'style:name': name }, levels)
+}
+
 function serializeInline(nodes: readonly ProseMirrorNodeJson[], used: Set<string>): XmlNode[] {
   return nodes.flatMap((node): XmlNode[] => {
     if (node.type === 'hardBreak') return [element('text:line-break')]
@@ -376,6 +548,7 @@ export function serializeOdtContent(
   options: { contentAttributes: Record<string, string> },
 ): string {
   const used = new Set<string>()
+  const usedLists = new Set<string>()
 
   const serializeBlock = (node: ProseMirrorNodeJson): XmlNode[] => {
     switch (node.type) {
@@ -401,18 +574,33 @@ export function serializeOdtContent(
           ),
         ]
       case 'bulletList':
-      case 'orderedList':
+      case 'orderedList': {
+        // The style name carries the bullet-versus-number distinction, which is
+        // where ODT keeps it; the style itself is declared alongside.
+        const name = node.type === 'orderedList' ? NUMBER_NAME : BULLET_NAME
+        usedLists.add(name)
+
+        const start = node.attrs?.['start']
+        const items = node.content ?? []
+
         return [
           element(
             LIST_TAG,
-            // The style name carries the bullet-versus-number distinction, which
-            // is where ODT keeps it.
-            { 'text:style-name': node.type === 'orderedList' ? 'LNum1' : 'L1' },
-            (node.content ?? []).map((item) =>
-              element(LIST_ITEM_TAG, {}, (item.content ?? []).flatMap(serializeBlock)),
+            { 'text:style-name': name },
+            items.map((item, index) =>
+              element(
+                LIST_ITEM_TAG,
+                // A list that does not start at one says so on its first item,
+                // which is how a restart is written.
+                index === 0 && typeof start === 'number' && start !== 1
+                  ? { 'text:start-value': String(start) }
+                  : {},
+                (item.content ?? []).flatMap(serializeBlock),
+              ),
             ),
           ),
         ]
+      }
 
       case 'table': {
         const rows = node.content ?? []
@@ -485,7 +673,10 @@ export function serializeOdtContent(
         }
 
   const root = element('office:document-content', attributes, [
-    element('office:automatic-styles', {}, [...used].sort().map(buildTextProperties)),
+    element('office:automatic-styles', {}, [
+      ...[...used].sort().map(buildTextProperties),
+      ...[...usedLists].sort().map(buildListStyle),
+    ]),
     element('office:body', {}, [element('office:text', {}, body)]),
   ])
 
@@ -513,7 +704,10 @@ export async function openOdt(bytes: Uint8Array): Promise<OpenOdt> {
     throw new Error(`not an ODT package: ${CONTENT_PART} is missing`)
   }
 
-  const parsed = parseOdtContent(contentXml)
+  const stylesXml = parts.get(STYLES_PART)?.text
+  const parsed = parseOdtContent(contentXml, {
+    ...(stylesXml === undefined ? {} : { listStyles: parseOdtListStyles(stylesXml) }),
+  })
 
   return {
     pkg: { parts },

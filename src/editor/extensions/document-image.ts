@@ -30,6 +30,10 @@ export const DocumentImage = Image.extend({
       /** `inline`, `left`, `right` or `topAndBottom` — see `src/ooxml/image.ts`. */
       wrap: { default: 'inline' },
       drawing: { default: null },
+      /** ODT: the picture's path inside the package, e.g. `Pictures/a.png`. */
+      href: { default: null, renderHTML: () => ({}) },
+      /** ODT: the original `draw:frame`, written back when nothing changed. */
+      frame: { default: null, renderHTML: () => ({}) },
       drawingWidth: { default: null },
       drawingWrap: { default: null },
       imageId: { default: null },

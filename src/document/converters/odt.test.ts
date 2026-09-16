@@ -2,6 +2,7 @@ import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
 import { textContentOf } from './types'
 import {
+  lengthToPoints,
   openOdt,
   parseOdtContent,
   parseOdtListStyles,
@@ -184,6 +185,154 @@ describe('list styles', () => {
     )
 
     expect(parseOdtContent(first).doc.content?.[0]?.type).toBe('orderedList')
+  })
+})
+
+describe('images', () => {
+  const FRAME = (attributes: string, inner = '<draw:image xlink:href="Pictures/a.png"/>') =>
+    `<text:p><draw:frame ${attributes}>${inner}</draw:frame></text:p>`
+
+  it('converts frame lengths to points', () => {
+    expect(lengthToPoints('1in')).toBe(72)
+    expect(lengthToPoints('2.54cm')).toBe(72)
+    expect(lengthToPoints('12pt')).toBe(12)
+    expect(lengthToPoints('96px')).toBe(72)
+    expect(lengthToPoints(undefined)).toBeNull()
+    expect(lengthToPoints('wide')).toBeNull()
+  })
+
+  it('reads an inline picture with its size and alt text', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        FRAME(
+          'text:anchor-type="as-char" svg:width="1in" svg:height="0.5in"',
+          '<draw:image xlink:href="Pictures/a.png"/><svg:desc>A cat</svg:desc>',
+        ),
+      ),
+    )
+
+    const image = doc.content?.[0]?.content?.[0]
+    expect(image?.type).toBe('image')
+    expect(image?.attrs?.['width']).toBe(72)
+    expect(image?.attrs?.['height']).toBe(36)
+    expect(image?.attrs?.['alt']).toBe('A cat')
+    expect(image?.attrs?.['wrap']).toBe('inline')
+    expect(image?.attrs?.['href']).toBe('Pictures/a.png')
+  })
+
+  it('takes the wrap side from the frame style, inverted', () => {
+    // `style:wrap="right"` lets text run down the right, so the picture is left.
+    const { doc } = parseOdtContent(
+      CONTENT(
+        FRAME('text:anchor-type="paragraph" draw:style-name="fr1"'),
+        '<style:style style:name="fr1" style:family="graphic"><style:graphic-properties style:wrap="right"/></style:style>',
+      ),
+    )
+
+    expect(doc.content?.[0]?.content?.[0]?.attrs?.['wrap']).toBe('left')
+  })
+
+  it('preserves a frame drawn behind the text rather than moving it into the flow', () => {
+    const { doc, warnings } = parseOdtContent(
+      CONTENT(
+        FRAME('text:anchor-type="paragraph" draw:style-name="fr1"'),
+        '<style:style style:name="fr1" style:family="graphic"><style:graphic-properties style:wrap="run-through"/></style:style>',
+      ),
+    )
+
+    expect(doc.content?.[0]?.content?.[0]?.type).toBe('passthroughInline')
+    expect(warnings.some((warning) => warning.tag === 'draw:frame')).toBe(true)
+  })
+
+  it('preserves a frame that holds something other than a picture', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(FRAME('text:anchor-type="as-char"', '<draw:text-box><text:p>x</text:p></draw:text-box>')),
+    )
+
+    expect(doc.content?.[0]?.content?.[0]?.type).toBe('passthroughInline')
+  })
+
+  it('preserves a linked picture, whose bytes are not in the package', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        FRAME('text:anchor-type="as-char"', '<draw:image xlink:href="https://example.com/a.png"/>'),
+      ),
+    )
+
+    expect(doc.content?.[0]?.content?.[0]?.type).toBe('passthroughInline')
+  })
+
+  it('writes an untouched picture back unchanged', () => {
+    const source = CONTENT(
+      FRAME('draw:name="Image1" text:anchor-type="as-char" svg:width="1in" svg:height="0.5in"'),
+    )
+
+    const { doc } = parseOdtContent(source)
+    const xml = serializeOdtContent(doc, { contentAttributes: {} })
+
+    expect(xml).toContain('svg:width="1in"')
+    expect(xml).toContain('xlink:href="Pictures/a.png"')
+  })
+
+  it('rebuilds the frame once the picture is resized', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(FRAME('text:anchor-type="as-char" svg:width="1in" svg:height="0.5in"')),
+    )
+
+    const image = doc.content?.[0]?.content?.[0]
+    if (image?.attrs) image.attrs['width'] = 144
+
+    const xml = serializeOdtContent(doc, { contentAttributes: {} })
+    expect(xml).toContain('svg:width="144pt"')
+    expect(xml).not.toContain('svg:width="1in"')
+  })
+
+  it('declares a graphic style for a wrapped picture it writes', () => {
+    const xml = serializeOdtContent(
+      {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'image', attrs: { href: 'Pictures/a.png', width: 72, wrap: 'left' } },
+            ],
+          },
+        ],
+      },
+      { contentAttributes: {} },
+    )
+
+    expect(xml).toContain('style:name="OD_WrapLeft"')
+    // Text runs down the right of a picture floated left.
+    expect(xml).toContain('style:wrap="right"')
+    expect(xml).toContain('text:anchor-type="paragraph"')
+  })
+
+  it('resolves picture bytes to a data URL when the package is opened', async () => {
+    const zip = new JSZip()
+    zip.file('mimetype', 'application/vnd.oasis.opendocument.text')
+    zip.file('content.xml', CONTENT(FRAME('text:anchor-type="as-char" svg:width="1in"')))
+    zip.file('styles.xml', '<office:document-styles/>')
+    zip.file('Pictures/a.png', new Uint8Array([137, 80, 78, 71]))
+
+    const document = await openOdt(await zip.generateAsync({ type: 'uint8array' }))
+    const image = document.doc.content?.[0]?.content?.[0]
+
+    expect(image?.attrs?.['src']).toBe('data:image/png;base64,iVBORw==')
+  })
+
+  it('keeps the picture bytes when the document is saved', async () => {
+    const zip = new JSZip()
+    zip.file('mimetype', 'application/vnd.oasis.opendocument.text')
+    zip.file('content.xml', CONTENT(FRAME('text:anchor-type="as-char" svg:width="1in"')))
+    zip.file('styles.xml', '<office:document-styles/>')
+    zip.file('Pictures/a.png', new Uint8Array([137, 80, 78, 71]))
+
+    const document = await openOdt(await zip.generateAsync({ type: 'uint8array' }))
+    const saved = await JSZip.loadAsync(await saveOdt(document, document.doc))
+
+    expect(saved.file('Pictures/a.png')).not.toBeNull()
   })
 })
 

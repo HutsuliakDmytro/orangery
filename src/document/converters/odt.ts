@@ -12,6 +12,7 @@ import {
   isTextNode,
 } from '../../ooxml/xml'
 import type { XmlNode } from '../../ooxml/xml'
+import { contentTypeFor } from '../../ooxml/image'
 import { docOf, markNames } from './types'
 import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-document'
 
@@ -46,7 +47,10 @@ export interface OpenOdt {
 interface OdtContext {
   styles: Map<string, OdtStyle>
   listStyles: Map<string, OdtListStyle>
+  graphicStyles: Map<string, OdtGraphicStyle>
   warnings: ParseWarning[]
+  /** Turns a package path such as `Pictures/a.png` into something displayable. */
+  resolveImage?: ((href: string) => string | null) | undefined
 }
 
 /** Style properties we model; anything else keeps the style reference as-is. */
@@ -65,6 +69,8 @@ const LIST_HEADER_TAG = 'text:list-header'
 const TABLE_TAG = 'table:table'
 const TABLE_ROW_TAG = 'table:table-row'
 const TABLE_CELL_TAG = 'table:table-cell'
+const FRAME_TAG = 'draw:frame'
+const IMAGE_TAG = 'draw:image'
 
 /**
  * One level of a list style.
@@ -189,6 +195,159 @@ function lastLevel(style: OdtListStyle | undefined): OdtListLevel | undefined {
   return deepest
 }
 
+/**
+ * Points per unit for the lengths ODF allows.
+ *
+ * XSL-FO lengths, so a frame can be sized in any of them; `px` is defined
+ * against the 96 dpi CSS reference pixel rather than the screen.
+ */
+const POINTS_PER_UNIT: Record<string, number> = {
+  in: 72,
+  cm: 72 / 2.54,
+  mm: 72 / 25.4,
+  pt: 1,
+  pc: 12,
+  px: 0.75,
+}
+
+export function lengthToPoints(value: string | undefined): number | null {
+  if (value === undefined) return null
+
+  const match = /^\s*(-?[\d.]+)\s*([a-z]*)\s*$/iu.exec(value)
+  if (!match?.[1]) return null
+
+  const amount = Number.parseFloat(match[1])
+  if (!Number.isFinite(amount)) return null
+
+  // A bare number is not a valid ODF length; treating it as points is closer
+  // than discarding the size and rendering the image at its natural one.
+  const factor = POINTS_PER_UNIT[(match[2] ?? '').toLowerCase()] ?? 1
+  return Math.round(amount * factor * 100) / 100
+}
+
+/** The frame properties that decide where a picture sits relative to the text. */
+interface OdtGraphicStyle {
+  wrap: string | null
+  horizontalPosition: string | null
+}
+
+function parseGraphicStyles(root: XmlNode): Map<string, OdtGraphicStyle> {
+  const styles = new Map<string, OdtGraphicStyle>()
+
+  for (const section of children(root)) {
+    const sectionTag = tagName(section)
+    if (sectionTag === null || !STYLE_CONTAINERS.has(sectionTag)) continue
+
+    for (const style of children(section)) {
+      if (tagName(style) !== 'style:style') continue
+      if (attribute(style, 'style:family') !== 'graphic') continue
+
+      const name = attribute(style, 'style:name')
+      if (name === undefined) continue
+
+      const properties = children(style).find(
+        (node) => tagName(node) === 'style:graphic-properties',
+      )
+
+      styles.set(name, {
+        wrap: (properties === undefined ? undefined : attribute(properties, 'style:wrap')) ?? null,
+        horizontalPosition:
+          (properties === undefined ? undefined : attribute(properties, 'style:horizontal-pos')) ??
+          null,
+      })
+    }
+  }
+
+  return styles
+}
+
+/**
+ * Where a frame sits, as the editor models it.
+ *
+ * ODF names the side the *text* may occupy, which is the opposite of the side
+ * the image floats to — the same inversion DrawingML's `wrapText` has. Frames
+ * drawn behind or in front of the text have no equivalent and return null, so
+ * they stay preserved rather than being dropped into the flow.
+ */
+function frameWrap(node: XmlNode, ctx: OdtContext): 'inline' | 'left' | 'right' | 'topAndBottom' | null {
+  const anchor = attribute(node, 'text:anchor-type') ?? 'paragraph'
+  if (anchor === 'as-char') return 'inline'
+  if (anchor === 'page' || anchor === 'frame') return null
+
+  const styleName = attribute(node, 'draw:style-name')
+  const style = styleName === undefined ? undefined : ctx.graphicStyles.get(styleName)
+
+  switch (style?.wrap) {
+    case 'none':
+      return 'topAndBottom'
+    case 'left':
+      return 'right'
+    case 'right':
+      return 'left'
+    case 'run-through':
+      return null
+    default: {
+      // `parallel` and `dynamic` let text run down both sides, which CSS floats
+      // cannot do; the frame's own alignment is the closest single side.
+      const position = style?.horizontalPosition
+      return position === 'right' ? 'right' : 'left'
+    }
+  }
+}
+
+/** Text of an `svg:title` or `svg:desc` child, which is where alt text lives. */
+function describedBy(node: XmlNode, tag: string): string | null {
+  const child = children(node).find((candidate) => tagName(candidate) === tag)
+  if (!child) return null
+
+  const text = children(child)
+    .map((part) => (isTextNode(part) ? textValue(part) : ''))
+    .join('')
+    .trim()
+
+  return text === '' ? null : text
+}
+
+/**
+ * A picture frame.
+ *
+ * Returns null for anything that is not a plain embedded image — an OLE object,
+ * a text box, a linked picture — so the caller preserves it verbatim.
+ */
+function parseFrame(node: XmlNode, ctx: OdtContext): ProseMirrorNodeJson | null {
+  const picture = children(node).find((child) => tagName(child) === IMAGE_TAG)
+  if (!picture) return null
+
+  const href = attribute(picture, 'xlink:href')
+  // A frame holding the bytes inline as `office:binary-data` has no href; so
+  // does one linking to a file outside the package.
+  if (href === undefined || href === '' || /^[a-z]+:\/\//iu.test(href)) return null
+
+  const wrap = frameWrap(node, ctx)
+  if (wrap === null) return null
+
+  const width = lengthToPoints(attribute(node, 'svg:width'))
+  const height = lengthToPoints(attribute(node, 'svg:height'))
+  const alt = describedBy(node, 'svg:desc') ?? describedBy(node, 'svg:title') ?? ''
+
+  return {
+    type: 'image',
+    attrs: {
+      src: ctx.resolveImage?.(href) ?? '',
+      alt,
+      width: width ?? 0,
+      height: height ?? 0,
+      wrap,
+      href,
+      // Kept so a picture nobody touched is written back as it was read; the
+      // recorded width and wrap say whether either has since changed.
+      frame: serializeNode(node),
+      drawingWidth: width ?? 0,
+      drawingWrap: wrap,
+    },
+  }
+}
+
 function parseAutomaticStyles(root: XmlNode): Map<string, OdtStyle> {
   const styles = new Map<string, OdtStyle>()
 
@@ -227,9 +386,8 @@ function marksFor(style: OdtStyle | undefined): { type: string }[] {
 
 function inlineFrom(
   node: XmlNode,
-  styles: Map<string, OdtStyle>,
+  ctx: OdtContext,
   inherited: { type: string }[],
-  warnings: ParseWarning[],
 ): ProseMirrorNodeJson[] {
   if (isTextNode(node)) {
     const text = textValue(node)
@@ -245,9 +403,9 @@ function inlineFrom(
       const styleName = attribute(node, 'text:style-name')
       const marks = [
         ...inherited,
-        ...marksFor(styleName === undefined ? undefined : styles.get(styleName)),
+        ...marksFor(styleName === undefined ? undefined : ctx.styles.get(styleName)),
       ]
-      return children(node).flatMap((child) => inlineFrom(child, styles, marks, warnings))
+      return children(node).flatMap((child) => inlineFrom(child, ctx, marks))
     }
     case 'text:s': {
       // An explicit run of spaces; ODT collapses literal whitespace otherwise.
@@ -261,7 +419,7 @@ function inlineFrom(
     case 'text:a': {
       const href = attribute(node, 'xlink:href')
       const marks = href === undefined ? inherited : [...inherited, { type: 'link' }]
-      const inner = children(node).flatMap((child) => inlineFrom(child, styles, marks, warnings))
+      const inner = children(node).flatMap((child) => inlineFrom(child, ctx, marks))
       if (href !== undefined) {
         for (const item of inner) {
           const link = item.marks?.find((mark) => mark.type === 'link')
@@ -270,9 +428,19 @@ function inlineFrom(
       }
       return inner
     }
+    case FRAME_TAG: {
+      const image = parseFrame(node, ctx)
+      if (image !== null) return [image]
+
+      ctx.warnings.push({
+        tag: FRAME_TAG,
+        message: 'A frame is preserved but cannot be moved or resized yet.',
+      })
+      return [{ type: 'passthroughInline', attrs: { xml: serializeNode(node), tag: FRAME_TAG } }]
+    }
     default:
       if (tag === null) return []
-      warnings.push({ tag, message: `<${tag}> is preserved but not editable.` })
+      ctx.warnings.push({ tag, message: `<${tag}> is preserved but not editable.` })
       return [{ type: 'passthroughInline', attrs: { xml: serializeNode(node), tag } }]
   }
 }
@@ -365,7 +533,7 @@ function parseBlock(
   if (tag === null || isTextNode(node)) return []
 
   if (tag === PARAGRAPH_TAG || tag === HEADING_TAG) {
-    const inline = children(node).flatMap((child) => inlineFrom(child, ctx.styles, [], ctx.warnings))
+    const inline = children(node).flatMap((child) => inlineFrom(child, ctx, []))
 
     if (tag === HEADING_TAG) {
       const level = Number.parseInt(attribute(node, 'text:outline-level') ?? '1', 10)
@@ -392,7 +560,10 @@ function parseBlock(
 
 export function parseOdtContent(
   xml: string,
-  options: { listStyles?: Map<string, OdtListStyle> } = {},
+  options: {
+    listStyles?: Map<string, OdtListStyle>
+    resolveImage?: (href: string) => string | null
+  } = {},
 ): {
   doc: ProseMirrorNodeJson
   warnings: ParseWarning[]
@@ -416,7 +587,13 @@ export function parseOdtContent(
   const listStyles = new Map(options.listStyles ?? [])
   collectListStyles(root, listStyles)
 
-  const ctx: OdtContext = { styles: parseAutomaticStyles(root), listStyles, warnings }
+  const ctx: OdtContext = {
+    styles: parseAutomaticStyles(root),
+    listStyles,
+    graphicStyles: parseGraphicStyles(root),
+    warnings,
+    ...(options.resolveImage === undefined ? {} : { resolveImage: options.resolveImage }),
+  }
   const automatic = children(root).find((node) => tagName(node) === 'office:automatic-styles')
 
   const body = children(root).find((node) => tagName(node) === 'office:body')
@@ -516,12 +693,92 @@ function buildListStyle(name: string): XmlNode {
   return element('text:list-style', { 'style:name': name }, levels)
 }
 
-function serializeInline(nodes: readonly ProseMirrorNodeJson[], used: Set<string>): XmlNode[] {
+/**
+ * Graphic styles for the wrap modes, named after the mode they carry.
+ *
+ * ODF names the side the text may occupy, so a picture floated left needs a
+ * style that lets text run down its right.
+ */
+const WRAP_STYLES: Record<string, string> = {
+  left: 'OD_WrapLeft',
+  right: 'OD_WrapRight',
+  topAndBottom: 'OD_WrapNone',
+}
+
+function buildGraphicStyle(name: string): XmlNode {
+  const wrap = name === 'OD_WrapLeft' ? 'right' : name === 'OD_WrapRight' ? 'left' : 'none'
+
+  return element('style:style', { 'style:name': name, 'style:family': 'graphic' }, [
+    element('style:graphic-properties', {
+      'style:wrap': wrap,
+      'style:horizontal-pos': name === 'OD_WrapRight' ? 'right' : 'left',
+      'style:horizontal-rel': 'paragraph',
+    }),
+  ])
+}
+
+/** A picture frame for an image the editor added or resized. */
+function buildFrame(node: ProseMirrorNodeJson, index: number, usedGraphics: Set<string>): XmlNode {
+  const href = node.attrs?.['href']
+  const width = node.attrs?.['width']
+  const height = node.attrs?.['height']
+  const alt = node.attrs?.['alt']
+  const wrapAttr = node.attrs?.['wrap']
+  const wrap = typeof wrapAttr === 'string' ? wrapAttr : 'inline'
+
+  const styleName = WRAP_STYLES[wrap]
+  if (styleName !== undefined) usedGraphics.add(styleName)
+
+  return element(
+    FRAME_TAG,
+    {
+      'draw:name': `Image${String(index + 1)}`,
+      ...(styleName === undefined ? {} : { 'draw:style-name': styleName }),
+      // `as-char` is the only anchor that keeps the picture in the text flow;
+      // every wrapped one hangs off the paragraph.
+      'text:anchor-type': wrap === 'inline' ? 'as-char' : 'paragraph',
+      ...(typeof width === 'number' && width > 0 ? { 'svg:width': `${String(width)}pt` } : {}),
+      ...(typeof height === 'number' && height > 0 ? { 'svg:height': `${String(height)}pt` } : {}),
+    },
+    [
+      element('draw:image', {
+        'xlink:href': typeof href === 'string' ? href : '',
+        'xlink:type': 'simple',
+        'xlink:show': 'embed',
+        'xlink:actuate': 'onLoad',
+      }),
+      ...(typeof alt === 'string' && alt !== ''
+        ? [element('svg:desc', {}, [textNode(alt)])]
+        : []),
+    ],
+  )
+}
+
+function serializeInline(
+  nodes: readonly ProseMirrorNodeJson[],
+  used: Set<string>,
+  images: { usedGraphics: Set<string>; count: number },
+): XmlNode[] {
   return nodes.flatMap((node): XmlNode[] => {
     if (node.type === 'hardBreak') return [element('text:line-break')]
     if (node.type === 'passthroughInline') {
       const xml = node.attrs?.['xml']
       return typeof xml === 'string' ? parseXml(xml) : []
+    }
+    if (node.type === 'image') {
+      const index = images.count
+      images.count += 1
+
+      // An untouched picture is written back exactly as it was read; the frame
+      // carries cropping, borders and effects this does not reproduce.
+      const original = node.attrs?.['frame']
+      const unchanged =
+        node.attrs?.['width'] === node.attrs?.['drawingWidth'] &&
+        node.attrs?.['wrap'] === node.attrs?.['drawingWrap']
+
+      if (typeof original === 'string' && unchanged) return parseXml(original)
+
+      return [buildFrame(node, index, images.usedGraphics)]
     }
     if (node.type !== 'text') return []
 
@@ -549,6 +806,7 @@ export function serializeOdtContent(
 ): string {
   const used = new Set<string>()
   const usedLists = new Set<string>()
+  const images = { usedGraphics: new Set<string>(), count: 0 }
 
   const serializeBlock = (node: ProseMirrorNodeJson): XmlNode[] => {
     switch (node.type) {
@@ -561,7 +819,7 @@ export function serializeOdtContent(
               'text:style-name': `Heading_20_${String(typeof level === 'number' ? level : 1)}`,
               'text:outline-level': String(typeof level === 'number' ? level : 1),
             },
-            serializeInline(node.content ?? [], used),
+            serializeInline(node.content ?? [], used, images),
           ),
         ]
       }
@@ -570,7 +828,7 @@ export function serializeOdtContent(
           element(
             PARAGRAPH_TAG,
             { 'text:style-name': 'Standard' },
-            serializeInline(node.content ?? [], used),
+            serializeInline(node.content ?? [], used, images),
           ),
         ]
       case 'bulletList':
@@ -669,18 +927,34 @@ export function serializeOdtContent(
           'xmlns:style': 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
           'xmlns:fo': 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0',
           'xmlns:xlink': 'http://www.w3.org/1999/xlink',
+          'xmlns:draw': 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0',
+          'xmlns:svg': 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
           'office:version': '1.3',
         }
 
   const root = element('office:document-content', attributes, [
     element('office:automatic-styles', {}, [
       ...[...used].sort().map(buildTextProperties),
+      ...[...images.usedGraphics].sort().map(buildGraphicStyle),
       ...[...usedLists].sort().map(buildListStyle),
     ]),
     element('office:body', {}, [element('office:text', {}, body)]),
   ])
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n${buildXml([root])}`
+}
+
+/** Data URL for a picture in the package, so the webview can display it. */
+export function odtMediaDataUrl(pkg: OdtPackage, href: string): string | null {
+  const part = pkg.parts.get(href)
+  if (!part) return null
+
+  const contentType = contentTypeFor(href)
+  if (contentType === null) return null
+
+  let binary = ''
+  for (const byte of part.bytes) binary += String.fromCharCode(byte)
+  return `data:${contentType};base64,${btoa(binary)}`
 }
 
 export async function openOdt(bytes: Uint8Array): Promise<OpenOdt> {
@@ -705,12 +979,15 @@ export async function openOdt(bytes: Uint8Array): Promise<OpenOdt> {
   }
 
   const stylesXml = parts.get(STYLES_PART)?.text
+  const pkg: OdtPackage = { parts }
+
   const parsed = parseOdtContent(contentXml, {
     ...(stylesXml === undefined ? {} : { listStyles: parseOdtListStyles(stylesXml) }),
+    resolveImage: (href) => odtMediaDataUrl(pkg, href),
   })
 
   return {
-    pkg: { parts },
+    pkg,
     doc: parsed.doc,
     warnings: parsed.warnings,
     automaticStyles: parsed.automaticStyles,

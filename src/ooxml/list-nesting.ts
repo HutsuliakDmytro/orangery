@@ -1,12 +1,13 @@
-import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
+import type { ProseMirrorNodeJson } from './prosemirror-json'
 
 /**
  * Rebuilding nested lists from a flat sequence of items.
  *
- * Markdown and RTF both describe a list one item at a time, each carrying its
- * own depth — indentation in one, a level control word in the other — with
- * nothing to say where a list begins or ends. The nesting has to be inferred
- * from how the depth moves, which is the same job in both formats.
+ * Markdown, RTF and OOXML all describe a list one item at a time, each carrying
+ * its own depth — indentation in one, a level control word in the next, a
+ * numbering level in the last — with nothing to say where a list begins or
+ * ends. The nesting has to be inferred from how the depth moves, which is the
+ * same job in all three.
  *
  * Depth is only ever compared, never interpreted, so a caller can count in
  * whatever unit its format uses.

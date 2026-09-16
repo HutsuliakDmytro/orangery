@@ -1,5 +1,5 @@
 import { safeImageSource } from './image-source'
-import { listBuilder } from './list-nesting'
+import { listBuilder } from '../../ooxml/list-nesting'
 import { flattenTable, parseMarkdownTable, tableFromRows, toMarkdownTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'

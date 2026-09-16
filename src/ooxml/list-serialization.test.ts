@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { parseDocument } from './parse-document'
+import { parseNumbering } from './numbering'
 import { runCommand } from '../editor/commands/registry'
 import { createTestEditor, selectAll } from '../test/editor-harness'
 import type { ProseMirrorNodeJson } from './prosemirror-json'
@@ -132,5 +134,83 @@ describe('a list created in the editor', () => {
     expect(xml).toContain('cell')
     // The cell paragraph is not part of the list.
     expect(xml.slice(xml.indexOf('<w:tbl'))).not.toContain('w:numPr')
+  })
+})
+
+describe('reading a list back out of a document', () => {
+  const wrap = (body: string) =>
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`
+
+  const item = (text: string, numId: number, level = 0) =>
+    `<w:p><w:pPr><w:numPr><w:ilvl w:val="${String(level)}"/><w:numId w:val="${String(numId)}"/></w:numPr></w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`
+
+  const numbering = (format: string) =>
+    parseNumbering(
+      `<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:abstractNum w:abstractNumId="0">` +
+        `<w:lvl w:ilvl="0"><w:numFmt w:val="${format}"/></w:lvl>` +
+        `<w:lvl w:ilvl="1"><w:numFmt w:val="${format}"/></w:lvl>` +
+        `</w:abstractNum>` +
+        `<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>` +
+        `</w:numbering>`,
+    )
+
+  it('leaves the paragraphs alone when the definitions are not available', () => {
+    // Nothing says whether the list is bulleted or numbered, and guessing shows
+    // the wrong marker rather than none.
+    const { doc } = parseDocument(wrap(item('one', 1)))
+    expect(doc.content?.[0]?.type).toBe('paragraph')
+  })
+
+  it('groups a run of paragraphs into the list they belong to', () => {
+    const { doc } = parseDocument(wrap(item('one', 1) + item('two', 1)), {
+      numbering: numbering('bullet'),
+    })
+
+    expect(doc.content).toHaveLength(1)
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+    expect(doc.content?.[0]?.content).toHaveLength(2)
+  })
+
+  it('tells a numbered list from a bulleted one by its definition', () => {
+    const { doc } = parseDocument(wrap(item('one', 1)), { numbering: numbering('decimal') })
+    expect(doc.content?.[0]?.type).toBe('orderedList')
+  })
+
+  it('nests by the level each paragraph declares', () => {
+    const { doc } = parseDocument(wrap(item('one', 1) + item('deep', 1, 1)), {
+      numbering: numbering('bullet'),
+    })
+
+    const outer = doc.content?.[0]
+    expect(outer?.content?.[0]?.content?.[1]?.type).toBe('bulletList')
+  })
+
+  it('ends the list at the first paragraph that is not part of it', () => {
+    const body = item('one', 1) + '<w:p><w:r><w:t>after</w:t></w:r></w:p>' + item('two', 1)
+    const { doc } = parseDocument(wrap(body), { numbering: numbering('bullet') })
+
+    expect(doc.content?.map((node) => node.type)).toEqual([
+      'bulletList',
+      'paragraph',
+      'bulletList',
+    ])
+  })
+
+  it('round-trips without adding a definition of its own', () => {
+    const source = wrap(item('one', 1) + item('two', 1))
+    const { doc } = parseDocument(source, { numbering: numbering('bullet') })
+
+    const xml = serializeDocument(doc, {
+      documentAttributes: {},
+      sectionProperties: null,
+      alwaysPreserveSpace: false,
+      // An allocator is offered and must go unused: the paragraphs already say
+      // which definition they belong to.
+      allocateNumbering: () => 99,
+    })
+
+    expect(xml).toContain('<w:numId w:val="1"/>')
+    expect(xml).not.toContain('w:val="99"')
   })
 })

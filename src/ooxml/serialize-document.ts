@@ -469,12 +469,27 @@ interface BlockContext {
  * those. Every paragraph inside carries the same `w:numId`, and its depth
  * becomes `w:ilvl`.
  */
+/** The numbering the first paragraph of a list arrived with, if it did. */
+function firstItemNumbering(node: ProseMirrorNodeJson): { numId: number; level: number } | null {
+  const paragraph = node.content?.[0]?.content?.[0]
+  const numbering = paragraph?.attrs?.['numbering']
+  if (typeof numbering !== 'object' || numbering === null) return null
+
+  const { numId, level } = numbering as { numId?: number; level?: number }
+  return typeof numId === 'number' ? { numId, level: typeof level === 'number' ? level : 0 } : null
+}
+
 function buildList(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[] {
   const kind = node.type === 'orderedList' ? 'ordered' : 'bullet'
 
+  // A list read from a file already points at a definition, and its paragraphs
+  // still carry it. Reusing that leaves the document's own numbering alone;
+  // allocating would add a second definition saying the same thing.
+  const existing = firstItemNumbering(node)
+
   // A nested list keeps its parent's numbering: one definition per list, not
   // one per level, which is how Word writes them too.
-  const numId = context.numbering?.numId ?? context.allocateNumbering?.(kind)
+  const numId = context.numbering?.numId ?? existing?.numId ?? context.allocateNumbering?.(kind)
   if (numId === undefined) {
     // No allocator — the caller is serialising without a package to add a
     // definition to. The text still survives, as plain paragraphs.
@@ -485,7 +500,8 @@ function buildList(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[] 
     )
   }
 
-  const level = context.numbering === undefined ? 0 : context.numbering.level + 1
+  const level =
+    context.numbering === undefined ? (existing?.level ?? 0) : context.numbering.level + 1
 
   return (node.content ?? []).flatMap((item) =>
     (item.content ?? []).flatMap((child) =>

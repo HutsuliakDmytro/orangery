@@ -89,10 +89,16 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     return footnote === undefined ? '' : readFootnoteText(footnote)
   }
 
+  // Read before the body: a list is a run of paragraphs pointing at a numbering
+  // definition, and without the definitions there is no way to tell one from a
+  // run of ordinary paragraphs.
+  const numbering = parseNumbering(getPartText(pkg, NUMBERING_PART) ?? '')
+
   const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '', {
     theme,
     resolveImage,
     footnoteText,
+    numbering,
   })
 
   return {
@@ -102,7 +108,7 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     styles: parseStyles(getPartText(pkg, 'word/styles.xml') ?? ''),
     footnotes,
     alwaysPreserveSpace: parsed.alwaysPreserveSpace,
-    numbering: parseNumbering(getPartText(pkg, 'word/numbering.xml') ?? ''),
+    numbering,
     headingNumbering: readHeadingNumbering(pkg),
     section: parseSection(parsed.sectionProperties),
     documentAttributes: parsed.documentAttributes,

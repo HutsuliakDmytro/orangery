@@ -78,12 +78,24 @@ describe('saving a document with a new list', () => {
     expect(getPartText(saved, CONTENT_TYPES_PART)).toContain('/word/numbering.xml')
   })
 
-  it('reopens the list as numbered paragraphs', async () => {
+  it('reopens the list as a list', async () => {
+    // OOXML has no list element — a list is a run of paragraphs sharing a
+    // numbering definition — so this is where they are put back together.
     const document = await createNewDocx()
     const reopened = await openDocx(await saveDocx(document, listDoc))
 
     const first = reopened.doc.content?.[0]
-    expect(first?.attrs?.['numbering']).toMatchObject({ level: 0 })
+    expect(first?.type).toBe('bulletList')
+    expect(first?.content?.[0]?.content?.[0]?.attrs?.['numbering']).toMatchObject({ level: 0 })
+  })
+
+  it('does not add a second definition for a list it read from the file', async () => {
+    const document = await createNewDocx()
+    const once = await openDocx(await saveDocx(document, listDoc))
+    const twice = await readPackage(await saveDocx(once, once.doc))
+
+    const numbering = getPartText(twice, NUMBERING_PART) ?? ''
+    expect(numbering.match(/<w:num /gu)).toHaveLength(1)
   })
 
   it('does not add a numbering part to a document with no lists', async () => {

@@ -14,6 +14,9 @@ import type { ProseMirrorMarkJson, ProseMirrorNodeJson } from './prosemirror-jso
 import { resolveThemeFont } from './fonts'
 import { imageNode, parseDrawing } from './image'
 import { parseIntAttribute as parseInt2 } from './units'
+import { listBuilder } from './list-nesting'
+import { isBulletList } from './numbering'
+import type { NumberingCatalogue } from './numbering'
 import { parseTable } from './table'
 import { parseTabs } from './tabs'
 import type { TabStop } from './tabs'
@@ -595,6 +598,49 @@ export interface ParseContext {
   resolveImage?: (relationshipId: string) => string | null
   /** Note text by footnote id, from `word/footnotes.xml`. */
   footnoteText?: (id: number) => string
+  /**
+   * Definitions from `word/numbering.xml`.
+   *
+   * Without them the numbered paragraphs still parse, but nothing says whether
+   * a list is bulleted or numbered, so they are left as the paragraphs they are
+   * in the file rather than guessed at.
+   */
+  numbering?: NumberingCatalogue
+}
+
+/**
+ * Groups the paragraphs of a list into the list they belong to.
+ *
+ * OOXML has no list element: a list is a run of paragraphs that happen to point
+ * at the same numbering definition, with their depth in `w:ilvl`. Left as
+ * paragraphs they render with no marker at all — the text of a list without any
+ * sign that it is one.
+ */
+function groupLists(
+  blocks: readonly ProseMirrorNodeJson[],
+  catalogue: NumberingCatalogue | undefined,
+): ProseMirrorNodeJson[] {
+  if (catalogue === undefined) return [...blocks]
+
+  const grouped: ProseMirrorNodeJson[] = []
+  const lists = listBuilder(grouped)
+
+  for (const block of blocks) {
+    const numbering = block.attrs?.['numbering']
+    if (typeof numbering !== 'object' || numbering === null) {
+      lists.close()
+      grouped.push(block)
+      continue
+    }
+
+    const { numId, level } = numbering as { numId: number; level: number }
+    const kind = isBulletList(catalogue, numId, level) ? 'bulletList' : 'orderedList'
+
+    lists.addItem(kind, level, [block])
+  }
+
+  lists.close()
+  return grouped
 }
 
 /**
@@ -649,7 +695,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
   }
 
   const body = findChild(document, 'w:body')
-  const content: ProseMirrorNodeJson[] = []
+  const blocks: ProseMirrorNodeJson[] = []
   let sectionProperties: string | null = null
 
   for (const child of body ? children(body) : []) {
@@ -657,21 +703,23 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
 
     switch (tag) {
       case 'w:p':
-        content.push(parseParagraph(child, warnings, theme, resolveImage, footnoteText))
+        blocks.push(parseParagraph(child, warnings, theme, resolveImage, footnoteText))
         break
       case 'w:tbl':
-        content.push(parseTableBlock(child, warnings, theme, resolveImage, footnoteText))
+        blocks.push(parseTableBlock(child, warnings, theme, resolveImage, footnoteText))
         break
       case 'w:sectPr':
         sectionProperties = serializeNode(child)
         break
       default:
         if (tag !== null) {
-          content.push({ type: 'passthroughBlock', attrs: { xml: serializeNode(child), tag } })
+          blocks.push({ type: 'passthroughBlock', attrs: { xml: serializeNode(child), tag } })
           warnings.push({ tag, message: `<${tag}> is preserved but cannot be edited yet.` })
         }
     }
   }
+
+  const content = groupLists(blocks, context.numbering)
 
   // ProseMirror requires at least one block.
   if (content.length === 0) content.push({ type: 'paragraph' })

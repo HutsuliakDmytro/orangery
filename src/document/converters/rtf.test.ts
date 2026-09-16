@@ -216,17 +216,78 @@ describe('rtf lists', () => {
     expect(rtf).toContain('\\li1440')
   })
 
-  it('does not put the written marker back into the text when read again', () => {
-    const rtf = serializeRtf({ type: 'doc', content: [list('bulletList', ['one'])] })
+  it('round-trips a bulleted list', () => {
+    const rtf = serializeRtf({ type: 'doc', content: [list('bulletList', ['one', 'two'])] })
     const { doc } = parseRtf(rtf)
 
-    // The list itself is not rebuilt, but the text must not gain a stray bullet.
-    expect(textContentOf(doc)).toBe('one')
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+    expect(doc.content?.[0]?.content).toHaveLength(2)
+    // The marker itself must not end up in the text.
+    expect(textContentOf(doc)).toBe('onetwo')
   })
 
-  it('ignores the marker text another writer puts in front of an item', () => {
-    const { doc } = parseRtf("{\\rtf1\\ansi{\\listtext\\f0 \\'b7\\tab}Item\\par}")
-    expect(textContentOf(doc)).toBe('Item')
+  it('round-trips a numbered list, keeping where it starts', () => {
+    const numbered = list('orderedList', ['a', 'b'])
+    numbered.attrs = { start: 3 }
+
+    const { doc } = parseRtf(serializeRtf({ type: 'doc', content: [numbered] }))
+
+    expect(doc.content?.[0]?.type).toBe('orderedList')
+    expect(doc.content?.[0]?.attrs?.['start']).toBe(3)
+  })
+
+  it('round-trips a nested list', () => {
+    const outer = list('bulletList', ['outer'])
+    outer.content?.[0]?.content?.push(list('bulletList', ['inner']))
+
+    const { doc } = parseRtf(serializeRtf({ type: 'doc', content: [outer] }))
+
+    const item = doc.content?.[0]?.content?.[0]
+    expect(item?.content?.[1]?.type).toBe('bulletList')
+    expect(textContentOf(item?.content?.[1] ?? { type: 'x' })).toBe('inner')
+  })
+
+  it('reads a list another writer marked with a level control word', () => {
+    const { doc } = parseRtf(
+      "{\\rtf1\\ansi\\pard\\li720\\ls1\\ilvl0{\\listtext\\f0 \\'b7\\tab}One\\par" +
+        "\\pard\\li1440\\ls1\\ilvl1{\\listtext\\f0 \\'b7\\tab}Deep\\par}",
+    )
+
+    const item = doc.content?.[0]?.content?.[0]
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+    expect(item?.content?.[1]?.type).toBe('bulletList')
+  })
+
+  it('reads a numbered marker as a numbered list', () => {
+    const { doc } = parseRtf(
+      '{\\rtf1\\ansi\\pard\\li720\\ls1\\ilvl0{\\listtext\\f0 1.\\tab}One\\par}',
+    )
+
+    expect(doc.content?.[0]?.type).toBe('orderedList')
+  })
+
+  it('reads a lettered marker as a numbered list too', () => {
+    const { doc } = parseRtf(
+      '{\\rtf1\\ansi\\pard\\li720{\\listtext\\f0 a)\\tab}One\\par}',
+    )
+
+    expect(doc.content?.[0]?.type).toBe('orderedList')
+  })
+
+  it('ends the list at the first paragraph without a marker', () => {
+    const rtf =
+      "{\\rtf1\\ansi\\pard\\li720{\\listtext\\f0 \\'b7\\tab}Item\\par\\pard After\\par}"
+    const { doc } = parseRtf(rtf)
+
+    expect(doc.content?.[0]?.type).toBe('bulletList')
+    expect(doc.content?.[1]?.type).toBe('paragraph')
+    expect(textContentOf(doc.content?.[1] ?? { type: 'x' })).toBe('After')
+  })
+
+  it('leaves an indented paragraph with no marker as a paragraph', () => {
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\li720 Just indented\\par}')
+
+    expect(doc.content?.[0]?.type).toBe('paragraph')
   })
 })
 

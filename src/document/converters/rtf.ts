@@ -1,3 +1,5 @@
+import { listBuilder } from './list-nesting'
+import type { ListKind } from './list-nesting'
 import { flattenTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
@@ -28,14 +30,23 @@ const IGNORED_DESTINATIONS = new Set([
   'generator',
   'listtable',
   'listoverridetable',
-  // The literal bullet or number a writer puts in front of a list item, for
-  // readers that cannot render list formatting. Keeping it would put a stray
-  // "1." or a bullet character into the text of the paragraph.
-  'pntext',
-  'listtext',
   'rsidtbl',
   'xmlnstbl',
 ])
+
+/**
+ * The literal marker a writer puts in front of a list item, for readers that
+ * cannot render list formatting.
+ *
+ * It must not land in the paragraph's text, but it is worth reading: RTF keeps
+ * the kind of list in a numbering table referenced by id, and the marker says
+ * the same thing in a form that does not need the table.
+ */
+const MARKER_DESTINATIONS = new Set(['listtext', 'pntext'])
+
+/** Twips of indent per list level, and the hanging indent of the marker. */
+const LIST_INDENT = 720
+const MARKER_INDENT = -360
 
 interface RunState {
   bold: boolean
@@ -66,6 +77,39 @@ function marksFor(state: RunState): { type: string }[] {
   return marks
 }
 
+/**
+ * Whether a marker numbers its item or just points at it.
+ *
+ * A digit is the clear case; a letter followed by a separator covers the
+ * alphabetic and roman numbering Word also writes. Every bullet character sits
+ * outside both, so anything else is a bullet.
+ */
+function kindOf(marker: string): ListKind {
+  if (/\d/u.test(marker)) return 'orderedList'
+  return /^\s*[a-z]+[.)]/iu.test(marker) ? 'orderedList' : 'bulletList'
+}
+
+/** The number a list counts from, when its first marker says one. */
+function startOf(marker: string): number {
+  const digits = /\d+/u.exec(marker)
+  if (digits === null) return 1
+
+  const value = Number.parseInt(digits[0], 10)
+  return Number.isFinite(value) && value > 0 ? value : 1
+}
+
+/**
+ * How deeply an item is nested.
+ *
+ * `\ilvl` says so outright. A writer that uses the older per-paragraph form
+ * does not emit it, and there the left indent is the only depth there is.
+ */
+function levelOf(declared: number | null, indent: number | null): number {
+  if (declared !== null) return declared
+  if (indent === null) return 0
+  return Math.max(0, Math.round(indent / LIST_INDENT) - 1)
+}
+
 export function parseRtf(text: string): ConversionResult {
   const warnings: ParseWarning[] = []
   const content: ProseMirrorNodeJson[] = []
@@ -75,6 +119,16 @@ export function parseRtf(text: string): ConversionResult {
   // Rows collected since `\trowd`, and the cells of the row being read.
   let rows: ProseMirrorNodeJson[] | null = null
   let cells: ProseMirrorNodeJson[] | null = null
+
+  const lists = listBuilder(content)
+
+  // Set while reading a marker group, so its text goes to the marker and not to
+  // the paragraph. Null means the paragraph has no marker and is not an item.
+  let markerDepth: number | null = null
+  let marker: string | null = null
+  // List level and indent, as the paragraph declared them.
+  let itemLevel: number | null = null
+  let itemIndent: number | null = null
   const stack: RunState[] = []
   let state: RunState = { ...CLEAN_STATE }
 
@@ -86,6 +140,11 @@ export function parseRtf(text: string): ConversionResult {
   // omit it mean one, which is what the spec says to assume.
   let unicodeSkip = 1
   let skipCharacters = 0
+
+  const emit = (value: string) => {
+    if (markerDepth !== null) marker = (marker ?? '') + value
+    else if (skipDepth === null) pendingText += value
+  }
 
   const flushText = () => {
     if (pendingText === '') return
@@ -114,20 +173,32 @@ export function parseRtf(text: string): ConversionResult {
 
     closeTable()
 
-    if (headingLevel !== null) {
-      content.push({
-        type: 'heading',
-        attrs: { level: headingLevel },
-        ...(current.length > 0 ? { content: current } : {}),
-      })
-    } else {
-      content.push({
-        type: 'paragraph',
-        ...(current.length > 0 ? { content: current } : {}),
-      })
+    const paragraph: ProseMirrorNodeJson = {
+      type: 'paragraph',
+      ...(current.length > 0 ? { content: current } : {}),
     }
+
+    if (marker !== null && headingLevel === null) {
+      lists.addItem(kindOf(marker), levelOf(itemLevel, itemIndent), [paragraph], startOf(marker))
+    } else {
+      lists.close()
+
+      if (headingLevel !== null) {
+        content.push({
+          type: 'heading',
+          attrs: { level: headingLevel },
+          ...(current.length > 0 ? { content: current } : {}),
+        })
+      } else {
+        content.push(paragraph)
+      }
+    }
+
     current = []
     headingLevel = null
+    marker = null
+    itemLevel = null
+    itemIndent = null
   }
 
   while (index < text.length) {
@@ -142,6 +213,7 @@ export function parseRtf(text: string): ConversionResult {
 
     if (char === '}') {
       flushText()
+      if (markerDepth !== null && depth <= markerDepth) markerDepth = null
       if (skipDepth !== null && depth <= skipDepth) skipDepth = null
       depth -= 1
       state = stack.pop() ?? { ...CLEAN_STATE }
@@ -154,7 +226,7 @@ export function parseRtf(text: string): ConversionResult {
 
       // Escaped literal characters.
       if (next === '\\' || next === '{' || next === '}') {
-        if (skipDepth === null) pendingText += next
+        emit(next)
         index += 2
         continue
       }
@@ -164,9 +236,7 @@ export function parseRtf(text: string): ConversionResult {
       if (next === "'") {
         const hex = text.slice(index + 2, index + 4)
         const code = Number.parseInt(hex, 16)
-        if (skipDepth === null && Number.isFinite(code)) {
-          pendingText += String.fromCharCode(code)
-        }
+        if (Number.isFinite(code)) emit(String.fromCharCode(code))
         index += 4
         continue
       }
@@ -198,10 +268,16 @@ export function parseRtf(text: string): ConversionResult {
         // negative. Surrogate pairs come through as two consecutive escapes and
         // recombine on their own once both halves are in the string.
         const codeUnit = parameter < 0 ? parameter + 65536 : parameter
-        if (skipDepth === null) pendingText += String.fromCharCode(codeUnit)
+        emit(String.fromCharCode(codeUnit))
         // The fallback characters that follow are for readers that cannot do
         // Unicode; appending them would duplicate the character as `?`.
         skipCharacters = unicodeSkip
+        continue
+      }
+
+      if (MARKER_DESTINATIONS.has(word)) {
+        markerDepth = depth
+        marker = ''
         continue
       }
 
@@ -243,6 +319,15 @@ export function parseRtf(text: string): ConversionResult {
           flushText()
           state = { ...CLEAN_STATE }
           headingLevel = null
+          marker = null
+          itemLevel = null
+          itemIndent = null
+          break
+        case 'ilvl':
+          if (parameter !== null && parameter >= 0) itemLevel = parameter
+          break
+        case 'li':
+          if (parameter !== null && parameter >= 0) itemIndent = parameter
           break
         case 'b':
           flushText()
@@ -282,7 +367,7 @@ export function parseRtf(text: string): ConversionResult {
           }
           break
         case 'tab':
-          pendingText += '\t'
+          emit('\t')
           break
         case 'page':
           flushText()
@@ -307,7 +392,7 @@ export function parseRtf(text: string): ConversionResult {
       continue
     }
 
-    if (skipDepth === null && char !== undefined) pendingText += char
+    if (char !== undefined) emit(char)
     index += 1
   }
 
@@ -316,7 +401,8 @@ export function parseRtf(text: string): ConversionResult {
     rows.push({ type: 'tableRow', content: cells })
     cells = null
   }
-  if (current.length > 0) endParagraph()
+  if (current.length > 0 || marker !== null) endParagraph()
+  lists.close()
   closeTable()
 
   // Every RTF file starts with an `\rtf` version control word. Text without one
@@ -389,10 +475,6 @@ function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
     })
     .join('')
 }
-
-/** Twips of indent per list level, and the hanging indent of the marker. */
-const LIST_INDENT = 720
-const MARKER_INDENT = -360
 
 /**
  * The width of the text column, in twips.

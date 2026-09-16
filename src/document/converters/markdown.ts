@@ -1,4 +1,5 @@
 import { safeImageSource } from './image-source'
+import { listBuilder } from './list-nesting'
 import { flattenTable, parseMarkdownTable, tableFromRows, toMarkdownTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
@@ -74,14 +75,6 @@ export function parseInline(line: string): ProseMirrorNodeJson[] {
   return nodes
 }
 
-/** A list currently being read, and where a sibling list would go beside it. */
-interface OpenList {
-  indent: number
-  type: 'bulletList' | 'orderedList'
-  node: ProseMirrorNodeJson
-  siblings: ProseMirrorNodeJson[]
-}
-
 /**
  * How far a line is indented, in columns.
  *
@@ -99,33 +92,13 @@ function listIndent(line: string): number {
   return columns
 }
 
-function itemsOf(list: ProseMirrorNodeJson): ProseMirrorNodeJson[] {
-  if (list.content === undefined) list.content = []
-  return list.content
-}
-
-/** The blocks of the last item, which is what a deeper list nests inside. */
-function contentOfLastItem(list: ProseMirrorNodeJson): ProseMirrorNodeJson[] {
-  const items = itemsOf(list)
-
-  let last = items[items.length - 1]
-  if (last === undefined) {
-    last = { type: 'listItem', content: [] }
-    items.push(last)
-  }
-  if (last.content === undefined) last.content = []
-
-  return last.content
-}
-
 export function parseMarkdown(text: string): ConversionResult {
   const lines = text.split(/\r\n|\r|\n/u)
   const content: ProseMirrorNodeJson[] = []
 
-  // One entry per open nesting level, shallowest first.
-  const open: OpenList[] = []
+  const lists = listBuilder(content)
   const closeLists = () => {
-    open.length = 0
+    lists.close()
   }
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -167,39 +140,16 @@ export function parseMarkdown(text: string): ConversionResult {
     const ordered = ORDERED.exec(line)
     if (bullet?.[1] !== undefined || ordered?.[2] !== undefined) {
       const type = bullet ? 'bulletList' : 'orderedList'
-      const indent = listIndent(line)
 
-      // A line pulled back to the left ends every list deeper than it.
-      while (open.length > 0 && indent < (open[open.length - 1]?.indent ?? 0)) open.pop()
-
-      let current = open[open.length - 1]
-
-      if (current !== undefined && current.indent === indent && current.type !== type) {
-        // Same depth, different marker: a new list beside the old one, not
-        // inside it.
-        open.pop()
-        const list: ProseMirrorNodeJson = { type, content: [] }
-        current.siblings.push(list)
-        current = { indent, type, node: list, siblings: current.siblings }
-        open.push(current)
-      } else if (current === undefined || indent > current.indent) {
-        const siblings = current === undefined ? content : contentOfLastItem(current.node)
-        const list: ProseMirrorNodeJson = { type, content: [] }
-        siblings.push(list)
-        current = { indent, type, node: list, siblings }
-        open.push(current)
-      }
-
-      // The first item decides where a numbered list starts counting.
+      // The item that opens a numbered list decides where it starts counting.
       const start = Number.parseInt(ordered?.[1] ?? '1', 10)
-      if (type === 'orderedList' && itemsOf(current.node).length === 0 && start > 1) {
-        current.node.attrs = { start }
-      }
 
-      itemsOf(current.node).push({
-        type: 'listItem',
-        content: [{ type: 'paragraph', content: parseInline(bullet?.[1] ?? ordered?.[2] ?? '') }],
-      })
+      lists.addItem(
+        type,
+        listIndent(line),
+        [{ type: 'paragraph', content: parseInline(bullet?.[1] ?? ordered?.[2] ?? '') }],
+        Number.isFinite(start) ? start : 1,
+      )
       continue
     }
 

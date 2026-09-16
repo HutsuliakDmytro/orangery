@@ -5,8 +5,11 @@ import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse
 import type { ParsedDocument, ProseMirrorNodeJson } from './parse-document'
 import { footnoteReferenceRun } from './footnotes'
 import { buildDrawing } from './image'
+import { sequenceField, styleReferenceField } from './fields'
+import { captionKindOf, numberCaptions, SEQUENCE_NAMES } from './captions'
 import { serializeTabs } from './tabs'
 import type { TabStop } from './tabs'
+import type { CaptionNumber } from './captions'
 import type { ImageWrap } from './image'
 import { serializeTable } from './table'
 import { buildTocField } from './toc-field'
@@ -35,6 +38,13 @@ export interface SerializeOptions {
    * body text, so the caller supplies one.
    */
   allocateNumbering?: (kind: 'bullet' | 'ordered') => number
+  /**
+   * Whether captions count within a chapter.
+   *
+   * Follows the heading numbering: "Figure 1.2" means nothing in a document
+   * whose chapters have no numbers.
+   */
+  captionsByChapter?: boolean
 }
 
 type Mark = NonNullable<ProseMirrorNodeJson['marks']>[number]
@@ -277,10 +287,43 @@ function buildParagraphProperties(node: ProseMirrorNodeJson): XmlNode | null {
   return properties.length > 0 ? element('w:pPr', {}, properties) : null
 }
 
-function buildParagraph(node: ProseMirrorNodeJson, alwaysPreserveSpace: boolean): XmlNode {
+/**
+ * The label and number a caption paragraph opens with.
+ *
+ * Written as real fields rather than as the text the editor draws: Word then
+ * renumbers them itself when a figure is inserted above, and a reader that
+ * cannot calculate fields still shows the number as it stood.
+ */
+function buildCaptionLabel(node: ProseMirrorNodeJson, numbered: CaptionNumber | undefined): XmlNode[] {
+  const kind = captionKindOf(node.attrs?.['captionKind'])
+  if (kind === undefined || numbered === undefined) return []
+
+  const [chapterValue, ownValue] = numbered.number.split('.')
+  const own = numbered.chapter === null ? numbered.number : (ownValue ?? numbered.number)
+
+  return [
+    element('w:r', {}, [element('w:t', { 'xml:space': 'preserve' }, [textNode(`${SEQUENCE_NAMES[kind]} `)])]),
+    ...(numbered.chapter === null
+      ? []
+      : [
+          ...styleReferenceField(1, chapterValue ?? String(numbered.chapter)),
+          element('w:r', {}, [element('w:t', {}, [textNode('.')])]),
+        ]),
+    ...sequenceField(SEQUENCE_NAMES[kind], own, numbered.chapter === null ? undefined : 1),
+    element('w:r', {}, [element('w:t', { 'xml:space': 'preserve' }, [textNode(' \u2014 ')])]),
+  ]
+}
+
+function buildParagraph(
+  node: ProseMirrorNodeJson,
+  alwaysPreserveSpace: boolean,
+  caption?: CaptionNumber,
+): XmlNode {
   const paragraphChildren: XmlNode[] = []
   const properties = buildParagraphProperties(node)
   if (properties) paragraphChildren.push(properties)
+
+  paragraphChildren.push(...buildCaptionLabel(node, caption))
 
   // OOXML groups content that shares properties into one `w:r`. Emitting a run
   // per node would split a run whose text is followed by a break, and the break
@@ -415,6 +458,8 @@ interface BlockContext {
   allocateNumbering?: (kind: 'bullet' | 'ordered') => number
   /** Numbering reference inherited from the list this block sits in. */
   numbering?: { numId: number; level: number }
+  /** Caption numbers by the block they belong to, computed for the whole body. */
+  captions?: Map<ProseMirrorNodeJson, CaptionNumber>
 }
 
 /**
@@ -469,7 +514,7 @@ function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[]
         context.numbering === undefined
           ? node
           : { ...node, attrs: { ...node.attrs, numbering: context.numbering } }
-      return [buildParagraph(withNumbering, alwaysPreserveSpace)]
+      return [buildParagraph(withNumbering, alwaysPreserveSpace, context.captions?.get(node))]
     }
 
     case 'table':
@@ -507,12 +552,30 @@ function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[]
 }
 
 export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOptions): string {
+  // Counted over the whole body before anything is written: a caption's number
+  // depends on every block above it, which the block itself cannot see.
+  const blocks = doc.content ?? []
+  const captions = new Map<ProseMirrorNodeJson, CaptionNumber>()
+
+  for (const numbered of numberCaptions(
+    blocks.map((node) => ({
+      type: node.type,
+      level: numberAttr(node.attrs, 'level') ?? undefined,
+      captionKind: captionKindOf(node.attrs?.['captionKind']),
+    })),
+    options.captionsByChapter ?? false,
+  )) {
+    const block = blocks[numbered.index]
+    if (block !== undefined) captions.set(block, numbered)
+  }
+
   const context: BlockContext = {
     alwaysPreserveSpace: options.alwaysPreserveSpace ?? false,
+    captions,
     ...(options.allocateNumbering ? { allocateNumbering: options.allocateNumbering } : {}),
   }
 
-  const body: XmlNode[] = (doc.content ?? []).flatMap((node) => buildBlock(node, context))
+  const body: XmlNode[] = blocks.flatMap((node) => buildBlock(node, context))
   body.push(...parsedNodes(options.sectionProperties))
 
   const document = element('w:document', options.documentAttributes, [element('w:body', {}, body)])

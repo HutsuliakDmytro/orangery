@@ -136,6 +136,8 @@ export async function saveDocx(
     sectionProperties: serializeSection(options.section ?? open.section),
     alwaysPreserveSpace: open.alwaysPreserveSpace,
     allocateNumbering: allocate,
+    // Captions count within a chapter exactly when the chapters are numbered.
+    captionsByChapter: (options.headingNumbering ?? open.headingNumbering) !== null,
   })
 
   if (added.length > 0) writeNumbering(open.pkg, added)

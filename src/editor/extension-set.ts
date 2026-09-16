@@ -21,6 +21,7 @@ import { useViewStore } from '../store/view-store'
 import { CommandKeymap } from './commands/keymap'
 import { FindReplace } from './extensions/find-replace'
 import { Footnote } from './extensions/footnote'
+import { Caption } from './extensions/caption'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
 import { HeadingNumbering } from './extensions/heading-numbering'
@@ -84,6 +85,11 @@ export function buildExtensions(): Extensions {
     ParagraphStyle,
     ParagraphSpacing,
     Indent,
+    Caption.configure({
+      // Captions count within a chapter exactly when the chapters are numbered:
+      // "Figure 1.2" means nothing in a document whose chapters have no numbers.
+      chapters: () => useViewStore.getState().headingNumbering !== null,
+    }),
     HeadingNumbering.configure({
       scheme: () => useViewStore.getState().headingNumbering,
     }),

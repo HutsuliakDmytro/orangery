@@ -32,6 +32,24 @@ export const insertCommands: readonly Command[] = [
     },
   },
   {
+    id: 'insert.figure-caption',
+    label: 'Figure Caption',
+    group: 'insert',
+    keywords: ['caption', 'figure', 'picture', 'number'],
+    run: ({ editor }) => {
+      editor.chain().focus().insertCaption('figure').run()
+    },
+  },
+  {
+    id: 'insert.table-caption',
+    label: 'Table Caption',
+    group: 'insert',
+    keywords: ['caption', 'table', 'number'],
+    run: ({ editor }) => {
+      editor.chain().focus().insertCaption('table').run()
+    },
+  },
+  {
     id: 'insert.refresh-table-of-contents',
     label: 'Update Table of Contents',
     group: 'insert',

@@ -498,3 +498,15 @@
   background-image: linear-gradient(to right, currentColor, currentColor);
   background-size: 100% 1px;
 }
+
+/* The label and number in front of a caption. Drawn by the editor, not typed,
+   so it must not look selectable. */
+.editor-surface .caption-label {
+  user-select: none;
+}
+
+.editor-surface p[data-caption] {
+  font-size: 10pt;
+  text-align: center;
+  color: #444444;
+}

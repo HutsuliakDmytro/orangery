@@ -1,3 +1,4 @@
+import { flattenTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
 import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-document'
@@ -27,6 +28,11 @@ const IGNORED_DESTINATIONS = new Set([
   'generator',
   'listtable',
   'listoverridetable',
+  // The literal bullet or number a writer puts in front of a list item, for
+  // readers that cannot render list formatting. Keeping it would put a stray
+  // "1." or a bullet character into the text of the paragraph.
+  'pntext',
+  'listtext',
   'rsidtbl',
   'xmlnstbl',
 ])
@@ -66,6 +72,9 @@ export function parseRtf(text: string): ConversionResult {
 
   let current: ProseMirrorNodeJson[] = []
   let headingLevel: number | null = null
+  // Rows collected since `\trowd`, and the cells of the row being read.
+  let rows: ProseMirrorNodeJson[] | null = null
+  let cells: ProseMirrorNodeJson[] | null = null
   const stack: RunState[] = []
   let state: RunState = { ...CLEAN_STATE }
 
@@ -89,8 +98,22 @@ export function parseRtf(text: string): ConversionResult {
     pendingText = ''
   }
 
+  /** A table ends at the first paragraph that is not part of a row. */
+  const closeTable = () => {
+    if (rows === null) return
+    if (rows.length > 0) content.push({ type: 'table', content: rows })
+    rows = null
+  }
+
   const endParagraph = () => {
     flushText()
+
+    // Inside a cell, `\par` separates paragraphs of that cell; the cell is
+    // closed by `\cell`, not here.
+    if (cells !== null) return
+
+    closeTable()
+
     if (headingLevel !== null) {
       content.push({
         type: 'heading',
@@ -194,6 +217,28 @@ export function parseRtf(text: string): ConversionResult {
         case 'line':
           endParagraph()
           break
+        case 'trowd':
+          // A new row. The first one also ends whatever paragraph preceded it.
+          if (rows === null) {
+            if (current.length > 0) endParagraph()
+            rows = []
+          }
+          cells = []
+          break
+        case 'cell':
+          flushText()
+          cells?.push({
+            type: 'tableCell',
+            // A cell has to hold at least one block, as it does in OOXML.
+            content: [{ type: 'paragraph', ...(current.length > 0 ? { content: current } : {}) }],
+          })
+          current = []
+          break
+        case 'row':
+          flushText()
+          if (cells !== null && rows !== null) rows.push({ type: 'tableRow', content: cells })
+          cells = null
+          break
         case 'pard':
           flushText()
           state = { ...CLEAN_STATE }
@@ -267,7 +312,12 @@ export function parseRtf(text: string): ConversionResult {
   }
 
   flushText()
+  if (cells !== null && rows !== null) {
+    rows.push({ type: 'tableRow', content: cells })
+    cells = null
+  }
   if (current.length > 0) endParagraph()
+  closeTable()
 
   // Every RTF file starts with an `\rtf` version control word. Text without one
   // still parses into paragraphs, so the only honest signal is its absence.
@@ -340,11 +390,92 @@ function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
     .join('')
 }
 
+/** Twips of indent per list level, and the hanging indent of the marker. */
+const LIST_INDENT = 720
+const MARKER_INDENT = -360
+
+/**
+ * The width of the text column, in twips.
+ *
+ * RTF places cell edges at absolute positions, so a table needs a page width to
+ * divide up. There is no section in a flat format, so this is the page a new
+ * document starts on: Letter with one inch margins.
+ */
+const COLUMN_WIDTH = 9360
+
+/**
+ * A list as RTF paragraphs.
+ *
+ * RTF has two ways to write a list: a numbering table referenced by id, and the
+ * older per-paragraph form used here. The latter repeats the marker on every
+ * paragraph, which is more verbose but understood by every reader — including
+ * the ones that ignore the numbering table entirely and would otherwise show
+ * the list as unindented body text.
+ */
+function listParagraphs(list: ProseMirrorNodeJson, level: number): string[] {
+  const lines: string[] = []
+  const ordered = list.type === 'orderedList'
+
+  const startAttr = list.attrs?.['start']
+  const first = typeof startAttr === 'number' && startAttr > 0 ? startAttr : 1
+
+  ;(list.content ?? []).forEach((item, index) => {
+    // `\'b7` is the bullet in the ANSI code page this file declares.
+    const marker = ordered
+      ? `{\\pntext\\f0 ${String(first + index)}.\\tab}{\\*\\pn\\pnlvlbody\\pnf0\\pnindent0\\pnstart${String(first + index)}\\pndec{\\pntxta.}}`
+      : `{\\pntext\\f0 \\'b7\\tab}{\\*\\pn\\pnlvlblt\\pnf0\\pnindent0{\\pntxtb\\'b7}}`
+
+    const indent = `\\fi${String(MARKER_INDENT)}\\li${String(LIST_INDENT * level)}`
+
+    for (const child of item.content ?? []) {
+      if (child.type === 'bulletList' || child.type === 'orderedList') {
+        lines.push(...listParagraphs(child, level + 1))
+        continue
+      }
+
+      // No space before the text: after a closing brace a space is literal, and
+      // the marker group already separates it from the indent control words.
+      lines.push(`\\pard${indent}${marker}${serializeInline(child.content ?? [])}\\par`)
+    }
+  })
+
+  return lines
+}
+
+/** A table as RTF rows. Cells are laid out evenly across the text column. */
+function tableRows(node: ProseMirrorNodeJson): string {
+  const flat = flattenTable(node, (block) => serializeInline(block.content ?? []))
+  // `flattenTable` pads ragged rows, so every row is as wide as the widest.
+  const columns = flat.rows[0]?.length ?? 0
+  if (columns === 0) return ''
+
+  const edges = Array.from({ length: columns }, (_unused, index) =>
+    Math.round((COLUMN_WIDTH / columns) * (index + 1)),
+  )
+  const layout = `\\trowd\\trgaph108${edges.map((edge) => `\\cellx${String(edge)}`).join('')}`
+
+  return flat.rows
+    .map((row) => {
+      const body = row.map((cell) => `\\intbl ${cell}\\cell`).join('')
+      return `${layout}\n${body}\\row`
+    })
+    .join('\n')
+}
+
 export function serializeRtf(doc: ProseMirrorNodeJson): string {
   const blocks: string[] = []
 
   for (const block of doc.content ?? []) {
     switch (block.type) {
+      case 'bulletList':
+      case 'orderedList':
+        blocks.push(listParagraphs(block, 1).join('\n'))
+        break
+      case 'table': {
+        const rendered = tableRows(block)
+        if (rendered !== '') blocks.push(rendered)
+        break
+      }
       case 'heading': {
         const level = block.attrs?.['level']
         const outline = typeof level === 'number' ? level - 1 : 0

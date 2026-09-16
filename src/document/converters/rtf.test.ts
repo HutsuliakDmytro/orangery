@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { escapeRtf, parseRtf, serializeRtf } from './rtf'
+import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
 import { textContentOf } from './types'
 
 const DOCUMENT = (body: string) => `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\n${body}\n}`
@@ -174,5 +175,137 @@ describe('serializeRtf', () => {
       content: [{ type: 'passthroughBlock', attrs: { xml: '<w:tbl/>', tag: 'w:tbl' } }],
     }
     expect(serializeRtf(doc)).not.toContain('w:tbl')
+  })
+})
+
+describe('rtf lists', () => {
+  const list = (type: 'bulletList' | 'orderedList', items: string[]): ProseMirrorNodeJson => ({
+    type,
+    content: items.map((text) => ({
+      type: 'listItem',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    })),
+  })
+
+  it('writes a bulleted list as indented paragraphs with a marker', () => {
+    const rtf = serializeRtf({ type: 'doc', content: [list('bulletList', ['one', 'two'])] })
+
+    expect(rtf).toContain('\\pnlvlblt')
+    expect(rtf).toContain('\\li720')
+    expect(rtf).toContain('one')
+    expect(rtf).toContain('two')
+  })
+
+  it('numbers an ordered list from the value it starts at', () => {
+    const numbered = list('orderedList', ['a', 'b'])
+    numbered.attrs = { start: 3 }
+
+    const rtf = serializeRtf({ type: 'doc', content: [numbered] })
+
+    expect(rtf).toContain('\\pntext\\f0 3.\\tab')
+    expect(rtf).toContain('\\pntext\\f0 4.\\tab')
+  })
+
+  it('indents a nested list one level further', () => {
+    const outer = list('bulletList', ['outer'])
+    outer.content?.[0]?.content?.push(list('bulletList', ['inner']))
+
+    const rtf = serializeRtf({ type: 'doc', content: [outer] })
+
+    expect(rtf).toContain('\\li720')
+    expect(rtf).toContain('\\li1440')
+  })
+
+  it('does not put the written marker back into the text when read again', () => {
+    const rtf = serializeRtf({ type: 'doc', content: [list('bulletList', ['one'])] })
+    const { doc } = parseRtf(rtf)
+
+    // The list itself is not rebuilt, but the text must not gain a stray bullet.
+    expect(textContentOf(doc)).toBe('one')
+  })
+
+  it('ignores the marker text another writer puts in front of an item', () => {
+    const { doc } = parseRtf("{\\rtf1\\ansi{\\listtext\\f0 \\'b7\\tab}Item\\par}")
+    expect(textContentOf(doc)).toBe('Item')
+  })
+})
+
+describe('rtf tables', () => {
+  const table: ProseMirrorNodeJson = {
+    type: 'table',
+    content: [
+      {
+        type: 'tableRow',
+        content: [
+          { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] }] },
+          { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] }] },
+        ],
+      },
+    ],
+  }
+
+  it('writes a row with a cell boundary for each column', () => {
+    const rtf = serializeRtf({ type: 'doc', content: [table] })
+
+    expect(rtf).toContain('\\trowd')
+    expect(rtf).toContain('\\cellx4680')
+    expect(rtf).toContain('\\cellx9360')
+    expect(rtf).toContain('\\row')
+  })
+
+  it('round-trips a table instead of running the cells together', () => {
+    const { doc } = parseRtf(serializeRtf({ type: 'doc', content: [table] }))
+
+    const cells = doc.content?.[0]?.content?.[0]?.content
+    expect(doc.content?.[0]?.type).toBe('table')
+    expect(cells).toHaveLength(2)
+    expect(textContentOf(cells?.[0] ?? { type: 'x' })).toBe('A')
+    expect(textContentOf(cells?.[1] ?? { type: 'x' })).toBe('B')
+  })
+
+  it('reads several rows into one table', () => {
+    const rtf =
+      '{\\rtf1\\ansi\\trowd\\cellx4680\\cellx9360 a\\cell b\\cell\\row\\trowd\\cellx4680\\cellx9360 c\\cell d\\cell\\row}'
+    const { doc } = parseRtf(rtf)
+
+    expect(doc.content?.[0]?.content).toHaveLength(2)
+  })
+
+  it('ends the table at the first paragraph that follows it', () => {
+    const rtf =
+      '{\\rtf1\\ansi\\trowd\\cellx9360 a\\cell\\row\\pard After\\par}'
+    const { doc } = parseRtf(rtf)
+
+    expect(doc.content?.[0]?.type).toBe('table')
+    expect(doc.content?.[1]?.type).toBe('paragraph')
+    expect(textContentOf(doc.content?.[1] ?? { type: 'x' })).toBe('After')
+  })
+
+  it('repeats a spanned cell rather than losing a column', () => {
+    const spanned: ProseMirrorNodeJson = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 2 },
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'wide' }] }],
+            },
+          ],
+        },
+        {
+          type: 'tableRow',
+          content: [
+            { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] },
+            { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'y' }] }] },
+          ],
+        },
+      ],
+    }
+
+    const { doc } = parseRtf(serializeRtf({ type: 'doc', content: [spanned] }))
+    expect(doc.content?.[0]?.content?.[0]?.content).toHaveLength(2)
   })
 })

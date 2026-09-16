@@ -118,7 +118,9 @@ pnpm tauri build        # release build (macOS: signed + notarized in CI only)
 
 ## Explicitly out of scope for MVP
 
-Real-time collaboration, cloud sync, comments/track changes, spell check, plugins, mobile. Do not add scaffolding for them "just in case".
+Real-time collaboration, cloud sync, spell check, plugins, mobile. Do not add scaffolding for them "just in case".
+
+Comments and track changes were moved back into scope on 2026-09-17 — see `PLAN.md`, phase 4.5.5. They are single-user features here: reviewing a document you were sent, not editing one with somebody at the same time.
 
 ## Known hard problems (see PLAN.md risks)
 

@@ -1,5 +1,9 @@
+import { HEADING_NUMBER_SCHEMES } from '../../heading-numbers'
+import type { HeadingNumberScheme } from '../../heading-numbers'
 import { PAGINATION_ATTRIBUTES } from '../../extensions/pagination'
 import type { PaginationAttribute } from '../../extensions/pagination'
+import type { Editor } from '@tiptap/core'
+import { useViewStore } from '../../../store/view-store'
 import { requestPicker } from '../picker-store'
 import { normalizeBlockSelection } from '../selection'
 import type { Command } from '../types'
@@ -235,6 +239,59 @@ const pagination: readonly Command[] = PAGINATION_ATTRIBUTES.map((name) => ({
     editor.getAttributes('heading')[name] === true,
 }))
 
+/**
+ * Numbering the headings, as one command per scheme plus one to stop.
+ *
+ * A property of the document, so it is held beside the page setup rather than
+ * on the paragraphs: every heading of a level is numbered by the same
+ * definition, which is also how Word writes it into the file.
+ */
+/**
+ * Nudges the editor so the numbers are redrawn.
+ *
+ * The scheme lives in a store, and the plugin that draws the numbers only looks
+ * at it when a transaction goes past. An empty one changes no content, so the
+ * document is not marked unsaved by a change of scheme.
+ */
+function redrawNumbers(editor: Editor): void {
+  editor.view.dispatch(editor.state.tr)
+}
+
+const SCHEME_LABELS: Readonly<Record<HeadingNumberScheme, string>> = {
+  decimal: 'Number Headings 1, 1.1, 1.1.1',
+  outline: 'Number Headings I, A, 1',
+}
+
+const numbering: readonly Command[] = [
+  ...HEADING_NUMBER_SCHEMES.map(
+    (scheme): Command => ({
+      id: `paragraph.heading-numbers-${scheme}`,
+      label: SCHEME_LABELS[scheme],
+      group: 'format',
+      keywords: ['multilevel', 'outline', 'chapter', 'section'],
+      run: ({ editor }) => {
+        const { headingNumbering, setHeadingNumbering } = useViewStore.getState()
+        // Running the scheme that is already on turns numbering off, so the
+        // command behaves like the toggle its tick in the menu says it is.
+        setHeadingNumbering(headingNumbering === scheme ? null : scheme)
+        redrawNumbers(editor)
+      },
+      isActive: () => useViewStore.getState().headingNumbering === scheme,
+    }),
+  ),
+  {
+    id: 'paragraph.heading-numbers-none',
+    label: 'No Heading Numbers',
+    group: 'format',
+    keywords: ['unnumbered', 'plain'],
+    run: ({ editor }) => {
+      useViewStore.getState().setHeadingNumbering(null)
+      redrawNumbers(editor)
+    },
+    isActive: () => useViewStore.getState().headingNumbering === null,
+  },
+]
+
 export const paragraphCommands: readonly Command[] = [
   ...styles,
   ...alignment,
@@ -243,4 +300,5 @@ export const paragraphCommands: readonly Command[] = [
   ...lists,
   ...blocks,
   ...pagination,
+  ...numbering,
 ]

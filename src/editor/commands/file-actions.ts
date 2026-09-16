@@ -82,6 +82,7 @@ export const fileOperations = {
         const docx = await createDocument()
         setSession({ kind: 'docx', docx })
         useViewStore.getState().setSection(docx.section)
+        useViewStore.getState().setHeadingNumbering(docx.headingNumbering)
         useStylesStore.getState().setCatalogue(docx.styles)
         useHeaderFooterStore.getState().reset()
         editor.commands.setContent(templateById(template).build())
@@ -102,6 +103,7 @@ export const fileOperations = {
         setSession(opened.session)
         if (opened.session.kind === 'docx') {
           useViewStore.getState().setSection(opened.session.docx.section)
+          useViewStore.getState().setHeadingNumbering(opened.session.docx.headingNumbering)
           useStylesStore.getState().setCatalogue(opened.session.docx.styles)
 
           const { pkg, section } = opened.session.docx
@@ -110,8 +112,10 @@ export const fileOperations = {
             footer: textFromParagraphs(readHeaderFooter(pkg, section, 'footer').paragraphs),
           })
         } else {
-          // A converted format has no style catalogue of its own.
+          // A converted format has no style catalogue of its own, and nothing
+          // that says its headings are numbered.
           useStylesStore.getState().setCatalogue(null)
+          useViewStore.getState().setHeadingNumbering(null)
         }
         editor.commands.setContent(opened.doc)
         useDocumentStore.getState().openDocument({
@@ -141,12 +145,10 @@ export const fileOperations = {
       applyHeaderFooter(session)
 
       try {
-        const result = await saveDocumentTo(
-          session,
-          docJson(editor),
-          path,
-          useViewStore.getState().section,
-        )
+        const result = await saveDocumentTo(session, docJson(editor), path, {
+          section: useViewStore.getState().section,
+          headingNumbering: useViewStore.getState().headingNumbering,
+        })
         useDocumentStore.getState().markSaved(result.path, format)
         // A conversion may have left something behind; the banner says what.
         if (result.warnings) useDocumentStore.getState().addWarnings(result.warnings)
@@ -172,12 +174,10 @@ export const fileOperations = {
       const targetFormat = formatFromPath(target) ?? format
 
       try {
-        const result = await saveDocumentTo(
-          session,
-          docJson(editor),
-          target,
-          useViewStore.getState().section,
-        )
+        const result = await saveDocumentTo(session, docJson(editor), target, {
+          section: useViewStore.getState().section,
+          headingNumbering: useViewStore.getState().headingNumbering,
+        })
         useDocumentStore.getState().markSaved(result.path, targetFormat)
         if (result.warnings) useDocumentStore.getState().addWarnings(result.warnings)
         await rememberRecent(result.path)

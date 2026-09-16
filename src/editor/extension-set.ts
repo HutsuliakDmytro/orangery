@@ -17,11 +17,13 @@ import Underline from '@tiptap/extension-underline'
 import StarterKit from '@tiptap/starter-kit'
 import type { Editor, Extensions } from '@tiptap/core'
 import { useSettingsStore } from '../store/settings-store'
+import { useViewStore } from '../store/view-store'
 import { CommandKeymap } from './commands/keymap'
 import { FindReplace } from './extensions/find-replace'
 import { Footnote } from './extensions/footnote'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
+import { HeadingNumbering } from './extensions/heading-numbering'
 import { ImageDrop } from './extensions/image-drop'
 import { Indent } from './extensions/indent'
 import { PageBreak } from './extensions/page-break'
@@ -80,6 +82,9 @@ export function buildExtensions(): Extensions {
     ParagraphStyle,
     ParagraphSpacing,
     Indent,
+    HeadingNumbering.configure({
+      scheme: () => useViewStore.getState().headingNumbering,
+    }),
     PageBreak,
     PageGaps,
     Pagination,

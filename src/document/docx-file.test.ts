@@ -113,7 +113,7 @@ describe('createNewDocx', () => {
       orientation: 'landscape' as const,
     }
 
-    const reopened = await openDocx(await saveDocx(document, document.doc, landscape))
+    const reopened = await openDocx(await saveDocx(document, document.doc, { section: landscape }))
     expect(reopened.section.orientation).toBe('landscape')
     expect(reopened.section.width).toBe(792)
   })

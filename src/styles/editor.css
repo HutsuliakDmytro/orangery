@@ -453,3 +453,10 @@
   border-left: var(--cell-border-v, 1px solid #bfbfbf);
   border-right: var(--cell-border-v, 1px solid #bfbfbf);
 }
+
+/* The number in front of a numbered heading. Drawn by the editor rather than
+   typed, so it must not look selectable or take part in the text. */
+.editor-surface .heading-number {
+  margin-right: 0.5em;
+  user-select: none;
+}

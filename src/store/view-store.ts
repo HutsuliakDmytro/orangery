@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_SECTION } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
+import type { HeadingNumberScheme } from '../editor/heading-numbers'
 
 /**
  * View state: zoom, page setup and which panels are open.
@@ -19,6 +20,13 @@ export const MAX_ZOOM = 2
 export interface ViewState {
   zoom: number
   section: SectionProperties
+  /**
+   * Which scheme numbers the headings, or null when they are not numbered.
+   *
+   * A property of the document rather than of the app: it is written into the
+   * file as a numbering definition attached to the heading styles.
+   */
+  headingNumbering: HeadingNumberScheme | null
   outlineOpen: boolean
 
   setZoom: (zoom: number) => void
@@ -26,6 +34,7 @@ export interface ViewState {
   zoomOut: () => void
   resetZoom: () => void
   setSection: (section: SectionProperties) => void
+  setHeadingNumbering: (scheme: HeadingNumberScheme | null) => void
   toggleOutline: () => void
 }
 
@@ -44,6 +53,7 @@ export function steppedZoom(current: number, direction: 1 | -1): number {
 export const useViewStore = create<ViewState>((set) => ({
   zoom: 1,
   section: { ...DEFAULT_SECTION, margins: { ...DEFAULT_SECTION.margins } },
+  headingNumbering: null,
   outlineOpen: false,
 
   setZoom: (zoom) => {
@@ -58,6 +68,10 @@ export const useViewStore = create<ViewState>((set) => ({
   resetZoom: () => {
     set({ zoom: 1 })
   },
+  setHeadingNumbering: (scheme) => {
+    set({ headingNumbering: scheme })
+  },
+
   setSection: (section) => {
     set({ section })
   },

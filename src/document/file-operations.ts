@@ -4,6 +4,7 @@ import { isTauri } from '../platform/os'
 import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
 import { DEFAULT_SECTION } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
+import type { HeadingNumberScheme } from '../editor/heading-numbers'
 import { converterFor } from './converters'
 import { embedImagesInto, embedOdtImages } from './embed-images'
 import { createNewOdt } from './odt-file'
@@ -133,11 +134,17 @@ export async function openDocumentFrom(path: string): Promise<OpenedDocument> {
   return { session: { kind: 'flat', format }, doc, warnings, path, format }
 }
 
+/** What the editing session knows that the document body does not carry. */
+export interface SaveOptions {
+  section?: SectionProperties
+  headingNumbering?: HeadingNumberScheme | null
+}
+
 export async function saveDocumentTo(
   session: OpenSession,
   doc: ProseMirrorNodeJson,
   path: string,
-  section?: SectionProperties,
+  options: SaveOptions = {},
 ): Promise<SaveResult> {
   const format = formatFromPath(path)
   if (format === null) {
@@ -149,7 +156,7 @@ export async function saveDocumentTo(
   // list marks which targets preserve and which do not.
   if (format === 'docx') {
     if (session.kind === 'docx') {
-      return writeDocumentFile(path, await saveDocx(session.docx, doc, section))
+      return writeDocumentFile(path, await saveDocx(session.docx, doc, options))
     }
 
     // Converting into the native format. The document starts from the template
@@ -157,11 +164,11 @@ export async function saveDocumentTo(
     // the body is written, or the drawings point at nothing.
     const fresh = await createNewDocx()
     const embedded = await embedImagesInto(fresh.pkg, doc, {
-      section: section ?? fresh.section,
+      section: options.section ?? fresh.section,
       measure: naturalSize,
     })
 
-    const result = await writeDocumentFile(path, await saveDocx(fresh, embedded.doc, section))
+    const result = await writeDocumentFile(path, await saveDocx(fresh, embedded.doc, options))
     return embedded.warnings.length > 0 ? { ...result, warnings: embedded.warnings } : result
   }
 
@@ -172,7 +179,7 @@ export async function saveDocumentTo(
 
     const fresh = await createNewOdt()
     const embedded = await embedOdtImages(fresh.pkg, doc, {
-      section: section ?? DEFAULT_SECTION,
+      section: options.section ?? DEFAULT_SECTION,
       measure: naturalSize,
     })
 

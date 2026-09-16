@@ -37,6 +37,8 @@ import { writeFootnotes } from './footnotes-session'
 import { parseSection, serializeSection } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
 import { serializeDocument } from '../ooxml/serialize-document'
+import { readHeadingNumbering, writeHeadingNumbering } from './heading-numbering-session'
+import type { HeadingNumberScheme } from '../editor/heading-numbers'
 
 /**
  * Opening and saving a DOCX.
@@ -60,6 +62,8 @@ export interface OpenDocx {
   section: SectionProperties
   /** Notes from `word/footnotes.xml`, keyed by id. */
   footnotes: Map<number, Footnote>
+  /** The scheme numbering the heading styles, or null when they are not. */
+  headingNumbering: HeadingNumberScheme | null
   /** Whether the source declared `xml:space` on every run. */
   alwaysPreserveSpace: boolean
   documentAttributes: Record<string, string>
@@ -99,15 +103,23 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     footnotes,
     alwaysPreserveSpace: parsed.alwaysPreserveSpace,
     numbering: parseNumbering(getPartText(pkg, 'word/numbering.xml') ?? ''),
+    headingNumbering: readHeadingNumbering(pkg),
     section: parseSection(parsed.sectionProperties),
     documentAttributes: parsed.documentAttributes,
   }
 }
 
+export interface SaveDocxOptions {
+  /** Page setup, which may have changed since the file was opened. */
+  section?: SectionProperties
+  /** Undefined leaves whatever the file already says about numbered headings. */
+  headingNumbering?: HeadingNumberScheme | null
+}
+
 export async function saveDocx(
   open: OpenDocx,
   doc: ProseMirrorNodeJson,
-  section?: SectionProperties,
+  options: SaveDocxOptions = {},
 ): Promise<Uint8Array> {
   // Lists made in the editor need a numbering definition in the package, or
   // Word renders them as plain body text.
@@ -121,12 +133,19 @@ export async function saveDocx(
   const xml = serializeDocument(doc, {
     documentAttributes: open.documentAttributes,
     // Page setup may have changed it since the file was opened.
-    sectionProperties: serializeSection(section ?? open.section),
+    sectionProperties: serializeSection(options.section ?? open.section),
     alwaysPreserveSpace: open.alwaysPreserveSpace,
     allocateNumbering: allocate,
   })
 
   if (added.length > 0) writeNumbering(open.pkg, added)
+
+  // The heading styles carry the numbering, so it is written to the package
+  // rather than to the body — see `heading-numbering-session`.
+  if (options.headingNumbering !== undefined) {
+    const { createdNumberingPart } = writeHeadingNumbering(open.pkg, options.headingNumbering)
+    if (createdNumberingPart) declareNumberingPart(open.pkg)
+  }
 
   setPartText(open.pkg, DOCUMENT_PART, xml)
   // Footnotes live in their own part, so they are written alongside the body.
@@ -144,9 +163,16 @@ function writeNumbering(pkg: DocxPackage, added: readonly XmlNode[]): void {
   const existing = getPartText(pkg, NUMBERING_PART)
   setPartText(pkg, NUMBERING_PART, mergeNumbering(existing, added))
 
-  if (existing !== undefined) return
+  if (existing === undefined) declareNumberingPart(pkg)
+}
 
-  // The part is new, so it needs a relationship and a content-type override.
+/**
+ * Declares a newly created `numbering.xml` in the package.
+ *
+ * Without the relationship and the content-type override Word repairs the file,
+ * so this runs whichever way the part came to exist.
+ */
+function declareNumberingPart(pkg: DocxPackage): void {
   const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
   if (!findByTarget(relationships, 'numbering.xml')) {
     addRelationship(relationships, NUMBERING_RELATIONSHIP, 'numbering.xml')

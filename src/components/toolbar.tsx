@@ -17,6 +17,8 @@ import {
   Minus,
   Omega,
   Outdent,
+  PaintBucket,
+  Paintbrush,
   Palette,
   Plus,
   Redo2,
@@ -187,6 +189,8 @@ export function Toolbar() {
       <ToolbarButton id="format.strike" icon={Strikethrough} />
       <ToolbarButton id="format.text-color" icon={Palette} />
       <ToolbarButton id="format.highlight" icon={Highlighter} />
+      <ToolbarButton id="format.copy-formatting" icon={Paintbrush} />
+      <ToolbarButton id="format.paste-formatting" icon={PaintBucket} />
 
       <ToolbarSeparator />
 

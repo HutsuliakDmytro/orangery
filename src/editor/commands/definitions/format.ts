@@ -1,4 +1,5 @@
 import { DEFAULT_FONT_SIZE, FONT_SIZE_PRESETS } from '../../extensions/font-size'
+import { applyFormat, copyFormat, heldFormat } from '../format-painter'
 import type { Command } from '../types'
 
 /**
@@ -136,4 +137,36 @@ const clearing: readonly Command[] = [
   },
 ]
 
-export const formatCommands: readonly Command[] = [...marks, ...sizing, ...clearing]
+/**
+ * The format painter, as two halves of one gesture.
+ *
+ * Word makes it a single armed button; two named commands do the same work and
+ * are reachable from the keyboard, the menu and the palette without a mode to
+ * get stuck in.
+ */
+const painter: readonly Command[] = [
+  {
+    id: 'format.copy-formatting',
+    label: 'Copy Formatting',
+    group: 'format',
+    shortcut: 'Mod+Alt+C',
+    keywords: ['painter', 'brush', 'style'],
+    run: ({ editor }) => {
+      copyFormat(editor)
+    },
+    isActive: () => heldFormat() !== null,
+  },
+  {
+    id: 'format.paste-formatting',
+    label: 'Paste Formatting',
+    group: 'format',
+    shortcut: 'Mod+Alt+V',
+    keywords: ['painter', 'brush', 'apply'],
+    run: ({ editor }) => {
+      applyFormat(editor)
+    },
+    isEnabled: () => heldFormat() !== null,
+  },
+]
+
+export const formatCommands: readonly Command[] = [...marks, ...sizing, ...clearing, ...painter]

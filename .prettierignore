@@ -1,0 +1,9 @@
+dist
+coverage
+pnpm-lock.yaml
+src-tauri/target
+src-tauri/gen
+src-tauri/icons
+tests/fixtures
+CLAUDE.md
+PLAN.md

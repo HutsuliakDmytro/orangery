@@ -1,3 +1,4 @@
+import { dataUrlFrom, decodeDataUrl } from '../data-url'
 import { listBuilder } from './list-nesting'
 import type { ListKind } from './list-nesting'
 import { flattenTable } from './table-text'
@@ -21,8 +22,10 @@ const IGNORED_DESTINATIONS = new Set([
   'colortbl',
   'stylesheet',
   'info',
-  'pict',
   'object',
+  // The metafile copy of a picture, written beside the real one for readers
+  // that cannot decode PNG or JPEG. Reading both would duplicate the picture.
+  'nonshppict',
   'themedata',
   'colorschememapping',
   'latentstyles',
@@ -43,6 +46,21 @@ const IGNORED_DESTINATIONS = new Set([
  * the same thing in a form that does not need the table.
  */
 const MARKER_DESTINATIONS = new Set(['listtext', 'pntext'])
+
+/**
+ * Picture encodings RTF names, and the image type each one holds.
+ *
+ * Only the two that a webview can display directly are read. A metafile or a
+ * device-dependent bitmap would have to be rasterised first, which is a decoder
+ * this app does not carry.
+ */
+const PICTURE_TYPES: Readonly<Record<string, string>> = {
+  pngblip: 'png',
+  jpegblip: 'jpg',
+}
+
+/** Twips per point, the unit RTF states a picture's display size in. */
+const TWIPS_PER_POINT = 20
 
 /** Twips of indent per list level, and the hanging indent of the marker. */
 const LIST_INDENT = 720
@@ -75,6 +93,49 @@ function marksFor(state: RunState): { type: string }[] {
   if (state.superscript) marks.push({ type: 'superscript' })
   if (state.subscript) marks.push({ type: 'subscript' })
   return marks
+}
+
+/** A picture's bytes, written as hex, as something the webview can display. */
+function dataUrlFromHex(hex: string, extension: string): string {
+  const even = hex.length % 2 === 0 ? hex : hex.slice(0, -1)
+
+  let binary = ''
+  for (let index = 0; index < even.length; index += 2) {
+    binary += String.fromCharCode(Number.parseInt(even.slice(index, index + 2), 16))
+  }
+
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+
+  return dataUrlFrom(bytes, `picture.${extension}`) ?? ''
+}
+
+/** A picture as a `\pict` group, with its bytes written back out as hex. */
+function pictureGroup(node: ProseMirrorNodeJson): string {
+  const src = node.attrs?.['src']
+  const decoded = typeof src === 'string' ? decodeDataUrl(src) : null
+  if (decoded === null) return ''
+
+  const encoding = Object.entries(PICTURE_TYPES).find(([, type]) => type === decoded.extension)?.[0]
+  // GIF, BMP and the rest have no RTF encoding that a reader is required to
+  // understand; writing one as raw bytes would produce a broken picture.
+  if (encoding === undefined) return ''
+
+  let hex = ''
+  for (const byte of decoded.bytes) hex += byte.toString(16).padStart(2, '0')
+
+  const width = node.attrs?.['width']
+  const height = node.attrs?.['height']
+  const size = [
+    typeof width === 'number' && width > 0
+      ? `\\picwgoal${String(Math.round(width * TWIPS_PER_POINT))}`
+      : '',
+    typeof height === 'number' && height > 0
+      ? `\\pichgoal${String(Math.round(height * TWIPS_PER_POINT))}`
+      : '',
+  ].join('')
+
+  return `{\\pict\\${encoding}${size} ${hex}}`
 }
 
 /**
@@ -122,6 +183,14 @@ export function parseRtf(text: string): ConversionResult {
 
   const lists = listBuilder(content)
 
+  // Set while reading a `\pict` group: the hex bytes, the encoding, and the
+  // size the writer wants it displayed at.
+  let pictureDepth: number | null = null
+  let pictureHex = ''
+  let pictureType: string | null = null
+  let pictureWidth: number | null = null
+  let pictureHeight: number | null = null
+
   // Set while reading a marker group, so its text goes to the marker and not to
   // the paragraph. Null means the paragraph has no marker and is not an item.
   let markerDepth: number | null = null
@@ -142,8 +211,40 @@ export function parseRtf(text: string): ConversionResult {
   let skipCharacters = 0
 
   const emit = (value: string) => {
+    // Inside a picture the stream is hex bytes, not text. Anything that is not
+    // a hex digit there is whitespace the writer used to wrap long lines.
+    if (pictureDepth !== null) {
+      pictureHex += value.replace(/[^0-9a-f]/giu, '')
+      return
+    }
     if (markerDepth !== null) marker = (marker ?? '') + value
     else if (skipDepth === null) pendingText += value
+  }
+
+  /** Turns the bytes just read into an image node, or reports why it could not. */
+  const endPicture = () => {
+    if (pictureType === null) {
+      warnings.push({
+        tag: 'pict',
+        message: 'A picture was left out because it is stored in a format this app cannot read.',
+      })
+    } else if (pictureHex.length >= 2) {
+      current.push({
+        type: 'image',
+        attrs: {
+          src: dataUrlFromHex(pictureHex, pictureType),
+          alt: '',
+          ...(pictureWidth === null ? {} : { width: pictureWidth }),
+          ...(pictureHeight === null ? {} : { height: pictureHeight }),
+          wrap: 'inline',
+        },
+      })
+    }
+
+    pictureHex = ''
+    pictureType = null
+    pictureWidth = null
+    pictureHeight = null
   }
 
   const flushText = () => {
@@ -213,6 +314,10 @@ export function parseRtf(text: string): ConversionResult {
 
     if (char === '}') {
       flushText()
+      if (pictureDepth !== null && depth <= pictureDepth) {
+        pictureDepth = null
+        endPicture()
+      }
       if (markerDepth !== null && depth <= markerDepth) markerDepth = null
       if (skipDepth !== null && depth <= skipDepth) skipDepth = null
       depth -= 1
@@ -272,6 +377,30 @@ export function parseRtf(text: string): ConversionResult {
         // The fallback characters that follow are for readers that cannot do
         // Unicode; appending them would duplicate the character as `?`.
         skipCharacters = unicodeSkip
+        continue
+      }
+
+      if (word === 'pict') {
+        flushText()
+        pictureDepth = depth
+        continue
+      }
+
+      // A picture Word wraps in a shape. The `\*` before it says the group may
+      // be ignored, but this one we can read, so the skip is called off.
+      if (word === 'shppict') {
+        if (skipDepth === depth) skipDepth = null
+        continue
+      }
+
+      if (pictureDepth !== null) {
+        const type = PICTURE_TYPES[word]
+        if (type !== undefined) pictureType = type
+        else if (word === 'picwgoal' && parameter !== null) {
+          pictureWidth = Math.round((parameter / TWIPS_PER_POINT) * 100) / 100
+        } else if (word === 'pichgoal' && parameter !== null) {
+          pictureHeight = Math.round((parameter / TWIPS_PER_POINT) * 100) / 100
+        }
         continue
       }
 
@@ -440,6 +569,7 @@ function serializeInline(nodes: readonly ProseMirrorNodeJson[]): string {
     .map((node) => {
       if (node.type === 'pageBreak') return '\\page '
       if (node.type === 'hardBreak') return '\\line '
+      if (node.type === 'image') return pictureGroup(node)
       if (node.type !== 'text') return ''
 
       const marks = markNames(node)
@@ -568,6 +698,9 @@ export function serializeRtf(doc: ProseMirrorNodeJson): string {
       }
       case 'paragraph':
         blocks.push(`\\pard ${serializeInline(block.content ?? [])}\\par`)
+        break
+      case 'image':
+        blocks.push(`\\pard ${pictureGroup(block)}\\par`)
         break
       case 'horizontalRule':
         blocks.push('\\pard\\brdrb\\brdrs\\brdrw10\\par')

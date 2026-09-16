@@ -370,3 +370,96 @@ describe('rtf tables', () => {
     expect(doc.content?.[0]?.content?.[0]?.content).toHaveLength(2)
   })
 })
+
+describe('rtf pictures', () => {
+  const PNG =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+  const withImage = (attrs: Record<string, unknown>): ProseMirrorNodeJson => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'image', attrs }] }],
+  })
+
+  it('writes the bytes as a hex picture group with its display size', () => {
+    const rtf = serializeRtf(withImage({ src: PNG, width: 72, height: 36 }))
+
+    expect(rtf).toContain('{\\pict\\pngblip')
+    // RTF states the display size in twips, twenty to the point.
+    expect(rtf).toContain('\\picwgoal1440')
+    expect(rtf).toContain('\\pichgoal720')
+    expect(rtf).toContain('89504e47')
+  })
+
+  it('round-trips a picture', () => {
+    const { doc } = parseRtf(serializeRtf(withImage({ src: PNG, width: 72, height: 36 })))
+
+    const image = doc.content?.[0]?.content?.[0]
+    expect(image?.type).toBe('image')
+    expect(image?.attrs?.['src']).toBe(PNG)
+    expect(image?.attrs?.['width']).toBe(72)
+    expect(image?.attrs?.['height']).toBe(36)
+  })
+
+  it('reads a picture Word wrapped in a shape', () => {
+    const rtf = '{\\rtf1\\ansi{\\*\\shppict{\\pict\\pngblip\\picwgoal1440 89504e47}}}'
+    const { doc } = parseRtf(rtf)
+
+    const image = doc.content?.[0]?.content?.[0]
+    expect(image?.type).toBe('image')
+    expect(image?.attrs?.['src']).toContain('data:image/png;base64,')
+  })
+
+  it('reads the picture only once when a metafile copy sits beside it', () => {
+    const rtf =
+      '{\\rtf1\\ansi{\\*\\shppict{\\pict\\pngblip 89504e47}}{\\nonshppict{\\pict\\wmetafile8 0102}}}'
+    const { doc } = parseRtf(rtf)
+
+    const images = (doc.content?.[0]?.content ?? []).filter((node) => node.type === 'image')
+    expect(images).toHaveLength(1)
+  })
+
+  it('ignores the whitespace a writer wraps long hex lines with', () => {
+    const rtf = '{\\rtf1\\ansi{\\pict\\pngblip\n8950\n4e47\n}}'
+    const { doc } = parseRtf(rtf)
+
+    expect(doc.content?.[0]?.content?.[0]?.attrs?.['src']).toBe('data:image/png;base64,iVBORw==')
+  })
+
+  it('reports a picture stored in a format it cannot read, rather than dropping it quietly', () => {
+    const { doc, warnings } = parseRtf('{\\rtf1\\ansi{\\pict\\wmetafile8 0102}}')
+
+    expect(JSON.stringify(doc)).not.toContain('image')
+    expect(warnings.some((warning) => warning.tag === 'pict')).toBe(true)
+  })
+
+  it('leaves out a picture no reader could decode instead of writing broken bytes', () => {
+    const rtf = serializeRtf(withImage({ src: 'data:image/gif;base64,R0lGOD', width: 10 }))
+
+    expect(rtf).not.toContain('\\pict')
+  })
+
+  it('keeps the text around a picture intact', () => {
+    const { doc } = parseRtf(
+      serializeRtf({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'before' },
+              { type: 'image', attrs: { src: PNG, width: 10, height: 10 } },
+              { type: 'text', text: 'after' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    expect(textContentOf(doc)).toBe('beforeafter')
+    expect((doc.content?.[0]?.content ?? []).map((node) => node.type)).toEqual([
+      'text',
+      'image',
+      'text',
+    ])
+  })
+})

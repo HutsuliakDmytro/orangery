@@ -48,6 +48,16 @@ describe('block parsing', () => {
     expect(first('___')?.type).toBe('horizontalRule')
   })
 
+  it('parses a table', () => {
+    const node = first('| A | B |\n| --- | --- |\n| 1 | 2 |')
+    expect(node?.type).toBe('table')
+    expect(node?.content).toHaveLength(2)
+  })
+
+  it('does not treat a paragraph containing pipes as a table', () => {
+    expect(first('| this is just text |\n| and so is this |')?.type).toBe('paragraph')
+  })
+
   it('drops blank lines between blocks', () => {
     expect(parseMarkdown('one\n\ntwo').doc.content).toHaveLength(2)
   })
@@ -135,6 +145,38 @@ describe('serializeMarkdown', () => {
 
   it('writes a rule for a page break, which Markdown cannot express', () => {
     expect(serializeMarkdown({ type: 'doc', content: [{ type: 'pageBreak' }] })).toBe('---')
+  })
+
+  it('writes a table rather than concatenating its cells', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] }],
+                },
+                {
+                  type: 'tableCell',
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(serializeMarkdown(doc)).toBe('| A | B |\n| --- | --- |')
+  })
+
+  it('round-trips a table', () => {
+    const source = '| A | B |\n| --- | --- |\n| 1 | 2 |'
+    expect(serializeMarkdown(parseMarkdown(source).doc)).toBe(source)
   })
 
   it('omits content it cannot represent rather than emitting HTML', () => {

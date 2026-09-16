@@ -1,3 +1,4 @@
+import { flattenTable, parseMarkdownTable, tableFromRows, toMarkdownTable } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
 import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
@@ -80,7 +81,24 @@ export function parseMarkdown(text: string): ConversionResult {
     listType = null
   }
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? ''
+
+    // A run of pipe lines may be a table; `parseMarkdownTable` decides, because
+    // a paragraph containing pipes is not one.
+    if (line.trim().startsWith('|')) {
+      let end = index
+      while (end < lines.length && (lines[end] ?? '').trim().startsWith('|')) end += 1
+
+      const rows = parseMarkdownTable(lines.slice(index, end))
+      if (rows !== null) {
+        flushList()
+        content.push(tableFromRows(rows))
+        index = end - 1
+        continue
+      }
+    }
+
     if (RULE.test(line)) {
       flushList()
       content.push({ type: 'horizontalRule' })
@@ -190,6 +208,12 @@ export function serializeMarkdown(doc: ProseMirrorNodeJson): string {
             .join(' ')
           blocks.push(`${marker}${text}`)
         })
+        break
+      }
+      case 'table': {
+        const flat = flattenTable(node, (block) => serializeInline(block.content ?? []))
+        const rendered = toMarkdownTable(flat)
+        if (rendered !== '') blocks.push(rendered)
         break
       }
       case 'horizontalRule':

@@ -21,6 +21,19 @@ describe('block parsing', () => {
     expect(first('<ol><li>one</li></ol>')?.type).toBe('orderedList')
   })
 
+  it('parses a table', () => {
+    const node = first('<table><tr><td>A</td><td>B</td></tr></table>')
+    expect(node?.type).toBe('table')
+    expect(node?.content?.[0]?.content).toHaveLength(2)
+  })
+
+  it('reads a table with a header row', () => {
+    const node = first(
+      '<table><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>',
+    )
+    expect(node?.content).toHaveLength(2)
+  })
+
   it('parses blockquotes and rules', () => {
     expect(first('<blockquote><p>q</p></blockquote>')?.type).toBe('blockquote')
     expect(first('<hr>')?.type).toBe('horizontalRule')
@@ -37,6 +50,13 @@ describe('block parsing', () => {
 
   it('produces a paragraph for empty input', () => {
     expect(parseHtml('').doc.content).toHaveLength(1)
+  })
+
+  it('ignores whitespace between block elements', () => {
+    // Pretty-printed HTML would otherwise gain an empty paragraph between every
+    // pair of elements.
+    const { doc } = parseHtml('<body>\n  <p>one</p>\n  <p>two</p>\n</body>')
+    expect(doc.content).toHaveLength(2)
   })
 })
 
@@ -146,6 +166,19 @@ describe('serializeHtml', () => {
     expect(html).toContain('<h2>Title</h2>')
     expect(html).toContain('<strong>bold</strong>')
     expect(html).toContain('<ul><li><p>one</p></li></ul>')
+  })
+
+  it('writes a table rather than concatenating its cells', () => {
+    const html = serializeHtml(parseHtml('<table><tr><td>A</td><td>B</td></tr></table>').doc)
+    expect(html).toContain('<table><tbody><tr><td>A</td><td>B</td></tr></tbody></table>')
+  })
+
+  it('round-trips a table', () => {
+    const doc = parseHtml(
+      '<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>',
+    ).doc
+    const again = parseHtml(serializeHtml(doc)).doc
+    expect(JSON.stringify(again)).toBe(JSON.stringify(doc))
   })
 
   it('omits content it cannot represent', () => {

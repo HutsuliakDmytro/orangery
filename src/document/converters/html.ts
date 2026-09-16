@@ -1,4 +1,5 @@
 import { normalizeUrl } from '../../editor/links'
+import { flattenTable, tableFromRows } from './table-text'
 import { docOf, markNames, textContentOf } from './types'
 import type { ConversionResult, Converter } from './types'
 import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-document'
@@ -28,6 +29,12 @@ const BLOCK_TAGS = new Set([
   'HR',
   'DIV',
   'PRE',
+  'TABLE',
+  'THEAD',
+  'TBODY',
+  'TR',
+  'TD',
+  'TH',
 ])
 
 const MARK_FOR_TAG: Readonly<Record<string, string>> = {
@@ -88,6 +95,11 @@ function inlineFrom(
 
 function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[] {
   if (node.nodeType !== node.ELEMENT_NODE) {
+    // Whitespace between block elements is formatting of the HTML, not content.
+    // Without this, any pretty-printed document gains an empty paragraph
+    // between every pair of elements.
+    if ((node.textContent ?? '').trim() === '') return []
+
     const inline = inlineFrom(node, [], warnings)
     return inline.length > 0 ? [{ type: 'paragraph', content: inline }] : []
   }
@@ -119,6 +131,13 @@ function blocksFrom(node: Node, warnings: ParseWarning[]): ProseMirrorNodeJson[]
     return items.length > 0
       ? [{ type: tag === 'UL' ? 'bulletList' : 'orderedList', content: items }]
       : []
+  }
+
+  if (tag === 'TABLE') {
+    const rows = [...element.querySelectorAll('tr')].map((row) =>
+      [...row.querySelectorAll('td, th')].map((cell) => cell.textContent.trim()),
+    )
+    return rows.length > 0 ? [tableFromRows(rows)] : []
   }
 
   if (tag === 'BLOCKQUOTE') {
@@ -208,6 +227,13 @@ function serializeBlock(node: ProseMirrorNodeJson): string {
         .map((item) => `<li>${(item.content ?? []).map(serializeBlock).join('')}</li>`)
         .join('')
       return `<${tag}>${items}</${tag}>`
+    }
+    case 'table': {
+      const flat = flattenTable(node, (block) => serializeInline(block.content ?? []))
+      const rows = flat.rows
+        .map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`)
+        .join('')
+      return rows === '' ? '' : `<table><tbody>${rows}</tbody></table>`
     }
     case 'horizontalRule':
     case 'pageBreak':

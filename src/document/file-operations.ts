@@ -2,9 +2,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { isTauri } from '../platform/os'
 import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
+import { DEFAULT_SECTION } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
 import { converterFor } from './converters'
-import { embedImagesInto } from './embed-images'
+import { embedImagesInto, embedOdtImages } from './embed-images'
+import { createNewOdt } from './odt-file'
 import { naturalSize } from './media'
 import { openOdt, saveOdt } from './converters/odt'
 import type { OpenOdt } from './converters/odt'
@@ -163,8 +165,19 @@ export async function saveDocumentTo(
     return embedded.warnings.length > 0 ? { ...result, warnings: embedded.warnings } : result
   }
 
-  if (format === 'odt' && session.kind === 'odt') {
-    return writeDocumentFile(path, await saveOdt(session.odt, doc))
+  if (format === 'odt') {
+    if (session.kind === 'odt') {
+      return writeDocumentFile(path, await saveOdt(session.odt, doc))
+    }
+
+    const fresh = await createNewOdt()
+    const embedded = await embedOdtImages(fresh.pkg, doc, {
+      section: section ?? DEFAULT_SECTION,
+      measure: naturalSize,
+    })
+
+    const result = await writeDocumentFile(path, await saveOdt(fresh, embedded.doc))
+    return embedded.warnings.length > 0 ? { ...result, warnings: embedded.warnings } : result
   }
 
   const converter = converterFor(format)

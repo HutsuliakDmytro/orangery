@@ -29,6 +29,11 @@ import type { ParseWarning, ProseMirrorNodeJson } from '../../ooxml/parse-docume
 
 export const CONTENT_PART = 'content.xml'
 export const STYLES_PART = 'styles.xml'
+export const MANIFEST_PART = 'META-INF/manifest.xml'
+export const MIMETYPE_PART = 'mimetype'
+export const ODT_MIME_TYPE = 'application/vnd.oasis.opendocument.text'
+/** Where an ODT keeps its pictures, the way `word/media/` works in a DOCX. */
+export const PICTURES_FOLDER = 'Pictures/'
 
 export interface OdtPackage {
   parts: Map<string, { bytes: Uint8Array; text?: string }>
@@ -929,6 +934,9 @@ export function serializeOdtContent(
           'xmlns:xlink': 'http://www.w3.org/1999/xlink',
           'xmlns:draw': 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0',
           'xmlns:svg': 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
+          // A table written with an undeclared prefix is not well-formed XML,
+          // so every prefix the serializer can emit is declared here.
+          'xmlns:table': 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
           'office:version': '1.3',
         }
 

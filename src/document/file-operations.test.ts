@@ -72,10 +72,53 @@ describe('saveDocumentTo', () => {
     ).rejects.toBeInstanceOf(UnsupportedFormatError)
   })
 
-  it('refuses a target it cannot build a package for', async () => {
-    await expect(saveDocumentTo({ kind: 'flat', format: 'txt' }, doc, '/a/b.odt')).rejects.toThrow(
-      /not supported/,
+  it('converts a document that has no package of its own into a real ODT', async () => {
+    const written = await captureWrite(() =>
+      saveDocumentTo(
+        { kind: 'flat', format: 'md' },
+        {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'converted' }] }],
+        },
+        '/a/b.odt',
+      ),
     )
+
+    const zip = await JSZip.loadAsync(written)
+    const content = await zip.file('content.xml')?.async('string')
+
+    expect(content).toContain('converted')
+    expect(await zip.file('mimetype')?.async('string')).toBe(
+      'application/vnd.oasis.opendocument.text',
+    )
+    expect(zip.file('META-INF/manifest.xml')).not.toBeNull()
+  })
+
+  it('carries a picture into the ODT package it builds', async () => {
+    const written = await captureWrite(() =>
+      saveDocumentTo(
+        { kind: 'flat', format: 'md' },
+        {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'image', attrs: { src: PNG, alt: '', width: 72, height: 36 } }],
+            },
+          ],
+        },
+        '/a/b.odt',
+      ),
+    )
+
+    const zip = await JSZip.loadAsync(written)
+    const content = await zip.file('content.xml')?.async('string')
+    const manifest = await zip.file('META-INF/manifest.xml')?.async('string')
+
+    expect(zip.file('Pictures/image1.png')).not.toBeNull()
+    // A frame has to name a part the manifest lists, or the page has a hole.
+    expect(content).toContain('xlink:href="Pictures/image1.png"')
+    expect(manifest).toContain('manifest:full-path="Pictures/image1.png"')
   })
 
   it('converts a document that has no package of its own into a real DOCX', async () => {

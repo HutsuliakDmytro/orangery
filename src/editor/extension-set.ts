@@ -25,6 +25,7 @@ import { ImageDrop } from './extensions/image-drop'
 import { Indent } from './extensions/indent'
 import { PageBreak } from './extensions/page-break'
 import { PageGaps } from './extensions/page-gaps'
+import { Pagination } from './extensions/pagination'
 import { ParagraphSpacing } from './extensions/paragraph-spacing'
 import { ParagraphStyle } from './extensions/paragraph-style'
 import { TableOfContents } from './extensions/table-of-contents'
@@ -79,6 +80,7 @@ export function buildExtensions(): Extensions {
     Indent,
     PageBreak,
     PageGaps,
+    Pagination,
     TabIndent,
     Table.extend({
       addAttributes() {

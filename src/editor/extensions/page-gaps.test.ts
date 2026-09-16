@@ -58,3 +58,33 @@ describe('breakPositions', () => {
     expect(PAGE_GAP_PX).toBeGreaterThanOrEqual(16)
   })
 })
+
+describe('breakPositions with a forced break', () => {
+  const forced = (position: number, top: number, height: number) => ({
+    position,
+    top,
+    height,
+    forced: true,
+  })
+
+  it('breaks before a block that asks for a page, though the page has room', () => {
+    const blocks = [block(0, 0, 100), forced(1, 100, 100), block(2, 200, 100)]
+    expect(breakPositions(blocks, PAGE)).toEqual([1])
+  })
+
+  it('still does not break before the first block', () => {
+    expect(breakPositions([forced(0, 0, 100), block(1, 100, 100)], PAGE)).toEqual([])
+  })
+
+  it('measures the next page from the forced break, not from the page above', () => {
+    // Without the reset the third block would look like it sits at 900 on a
+    // page that began at 0, and would gain a break it does not need.
+    const blocks = [block(0, 0, 100), forced(1, 100, 100), block(2, 200, 500)]
+    expect(breakPositions(blocks, PAGE)).toEqual([1])
+  })
+
+  it('breaks twice when a forced page is itself overrun', () => {
+    const blocks = [block(0, 0, 100), forced(1, 100, 400), block(2, 500, 400)]
+    expect(breakPositions(blocks, PAGE)).toEqual([1, 2])
+  })
+})

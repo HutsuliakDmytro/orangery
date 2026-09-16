@@ -219,8 +219,28 @@ interface ParagraphProperties {
   indentRight: number | null
   indentFirstLine: number | null
   numbering: { numId: number; level: number } | null
+  /** Pagination toggles. Null means the paragraph says nothing either way. */
+  keepNext: boolean | null
+  keepLines: boolean | null
+  pageBreakBefore: boolean | null
+  widowControl: boolean | null
   preserved: string[]
 }
+
+/**
+ * The pagination toggles, in the order `w:pPr` requires them.
+ *
+ * Each is an OOXML toggle: present means on, `w:val="0"` means explicitly off.
+ * The distinction matters for `w:widowControl`, which Word turns on by default
+ * — a paragraph that switches it off has to say so, and dropping that changes
+ * how the document breaks across pages.
+ */
+export const PAGINATION_PROPERTIES = [
+  ['w:keepNext', 'keepNext'],
+  ['w:keepLines', 'keepLines'],
+  ['w:pageBreakBefore', 'pageBreakBefore'],
+  ['w:widowControl', 'widowControl'],
+] as const
 
 /**
  * `w:pPr` children we rebuild from attributes. Everything else is preserved —
@@ -228,7 +248,17 @@ interface ParagraphProperties {
  * of its text. Dropping it changes how Word spaces the paragraph, and it is
  * invisible in the editor, so nothing would ever prompt a user to restore it.
  */
-const MODELLED_PARAGRAPH_PROPERTIES = new Set(['w:pStyle', 'w:jc', 'w:spacing', 'w:ind', 'w:numPr'])
+const MODELLED_PARAGRAPH_PROPERTIES = new Set([
+  'w:pStyle',
+  'w:jc',
+  'w:spacing',
+  'w:ind',
+  'w:numPr',
+  'w:keepNext',
+  'w:keepLines',
+  'w:pageBreakBefore',
+  'w:widowControl',
+])
 
 function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties {
   const result: ParagraphProperties = {
@@ -243,6 +273,10 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
     indentRight: null,
     indentFirstLine: null,
     numbering: null,
+    keepNext: null,
+    keepLines: null,
+    pageBreakBefore: null,
+    widowControl: null,
     preserved: [],
   }
 
@@ -301,6 +335,14 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
         const numId = parseIntAttribute(attribute(findChild(property, 'w:numId') ?? {}, 'w:val'))
         const level = parseIntAttribute(attribute(findChild(property, 'w:ilvl') ?? {}, 'w:val'))
         if (numId !== null) result.numbering = { numId, level: level ?? 0 }
+        break
+      }
+      case 'w:keepNext':
+      case 'w:keepLines':
+      case 'w:pageBreakBefore':
+      case 'w:widowControl': {
+        const name = PAGINATION_PROPERTIES.find(([element]) => element === tag)?.[1]
+        if (name !== undefined) result[name] = parseToggle(attribute(property, 'w:val'))
         break
       }
       default:
@@ -493,6 +535,9 @@ function parseParagraph(
   if (properties.indentLeft !== null) attrs['indentLeft'] = properties.indentLeft
   if (properties.indentRight !== null) attrs['indentRight'] = properties.indentRight
   if (properties.indentFirstLine !== null) attrs['indentFirstLine'] = properties.indentFirstLine
+  for (const [, name] of PAGINATION_PROPERTIES) {
+    if (properties[name] !== null) attrs[name] = properties[name]
+  }
   if (properties.preserved.length > 0) attrs['preservedPPr'] = properties.preserved.join('')
   if (properties.numbering !== null) attrs['numbering'] = properties.numbering
 
@@ -668,6 +713,10 @@ export function paragraphSignature(attrs: Record<string, unknown>): string {
     attrs['indentRight'] ?? null,
     attrs['indentFirstLine'] ?? null,
     attrs['numbering'] ?? null,
+    attrs['keepNext'] ?? null,
+    attrs['keepLines'] ?? null,
+    attrs['pageBreakBefore'] ?? null,
+    attrs['widowControl'] ?? null,
   ])
 }
 

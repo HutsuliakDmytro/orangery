@@ -38,4 +38,11 @@ export interface CommandDescriptor {
   group: CommandGroup
   shortcut: string | null
   enabled: boolean
+  /**
+   * Null for a command that is not a toggle.
+   *
+   * A toggle shown as a plain menu item gives no way to tell whether it is on,
+   * which for something like "keep with next" is the only state there is.
+   */
+  active: boolean | null
 }

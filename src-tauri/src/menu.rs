@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{AboutMetadata, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Runtime};
 
 use crate::AppError;
@@ -24,6 +24,10 @@ pub struct CommandDescriptor {
     pub group: String,
     pub shortcut: Option<String>,
     pub enabled: bool,
+    /// `Some` for a command that is a toggle, and says whether it is on. A
+    /// toggle without a tick in the menu gives no way to tell.
+    #[serde(default)]
+    pub active: Option<bool>,
 }
 
 /// Menu-bar order. A group with no commands is still rendered when it carries
@@ -103,14 +107,29 @@ pub fn build<R: Runtime>(
         let submenu = Submenu::new(app, title, true)?;
 
         for descriptor in &commands {
-            let item = MenuItem::with_id(
-                app,
-                &descriptor.id,
-                &descriptor.label,
-                descriptor.enabled,
-                accelerator(descriptor),
-            )?;
-            submenu.append(&item)?;
+            match descriptor.active {
+                Some(checked) => {
+                    let item = CheckMenuItem::with_id(
+                        app,
+                        &descriptor.id,
+                        &descriptor.label,
+                        descriptor.enabled,
+                        checked,
+                        accelerator(descriptor),
+                    )?;
+                    submenu.append(&item)?;
+                }
+                None => {
+                    let item = MenuItem::with_id(
+                        app,
+                        &descriptor.id,
+                        &descriptor.label,
+                        descriptor.enabled,
+                        accelerator(descriptor),
+                    )?;
+                    submenu.append(&item)?;
+                }
+            }
         }
 
         if !commands.is_empty() && !trailing.is_empty() {

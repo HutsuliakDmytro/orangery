@@ -33,7 +33,7 @@ const POINTS_TO_PIXELS = 96 / 72
  * worth checking, and it needs no DOM.
  */
 export function breakPositions(
-  blocks: readonly { position: number; top: number; height: number }[],
+  blocks: readonly { position: number; top: number; height: number; forced?: boolean }[],
   pageHeightPx: number,
 ): number[] {
   if (pageHeightPx <= 0 || blocks.length === 0) return []
@@ -47,6 +47,14 @@ export function breakPositions(
     // The first block cannot be moved anywhere, however tall it is: a break
     // before it would put a gap above the document.
     if (block.top <= pageTop) continue
+
+    // A paragraph that asks for a page before it gets one whether or not the
+    // page it sits on is full.
+    if (block.forced) {
+      positions.push(block.position)
+      pageTop = block.top
+      continue
+    }
 
     if (block.top + block.height > pageTop + pageHeightPx) {
       positions.push(block.position)
@@ -68,7 +76,7 @@ function outerHeight(element: HTMLElement): number {
 }
 
 function buildDecorations(view: EditorView, pageHeightPx: number): DecorationSet {
-  const blocks: { position: number; top: number; height: number }[] = []
+  const blocks: { position: number; top: number; height: number; forced?: boolean }[] = []
   const { doc } = view.state
 
   // The page's own top padding is the top margin of the sheet, not content, so
@@ -81,7 +89,7 @@ function buildDecorations(view: EditorView, pageHeightPx: number): DecorationSet
   // makes the break move on every re-measure.
   let gapHeight = 0
 
-  doc.forEach((_node, nodePosition) => {
+  doc.forEach((node, nodePosition) => {
     const dom = view.nodeDOM(nodePosition)
     if (!(dom instanceof HTMLElement)) return
 
@@ -94,6 +102,7 @@ function buildDecorations(view: EditorView, pageHeightPx: number): DecorationSet
       position: nodePosition,
       top: dom.offsetTop - paddingTop - gapHeight,
       height: dom.offsetHeight,
+      ...(node.attrs['pageBreakBefore'] === true ? { forced: true } : {}),
     })
   })
 

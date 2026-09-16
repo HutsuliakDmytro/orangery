@@ -1,7 +1,7 @@
 import { buildXml, deserializeNode, element, textNode, withDeclaration } from './xml'
 import type { XmlNode } from './xml'
 import { formatColor, multiplierToLineUnits, pointsToHalfPoints, pointsToTwips } from './units'
-import { paragraphSignature, runSignature } from './parse-document'
+import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse-document'
 import type { ParsedDocument, ProseMirrorNodeJson } from './parse-document'
 import { footnoteReferenceRun } from './footnotes'
 import { buildDrawing } from './image'
@@ -204,6 +204,14 @@ function buildParagraphProperties(node: ProseMirrorNodeJson): XmlNode | null {
   const styleId =
     stringAttr(attrs, 'styleId') ?? (level !== null ? `Heading${String(level)}` : null)
   if (styleId !== null) properties.push(element('w:pStyle', { 'w:val': styleId }))
+
+  // OOXML fixes the order of `w:pPr` children: the pagination toggles come
+  // between the style and the numbering.
+  for (const [tag, name] of PAGINATION_PROPERTIES) {
+    const value = attrs?.[name]
+    if (typeof value !== 'boolean') continue
+    properties.push(element(tag, value ? {} : { 'w:val': '0' }))
+  }
 
   const numbering = attrs?.['numbering']
   if (typeof numbering === 'object' && numbering !== null) {

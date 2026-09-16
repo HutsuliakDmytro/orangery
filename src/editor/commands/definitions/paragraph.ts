@@ -1,3 +1,5 @@
+import { PAGINATION_ATTRIBUTES } from '../../extensions/pagination'
+import type { PaginationAttribute } from '../../extensions/pagination'
 import { requestPicker } from '../picker-store'
 import { normalizeBlockSelection } from '../selection'
 import type { Command } from '../types'
@@ -205,6 +207,34 @@ const blocks: readonly Command[] = [
   },
 ]
 
+/**
+ * How the paragraph behaves at a page break.
+ *
+ * Written down even when it matches Word's default, because "not specified" and
+ * "off" are different documents — `widowControl` is on unless a paragraph says
+ * otherwise.
+ */
+const PAGINATION_LABELS: Readonly<Record<PaginationAttribute, { label: string; keywords: string[] }>> =
+  {
+    keepNext: { label: 'Keep with Next Paragraph', keywords: ['together', 'orphan', 'heading'] },
+    keepLines: { label: 'Keep Lines Together', keywords: ['split', 'break', 'paragraph'] },
+    pageBreakBefore: { label: 'Page Break Before', keywords: ['new page', 'start'] },
+    widowControl: { label: 'Widow and Orphan Control', keywords: ['single line', 'dangling'] },
+  }
+
+const pagination: readonly Command[] = PAGINATION_ATTRIBUTES.map((name) => ({
+  id: `paragraph.${name.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`,
+  label: PAGINATION_LABELS[name].label,
+  group: 'format' as const,
+  keywords: PAGINATION_LABELS[name].keywords,
+  run: ({ editor }) => {
+    editor.chain().focus().togglePagination(name).run()
+  },
+  isActive: ({ editor }) =>
+    editor.getAttributes('paragraph')[name] === true ||
+    editor.getAttributes('heading')[name] === true,
+}))
+
 export const paragraphCommands: readonly Command[] = [
   ...styles,
   ...alignment,
@@ -212,4 +242,5 @@ export const paragraphCommands: readonly Command[] = [
   ...indentation,
   ...lists,
   ...blocks,
+  ...pagination,
 ]

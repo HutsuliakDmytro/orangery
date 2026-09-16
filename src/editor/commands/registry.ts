@@ -68,6 +68,7 @@ export function describeCommands(ctx: CommandContext): CommandDescriptor[] {
     group: command.group,
     shortcut: command.shortcut ? resolveShortcut(command.shortcut) : null,
     enabled: isCommandEnabled(command, ctx),
+    active: command.isActive ? command.isActive(ctx) : null,
   }))
 }
 

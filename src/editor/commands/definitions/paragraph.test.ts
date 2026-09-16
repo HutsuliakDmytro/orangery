@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestEditor, selectAll } from '../../../test/editor-harness'
 import { INDENT_STEP_PT } from '../../extensions/indent'
-import { runCommand } from '../registry'
+import { describeCommands, runCommand } from '../registry'
 
 let editor: Editor
 
@@ -187,5 +187,49 @@ describe('spacing', () => {
     editor.commands.setParagraphSpacing({ before: 12, after: 6 })
     editor.commands.unsetParagraphSpacing()
     expect(blockAttributes()['spaceBefore']).toBeNull()
+  })
+})
+
+describe('pagination', () => {
+  it.each([
+    ['paragraph.keep-next', 'keepNext'],
+    ['paragraph.keep-lines', 'keepLines'],
+    ['paragraph.page-break-before', 'pageBreakBefore'],
+    ['paragraph.widow-control', 'widowControl'],
+  ])('%s toggles %s on', (id, attribute) => {
+    run(id)
+    expect(blockAttributes()[attribute]).toBe(true)
+  })
+
+  it('writes an explicit off rather than clearing the property', () => {
+    // Word turns widow control on by default, so clearing it would mean "on".
+    run('paragraph.widow-control')
+    run('paragraph.widow-control')
+    expect(blockAttributes()['widowControl']).toBe(false)
+  })
+
+  it('tells the menu it is a toggle, and whether it is on', () => {
+    // Without this the native menu draws a plain item, and a toggle with no
+    // tick gives no way to see its state.
+    const describe = () =>
+      describeCommands({ editor }).find((command) => command.id === 'paragraph.keep-next')
+
+    expect(describe()?.active).toBe(false)
+    run('paragraph.keep-next')
+    expect(describe()?.active).toBe(true)
+  })
+
+  it('leaves a command that is not a toggle without a state', () => {
+    const insert = describeCommands({ editor }).find(
+      (command) => command.id === 'insert.horizontal-rule',
+    )
+    expect(insert?.active).toBeNull()
+  })
+
+  it('applies to a heading as well as a paragraph', () => {
+    selectAll(editor)
+    run('paragraph.heading-2')
+    run('paragraph.keep-next')
+    expect(editor.getAttributes('heading')['keepNext']).toBe(true)
   })
 })

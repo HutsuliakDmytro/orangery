@@ -4,6 +4,7 @@ import {
   buildXml,
   children,
   element,
+  findChild,
   parseXml,
   serializeNode,
   tagName,
@@ -51,6 +52,7 @@ export interface OpenOdt {
 /** Everything the block walk needs: styles to resolve against, warnings to add to. */
 interface OdtContext {
   styles: Map<string, OdtStyle>
+  paragraphStyles: Map<string, OdtParagraphStyle>
   listStyles: Map<string, OdtListStyle>
   graphicStyles: Map<string, OdtGraphicStyle>
   warnings: ParseWarning[]
@@ -64,6 +66,44 @@ interface OdtStyle {
   italic: boolean
   underline: boolean
   strike: boolean
+  color: string | null
+  highlight: string | null
+  fontFamily: string | null
+  /** In points, which is what the editor and both document formats use. */
+  fontSize: number | null
+}
+
+/** The paragraph properties we model. */
+interface OdtParagraphStyle {
+  textAlign: string | null
+}
+
+/** ODF names the edges of the text rather than the sides of the page. */
+function alignmentFrom(value: string | undefined): string | null {
+  switch (value) {
+    case 'center':
+      return 'center'
+    case 'end':
+    case 'right':
+      return 'right'
+    case 'start':
+    case 'left':
+      return 'left'
+    case 'justify':
+      return 'justify'
+    default:
+      return null
+  }
+}
+
+function alignmentTo(value: string): string {
+  return value === 'right' ? 'end' : value === 'left' ? 'start' : value
+}
+
+/** A colour as the editor holds it, or null when the document says "none". */
+function odfColor(value: string | undefined): string | null {
+  if (value === undefined || value === '' || value === 'transparent') return null
+  return /^#[0-9a-f]{6}$/iu.test(value) ? value.toUpperCase() : null
 }
 
 const HEADING_TAG = 'text:h'
@@ -353,46 +393,99 @@ function parseFrame(node: XmlNode, ctx: OdtContext): ProseMirrorNodeJson | null 
   }
 }
 
-function parseAutomaticStyles(root: XmlNode): Map<string, OdtStyle> {
-  const styles = new Map<string, OdtStyle>()
+/**
+ * The named styles a run or paragraph can point at.
+ *
+ * ODT keeps formatting in styles declared beside the body rather than on the
+ * element, so every property has to be looked up by name. Both the automatic
+ * styles a writer generates per document and the named ones count.
+ */
+function parseTextStyles(root: XmlNode): {
+  text: Map<string, OdtStyle>
+  paragraph: Map<string, OdtParagraphStyle>
+} {
+  const text = new Map<string, OdtStyle>()
+  const paragraph = new Map<string, OdtParagraphStyle>()
 
-  const automatic = children(root).find((node) => tagName(node) === 'office:automatic-styles')
-  if (!automatic) return styles
-
-  for (const style of children(automatic)) {
-    if (tagName(style) !== 'style:style') continue
-
-    const name = attribute(style, 'style:name')
-    if (name === undefined) continue
-
-    const properties = children(style).find((node) => tagName(node) === 'style:text-properties')
-    if (!properties) continue
-
-    styles.set(name, {
-      bold: attribute(properties, 'fo:font-weight') === 'bold',
-      italic: attribute(properties, 'fo:font-style') === 'italic',
-      underline: attribute(properties, 'style:text-underline-style') !== undefined,
-      strike: attribute(properties, 'style:text-line-through-style') !== undefined,
-    })
+  // A font name points at a declaration rather than naming the family, so the
+  // declarations are read first.
+  const fonts = new Map<string, string>()
+  for (const section of children(root)) {
+    if (tagName(section) !== 'office:font-face-decls') continue
+    for (const face of children(section)) {
+      const name = attribute(face, 'style:name')
+      const family = attribute(face, 'svg:font-family') ?? name
+      if (name !== undefined && family !== undefined) fonts.set(name, family.replace(/^'|'$/gu, ''))
+    }
   }
 
-  return styles
+  for (const section of children(root)) {
+    const sectionTag = tagName(section)
+    if (sectionTag === null || !STYLE_CONTAINERS.has(sectionTag)) continue
+
+    for (const style of children(section)) {
+      if (tagName(style) !== 'style:style') continue
+
+      const name = attribute(style, 'style:name')
+      if (name === undefined) continue
+
+      const textProperties = findChild(style, 'style:text-properties')
+      if (textProperties) {
+        const family =
+          attribute(textProperties, 'fo:font-family') ??
+          fonts.get(attribute(textProperties, 'style:font-name') ?? '')
+
+        text.set(name, {
+          bold: attribute(textProperties, 'fo:font-weight') === 'bold',
+          italic: attribute(textProperties, 'fo:font-style') === 'italic',
+          underline: attribute(textProperties, 'style:text-underline-style') !== undefined,
+          strike: attribute(textProperties, 'style:text-line-through-style') !== undefined,
+          color: odfColor(attribute(textProperties, 'fo:color')),
+          highlight: odfColor(attribute(textProperties, 'fo:background-color')),
+          fontFamily: family === undefined ? null : family.replace(/^'|'$/gu, ''),
+          // A size given as a percentage is relative to a style we do not
+          // resolve, so it is left alone rather than turned into a wrong number.
+          fontSize: lengthToPoints(attribute(textProperties, 'fo:font-size')),
+        })
+      }
+
+      const paragraphProperties = findChild(style, 'style:paragraph-properties')
+      if (paragraphProperties) {
+        paragraph.set(name, {
+          textAlign: alignmentFrom(attribute(paragraphProperties, 'fo:text-align')),
+        })
+      }
+    }
+  }
+
+  return { text, paragraph }
 }
 
-function marksFor(style: OdtStyle | undefined): { type: string }[] {
+function marksFor(style: OdtStyle | undefined): { type: string; attrs?: Record<string, unknown> }[] {
   if (!style) return []
-  const marks: { type: string }[] = []
+
+  const marks: { type: string; attrs?: Record<string, unknown> }[] = []
   if (style.bold) marks.push({ type: 'bold' })
   if (style.italic) marks.push({ type: 'italic' })
   if (style.underline) marks.push({ type: 'underline' })
   if (style.strike) marks.push({ type: 'strike' })
+  if (style.highlight !== null) marks.push({ type: 'highlight', attrs: { color: style.highlight } })
+
+  // Colour, family and size are one mark with three attributes, matching the
+  // run properties both document formats keep them in.
+  const attrs: Record<string, unknown> = {}
+  if (style.color !== null) attrs['color'] = style.color
+  if (style.fontFamily !== null) attrs['fontFamily'] = style.fontFamily
+  if (style.fontSize !== null) attrs['fontSize'] = style.fontSize
+  if (Object.keys(attrs).length > 0) marks.push({ type: 'textStyle', attrs })
+
   return marks
 }
 
 function inlineFrom(
   node: XmlNode,
   ctx: OdtContext,
-  inherited: { type: string }[],
+  inherited: { type: string; attrs?: Record<string, unknown> }[],
 ): ProseMirrorNodeJson[] {
   if (isTextNode(node)) {
     const text = textValue(node)
@@ -540,18 +633,31 @@ function parseBlock(
   if (tag === PARAGRAPH_TAG || tag === HEADING_TAG) {
     const inline = children(node).flatMap((child) => inlineFrom(child, ctx, []))
 
+    const styleName = attribute(node, 'text:style-name')
+    const align =
+      styleName === undefined ? null : (ctx.paragraphStyles.get(styleName)?.textAlign ?? null)
+
     if (tag === HEADING_TAG) {
       const level = Number.parseInt(attribute(node, 'text:outline-level') ?? '1', 10)
       return [
         {
           type: 'heading',
-          attrs: { level: Number.isFinite(level) ? Math.min(6, Math.max(1, level)) : 1 },
+          attrs: {
+            level: Number.isFinite(level) ? Math.min(6, Math.max(1, level)) : 1,
+            ...(align === null ? {} : { textAlign: align }),
+          },
           ...(inline.length > 0 ? { content: inline } : {}),
         },
       ]
     }
 
-    return [{ type: 'paragraph', ...(inline.length > 0 ? { content: inline } : {}) }]
+    return [
+      {
+        type: 'paragraph',
+        ...(align === null ? {} : { attrs: { textAlign: align } }),
+        ...(inline.length > 0 ? { content: inline } : {}),
+      },
+    ]
   }
 
   if (tag === LIST_TAG) {
@@ -592,8 +698,10 @@ export function parseOdtContent(
   const listStyles = new Map(options.listStyles ?? [])
   collectListStyles(root, listStyles)
 
+  const named = parseTextStyles(root)
   const ctx: OdtContext = {
-    styles: parseAutomaticStyles(root),
+    styles: named.text,
+    paragraphStyles: named.paragraph,
     listStyles,
     graphicStyles: parseGraphicStyles(root),
     warnings,
@@ -622,26 +730,136 @@ export function parseOdtContent(
   }
 }
 
-/** Style names for the mark combinations the document actually uses. */
-function styleNameFor(marks: Set<string>): string | null {
-  const parts: string[] = []
-  if (marks.has('bold')) parts.push('B')
-  if (marks.has('italic')) parts.push('I')
-  if (marks.has('underline')) parts.push('U')
-  if (marks.has('strike')) parts.push('S')
-  return parts.length > 0 ? `OD_${parts.join('')}` : null
+/**
+ * Styles generated for what the document actually uses.
+ *
+ * ODT has nowhere to put formatting on the element itself, so every distinct
+ * combination of run properties needs a declared style to point at. They are
+ * collected while the body is written and emitted together at the end.
+ */
+interface TextProperties {
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  strike: boolean
+  color: string | null
+  highlight: string | null
+  fontFamily: string | null
+  fontSize: number | null
 }
 
-function buildTextProperties(name: string): XmlNode {
-  const attributes: Record<string, string> = {}
-  if (name.includes('B')) attributes['fo:font-weight'] = 'bold'
-  if (name.includes('I')) attributes['fo:font-style'] = 'italic'
-  if (name.includes('U')) attributes['style:text-underline-style'] = 'solid'
-  if (name.includes('S')) attributes['style:text-line-through-style'] = 'solid'
+function propertiesOf(node: ProseMirrorNodeJson): TextProperties | null {
+  const names = markNames(node)
+  const textStyle = node.marks?.find((mark) => mark.type === 'textStyle')?.attrs
+  const highlight = node.marks?.find((mark) => mark.type === 'highlight')?.attrs?.['color']
 
-  return element('style:style', { 'style:name': name, 'style:family': 'text' }, [
-    element('style:text-properties', attributes),
-  ])
+  const color = textStyle?.['color']
+  const fontFamily = textStyle?.['fontFamily']
+  const fontSize = textStyle?.['fontSize']
+
+  const properties: TextProperties = {
+    bold: names.has('bold'),
+    italic: names.has('italic'),
+    underline: names.has('underline'),
+    strike: names.has('strike'),
+    color: typeof color === 'string' ? color : null,
+    highlight: typeof highlight === 'string' ? highlight : null,
+    fontFamily: typeof fontFamily === 'string' ? fontFamily : null,
+    fontSize: typeof fontSize === 'number' ? fontSize : null,
+  }
+
+  const plain =
+    !properties.bold &&
+    !properties.italic &&
+    !properties.underline &&
+    !properties.strike &&
+    properties.color === null &&
+    properties.highlight === null &&
+    properties.fontFamily === null &&
+    properties.fontSize === null
+
+  return plain ? null : properties
+}
+
+interface StyleRegistry {
+  /** A style name for these run properties, or null when there are none. */
+  forText: (node: ProseMirrorNodeJson) => string | null
+  /** A style name for a paragraph that is aligned, or null when it is not. */
+  forParagraph: (parent: string, textAlign: unknown) => string | null
+  declarations: () => XmlNode[]
+}
+
+function createStyles(): StyleRegistry {
+  const text = new Map<string, { name: string; properties: TextProperties }>()
+  const paragraph = new Map<string, { name: string; parent: string; textAlign: string }>()
+
+  return {
+    forText(node) {
+      const properties = propertiesOf(node)
+      if (properties === null) return null
+
+      const key = JSON.stringify(properties)
+      const existing = text.get(key)
+      if (existing) return existing.name
+
+      const name = `OD_T${String(text.size + 1)}`
+      text.set(key, { name, properties })
+      return name
+    },
+
+    forParagraph(parent, textAlign) {
+      if (typeof textAlign !== 'string' || alignmentFrom(textAlign) === null) return null
+
+      const key = `${parent}|${textAlign}`
+      const existing = paragraph.get(key)
+      if (existing) return existing.name
+
+      const name = `OD_P${String(paragraph.size + 1)}`
+      paragraph.set(key, { name, parent, textAlign })
+      return name
+    },
+
+    declarations() {
+      const nodes: XmlNode[] = []
+
+      for (const { name, properties } of text.values()) {
+        const attributes: Record<string, string> = {}
+        if (properties.bold) attributes['fo:font-weight'] = 'bold'
+        if (properties.italic) attributes['fo:font-style'] = 'italic'
+        if (properties.underline) attributes['style:text-underline-style'] = 'solid'
+        if (properties.strike) attributes['style:text-line-through-style'] = 'solid'
+        if (properties.color !== null) attributes['fo:color'] = properties.color
+        if (properties.highlight !== null) {
+          attributes['fo:background-color'] = properties.highlight
+        }
+        // The family is written out rather than named: a `style:font-name`
+        // refers to a declaration, and one more part to keep in step is one
+        // more way for the reference to go stale.
+        if (properties.fontFamily !== null) attributes['fo:font-family'] = properties.fontFamily
+        if (properties.fontSize !== null) {
+          attributes['fo:font-size'] = `${String(properties.fontSize)}pt`
+        }
+
+        nodes.push(
+          element('style:style', { 'style:name': name, 'style:family': 'text' }, [
+            element('style:text-properties', attributes),
+          ]),
+        )
+      }
+
+      for (const { name, parent, textAlign } of paragraph.values()) {
+        nodes.push(
+          element(
+            'style:style',
+            { 'style:name': name, 'style:family': 'paragraph', 'style:parent-style-name': parent },
+            [element('style:paragraph-properties', { 'fo:text-align': alignmentTo(textAlign) })],
+          ),
+        )
+      }
+
+      return nodes
+    },
+  }
 }
 
 const BULLET_NAME = 'OD_Bullet'
@@ -761,7 +979,7 @@ function buildFrame(node: ProseMirrorNodeJson, index: number, usedGraphics: Set<
 
 function serializeInline(
   nodes: readonly ProseMirrorNodeJson[],
-  used: Set<string>,
+  styles: StyleRegistry,
   images: { usedGraphics: Set<string>; count: number },
 ): XmlNode[] {
   return nodes.flatMap((node): XmlNode[] => {
@@ -787,10 +1005,7 @@ function serializeInline(
     }
     if (node.type !== 'text') return []
 
-    const marks = markNames(node)
-    const styleName = styleNameFor(marks)
-    if (styleName !== null) used.add(styleName)
-
+    const styleName = styles.forText(node)
     const text = textNode(node.text ?? '')
     const href = node.marks?.find((mark) => mark.type === 'link')?.attrs?.['href']
 
@@ -809,7 +1024,7 @@ export function serializeOdtContent(
   doc: ProseMirrorNodeJson,
   options: { contentAttributes: Record<string, string> },
 ): string {
-  const used = new Set<string>()
+  const styles = createStyles()
   const usedLists = new Set<string>()
   const images = { usedGraphics: new Set<string>(), count: 0 }
 
@@ -817,14 +1032,15 @@ export function serializeOdtContent(
     switch (node.type) {
       case 'heading': {
         const level = node.attrs?.['level']
+        const parent = `Heading_20_${String(typeof level === 'number' ? level : 1)}`
         return [
           element(
             HEADING_TAG,
             {
-              'text:style-name': `Heading_20_${String(typeof level === 'number' ? level : 1)}`,
+              'text:style-name': styles.forParagraph(parent, node.attrs?.['textAlign']) ?? parent,
               'text:outline-level': String(typeof level === 'number' ? level : 1),
             },
-            serializeInline(node.content ?? [], used, images),
+            serializeInline(node.content ?? [], styles, images),
           ),
         ]
       }
@@ -832,8 +1048,11 @@ export function serializeOdtContent(
         return [
           element(
             PARAGRAPH_TAG,
-            { 'text:style-name': 'Standard' },
-            serializeInline(node.content ?? [], used, images),
+            {
+              'text:style-name':
+                styles.forParagraph('Standard', node.attrs?.['textAlign']) ?? 'Standard',
+            },
+            serializeInline(node.content ?? [], styles, images),
           ),
         ]
       case 'bulletList':
@@ -942,7 +1161,7 @@ export function serializeOdtContent(
 
   const root = element('office:document-content', attributes, [
     element('office:automatic-styles', {}, [
-      ...[...used].sort().map(buildTextProperties),
+      ...styles.declarations(),
       ...[...images.usedGraphics].sort().map(buildGraphicStyle),
       ...[...usedLists].sort().map(buildListStyle),
     ]),

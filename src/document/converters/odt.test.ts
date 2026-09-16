@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
+import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
 import { textContentOf } from './types'
 import {
   lengthToPoints,
@@ -524,8 +525,10 @@ describe('serializeOdtContent', () => {
     )
     const xml = serializeOdtContent(parsed.doc, { contentAttributes: parsed.contentAttributes })
 
-    expect(xml).toContain('OD_B')
-    expect(xml).not.toContain('OD_I')
+    // One style for the one combination in use, and nothing else.
+    expect(xml.match(/style:family="text"/gu)).toHaveLength(1)
+    expect(xml).toContain('fo:font-weight="bold"')
+    expect(xml).not.toContain('fo:font-style')
   })
 })
 
@@ -577,5 +580,158 @@ describe('package handling', () => {
 
     const reopened = await openOdt(await saveOdt(document, edited))
     expect(textContentOf(reopened.doc)).toBe('changed')
+  })
+})
+
+describe('odt character formatting', () => {
+  const styled = (properties: string, name = 'T1') =>
+    CONTENT(
+      `<text:p><text:span text:style-name="${name}">text</text:span></text:p>`,
+      `<style:style style:name="${name}" style:family="text"><style:text-properties ${properties}/></style:style>`,
+    )
+
+  const markOf = (doc: ProseMirrorNodeJson, type: string) =>
+    doc.content?.[0]?.content?.[0]?.marks?.find((mark) => mark.type === type)
+
+  it('reads colour, family and size as one mark', () => {
+    const { doc } = parseOdtContent(
+      styled('fo:color="#FF0000" fo:font-family="Georgia" fo:font-size="14pt"'),
+    )
+
+    const attrs = markOf(doc, 'textStyle')?.attrs
+    expect(attrs?.['color']).toBe('#FF0000')
+    expect(attrs?.['fontFamily']).toBe('Georgia')
+    expect(attrs?.['fontSize']).toBe(14)
+  })
+
+  it('reads a background colour as a highlight', () => {
+    const { doc } = parseOdtContent(styled('fo:background-color="#FFFF00"'))
+    expect(markOf(doc, 'highlight')?.attrs?.['color']).toBe('#FFFF00')
+  })
+
+  it('treats a transparent background as no highlight', () => {
+    const { doc } = parseOdtContent(styled('fo:background-color="transparent"'))
+    expect(markOf(doc, 'highlight')).toBeUndefined()
+  })
+
+  it('leaves a size given as a percentage alone rather than guessing a number', () => {
+    const { doc } = parseOdtContent(styled('fo:font-size="120%"'))
+    expect(markOf(doc, 'textStyle')).toBeUndefined()
+  })
+
+  it('resolves a font named through the font declarations', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+<office:font-face-decls><style:font-face style:name="F1" svg:font-family="Courier New"/></office:font-face-decls>
+<office:automatic-styles><style:style style:name="T1" style:family="text"><style:text-properties style:font-name="F1"/></style:style></office:automatic-styles>
+<office:body><office:text><text:p><text:span text:style-name="T1">text</text:span></text:p></office:text></office:body>
+</office:document-content>`
+
+    const { doc } = parseOdtContent(xml)
+    expect(markOf(doc, 'textStyle')?.attrs?.['fontFamily']).toBe('Courier New')
+  })
+
+  it('round-trips colour, highlight, family and size', () => {
+    const source = parseOdtContent(
+      styled('fo:color="#FF0000" fo:background-color="#FFFF00" fo:font-family="Georgia" fo:font-size="14pt"'),
+    )
+    const again = parseOdtContent(
+      serializeOdtContent(source.doc, { contentAttributes: source.contentAttributes }),
+    )
+
+    const attrs = markOf(again.doc, 'textStyle')?.attrs
+    expect(attrs?.['color']).toBe('#FF0000')
+    expect(attrs?.['fontFamily']).toBe('Georgia')
+    expect(attrs?.['fontSize']).toBe(14)
+    expect(markOf(again.doc, 'highlight')?.attrs?.['color']).toBe('#FFFF00')
+  })
+
+  it('declares one style per combination, however many runs use it', () => {
+    const xml = serializeOdtContent(
+      {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'a', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+              { type: 'text', text: 'b', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+              { type: 'text', text: 'c', marks: [{ type: 'textStyle', attrs: { color: '#00FF00' } }] },
+            ],
+          },
+        ],
+      },
+      { contentAttributes: {} },
+    )
+
+    expect(xml.match(/style:family="text"/gu)).toHaveLength(2)
+  })
+})
+
+describe('odt paragraph alignment', () => {
+  it('reads the alignment off the paragraph style', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:p text:style-name="P1">text</text:p>',
+        '<style:style style:name="P1" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/></style:style>',
+      ),
+    )
+
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('center')
+  })
+
+  it('reads the edge ODF names as the side the editor names', () => {
+    const { doc } = parseOdtContent(
+      CONTENT(
+        '<text:p text:style-name="P1">text</text:p>',
+        '<style:style style:name="P1" style:family="paragraph"><style:paragraph-properties fo:text-align="end"/></style:style>',
+      ),
+    )
+
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('right')
+  })
+
+  it('writes an aligned paragraph as a style based on the plain one', () => {
+    const xml = serializeOdtContent(
+      {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: 'x' }] },
+        ],
+      },
+      { contentAttributes: {} },
+    )
+
+    expect(xml).toContain('style:parent-style-name="Standard"')
+    expect(xml).toContain('fo:text-align="end"')
+  })
+
+  it('keeps a heading aligned without losing its level', () => {
+    const source: ProseMirrorNodeJson = {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 2, textAlign: 'center' },
+          content: [{ type: 'text', text: 'Title' }],
+        },
+      ],
+    }
+
+    const { doc } = parseOdtContent(serializeOdtContent(source, { contentAttributes: {} }))
+
+    expect(doc.content?.[0]?.type).toBe('heading')
+    expect(doc.content?.[0]?.attrs?.['level']).toBe(2)
+    expect(doc.content?.[0]?.attrs?.['textAlign']).toBe('center')
+  })
+
+  it('leaves an unaligned paragraph pointing at the plain style', () => {
+    const xml = serializeOdtContent(
+      { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] },
+      { contentAttributes: {} },
+    )
+
+    expect(xml).toContain('text:style-name="Standard"')
+    expect(xml).not.toContain('style:family="paragraph"')
   })
 })

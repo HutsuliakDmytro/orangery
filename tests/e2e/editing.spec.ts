@@ -60,6 +60,37 @@ test('inserts a list and nests an item', async ({ page }) => {
   await expect(page.locator(`${editor} ul ul li`)).toHaveCount(1)
 })
 
+/**
+ * A list with no marker is not a list on the page, however right the markup is.
+ * Nothing below the browser can catch this: the framework's own reset strips
+ * the marker, and every unit test still sees a correct `<ul><li>`.
+ */
+test('draws a marker on every kind of list', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('first')
+
+  await page.getByRole('button', { name: 'Numbered List' }).click()
+  await expect(page.locator(`${editor} ol li`)).toHaveCount(1)
+
+  const markerOf = (selector: string): Promise<string> =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((node: Element): string => getComputedStyle(node).listStyleType)
+
+  expect(await markerOf(`${editor} ol`)).toBe('decimal')
+
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('second')
+  await page.keyboard.press('Tab')
+
+  // A nested level has a marker of its own, so it reads as nested.
+  expect(await markerOf(`${editor} ol ol`)).toBe('lower-alpha')
+
+  await page.getByRole('button', { name: 'Bulleted List' }).click()
+  expect(await markerOf(`${editor} ul`)).toBe('disc')
+})
+
 test('inserts a table from the grid picker', async ({ page }) => {
   await page.locator(editor).click()
   await page.getByRole('button', { name: 'Table', exact: true }).click()

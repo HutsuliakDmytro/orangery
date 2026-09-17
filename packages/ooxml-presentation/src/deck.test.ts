@@ -113,7 +113,12 @@ describe('shapes', () => {
     const connectors = await deckOf('groups-and-connectors')
     const pictures = await deckOf('picture')
 
-    expect(connectors.slides[0]?.shapes.map((shape) => shape.kind)).toEqual(['sp', 'sp', 'cxnSp'])
+    expect(connectors.slides[0]?.shapes.map((shape) => shape.kind)).toEqual([
+      'sp',
+      'sp',
+      'cxnSp',
+      'grpSp',
+    ])
     expect(pictures.slides[0]?.shapes.map((shape) => shape.kind)).toEqual(['pic'])
     expect(pictures.slides[0]?.shapes[0]?.description).toBe('sample.png')
   })
@@ -231,7 +236,7 @@ describe('text on a real deck', () => {
     // The difference matters: one cannot take text, the other has none yet.
     const deck = await deckOf('groups-and-connectors')
     const connector = deck.slides[0]?.shapes.find((shape) => shape.kind === 'cxnSp')
-    const box = deck.slides[0]?.shapes.find((shape) => shape.kind === 'sp')
+    const box = deck.slides[0]?.shapes.find((shape) => shape.name === 'Rounded Rectangle 1')
 
     expect(connector?.text).toBeNull()
     expect(box?.text?.paragraphs.length).toBeGreaterThan(0)

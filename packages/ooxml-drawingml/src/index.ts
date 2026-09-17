@@ -16,8 +16,8 @@ export {
   pointsToEmu,
 } from './units'
 export { contentTypeFor } from './media'
-export { blipRelationshipId, pictureGraphic } from './picture'
-export type { Picture } from './picture'
+export { blipRelationshipId, NO_CROP, pictureGraphic, readBlipFill } from './picture'
+export type { BlipFill, Crop, Picture } from './picture'
 export { readColor, readColorChild, resolveColor } from './color'
 export type { Color, ColorContext, ColorSource, ColorTransform, ResolvedColor } from './color'
 export { fontStackFor, parseTheme, resolveThemeFont } from './theme'

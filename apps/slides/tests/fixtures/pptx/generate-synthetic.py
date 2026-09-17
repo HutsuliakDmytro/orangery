@@ -107,6 +107,7 @@ def groups_and_connectors() -> Presentation:
     prs = Presentation()
     slide = prs.slides.add_slide(blank(prs))
 
+
     first = slide.shapes.add_shape(
         MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(2), Inches(2), Inches(1)
     )
@@ -121,6 +122,18 @@ def groups_and_connectors() -> Presentation:
     )
     connector.begin_connect(first, 3)
     connector.end_connect(second, 1)
+
+    # A group states where it sits and the coordinate space its children are
+    # written in; the two differ here, so a reader that ignores chOff/chExt
+    # puts the children in the wrong place.
+    group = slide.shapes.add_group_shape()
+    inner = group.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(1), Inches(4), Inches(1), Inches(1)
+    )
+    inner.text_frame.text = "In a group"
+    group.shapes.add_shape(MSO_SHAPE.OVAL, Inches(2.5), Inches(4), Inches(1), Inches(1))
+    group.left, group.top = Inches(5), Inches(4)
+    group.width, group.height = Inches(3), Inches(1)
     return prs
 
 

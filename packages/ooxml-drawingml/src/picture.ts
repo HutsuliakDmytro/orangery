@@ -1,4 +1,4 @@
-import { attribute, element, findDescendant } from '@orangery/ooxml-core'
+import { attribute, element, findChild, findDescendant } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
@@ -74,4 +74,57 @@ export function pictureGraphic(picture: Picture): XmlNode {
       ]),
     ]),
   ])
+}
+
+/**
+ * How much of the image is shown, as a fraction cropped from each side.
+ *
+ * `a:srcRect` is written in thousandths of a percent, and every side is
+ * optional — a picture cropped only on the left states only `l`. Zero from
+ * every side is the whole image.
+ */
+export interface Crop {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+export const NO_CROP: Crop = { left: 0, top: 0, right: 0, bottom: 0 }
+
+export interface BlipFill {
+  /** Relationship id of the media part, or null for a fill that links out. */
+  relationshipId: string | null
+  crop: Crop
+  /** `stretch` fills the shape, `tile` repeats. */
+  mode: 'stretch' | 'tile' | null
+}
+
+const fraction = (value: string | undefined): number => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed / 100000 : 0
+}
+
+/** Reads `p:blipFill` or `a:blipFill`. */
+export function readBlipFill(node: XmlNode): BlipFill {
+  const source = findChild(node, 'a:srcRect')
+
+  return {
+    relationshipId: blipRelationshipId(node),
+    crop:
+      source === undefined
+        ? NO_CROP
+        : {
+            left: fraction(attribute(source, 'l')),
+            top: fraction(attribute(source, 't')),
+            right: fraction(attribute(source, 'r')),
+            bottom: fraction(attribute(source, 'b')),
+          },
+    mode:
+      findChild(node, 'a:tile') !== undefined
+        ? 'tile'
+        : findChild(node, 'a:stretch') !== undefined
+          ? 'stretch'
+          : null,
+  }
 }

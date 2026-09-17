@@ -43,7 +43,7 @@ describe('a shape that states none', () => {
     // Without this the shape draws blank, which is what most shapes from a
     // template would do.
     const { slide, theme } = await load('groups-and-connectors')
-    const rounded = slide.shapes[0]
+    const rounded = slide.shapes.find((shape) => shape.name === 'Rounded Rectangle 1')
     if (!rounded) throw new Error('fixture changed')
 
     expect(rounded.properties?.fill).toBeNull()
@@ -54,7 +54,7 @@ describe('a shape that states none', () => {
 
   it('resolves phClr in that fill to the colour the reference supplied', async () => {
     const { slide, theme, base } = await load('groups-and-connectors')
-    const rounded = slide.shapes[0]
+    const rounded = slide.shapes.find((shape) => shape.name === 'Rounded Rectangle 1')
     if (!rounded) throw new Error('fixture changed')
 
     const look = shapeLook(rounded, theme)
@@ -70,7 +70,7 @@ describe('a shape that states none', () => {
 
   it('takes the line from the reference too', async () => {
     const { slide, theme } = await load('groups-and-connectors')
-    const rounded = slide.shapes[0]
+    const rounded = slide.shapes.find((shape) => shape.name === 'Rounded Rectangle 1')
     if (!rounded) throw new Error('fixture changed')
 
     expect(rounded.properties?.line).toBeNull()
@@ -93,6 +93,8 @@ describe('the index into the theme', () => {
       properties: null,
       style: { line: null, fill: { index, color: null }, effect: null, font: null },
       text: null,
+      picture: null,
+      connection: null,
       shapes: [],
       node: {},
     })

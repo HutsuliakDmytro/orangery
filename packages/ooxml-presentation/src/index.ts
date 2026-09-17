@@ -49,3 +49,5 @@ export {
 export type { MasterTextStyles } from './text-inheritance'
 export { lookContext, shapeLook } from './shape-look'
 export type { ShapeLook } from './shape-look'
+export { absoluteTransform, throughGroup, withAncestors } from './group-transform'
+export type { Connection } from './shape-tree'

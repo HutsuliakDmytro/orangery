@@ -1,7 +1,12 @@
 import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
-import { readShapeProperties, readShapeStyle, readTextBody } from '@orangery/ooxml-drawingml'
-import type { ShapeProperties, ShapeStyle, TextBody } from '@orangery/ooxml-drawingml'
+import {
+  readBlipFill,
+  readShapeProperties,
+  readShapeStyle,
+  readTextBody,
+} from '@orangery/ooxml-drawingml'
+import type { BlipFill, ShapeProperties, ShapeStyle, TextBody } from '@orangery/ooxml-drawingml'
 
 /**
  * The shapes on a slide.
@@ -51,6 +56,19 @@ export interface Placeholder {
   index: number | null
 }
 
+/**
+ * Where a connector's ends are pinned.
+ *
+ * `id` names a shape in the same tree and `index` a connection site on it —
+ * which corner or edge. A connector also carries its own transform, so it can
+ * be drawn without resolving these; they matter when the shape it is attached
+ * to moves.
+ */
+export interface Connection {
+  start: { shapeId: number; site: number } | null
+  end: { shapeId: number; site: number } | null
+}
+
 export interface Shape {
   kind: ShapeKind
   /** Unique within the slide part. */
@@ -84,6 +102,10 @@ export interface Shape {
    * text always has one, even when it is empty.
    */
   text: TextBody | null
+  /** The image, for a `p:pic`. Null for everything else. */
+  picture: BlipFill | null
+  /** What a connector is attached to, for a `p:cxnSp`. */
+  connection: Connection | null
   /** Empty for everything that is not a group. */
   shapes: Shape[]
   /** The element this was read from. Written back as-is unless something edits it. */
@@ -148,6 +170,21 @@ function parseTransform(xfrm: XmlNode | undefined): Transform | null {
   }
 }
 
+function readConnection(nonVisual: XmlNode | undefined): Connection {
+  const properties = nonVisual === undefined ? undefined : findChild(nonVisual, 'p:cNvCxnSpPr')
+
+  const end = (tag: string) => {
+    const element = properties === undefined ? undefined : findChild(properties, tag)
+    if (element === undefined) return null
+
+    const shapeId = Number(attribute(element, 'id'))
+    const site = Number(attribute(element, 'idx'))
+    return Number.isFinite(shapeId) ? { shapeId, site: Number.isFinite(site) ? site : 0 } : null
+  }
+
+  return { start: end('a:stCxn'), end: end('a:endCxn') }
+}
+
 function parsePlaceholder(nonVisual: XmlNode | undefined): Placeholder | null {
   const properties = nonVisual === undefined ? undefined : findChild(nonVisual, 'p:nvPr')
   const ph = properties === undefined ? undefined : findChild(properties, 'p:ph')
@@ -169,6 +206,7 @@ function parseShape(node: XmlNode): Shape {
   const propertiesNode = shapePropertiesOf(node)
   const styleNode = findChild(node, 'p:style')
   const textNode = findChild(node, 'p:txBody')
+  const pictureNode = findChild(node, 'p:blipFill')
 
   return {
     kind,
@@ -180,6 +218,8 @@ function parseShape(node: XmlNode): Shape {
     properties: propertiesNode === undefined ? null : readShapeProperties(propertiesNode),
     style: styleNode === undefined ? null : readShapeStyle(styleNode),
     text: textNode === undefined ? null : readTextBody(textNode),
+    picture: pictureNode === undefined ? null : readBlipFill(pictureNode),
+    connection: kind === 'cxnSp' ? readConnection(nonVisual) : null,
     shapes: kind === 'grpSp' ? parseShapeTree(node) : [],
     node,
   }

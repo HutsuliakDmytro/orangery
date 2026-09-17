@@ -1,5 +1,8 @@
 import { findChild, getPartText, parseXml, tagName } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { readListStyle } from '@orangery/ooxml-drawingml'
+import type { ListStyle } from '@orangery/ooxml-drawingml'
+import { PRESENTATION_PART } from './parts'
 import { readPresentation } from './presentation'
 import type { PresentationMap, SlideSize } from './presentation'
 import { parseShapeTree } from './shape-tree'
@@ -46,8 +49,24 @@ export interface Deck {
   /** Keyed by part path, which is how a slide names its layout. */
   layouts: Map<string, SlidePart>
   masters: Map<string, Master>
+  /**
+   * `p:defaultTextStyle` — the last rung of the inheritance chain.
+   *
+   * What a plain text box falls back to: it belongs to no placeholder, so it
+   * inherits nothing from the layout.
+   */
+  defaultTextStyle: ListStyle
   /** The part map this was built from, for anything that needs to walk it again. */
   map: PresentationMap
+}
+
+function readDefaultTextStyle(pkg: OoxmlPackage): ListStyle {
+  const root = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '').find(
+    (node) => tagName(node) === 'p:presentation',
+  )
+  const style = root === undefined ? undefined : findChild(root, 'p:defaultTextStyle')
+
+  return style === undefined ? new Map<number, never>() : readListStyle(style)
 }
 
 const ROOTS = new Set(['p:sld', 'p:sldLayout', 'p:sldMaster', 'p:notes'])
@@ -95,7 +114,15 @@ export function readDeck(pkg: OoxmlPackage): Deck {
     return part === null ? [] : [{ ...part, layout: entry.layout, notes: entry.notes }]
   })
 
-  return { slideSize: map.slideSize, notesSize: map.notesSize, slides, layouts, masters, map }
+  return {
+    slideSize: map.slideSize,
+    notesSize: map.notesSize,
+    slides,
+    layouts,
+    masters,
+    defaultTextStyle: readDefaultTextStyle(pkg),
+    map,
+  }
 }
 
 /** The layout a slide is built on, or null when the deck does not say. */

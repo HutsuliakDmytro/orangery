@@ -39,3 +39,11 @@ export {
 } from './placeholders'
 export type { MasterPlaceholder } from './placeholders'
 export { colorContextFor, readColorMap, readThemes } from './theme-context'
+export {
+  listStyleChain,
+  masterStyleFor,
+  readMasterTextStyles,
+  resolveParagraphProperties,
+  resolveRunProperties,
+} from './text-inheritance'
+export type { MasterTextStyles } from './text-inheritance'

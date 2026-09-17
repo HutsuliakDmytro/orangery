@@ -99,10 +99,19 @@ jobs:
       # Marked as a pre-release: nothing here is signed or notarized yet, so
       # macOS and Windows will both warn before running it.
       - run: |
+          # Read into an array rather than substituted into the command line:
+          # the installers have a space in their name, and word splitting turns
+          # each of them into two paths that do not exist.
+          mapfile -t assets < <(
+            find bundles -type f \( -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.exe' \)
+          )
+
+          printf 'attaching %s\n' "${assets[@]}"
+
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --prerelease \
             --generate-notes \
-            $(find bundles -type f \( -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.exe' \) -print)
+            "${assets[@]}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

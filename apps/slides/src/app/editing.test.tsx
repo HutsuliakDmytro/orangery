@@ -536,3 +536,40 @@ describe('the properties panel', () => {
     expect(useDeckStore.getState().undoStack).toHaveLength(1)
   })
 })
+
+describe('tables', () => {
+  it('puts one on the slide and selects it', async () => {
+    await openDeck('empty')
+    act(() => {
+      runCommand('insert.table', {})
+    })
+
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    expect(shapes[0]?.graphic?.kind).toBe('table')
+    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
+  })
+
+  it('draws it on the canvas', async () => {
+    await openDeck('empty')
+    render(<App />)
+
+    act(() => {
+      runCommand('insert.table', {})
+    })
+
+    // Nine cells, each a rectangle with a text box over it.
+    expect(document.querySelectorAll('foreignObject').length).toBeGreaterThanOrEqual(9)
+  })
+
+  it('takes it back in one step', async () => {
+    await openDeck('empty')
+    const before = partText()
+
+    act(() => {
+      runCommand('insert.table', {})
+      runCommand('edit.undo', {})
+    })
+
+    expect(partText()).toBe(before)
+  })
+})

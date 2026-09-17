@@ -14,6 +14,7 @@ import {
   createShape,
   deleteShapes,
   insertPicture,
+  insertTable,
   distributeShapes,
   duplicateShape,
   groupShapes,
@@ -296,6 +297,42 @@ export const pictureCommands: readonly Command[] = [
   },
 ]
 
+export const tableCommands: readonly Command[] = [
+  {
+    id: 'insert.table',
+    label: 'Table…',
+    group: 'insert',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { open, edit, selectShapes } = useDeckStore.getState()
+      const size = open?.deck.slideSize ?? { width: 0, height: 0 }
+      if (open === null) return
+
+      // Three by three across most of the slide, which is what PowerPoint's
+      // own dialogue starts at; choosing the size comes with the grid picker.
+      const width = size.width * 0.8
+      const height = size.height * 0.4
+      const made: { id: number | null } = { id: null }
+
+      edit((slide) => {
+        made.id = insertTable(open.package, slide, {
+          rows: 3,
+          columns: 3,
+          transform: {
+            x: (size.width - width) / 2,
+            y: (size.height - height) / 2,
+            width,
+            height,
+          },
+        })
+        return made.id !== null
+      })
+
+      if (made.id !== null) selectShapes([made.id])
+    },
+  },
+]
+
 export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) => ({
   id: `insert.${preset}`,
   label,
@@ -494,6 +531,7 @@ export function registerBuiltinCommands(): void {
   registerAll(arrangeCommands)
   registerAll(insertCommands)
   registerAll(pictureCommands)
+  registerAll(tableCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

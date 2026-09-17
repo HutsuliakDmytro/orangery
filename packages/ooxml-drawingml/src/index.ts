@@ -70,3 +70,5 @@ export {
 export type { FormatScheme } from './format-scheme'
 export { readCellProperties, readTable, visibleCells } from './table'
 export type { CellProperties, Table, TableCell, TableProperties, TableRow } from './table'
+export { readChart } from './chart'
+export type { Chart, ChartKind, ChartSeries } from './chart'

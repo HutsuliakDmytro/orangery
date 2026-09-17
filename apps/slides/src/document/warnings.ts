@@ -40,7 +40,9 @@ function findingsFor(shape: Shape, slide: number): Finding[] {
 
   const graphic = shape.graphic?.kind
   if (graphic === 'chart') {
-    found.push({ kind: 'chart', message: 'Charts are shown as an empty frame for now', slide })
+    // Drawn from the values cached in the chart part, which is what PowerPoint
+    // draws from too — but without its styling, so it is worth mentioning.
+    found.push({ kind: 'chart', message: 'Charts are drawn simply, without their styling', slide })
   }
   if (graphic === 'diagram') {
     found.push({ kind: 'diagram', message: 'SmartArt is shown as an empty frame', slide })

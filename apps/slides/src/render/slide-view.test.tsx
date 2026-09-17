@@ -237,3 +237,45 @@ describe('autofit', () => {
     expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700)}px` })
   })
 })
+
+describe('charts', () => {
+  const drawCharts = async () => {
+    const { deck, slide, themes, pkg } = await open('charts')
+    return render(<SlideView deck={deck} slide={slide} themes={themes} package={pkg} />)
+  }
+
+  it('draws one chart per frame on the slide', async () => {
+    const { container } = await drawCharts()
+    // The slide's own svg, plus one nested per chart.
+    expect(container.querySelectorAll('svg')).toHaveLength(4)
+  })
+
+  it('draws a bar per point of every series', async () => {
+    const { container } = await drawCharts()
+    const chart = container.querySelectorAll('svg')[1]
+    const bars = [...(chart?.querySelectorAll('rect') ?? [])].filter(
+      (rect) => rect.getAttribute('fill') !== '#FFFFFF',
+    )
+
+    // Two series of four, plus a legend swatch each.
+    expect(bars.length).toBeGreaterThanOrEqual(8)
+  })
+
+  it('draws a line chart as paths rather than bars', async () => {
+    const { container } = await drawCharts()
+    const chart = container.querySelectorAll('svg')[2]
+
+    expect(chart?.querySelectorAll('path').length).toBeGreaterThan(0)
+  })
+
+  it('names the chart for anyone reading by ear', async () => {
+    await drawCharts()
+    expect(screen.getAllByRole('img', { name: 'Chart' }).length).toBe(3)
+  })
+
+  it('draws nothing where the chart part cannot be reached', async () => {
+    // No package, no chart part; the slide still renders.
+    const { container } = await draw('charts')
+    expect(container.querySelectorAll('svg')).toHaveLength(1)
+  })
+})

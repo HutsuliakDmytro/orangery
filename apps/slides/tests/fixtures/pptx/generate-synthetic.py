@@ -19,6 +19,8 @@ from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.util import Emu, Inches, Pt
 
@@ -161,6 +163,37 @@ def picture() -> Presentation:
     return prs
 
 
+def charts() -> Presentation:
+    """Three chart types on one slide, each its own part under ppt/charts."""
+    prs = Presentation()
+    slide = prs.slides.add_slide(blank(prs))
+
+    data = CategoryChartData()
+    data.categories = ["Q1", "Q2", "Q3", "Q4"]
+    data.add_series("Revenue", (10.5, 14.2, 9.8, 18.1))
+    data.add_series("Costs", (7.1, 8.4, 8.9, 10.0))
+
+    columns = slide.shapes.add_chart(
+        XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(0.5), Inches(0.5), Inches(4.5), Inches(3), data
+    ).chart
+    columns.has_legend = True
+    columns.legend.position = XL_LEGEND_POSITION.BOTTOM
+    columns.legend.include_in_layout = False
+
+    slide.shapes.add_chart(
+        XL_CHART_TYPE.LINE, Inches(5.2), Inches(0.5), Inches(4), Inches(3), data
+    )
+
+    single = CategoryChartData()
+    single.categories = ["Alpha", "Beta", "Gamma"]
+    single.add_series("Share", (45, 30, 25))
+    slide.shapes.add_chart(
+        XL_CHART_TYPE.PIE, Inches(0.5), Inches(3.8), Inches(4), Inches(2.8), single
+    )
+
+    return prs
+
+
 def notes() -> Presentation:
     """A notesSlide, which is its own part with its own master."""
     prs = Presentation()
@@ -196,6 +229,7 @@ DECKS = {
     "groups-and-connectors": groups_and_connectors,
     "table": table,
     "picture": picture,
+    "charts": charts,
     "notes": notes,
     "many-slides": many_slides,
     "sixteen-by-nine": widescreen,

@@ -372,6 +372,9 @@ importers:
       eslint:
         specifier: ^10.10.0
         version: 10.10.0(jiti@2.7.0)
+      jszip:
+        specifier: ^3.10.2
+        version: 3.10.2
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

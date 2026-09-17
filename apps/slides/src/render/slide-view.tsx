@@ -10,13 +10,16 @@ import {
   resolveRunProperties,
   resolveTransform,
   shapeLook,
+  relationshipTarget,
   withAncestors,
 } from '@orangery/ooxml-presentation'
 import type { Deck, Shape, Slide, Transform } from '@orangery/ooxml-presentation'
+import { getPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
   EMU_PER_POINT,
   fontStackFor,
+  readChart,
   resolveThemeFont,
   textOfBody,
 } from '@orangery/ooxml-drawingml'
@@ -24,6 +27,7 @@ import type { ColorContext, Theme } from '@orangery/ooxml-drawingml'
 import { fillPaint, linePaint } from './paint'
 import { mediaUrl } from './media'
 import { TableView } from './table-view'
+import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
 
@@ -130,6 +134,44 @@ function ShapeImage({ drawing, pkg, part }: { drawing: Drawing; pkg: OoxmlPackag
         clipPath={`url(#clip-${key})`}
       />
     </g>
+  )
+}
+
+/**
+ * A chart, which lives in a part of its own.
+ *
+ * The frame on the slide says only which relationship to follow; everything
+ * drawn comes from `ppt/charts/chartN.xml`, and that part goes back into the
+ * file untouched.
+ */
+function ChartFrame({
+  drawing,
+  pkg,
+  part,
+  theme,
+}: {
+  drawing: Drawing
+  pkg: OoxmlPackage
+  part: string
+  theme: Theme | undefined
+}) {
+  const { shape, transform, context } = drawing
+  const target = relationshipTarget(pkg, part, shape.graphic?.relationshipId ?? '')
+  const xml = target === null ? undefined : getPartText(pkg, target)
+  const chart = xml === undefined ? null : readChart(xml)
+
+  if (chart === null) return null
+
+  return (
+    <ChartView
+      chart={chart}
+      x={transform.x}
+      y={transform.y}
+      width={transform.width}
+      height={transform.height}
+      theme={theme}
+      context={context}
+    />
   )
 }
 
@@ -358,6 +400,8 @@ export function SlideView({
           <Fragment key={drawing.key}>
             {drawing.shape.kind === 'pic' && pkg !== undefined ? (
               <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
+            ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
+              <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
             ) : drawing.shape.graphic?.table != null ? (
               <TableView
                 table={drawing.shape.graphic.table}

@@ -1,3 +1,4 @@
+import { useViewStore } from '../../../store/view-store'
 import { requestPicker } from '../picker-store'
 import type { Command } from '../types'
 
@@ -29,6 +30,15 @@ export const insertCommands: readonly Command[] = [
     keywords: ['toc', 'contents', 'index'],
     run: ({ editor }) => {
       editor.chain().focus().insertTableOfContents().refreshTableOfContents().run()
+    },
+  },
+  {
+    id: 'insert.section-break',
+    label: 'Section Break',
+    group: 'insert',
+    keywords: ['section', 'landscape', 'margins', 'orientation'],
+    run: ({ editor }) => {
+      editor.chain().focus().insertSectionBreak(useViewStore.getState().section).run()
     },
   },
   {

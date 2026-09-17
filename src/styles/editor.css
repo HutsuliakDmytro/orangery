@@ -510,3 +510,25 @@
   text-align: center;
   color: #444444;
 }
+
+/* A section break: where the page setup changes. Drawn like Word's marker — a
+   dotted rule with the words on it — because a break with nothing to see is one
+   nobody can find to remove. */
+.editor-surface .section-break {
+  position: relative;
+  margin: 10pt 0;
+  border-top: 1px dashed #999999;
+  text-align: center;
+  user-select: none;
+}
+
+.editor-surface .section-break-label {
+  position: relative;
+  top: -0.65em;
+  padding: 0 6pt;
+  background: var(--page);
+  font-size: 8pt;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #777777;
+}

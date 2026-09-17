@@ -2,6 +2,7 @@ import {
   attribute,
   attributes,
   children,
+  element,
   findChild,
   isTextNode,
   parseXml,
@@ -226,6 +227,8 @@ interface ParagraphProperties {
   numbering: { numId: number; level: number } | null
   /** Pagination toggles. Null means the paragraph says nothing either way. */
   tabs: TabStop[]
+  /** `w:sectPr` carried by this paragraph, which ends a section after it. */
+  sectionBreak: string | null
   keepNext: boolean | null
   keepLines: boolean | null
   pageBreakBefore: boolean | null
@@ -261,6 +264,7 @@ const MODELLED_PARAGRAPH_PROPERTIES = new Set([
   'w:ind',
   'w:numPr',
   'w:tabs',
+  'w:sectPr',
   'w:keepNext',
   'w:keepLines',
   'w:pageBreakBefore',
@@ -281,6 +285,7 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
     indentFirstLine: null,
     numbering: null,
     tabs: [],
+    sectionBreak: null,
     keepNext: null,
     keepLines: null,
     pageBreakBefore: null,
@@ -348,6 +353,9 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
       case 'w:tabs':
         result.tabs = parseTabs(property)
         break
+      case 'w:sectPr':
+        result.sectionBreak = serializeNode(property)
+        break
       case 'w:keepNext':
       case 'w:keepLines':
       case 'w:pageBreakBefore':
@@ -359,6 +367,14 @@ function parseParagraphProperties(pPr: XmlNode | undefined): ParagraphProperties
       default:
         if (!MODELLED_PARAGRAPH_PROPERTIES.has(tag)) result.preserved.push(serializeNode(property))
     }
+  }
+
+  // The section break is carried out of the paragraph as a block of its own, so
+  // the preserved `w:pPr` must not still contain it — the two would both be
+  // written back and the document would gain a section on every save.
+  if (result.sectionBreak !== null) {
+    const withoutSection = children(pPr).filter((child) => tagName(child) !== 'w:sectPr')
+    result.original = serializeNode(element('w:pPr', attributesOf(pPr), withoutSection))
   }
 
   return result
@@ -546,6 +562,7 @@ function parseParagraph(
   if (properties.indentLeft !== null) attrs['indentLeft'] = properties.indentLeft
   if (properties.indentRight !== null) attrs['indentRight'] = properties.indentRight
   if (properties.indentFirstLine !== null) attrs['indentFirstLine'] = properties.indentFirstLine
+  if (properties.sectionBreak !== null) attrs['sectionBreak'] = properties.sectionBreak
   for (const [, name] of PAGINATION_PROPERTIES) {
     if (properties[name] !== null) attrs[name] = properties[name]
   }
@@ -702,9 +719,23 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
     const tag = tagName(child)
 
     switch (tag) {
-      case 'w:p':
-        blocks.push(parseParagraph(child, warnings, theme, resolveImage, footnoteText))
+      case 'w:p': {
+        const paragraph = parseParagraph(child, warnings, theme, resolveImage, footnoteText)
+        const sectPr = paragraph.attrs?.['sectionBreak']
+
+        if (typeof sectPr !== 'string') {
+          blocks.push(paragraph)
+          break
+        }
+
+        // A section ends at the paragraph whose properties carry it. Shown as a
+        // block of its own, so it can be seen, selected and removed — as a
+        // paragraph attribute it would be invisible and undeletable.
+        const { sectionBreak: _carried, ...rest } = paragraph.attrs ?? {}
+        blocks.push({ ...paragraph, attrs: rest })
+        blocks.push({ type: 'sectionBreak', attrs: { sectPr } })
         break
+      }
       case 'w:tbl':
         blocks.push(parseTableBlock(child, warnings, theme, resolveImage, footnoteText))
         break

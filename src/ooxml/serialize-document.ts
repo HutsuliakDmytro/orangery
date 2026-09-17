@@ -1,4 +1,4 @@
-import { buildXml, deserializeNode, element, textNode, withDeclaration } from './xml'
+import { buildXml, children, deserializeNode, element, textNode, withDeclaration } from './xml'
 import type { XmlNode } from './xml'
 import { formatColor, multiplierToLineUnits, pointsToHalfPoints, pointsToTwips } from './units'
 import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse-document'
@@ -201,13 +201,24 @@ function buildBreak(node: ProseMirrorNodeJson): XmlNode {
   return element('w:br', breakType === null ? {} : { 'w:type': breakType })
 }
 
-function buildParagraphProperties(node: ProseMirrorNodeJson): XmlNode | null {
+function buildParagraphProperties(
+  node: ProseMirrorNodeJson,
+  sectionBreak?: string,
+): XmlNode | null {
   const attrs = node.attrs
+
+  /** `w:sectPr` comes last among the paragraph properties. */
+  const withSection = (pPr: XmlNode | null): XmlNode | null => {
+    if (sectionBreak === undefined) return pPr
+
+    const existing = pPr === null ? [] : children(pPr)
+    return element('w:pPr', {}, [...existing, ...parsedNodes(sectionBreak)])
+  }
 
   const original = stringAttr(attrs, 'pPrOriginal')
   const signature = stringAttr(attrs, 'pPrSignature')
   if (original !== null && signature !== null && paragraphSignature(attrs ?? {}) === signature) {
-    return parsedNodes(original)[0] ?? null
+    return withSection(parsedNodes(original)[0] ?? null)
   }
 
   const properties: XmlNode[] = []
@@ -284,7 +295,7 @@ function buildParagraphProperties(node: ProseMirrorNodeJson): XmlNode | null {
 
   properties.push(...parsedNodes(stringAttr(attrs, 'preservedPPr')))
 
-  return properties.length > 0 ? element('w:pPr', {}, properties) : null
+  return withSection(properties.length > 0 ? element('w:pPr', {}, properties) : null)
 }
 
 /**
@@ -318,9 +329,10 @@ function buildParagraph(
   node: ProseMirrorNodeJson,
   alwaysPreserveSpace: boolean,
   caption?: CaptionNumber,
+  sectionBreak?: string,
 ): XmlNode {
   const paragraphChildren: XmlNode[] = []
-  const properties = buildParagraphProperties(node)
+  const properties = buildParagraphProperties(node, sectionBreak)
   if (properties) paragraphChildren.push(properties)
 
   paragraphChildren.push(...buildCaptionLabel(node, caption))
@@ -460,6 +472,8 @@ interface BlockContext {
   numbering?: { numId: number; level: number }
   /** Caption numbers by the block they belong to, computed for the whole body. */
   captions?: Map<ProseMirrorNodeJson, CaptionNumber>
+  /** A `w:sectPr` the block being written has to carry, ending a section. */
+  sectionBreak?: string
 }
 
 /**
@@ -530,7 +544,14 @@ function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[]
         context.numbering === undefined
           ? node
           : { ...node, attrs: { ...node.attrs, numbering: context.numbering } }
-      return [buildParagraph(withNumbering, alwaysPreserveSpace, context.captions?.get(node))]
+      return [
+        buildParagraph(
+          withNumbering,
+          alwaysPreserveSpace,
+          context.captions?.get(node),
+          context.sectionBreak,
+        ),
+      ]
     }
 
     case 'table':
@@ -596,7 +617,36 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
     ...(options.allocateNumbering ? { allocateNumbering: options.allocateNumbering } : {}),
   }
 
-  const body: XmlNode[] = blocks.flatMap((node) => buildBlock(node, context))
+  const body: XmlNode[] = []
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const node = blocks[index]
+    if (node === undefined || node.type === 'sectionBreak') continue
+
+    // A section's properties live on the last paragraph of that section, so a
+    // break is folded into the block in front of it rather than written out.
+    const next = blocks[index + 1]
+    const sectPr =
+      next?.type === 'sectionBreak' && (node.type === 'paragraph' || node.type === 'heading')
+        ? stringAttr(next.attrs, 'sectPr')
+        : null
+
+    body.push(...buildBlock(node, { ...context, ...(sectPr === null ? {} : { sectionBreak: sectPr }) }))
+
+    // Nothing in front of it that can carry the properties — a table, or the
+    // very start of the document — so the break needs a paragraph of its own.
+    const orphan = blocks[index + 1]
+    if (orphan?.type === 'sectionBreak' && sectPr === null) {
+      body.push(element('w:p', {}, [element('w:pPr', {}, parsedNodes(stringAttr(orphan.attrs, 'sectPr')))]))
+    }
+  }
+
+  // A break with nothing before it at all still ends a section.
+  if (blocks[0]?.type === 'sectionBreak') {
+    body.unshift(
+      element('w:p', {}, [element('w:pPr', {}, parsedNodes(stringAttr(blocks[0].attrs, 'sectPr')))]),
+    )
+  }
   body.push(...parsedNodes(options.sectionProperties))
 
   const document = element('w:document', options.documentAttributes, [element('w:body', {}, body)])

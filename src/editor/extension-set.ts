@@ -28,6 +28,7 @@ import { HeadingNumbering } from './extensions/heading-numbering'
 import { ImageDrop } from './extensions/image-drop'
 import { Indent } from './extensions/indent'
 import { PageBreak } from './extensions/page-break'
+import { SectionBreak } from './extensions/section-break'
 import { PageGaps } from './extensions/page-gaps'
 import { Pagination } from './extensions/pagination'
 import { ParagraphSpacing } from './extensions/paragraph-spacing'
@@ -94,6 +95,7 @@ export function buildExtensions(): Extensions {
       scheme: () => useViewStore.getState().headingNumbering,
     }),
     PageBreak,
+    SectionBreak,
     PageGaps,
     Pagination,
     TabIndent,

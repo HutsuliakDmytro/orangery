@@ -24,4 +24,9 @@ export {
 } from './parts'
 
 export { readPresentation, referencedParts } from './presentation'
+export { layoutOf, masterOf, readDeck, readSlidePart } from './deck'
+export type { Deck, Master, Slide, SlidePart } from './deck'
+export { flatten, parseShapeTree } from './shape-tree'
+export type { Placeholder, Shape, ShapeKind, Transform } from './shape-tree'
 export type { MasterParts, PresentationMap, SlideParts, SlideSize } from './presentation'
+export { declarationOf, rewriteEveryPart, saveDeck, writePart, writeSlidePart } from './save'

@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@orangery/editor-text": "workspace:*",
+    "@orangery/fonts": "workspace:*",
     "@orangery/ooxml-core": "workspace:*",
     "@orangery/ooxml-drawingml": "workspace:*",
     "@orangery/platform": "workspace:*",

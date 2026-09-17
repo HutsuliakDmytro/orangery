@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@orangery/fonts/fonts.css';
 @import '@orangery/ui-kit/tokens.css';
 
 /*

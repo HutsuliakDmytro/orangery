@@ -1,0 +1,14 @@
+{
+  "name": "@orangery/fonts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The families that ship with the suite, so a file looks the same on every OS.",
+  "exports": {
+    "./fonts.css": "./src/fonts.css"
+  },
+  "scripts": {
+    "check": "node --test src/fonts.test.mjs",
+    "test:unit": "node --test src/fonts.test.mjs"
+  }
+}

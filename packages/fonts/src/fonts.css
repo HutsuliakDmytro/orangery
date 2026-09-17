@@ -1,0 +1,221 @@
+/**
+ * The families that ship with the suite.
+ *
+ * A file has to look the same on every OS (CLAUDE.md, "Known hard problems"),
+ * and the way to get that is not a nice-looking substitute but a metric-
+ * compatible one: same advance widths, so the line breaks fall in the same
+ * places as they did on the machine the file was written on.
+ *
+ *   Inter — the chrome font, so the interface does not change shape between
+ *   macOS, Windows and Linux.
+ *
+ *   Liberation Sans / Serif / Mono — metric-compatible with Arial, Times New
+ *   Roman and Courier New. A document that names Arial keeps its line breaks on
+ *   a machine that has never had Arial installed.
+ *
+ *   Carlito — metric-compatible with Calibri, which is what PowerPoint puts in
+ *   a deck unless told otherwise, and what Word has used since 2007 for its
+ *   default theme.
+ *
+ *   Caladea — metric-compatible with Cambria, Calibri's serif counterpart in
+ *   the same Office theme. Shipping one without the other leaves half of a
+ *   default document falling back to the wrong metrics.
+ *
+ * The URLs are relative so the bundler hashes and copies the files; an app does
+ * not have to keep a copy in its own `public/`.
+ *
+ * Licences ship alongside the files, all SIL Open Font License: Inter, Carlito
+ * and Caladea under 1.1, Liberation under the OFL as of 2.1.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/Inter-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/Inter-Italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/Inter-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/Inter-BoldItalic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/LiberationSans-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/LiberationSans-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/LiberationSans-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/LiberationSans-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/LiberationSerif-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/LiberationSerif-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/LiberationSerif-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Serif';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/LiberationSerif-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/LiberationMono-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Mono';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/LiberationMono-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/LiberationMono-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Liberation Mono';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/LiberationMono-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Carlito';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/Carlito-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Carlito';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/Carlito-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Carlito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/Carlito-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Carlito';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/Carlito-BoldItalic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Caladea';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/Caladea-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Caladea';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./files/Caladea-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Caladea';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/Caladea-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Caladea';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./files/Caladea-BoldItalic.ttf') format('truetype');
+}

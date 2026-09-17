@@ -36,7 +36,8 @@
 - [x] Layout-каркас: filmstrip (ліво) / canvas (центр) / properties (право) / notes (низ), resizable панелі
       — розтягування через pointer capture, а не слухачі на вікні: курсор, що зійшов з роздільника посеред перетягування, це норма, а не крайній випадок. Панелі вмикаються командами з реєстру, тож у меню вони з галочками. `@theme inline` переїхав у спільний `tokens.css`: він лежав у `global.css` Docs, і Slides отримав би змінні без утиліт — кожен `bg-surface` у спільному компоненті мовчки нічого б не робив
 - [ ] `tests/fixtures/pptx/`: 20+ реальних дек — PowerPoint mac/win, Google Slides export, Keynote export, LibreOffice Impress; з анімаціями, діаграмами, відео, SmartArt, таблицями, групами
-- [ ] Bundled fonts: Carlito, Liberation Sans/Serif, Inter
+- [x] Bundled fonts: Carlito, Liberation Sans/Serif, Inter
+      — спільний пакет `@orangery/fonts`, не копія в кожному аппі: файли підключаються відносними URL, тож бандлер сам їх розкладає. Додався ще Caladea — метричний відповідник Cambria, серифної пари Calibri у темі Office; везти одну без другої означає лишити половину типового документа з чужими метриками. По дорозі знайшлась справжня помилка в Docs: Calibri падав на Liberation Sans, метрично сумісний з **Arial**, а Arial узагалі падав на `sans-serif` — тобто документ переверстувався на машині без Office. Підстановка тепер окреме поле `substitute`, а не здогадка всередині рядка стека, і Georgia з Verdana чесно кажуть, що відповідника не існує
 
 **DoD:** обидва апи запускаються з одного репо, Docs без регресій.
 

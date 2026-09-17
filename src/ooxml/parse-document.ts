@@ -498,6 +498,19 @@ function parseRun(
   return nodes
 }
 
+/**
+ * Comment ids open at this point in the body.
+ *
+ * A comment's range can start in one paragraph and end in another, so the set
+ * outlives any one of them. Module state for the same reason the run key is:
+ * threading it through every parser would say nothing the name does not.
+ */
+let openComments: number[] = []
+
+function commentMarks(): ProseMirrorMarkJson[] {
+  return openComments.map((id) => ({ type: 'comment', attrs: { commentId: id } }))
+}
+
 function parseParagraph(
   paragraph: XmlNode,
   warnings: ParseWarning[],
@@ -514,9 +527,30 @@ function parseParagraph(
     switch (tag) {
       case 'w:pPr':
         break
-      case 'w:r':
-        content.push(...parseRun(child, warnings, theme, resolveImage, footnoteText))
+      case 'w:commentRangeStart': {
+        const id = parseInt2(attribute(child, 'w:id'))
+        if (id !== null && !openComments.includes(id)) openComments.push(id)
         break
+      }
+      case 'w:commentRangeEnd': {
+        const id = parseInt2(attribute(child, 'w:id'))
+        openComments = openComments.filter((open) => open !== id)
+        break
+      }
+      case 'w:r': {
+        const runs = parseRun(child, warnings, theme, resolveImage, footnoteText)
+        const marks = commentMarks()
+
+        // The run that only carries the reference is the marker itself, not
+        // text: Word draws the bubble from it and shows nothing for it inline.
+        if (findChild(child, 'w:commentReference') !== undefined) break
+
+        for (const node of runs) {
+          if (marks.length > 0) node.marks = [...(node.marks ?? []), ...marks]
+        }
+        content.push(...runs)
+        break
+      }
       case 'w:hyperlink': {
         // The relationship id is resolved against document.xml.rels by the caller;
         // the anchor form is kept as-is.
@@ -704,6 +738,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
   const resolveImage = context.resolveImage
   const footnoteText = context.footnoteText
   runKeyCounter = 0
+  openComments = []
   const warnings: ParseWarning[] = []
   const roots = parseXml(xml)
 

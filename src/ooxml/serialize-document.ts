@@ -7,6 +7,7 @@ import { footnoteReferenceRun } from './footnotes'
 import { buildDrawing } from './image'
 import { sequenceField, styleReferenceField } from './fields'
 import { captionKindOf, numberCaptions, SEQUENCE_NAMES } from './captions'
+import { rangeEnd, rangeStart, referenceRun } from './comments'
 import { serializeTabs } from './tabs'
 import type { TabStop } from './tabs'
 import type { CaptionNumber } from './captions'
@@ -330,11 +331,34 @@ function buildCaptionLabel(node: ProseMirrorNodeJson, numbered: CaptionNumber | 
   ]
 }
 
+/** Comment ids currently open, and the ones the blocks ahead still carry. */
+interface CommentState {
+  open: number[]
+  ahead: readonly number[]
+}
+
+const NO_COMMENTS: CommentState = { open: [], ahead: [] }
+
+function commentIdsOf(marks: Mark[] | undefined): number[] {
+  return (marks ?? [])
+    .filter((mark) => mark.type === 'comment')
+    .map((mark) => mark.attrs?.['commentId'])
+    .filter((id): id is number => typeof id === 'number')
+}
+
+/** Every comment id anywhere in a block, however deeply nested. */
+function commentIdsIn(node: ProseMirrorNodeJson): number[] {
+  const ids = commentIdsOf(node.marks)
+  for (const child of node.content ?? []) ids.push(...commentIdsIn(child))
+  return [...new Set(ids)]
+}
+
 function buildParagraph(
   node: ProseMirrorNodeJson,
   alwaysPreserveSpace: boolean,
   caption?: CaptionNumber,
   sectionBreak?: string,
+  comments: CommentState = NO_COMMENTS,
 ): XmlNode {
   const paragraphChildren: XmlNode[] = []
   const properties = buildParagraphProperties(node, sectionBreak)
@@ -359,6 +383,28 @@ function buildParagraph(
     pending = null
   }
 
+  /**
+   * Opens and closes comment ranges so the runs ahead sit inside the right ones.
+   *
+   * The open set belongs to the body rather than to this paragraph: a comment
+   * can start in one paragraph and end in another, and OOXML states that as one
+   * range, not one per paragraph.
+   */
+  const open = comments.open
+  const syncComments = (ids: readonly number[]) => {
+    for (const id of [...open]) {
+      if (ids.includes(id)) continue
+      paragraphChildren.push(rangeEnd(id), referenceRun(id))
+      open.splice(open.indexOf(id), 1)
+    }
+
+    for (const id of ids) {
+      if (open.includes(id)) continue
+      paragraphChildren.push(rangeStart(id))
+      open.push(id)
+    }
+  }
+
   const append = (marks: Map<string, Mark>, signature: string, nodes: XmlNode[]) => {
     if (pending !== null && pending.signature !== signature) flush()
     pending ??= { marks, signature, children: [] }
@@ -366,6 +412,14 @@ function buildParagraph(
   }
 
   for (const child of node.content ?? []) {
+    // A run entering or leaving a comment closes the grouping: the markers sit
+    // between runs, so they cannot be added once a run has been written.
+    const ids = commentIdsOf(child.marks)
+    if (ids.join(',') !== open.join(',')) {
+      flush()
+      syncComments(ids)
+    }
+
     switch (child.type) {
       case 'text': {
         const marks = markMap(child.marks)
@@ -466,6 +520,9 @@ function buildParagraph(
   }
 
   flush()
+  // Only what the blocks ahead do not carry on with is closed here; the rest
+  // stays open so the range spans the paragraphs it covers.
+  syncComments(open.filter((id) => comments.ahead.includes(id)))
 
   return element('w:p', {}, paragraphChildren)
 }
@@ -479,6 +536,8 @@ interface BlockContext {
   captions?: Map<ProseMirrorNodeJson, CaptionNumber>
   /** A `w:sectPr` the block being written has to carry, ending a section. */
   sectionBreak?: string
+  /** Comment ranges open across the body, and what the blocks ahead carry. */
+  comments?: CommentState
 }
 
 /**
@@ -555,6 +614,7 @@ function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[]
           alwaysPreserveSpace,
           context.captions?.get(node),
           context.sectionBreak,
+          context.comments,
         ),
       ]
     }
@@ -616,9 +676,14 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
     if (block !== undefined) captions.set(block, numbered)
   }
 
+  // Shared across the whole body, so a comment starting in one paragraph and
+  // ending in another is written as the single range OOXML expects.
+  const commentState: CommentState = { open: [], ahead: [] }
+
   const context: BlockContext = {
     alwaysPreserveSpace: options.alwaysPreserveSpace ?? false,
     captions,
+    comments: commentState,
     ...(options.allocateNumbering ? { allocateNumbering: options.allocateNumbering } : {}),
   }
 
@@ -635,6 +700,10 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
       next?.type === 'sectionBreak' && (node.type === 'paragraph' || node.type === 'heading')
         ? stringAttr(next.attrs, 'sectPr')
         : null
+
+    // What the blocks after this one still comment on decides which ranges stay
+    // open past it.
+    commentState.ahead = blocks.slice(index + 1).flatMap((ahead) => commentIdsIn(ahead))
 
     body.push(...buildBlock(node, { ...context, ...(sectPr === null ? {} : { sectionBreak: sectPr }) }))
 

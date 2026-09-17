@@ -23,6 +23,7 @@ import { FindReplace } from './extensions/find-replace'
 import { Footnote } from './extensions/footnote'
 import { Caption } from './extensions/caption'
 import { CharacterStyle } from './extensions/character-style'
+import { CommentMark } from './extensions/comment'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
 import { HeadingNumbering } from './extensions/heading-numbering'
@@ -86,6 +87,7 @@ export function buildExtensions(): Extensions {
     TaskItem.configure({ nested: true }),
     ParagraphStyle,
     CharacterStyle,
+    CommentMark,
     ParagraphSpacing,
     Indent,
     Caption.configure({

@@ -237,6 +237,8 @@ export function buildExtensions(): Extensions {
       fallbackLanguage: () => useSettingsStore.getState().language,
     }),
     PastePlainText,
-    CommandKeymap,
+    // The registry does not know what a command acts on; in this app it is the
+    // editor the keystroke arrived in.
+    CommandKeymap.configure({ context: (instance) => ({ editor: instance }) }),
   ]
 }

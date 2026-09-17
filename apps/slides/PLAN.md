@@ -31,8 +31,10 @@
       — `pnpm check` у корені: prettier по репо + `pnpm -r check` по кожному пакету. У `build.yml` з'явилась вісь `app`, додати Slides — це дописати слово в список; тег `docs-v*`/`slides-v*` визначає, чиї артефакти публікуються
 
 ### 0.2 Skeleton Slides
-- [ ] `apps/slides`: Tauri 2 + React, вікно, native menu, тема, welcome screen
-- [ ] Layout-каркас: filmstrip (ліво) / canvas (центр) / properties (право) / notes (низ), resizable панелі
+- [x] `apps/slides`: Tauri 2 + React, вікно, native menu, тема, welcome screen
+      — тут Slides уперше показав, що реєстр команд був заточений під Docs: `CommandContext` — це був Tiptap-редактор, якого в деки немає. Тепер контекст оголошує апп через augmentation, а хром бере його з `CommandSource` (прочитати зараз + підписатися на зміни). Меню, палітра й `useCommand` більше не знають про редактор. Команди файлів зареєстровані **вимкненими**, а не пропущені: меню — це форма застосунку, і порожній File каже «не вміє відкривати деки», а сірий Open — «ще не вміє». **Іконка тимчасово скопійована з Docs** — своя у фазі 4
+- [x] Layout-каркас: filmstrip (ліво) / canvas (центр) / properties (право) / notes (низ), resizable панелі
+      — розтягування через pointer capture, а не слухачі на вікні: курсор, що зійшов з роздільника посеред перетягування, це норма, а не крайній випадок. Панелі вмикаються командами з реєстру, тож у меню вони з галочками. `@theme inline` переїхав у спільний `tokens.css`: він лежав у `global.css` Docs, і Slides отримав би змінні без утиліт — кожен `bg-surface` у спільному компоненті мовчки нічого б не робив
 - [ ] `tests/fixtures/pptx/`: 20+ реальних дек — PowerPoint mac/win, Google Slides export, Keynote export, LibreOffice Impress; з анімаціями, діаграмами, відео, SmartArt, таблицями, групами
 - [ ] Bundled fonts: Carlito, Liberation Sans/Serif, Inter
 

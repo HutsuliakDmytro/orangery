@@ -1,0 +1,26 @@
+@import 'tailwindcss';
+@import '@orangery/ui-kit/tokens.css';
+
+/*
+ * The slide canvas sits on `--surface`; the slide itself renders in its own
+ * theme's colours and is never tinted by the app theme (CLAUDE.md).
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

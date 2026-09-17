@@ -1,5 +1,7 @@
 import { Extension } from '@tiptap/core'
+import type { Editor } from '@tiptap/core'
 import { allCommands, isCommandEnabled } from './registry'
+import type { CommandContext } from './types'
 import type { Shortcut } from '@orangery/platform'
 
 /**
@@ -16,17 +18,36 @@ export function toKeymapBinding(shortcut: Shortcut): string {
  * bindings win over the defaults StarterKit installs — the registry is the source
  * of truth (see `docs/adr/0002-command-registry.md`).
  */
-export const CommandKeymap = Extension.create({
+export interface CommandKeymapOptions {
+  /**
+   * How to build the context a command runs against, given the editor the
+   * keystroke arrived in.
+   *
+   * Supplied by the app: in a document that is the editor itself, in a deck it
+   * is the deck plus the text box the editor belongs to. There is no sensible
+   * default, so a keymap configured without one binds nothing rather than
+   * running commands against a context it invented.
+   */
+  context: ((editor: Editor) => CommandContext) | null
+}
+
+export const CommandKeymap = Extension.create<CommandKeymapOptions>({
   name: 'commandKeymap',
   priority: 1000,
 
+  addOptions() {
+    return { context: null }
+  },
+
   addKeyboardShortcuts() {
     const bindings: Record<string, () => boolean> = {}
+    const build = this.options.context
+    if (!build) return bindings
 
     for (const command of allCommands()) {
       if (!command.shortcut) continue
       bindings[toKeymapBinding(command.shortcut)] = () => {
-        const ctx = { editor: this.editor }
+        const ctx = build(this.editor)
         // Returning false lets the key fall through to the next handler.
         if (!isCommandEnabled(command, ctx)) return false
         command.run(ctx)

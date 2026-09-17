@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@orangery/platform": "workspace:*",
+    "@tauri-apps/api": "^2.9.0",
     "@tiptap/core": "^2.27.3",
     "@tiptap/react": "^2.27.3",
     "lucide-react": "^1.46.0",

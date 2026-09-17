@@ -1,35 +1,37 @@
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
-import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useRef } from 'react'
-import { describeCommands, runCommand } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
+import { describeCommands, runCommand } from './registry'
+import { useCommandSource } from './source'
 
 /**
  * Keeps the native menu bar in sync with the command registry.
  *
  * Descriptors go down to Rust, clicked ids come back up, and the command runs
- * through the same `runCommand` the toolbar and palette use — see
- * `docs/adr/0002-command-registry.md`.
+ * through the same `runCommand` the toolbar and the palette use — see
+ * `apps/docs/docs/adr/0002-command-registry.md`.
  *
- * The rebuild is deferred rather than run per transaction. `useEditorState`
- * evaluates its selector on every keystroke — its equality check only prevents
- * the re-render, not the work — and describing every command costs a couple of
- * milliseconds on a large document. Nobody reads the menu bar mid-word, so it is
- * brought up to date once typing pauses.
+ * The rebuild is deferred rather than run per change. Describing every command
+ * costs a couple of milliseconds on a large document, and the source notifies
+ * on every keystroke; nobody reads the menu bar mid-word, so it is brought up
+ * to date once typing pauses.
  */
 export const MENU_SYNC_DELAY_MS = 250
 
 export function useNativeMenu(): void {
-  const { editor } = useCurrentEditor()
+  const source = useCommandSource()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSent = useRef<string>('')
 
   useEffect(() => {
-    if (!editor || !isTauri()) return
+    if (!source || !isTauri()) return
 
     const sync = () => {
-      const descriptors = describeCommands({ editor })
+      const context = source.read()
+      if (context === null) return
+
+      const descriptors = describeCommands(context)
       const serialised = JSON.stringify(descriptors)
 
       // Rust rebuilds the whole menu bar on each call, which flickers on macOS;
@@ -48,23 +50,21 @@ export function useNativeMenu(): void {
     }
 
     sync()
-
-    // Selection changes matter too: enabled-state follows the cursor.
-    editor.on('update', schedule)
-    editor.on('selectionUpdate', schedule)
+    const unsubscribe = source.subscribe(schedule)
 
     return () => {
-      editor.off('update', schedule)
-      editor.off('selectionUpdate', schedule)
+      unsubscribe()
       if (timer.current !== null) clearTimeout(timer.current)
     }
-  }, [editor])
+  }, [source])
 
   useEffect(() => {
-    if (!editor || !isTauri()) return
+    if (!source || !isTauri()) return
 
     const unlisten = listen<string>('menu:command', (event) => {
-      runCommand(event.payload, { editor })
+      const context = source.read()
+      if (context === null) return
+      runCommand(event.payload, context)
     })
 
     return () => {
@@ -72,5 +72,5 @@ export function useNativeMenu(): void {
         stop()
       })
     }
-  }, [editor])
+  }, [source])
 }

@@ -5,7 +5,8 @@ import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isMac } from '@orangery/platform'
-import { CommandKeymap, useCommand } from '@orangery/ui-kit'
+import { CommandKeymap, CommandSourceProvider, useCommand } from '@orangery/ui-kit'
+import type { CommandSource } from '@orangery/ui-kit'
 import { registerBuiltinCommands } from './definitions'
 
 function Wrapper({ children }: { children: ReactNode }) {
@@ -14,7 +15,28 @@ function Wrapper({ children }: { children: ReactNode }) {
     content: '<p>hello</p>',
   })
   const value = useMemo(() => ({ editor }), [editor])
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+
+  // The same pairing the app installs: the editor for Tiptap's own hooks, and
+  // the command source for the registry, which does not know what an editor is.
+  const source = useMemo<CommandSource>(
+    () => ({
+      read: () => (editor ? { editor } : null),
+      subscribe: (listener) => {
+        if (!editor) return () => {}
+        editor.on('transaction', listener)
+        return () => {
+          editor.off('transaction', listener)
+        }
+      },
+    }),
+    [editor],
+  )
+
+  return (
+    <EditorContext.Provider value={value}>
+      <CommandSourceProvider source={source}>{children}</CommandSourceProvider>
+    </EditorContext.Provider>
+  )
 }
 
 describe('useCommand', () => {

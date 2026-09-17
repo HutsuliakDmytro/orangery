@@ -37,7 +37,7 @@ import { useHeaderFooterStore } from '../store/header-footer-store'
 import { useViewStore } from '../store/view-store'
 import { useCloseGuard } from './use-close-guard'
 import { useExternalOpen } from './use-external-open'
-import { useNativeMenu } from './menu/use-native-menu'
+import { useNativeMenu } from '@orangery/ui-kit'
 import { useTheme } from './use-theme'
 
 function Shell() {

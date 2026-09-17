@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         # Adding an app to the suite is adding it to this list.
-        app: [docs]
+        app: [docs, slides]
         platform:
           - os: macos-latest
             label: macOS universal (unsigned)

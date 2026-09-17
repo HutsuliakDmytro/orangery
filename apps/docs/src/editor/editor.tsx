@@ -1,5 +1,7 @@
 import { EditorContext, useEditor } from '@tiptap/react'
 import { useEffect, useMemo } from 'react'
+import { CommandSourceProvider } from '@orangery/ui-kit'
+import type { CommandSource } from '@orangery/ui-kit'
 import { registerBuiltinCommands } from './commands/definitions'
 import { buildExtensions, setCurrentEditor } from './extension-set'
 
@@ -34,5 +36,41 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({ editor }), [editor])
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+  /**
+   * What the chrome runs commands against, and when to ask again.
+   *
+   * The registry is app-agnostic, so the app supplies both halves. Subscribing
+   * per surface rather than re-rendering everything on each transaction is what
+   * keeps a 200-page document responsive: each button recomputes only its own
+   * two booleans and ignores every change that does not move them.
+   */
+  const source = useMemo<CommandSource>(
+    () => ({
+      read: () => (editor ? { editor } : null),
+      subscribe: (listener) => {
+        if (!editor) return () => {}
+
+        // Selection moves without a transaction, and focus decides whether an
+        // edit command applies at all.
+        editor.on('transaction', listener)
+        editor.on('selectionUpdate', listener)
+        editor.on('focus', listener)
+        editor.on('blur', listener)
+
+        return () => {
+          editor.off('transaction', listener)
+          editor.off('selectionUpdate', listener)
+          editor.off('focus', listener)
+          editor.off('blur', listener)
+        }
+      },
+    }),
+    [editor],
+  )
+
+  return (
+    <EditorContext.Provider value={value}>
+      <CommandSourceProvider source={source}>{children}</CommandSourceProvider>
+    </EditorContext.Provider>
+  )
 }

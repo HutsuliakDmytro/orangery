@@ -1,37 +1,48 @@
-import { act, renderHook, waitFor } from '@testing-library/react'
-import { EditorContext, useCurrentEditor, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
+import { act, renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { useMemo } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isMac } from '@orangery/platform'
-import { CommandKeymap } from './keymap'
 import { register, resetRegistry } from './registry'
+import { CommandSourceProvider } from './source-provider'
+import type { CommandSource } from './source'
 import { useCommand } from './use-command'
 
 /**
- * The hook against commands registered here, not against an app's.
- *
- * What it owes its caller is the same either way: the registry's label, a
- * shortcut formatted for this platform, an enabled flag that follows the
- * editor, and a run that reaches the command. Testing that through a real
- * app's Undo would make the test fail for reasons that have nothing to do
- * with the hook.
+ * The hook against a context this file declares, the way an app declares its
+ * own. Nothing here is an editor or a deck: what the hook owes its caller is
+ * the registry's label, a shortcut formatted for this platform, an enabled flag
+ * that follows the source, and a run that reaches the command.
  */
-
-function Wrapper({ children }: { children: ReactNode }) {
-  const editor = useEditor({
-    extensions: [StarterKit, CommandKeymap],
-    content: '<p>hello</p>',
-  })
-  const value = useMemo(() => ({ editor }), [editor])
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+declare module './types' {
+  interface CommandContext {
+    value: string
+  }
 }
 
+let value = 'hello'
 let ran = 0
+const listeners = new Set<() => void>()
+
+const source: CommandSource = {
+  read: () => ({ value }),
+  subscribe: (listener) => {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  },
+}
+
+function change(next: string) {
+  value = next
+  for (const listener of listeners) listener()
+}
+
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <CommandSourceProvider source={source}>{children}</CommandSourceProvider>
+)
 
 beforeEach(() => {
   resetRegistry()
+  value = 'hello'
   ran = 0
 
   register({
@@ -48,62 +59,76 @@ beforeEach(() => {
     id: 'test.needs-text',
     label: 'Needs text',
     group: 'edit',
-    // Reads the editor on every call, which is what makes the flag follow it.
-    isEnabled: ({ editor }) => editor.getText().length > 4,
+    // Read on every call, which is what makes the flag follow the source.
+    isEnabled: (context) => context.value.length > 4,
     run: () => {},
   })
 })
 
 describe('useCommand', () => {
-  it('exposes the registry label and a platform-formatted shortcut', async () => {
-    const { result } = renderHook(() => useCommand('test.shout'), { wrapper: Wrapper })
+  it('exposes the registry label and a platform-formatted shortcut', () => {
+    const { result } = renderHook(() => useCommand('test.shout'), { wrapper })
 
-    await waitFor(() => {
-      expect(result.current.command).toBeDefined()
-    })
     expect(result.current.label).toBe('Shout')
     expect(result.current.shortcut).toBe(isMac ? '⌘Z' : 'Ctrl+Z')
   })
 
-  it('runs the registered command', async () => {
-    const { result } = renderHook(() => useCommand('test.shout'), { wrapper: Wrapper })
+  it('runs the registered command against the current context', () => {
+    const { result } = renderHook(() => useCommand('test.shout'), { wrapper })
 
-    await waitFor(() => {
-      expect(result.current.command).toBeDefined()
-    })
     act(() => {
       result.current.run()
     })
-
     expect(ran).toBe(1)
   })
 
-  it('re-reads isEnabled as the document changes', async () => {
-    const { result } = renderHook(
-      () => ({ command: useCommand('test.needs-text'), editor: useCurrentEditor().editor }),
-      { wrapper: Wrapper },
-    )
-
-    await waitFor(() => {
-      expect(result.current.editor).not.toBeNull()
-    })
-    expect(result.current.command.isEnabled).toBe(true)
+  it('re-reads isEnabled when the source says the context changed', () => {
+    const { result } = renderHook(() => useCommand('test.needs-text'), { wrapper })
+    expect(result.current.isEnabled).toBe(true)
 
     act(() => {
-      result.current.editor?.commands.setContent('<p>hi</p>')
+      change('hi')
     })
-    await waitFor(() => {
-      expect(result.current.command.isEnabled).toBe(false)
-    })
+    expect(result.current.isEnabled).toBe(false)
   })
 
-  it('falls back to the id when a command is not registered', async () => {
-    const { result } = renderHook(() => useCommand('nope.missing'), { wrapper: Wrapper })
-
-    await waitFor(() => {
-      expect(result.current.label).toBe('nope.missing')
+  it('refuses to run a disabled command', () => {
+    register({
+      id: 'test.never',
+      label: 'Never',
+      group: 'edit',
+      isEnabled: () => false,
+      run: () => {
+        ran += 1
+      },
     })
+    const { result } = renderHook(() => useCommand('test.never'), { wrapper })
+
+    expect(result.current.isEnabled).toBe(false)
+    act(() => {
+      result.current.run()
+    })
+    expect(ran).toBe(0)
+  })
+
+  it('falls back to the id when a command is not registered', () => {
+    const { result } = renderHook(() => useCommand('nope.missing'), { wrapper })
+
+    expect(result.current.label).toBe('nope.missing')
     expect(result.current.command).toBeUndefined()
     expect(result.current.isEnabled).toBe(false)
+  })
+
+  it('is inert outside a provider rather than throwing', () => {
+    // A surface can render before the app has anything to act on; greyed out is
+    // the right answer there, a crash is not.
+    const { result } = renderHook(() => useCommand('test.shout'))
+
+    expect(result.current.label).toBe('Shout')
+    expect(result.current.isEnabled).toBe(false)
+    act(() => {
+      result.current.run()
+    })
+    expect(ran).toBe(0)
   })
 })

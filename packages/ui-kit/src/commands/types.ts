@@ -1,4 +1,3 @@
-import type { Editor } from '@tiptap/react'
 import type { Shortcut } from '@orangery/platform'
 
 /**
@@ -9,10 +8,26 @@ export const COMMAND_GROUPS = ['file', 'edit', 'format', 'insert', 'view', 'help
 
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
 
-/** Everything a command is allowed to touch. Commands never reach for globals. */
-export interface CommandContext {
-  editor: Editor
-}
+/**
+ * Everything a command is allowed to touch. Commands never reach for globals.
+ *
+ * Deliberately empty here. Each app says what its commands act on by augmenting
+ * this interface — Docs the editor, Slides the deck and what is selected on it:
+ *
+ * ```ts
+ * declare module '@orangery/ui-kit' {
+ *   interface CommandContext {
+ *     editor: Editor
+ *   }
+ * }
+ * ```
+ *
+ * It named `editor` until Slides needed a menu. A deck has no editor at all —
+ * only a text box inside a shape does — so the type was making one app fake
+ * the other's context to use its own registry.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface CommandContext {}
 
 export interface Command {
   /** Stable, dot-namespaced, e.g. `format.bold`. Used as the native menu item id. */

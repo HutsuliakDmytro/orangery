@@ -1,8 +1,8 @@
-import type { Editor } from '@tiptap/react'
-import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useRef, useState } from 'react'
 import { allCommands, isCommandEnabled, runCommand } from '../commands/registry'
 import { searchCommands } from '../commands/search'
+import { useCommandSource } from '../commands/source'
+import type { CommandContext } from '../commands/types'
 import { formatShortcut, hasMod } from '@orangery/platform'
 
 const PALETTE_SHORTCUT_KEY = 'p'
@@ -15,7 +15,7 @@ const PALETTE_SHORTCUT_KEY = 'p'
  * is rebuilt on every open and can never show a stale enabled-state.
  */
 export function CommandPalette() {
-  const { editor } = useCurrentEditor()
+  const source = useCommandSource()
   const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
@@ -32,35 +32,43 @@ export function CommandPalette() {
     }
   }, [])
 
-  if (!isOpen || !editor) return null
+  const context = source?.read() ?? null
+  if (!isOpen || context === null) return null
 
   return (
     <PaletteDialog
-      editor={editor}
+      context={context}
       onClose={() => {
         setIsOpen(false)
-        editor.commands.focus()
       }}
     />
   )
 }
 
-function PaletteDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+function PaletteDialog({ context, onClose }: { context: CommandContext; onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    // Whatever had focus gets it back on close — the editor, a panel, a field.
+    // Restoring it here rather than naming the editor is what lets the palette
+    // sit over a deck as readily as over a document.
+    const restore = document.activeElement
     inputRef.current?.focus()
+
+    return () => {
+      if (restore instanceof HTMLElement) restore.focus()
+    }
   }, [])
 
   const hits = searchCommands(allCommands(), query).filter((hit) =>
-    isCommandEnabled(hit.command, { editor }),
+    isCommandEnabled(hit.command, context),
   )
 
   const run = (id: string) => {
     onClose()
-    runCommand(id, { editor })
+    runCommand(id, context)
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {

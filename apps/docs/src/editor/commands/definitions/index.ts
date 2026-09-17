@@ -1,4 +1,5 @@
 import { registerAll, resetRegistry } from '@orangery/ui-kit'
+import '../context'
 import { appearanceCommands } from './appearance'
 import { editCommands } from './edit'
 import { fileCommands } from './file'

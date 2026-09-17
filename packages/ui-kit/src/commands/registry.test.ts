@@ -10,9 +10,10 @@ import {
 } from './registry'
 import type { Command, CommandContext } from './types'
 
-// The registry never touches the editor unless a command's own callback does, so a
-// stub is enough to exercise registration, ordering and descriptor serialisation.
-const stubContext = { editor: {} } as CommandContext
+// The registry never looks inside the context — only a command's own callback
+// does — so an empty one is enough to exercise registration, ordering and
+// descriptor serialisation.
+const stubContext = {} as CommandContext
 
 function makeCommand(overrides: Partial<Command> & Pick<Command, 'id'>): Command {
   return {

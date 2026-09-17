@@ -16,7 +16,7 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { DOCUMENT_PART, NUMBERING_PART, readDocxPackage } from '../ooxml/parts'
-import { parseThemeFonts } from '../ooxml/fonts'
+import { parseTheme } from '@orangery/ooxml-drawingml'
 import { parseNumbering } from '../ooxml/numbering'
 import {
   allocateNumbering,
@@ -83,7 +83,7 @@ export interface OpenDocx {
 export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
   const pkg = await readDocxPackage(bytes)
 
-  const theme = parseThemeFonts(getPartText(pkg, THEME_PART) ?? '')
+  const theme = parseTheme(getPartText(pkg, THEME_PART) ?? '').fonts
   const relationships = parseRelationships(getPartText(pkg, 'word/_rels/document.xml.rels') ?? '')
 
   // Images are stored as relationship ids; the webview needs something it can

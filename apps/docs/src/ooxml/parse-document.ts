@@ -18,7 +18,7 @@ import {
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import type { ProseMirrorMarkJson, ProseMirrorNodeJson } from './prosemirror-json'
-import { resolveThemeFont } from './fonts'
+import { resolveThemeFont } from '@orangery/ooxml-drawingml'
 import { imageNode, parseDrawing } from './image'
 import { listBuilder } from './list-nesting'
 import { isBulletList } from './numbering'
@@ -26,7 +26,7 @@ import type { NumberingCatalogue } from './numbering'
 import { parseTable } from './table'
 import { parseTabs } from './tabs'
 import type { TabStop } from './tabs'
-import type { ThemeFonts } from './fonts'
+import type { ThemeFonts } from '@orangery/ooxml-drawingml'
 
 /**
  * `word/document.xml` → ProseMirror JSON.

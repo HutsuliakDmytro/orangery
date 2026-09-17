@@ -1,15 +1,15 @@
 import { compareXml, describeDifferences, stripDeclaration } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
-import { parseThemeFonts } from './fonts'
+import { parseTheme } from '@orangery/ooxml-drawingml'
 import { parseDocument } from './parse-document'
 import { serializeParsed } from './serialize-document'
 
-const THEME = parseThemeFonts(
+const THEME = parseTheme(
   `<a:theme xmlns:a="x"><a:themeElements><a:fontScheme>
      <a:majorFont><a:latin typeface="Cambria"/></a:majorFont>
      <a:minorFont><a:latin typeface="Calibri"/></a:minorFont>
    </a:fontScheme></a:themeElements></a:theme>`,
-)
+).fonts
 
 function wrap(body: string): string {
   return `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`

@@ -72,7 +72,8 @@
 - [ ] `graphicFrame`: таблиці (`a:tbl`) повністю; діаграми, SmartArt, OLE — як bounding box + passthrough (діаграми — рендер у 1.4)
 - [x] Placeholder-резолвер: `p:ph` type/idx → layout → master, злиття властивостей; тести на кожен рівень
       — два кроки зіставляються **по-різному**, і це головна пастка схеми. Слайд→layout іде за `idx` (layout може мати кілька body). Layout→master іде **за типом**, бо індекси між ними не пов'язані: у типовому майстрі PowerPoint дата це `idx="2"`, а в layout — `idx="10"`. Зіставлення за `idx` не знайшло б нічого, а відкат «бери першу» віддав би даті геометрію заголовка — перевірив пробою, тести падають саме так. Майстер має лише п'ять видів, тож усе, що тримає контент (obj, subTitle, pic, tbl, chart, dgm, media), успадковується від body — це не спрощення, іншого там просто немає. Успадковане резолвиться при читанні й ніколи не пишеться назад
-- [ ] Theme: `clrScheme`, `fontScheme` (major/minor, latin/ea/cs), `fmtScheme`; `schemeClr` з `lumMod/lumOff/tint/shade/alpha`
+- [~] Theme: `clrScheme`, `fontScheme` (major/minor, latin/ea/cs), `fmtScheme`; `schemeClr` з `lumMod/lumOff/tint/shade/alpha`
+      — палітра і дві гарнітури читаються, колір лишається **символічним** і резолвиться лише при малюванні. Головне тут — `p:clrMap` на майстрі: фігури й тема говорять різними словниками (`tx1` проти `dk1`), і без мапи `schemeClr val="tx1"` не резолвиться взагалі. Модифікатори зберігаються в порядку запису, бо вони не комутативні; `lumMod`/`lumOff`/`satMod`/`satOff` рахуються в HSL, `tint`/`shade` — по каналах. Робота з темою переїхала з Docs у спільний пакет: `a:theme` однаковий у документа й деки. `fmtScheme` і `ea`/`cs` гарнітури ще не читаються
 
 ### 1.3 Рендер (read-only)
 - [ ] SVG-рендерер слайда: фон (solid/gradient/picture, з master), фігури, текст (через ProseMirror у режимі read-only або статичний HTML), картинки, таблиці, групи

@@ -18,3 +18,7 @@ export {
 export { contentTypeFor } from './media'
 export { blipRelationshipId, pictureGraphic } from './picture'
 export type { Picture } from './picture'
+export { readColor, readColorChild, resolveColor } from './color'
+export type { Color, ColorContext, ColorSource, ColorTransform, ResolvedColor } from './color'
+export { fontStackFor, parseTheme, resolveThemeFont } from './theme'
+export type { Theme, ThemeFonts } from './theme'

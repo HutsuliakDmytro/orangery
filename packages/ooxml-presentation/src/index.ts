@@ -38,3 +38,4 @@ export {
   resolveTransform,
 } from './placeholders'
 export type { MasterPlaceholder } from './placeholders'
+export { colorContextFor, readColorMap, readThemes } from './theme-context'

@@ -251,3 +251,24 @@ test('applies a style from the styles panel', async ({ page }) => {
   await expect(styled).toHaveCount(1)
   await expect(styled).toContainText('a line of text')
 })
+
+test('makes a style out of the selection and offers it afterwards', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('a line to style')
+
+  await page.getByRole('button', { name: 'Center' }).click()
+  await page.getByRole('button', { name: 'Bold' }).click()
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Styles')
+  await page.keyboard.press('Enter')
+
+  const panel = page.getByRole('dialog', { name: 'Styles' })
+  await panel.getByLabel('New style name').fill('Pull Quote')
+  await panel.getByRole('button', { name: 'Create' }).click()
+
+  // The list is rebuilt from the file, so a style just written is one the
+  // document has and the panel can offer again.
+  await expect(panel.getByRole('button', { name: 'Pull Quote', exact: true })).toHaveCount(1)
+  await expect(page.locator(`${editor} p[data-style-id="PullQuote"]`)).toHaveCount(1)
+})

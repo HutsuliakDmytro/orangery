@@ -1,6 +1,13 @@
 import { useCurrentEditor, useEditorState } from '@tiptap/react'
+import { useState } from 'react'
+import type { Editor } from '@tiptap/core'
+import { formattingAt, newStyleFrom, saveStyle } from '../document/styles-session'
+import { getSession } from '../document/session'
+import { useDocumentStore } from '../store/document-store'
 import { useStylesStore } from '../store/styles-store'
 import { PickerPopover } from './picker-popover'
+import type { DocxPackage } from '../ooxml/package'
+import type { StyleDefinition } from '../ooxml/style-writer'
 import type { StyleOption } from '../store/styles-store'
 
 /** Mirrors Tiptap's `Level`; declared locally so the heading package stays transitive. */
@@ -15,6 +22,7 @@ type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
  */
 export function StylesPanel({ onClose }: { onClose: () => void }) {
   const { editor } = useCurrentEditor()
+  const [newName, setNewName] = useState('')
   const paragraphStyles = useStylesStore((state) => state.options)
   const characterStyles = useStylesStore((state) => state.characterOptions)
 
@@ -42,6 +50,41 @@ export function StylesPanel({ onClose }: { onClose: () => void }) {
     }) ?? '\u0000'
 
   const [paragraphStyle = '', characterStyle = ''] = wearing.split('\u0000')
+
+  /**
+   * Writes a style into the document and refreshes what the panel offers.
+   *
+   * The catalogue is rebuilt from the file rather than patched: it is what the
+   * dropdown and this panel both read, and a copy that drifts offers styles the
+   * document no longer has.
+   */
+  const writeStyle = (
+    build: (pkg: DocxPackage, instance: Editor) => StyleDefinition,
+  ): StyleDefinition | null => {
+    const session = getSession()
+    if (session?.kind !== 'docx' || !editor) return null
+
+    const saved = saveStyle(session.docx.pkg, build(session.docx.pkg, editor))
+    if (saved === null) return null
+
+    useStylesStore.getState().setCatalogue(saved.catalogue)
+    useDocumentStore.getState().markDirty()
+    return saved.definition
+  }
+
+  /** The style being updated, as it stands, so only its formatting changes. */
+  const definitionOf = (styleId: string): StyleDefinition => {
+    const existing = useStylesStore.getState().catalogue?.styles.get(styleId)
+
+    return {
+      id: styleId,
+      name: existing?.name ?? styleId,
+      type: existing?.type ?? 'paragraph',
+      basedOn: existing?.basedOn ?? null,
+      next: existing?.next ?? null,
+      formatting: {},
+    }
+  }
 
   const applyParagraph = (style: StyleOption) => {
     if (!editor) return
@@ -88,6 +131,59 @@ export function StylesPanel({ onClose }: { onClose: () => void }) {
             ))}
           </section>
         )}
+        <section className="flex flex-col gap-2 border-t border-border pt-2">
+          <button
+            type="button"
+            disabled={paragraphStyle === ''}
+            onMouseDown={(event) => {
+              event.preventDefault()
+            }}
+            onClick={() => {
+              writeStyle((_pkg, instance) => ({
+                ...definitionOf(paragraphStyle),
+                formatting: formattingAt(instance, 'paragraph'),
+              }))
+            }}
+            className="rounded border border-border px-2 py-1 text-sm text-text disabled:opacity-40"
+          >
+            {paragraphStyle === ''
+              ? 'Update style to match'
+              : `Update ${paragraphStyle} to match selection`}
+          </button>
+
+          <div className="flex gap-1">
+            <input
+              value={newName}
+              placeholder="New style from selection"
+              aria-label="New style name"
+              onChange={(event) => {
+                setNewName(event.target.value)
+              }}
+              className="min-w-0 flex-1 rounded border border-border bg-surface-2 px-2 py-1 text-sm text-text outline-none"
+            />
+            <button
+              type="button"
+              disabled={newName.trim() === ''}
+              onMouseDown={(event) => {
+                event.preventDefault()
+              }}
+              onClick={() => {
+                const name = newName.trim()
+                const created = writeStyle((pkg, instance) =>
+                  newStyleFrom(pkg, instance, name, 'paragraph'),
+                )
+
+                if (created !== null) {
+                  editor?.chain().focus().setParagraphStyle(created.id).run()
+                  setNewName('')
+                }
+              }}
+              className="rounded bg-accent px-2 py-1 text-sm text-black disabled:opacity-40"
+            >
+              Create
+            </button>
+          </div>
+        </section>
       </div>
     </PickerPopover>
   )

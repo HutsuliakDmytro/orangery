@@ -7,6 +7,7 @@ import {
   serializeNode,
   setAttribute,
   tagName,
+  textValue,
   upsertChild,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
@@ -113,7 +114,7 @@ function marksOf(properties: XmlNode | undefined): PmMark[] {
 /** The text of an `a:t`, which holds it as a child node. */
 function textOf(node: XmlNode): string {
   return children(node)
-    .map((child) => String(child['#text'] ?? ''))
+    .map((child) => textValue(child))
     .join('')
 }
 

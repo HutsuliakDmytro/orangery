@@ -26,7 +26,7 @@ describe('reading text as a document', () => {
 
     expect(doc.content?.[0]?.content?.map((run) => run.text)).toEqual(['bold', 'italic'])
     expect(marksOn(doc)).toContain('bold')
-    expect(marksOn(doc)).toContain('fontSize')
+    expect(marksOn(doc)).toContain('textStyle')
     expect(marksOn(doc, 1)).toContain('italic')
   })
 

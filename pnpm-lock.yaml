@@ -222,6 +222,9 @@ importers:
 
   apps/slides:
     dependencies:
+      '@orangery/editor-text':
+        specifier: workspace:*
+        version: link:../../packages/editor-text
       '@orangery/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
@@ -246,6 +249,24 @@ importers:
       '@tauri-apps/plugin-fs':
         specifier: ^2.5.2
         version: 2.5.2
+      '@tiptap/core':
+        specifier: ^2.27.3
+        version: 2.27.3(@tiptap/pm@2.27.3)
+      '@tiptap/extension-text-style':
+        specifier: ^2.27.3
+        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
+      '@tiptap/extension-underline':
+        specifier: ^2.27.3
+        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
+      '@tiptap/pm':
+        specifier: ^2.27.3
+        version: 2.27.3
+      '@tiptap/react':
+        specifier: ^2.27.3
+        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tiptap/starter-kit':
+        specifier: ^2.27.3
+        version: 2.27.3
       lucide-react:
         specifier: ^1.46.0
         version: 1.46.0(react@19.3.0)

@@ -37,7 +37,8 @@ function isTyping(target: EventTarget | null): boolean {
 export function useShortcuts(): void {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (isTyping(event.target)) return
+      // Escape is the way out of a text box, so it is heard even while typing.
+      if (event.key !== 'Escape' && isTyping(event.target)) return
 
       const pressed = event.key.toLowerCase()
       const mod = isMac ? event.metaKey : event.ctrlKey

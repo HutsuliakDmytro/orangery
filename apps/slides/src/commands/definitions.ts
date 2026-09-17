@@ -142,6 +142,18 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.leave-text',
+    label: 'Finish Editing Text',
+    group: 'edit',
+    shortcut: 'Escape',
+    // At the window rather than inside the editor: Escape should leave the
+    // shape wherever the focus happens to be.
+    isEnabled: () => useDeckStore.getState().editing !== null,
+    run: () => {
+      useDeckStore.getState().setEditing(null)
+    },
+  },
+  {
     id: 'edit.delete',
     label: 'Delete',
     group: 'edit',

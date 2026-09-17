@@ -22,6 +22,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@orangery/editor-text": "workspace:*",
     "@orangery/fonts": "workspace:*",
     "@orangery/ooxml-core": "workspace:*",
     "@orangery/ooxml-drawingml": "workspace:*",
@@ -30,6 +31,12 @@
     "@orangery/ui-kit": "workspace:*",
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-fs": "^2.5.2",
+    "@tiptap/core": "^2.27.3",
+    "@tiptap/extension-text-style": "^2.27.3",
+    "@tiptap/extension-underline": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
+    "@tiptap/react": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
     "lucide-react": "^1.46.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -21,9 +21,10 @@ import {
   fontStackFor,
   readChart,
   resolveThemeFont,
+  textBodyToDoc,
   textOfBody,
 } from '@orangery/ooxml-drawingml'
-import type { ColorContext, Theme } from '@orangery/ooxml-drawingml'
+import type { ColorContext, PmNode, Theme } from '@orangery/ooxml-drawingml'
 import { fillPaint, linePaint } from './paint'
 import { mediaUrl } from './media'
 import { TableView } from './table-view'
@@ -31,6 +32,7 @@ import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, useDrag } from './use-drag'
+import { TextEditor } from './text-editor'
 import type { DragState, Handle } from './use-drag'
 
 /**
@@ -224,14 +226,22 @@ function ShapeText({
   deck,
   slide,
   theme,
+  editing,
+  onCommitText,
+  onLeave,
 }: {
   drawing: Drawing
   deck: Deck
   slide: Slide
   theme: Theme | undefined
+  editing?: boolean
+  onCommitText?: (id: number, doc: PmNode) => void
+  onLeave?: () => void
 }) {
   const { shape, transform, context } = drawing
-  if (shape.text === null || textOfBody(shape.text) === '') return null
+  // A shape being edited shows its editor even when it holds no text yet —
+  // that is the only way to put the first word into an empty box.
+  if (shape.text === null || (textOfBody(shape.text) === '' && editing !== true)) return null
 
   const chain = listStyleChain(deck, slide, shape)
   const insets = shape.text.bodyProperties?.insets
@@ -275,69 +285,81 @@ function ShapeText({
           overflow: 'hidden',
         }}
       >
-        {shape.text.paragraphs.map((paragraph, index) => {
-          const properties = resolveParagraphProperties(paragraph.properties, chain)
-          const align = properties.align
+        {editing === true ? (
+          <TextEditor
+            doc={textBodyToDoc(shape.text)}
+            onCommit={(edited) => {
+              onCommitText?.(shape.id, edited)
+            }}
+            onCancel={() => {
+              onLeave?.()
+            }}
+          />
+        ) : (
+          shape.text.paragraphs.map((paragraph, index) => {
+            const properties = resolveParagraphProperties(paragraph.properties, chain)
+            const align = properties.align
 
-          return (
-            <p
-              key={index}
-              style={{
-                margin: 0,
-                marginLeft: properties.marginLeft ?? 0,
-                textIndent: properties.indent ?? 0,
-                textAlign:
-                  align === 'ctr'
-                    ? 'center'
-                    : align === 'r'
-                      ? 'right'
-                      : align === 'just'
-                        ? 'justify'
-                        : 'left',
-                lineHeight:
-                  (properties.lineSpacing?.kind === 'percent'
-                    ? properties.lineSpacing.value
-                    : 1.2) *
-                  (1 - lineReduction),
-              }}
-            >
-              {paragraph.runs.map((run, runIndex) => {
-                const resolved = resolveRunProperties(run.properties, properties)
-                const family = resolveThemeFont(
-                  theme?.fonts ?? { major: null, minor: null },
-                  resolved?.font ?? undefined,
-                )
-                const named = resolved?.font?.startsWith('+') === true ? family : resolved?.font
+            return (
+              <p
+                key={index}
+                style={{
+                  margin: 0,
+                  marginLeft: properties.marginLeft ?? 0,
+                  textIndent: properties.indent ?? 0,
+                  textAlign:
+                    align === 'ctr'
+                      ? 'center'
+                      : align === 'r'
+                        ? 'right'
+                        : align === 'just'
+                          ? 'justify'
+                          : 'left',
+                  lineHeight:
+                    (properties.lineSpacing?.kind === 'percent'
+                      ? properties.lineSpacing.value
+                      : 1.2) *
+                    (1 - lineReduction),
+                }}
+              >
+                {paragraph.runs.map((run, runIndex) => {
+                  const resolved = resolveRunProperties(run.properties, properties)
+                  const family = resolveThemeFont(
+                    theme?.fonts ?? { major: null, minor: null },
+                    resolved?.font ?? undefined,
+                  )
+                  const named = resolved?.font?.startsWith('+') === true ? family : resolved?.font
 
-                if (run.kind === 'break') return <br key={runIndex} />
+                  if (run.kind === 'break') return <br key={runIndex} />
 
-                return (
-                  <span
-                    key={runIndex}
-                    style={{
-                      fontSize: (resolved?.size ?? 18) * EMU_PER_POINT * scale,
-                      fontWeight: resolved?.bold === true ? 700 : 400,
-                      fontStyle: resolved?.italic === true ? 'italic' : 'normal',
-                      textDecoration:
-                        resolved?.underline != null && resolved.underline !== 'none'
-                          ? 'underline'
-                          : undefined,
-                      fontFamily: named == null ? undefined : fontStackFor(named),
-                      color: (() => {
-                        const colour = resolved?.color
-                        if (colour == null) return undefined
-                        const paint = fillPaint({ kind: 'solid', color: colour }, context, 'text')
-                        return paint.paint === 'none' ? undefined : paint.paint
-                      })(),
-                    }}
-                  >
-                    {run.text}
-                  </span>
-                )
-              })}
-            </p>
-          )
-        })}
+                  return (
+                    <span
+                      key={runIndex}
+                      style={{
+                        fontSize: (resolved?.size ?? 18) * EMU_PER_POINT * scale,
+                        fontWeight: resolved?.bold === true ? 700 : 400,
+                        fontStyle: resolved?.italic === true ? 'italic' : 'normal',
+                        textDecoration:
+                          resolved?.underline != null && resolved.underline !== 'none'
+                            ? 'underline'
+                            : undefined,
+                        fontFamily: named == null ? undefined : fontStackFor(named),
+                        color: (() => {
+                          const colour = resolved?.color
+                          if (colour == null) return undefined
+                          const paint = fillPaint({ kind: 'solid', color: colour }, context, 'text')
+                          return paint.paint === 'none' ? undefined : paint.paint
+                        })(),
+                      }}
+                    >
+                      {run.text}
+                    </span>
+                  )
+                })}
+              </p>
+            )
+          })
+        )}
       </div>
     </foreignObject>
   )
@@ -351,6 +373,9 @@ export function SlideView({
   selection,
   onSelect,
   onDrag,
+  editing,
+  onEdit,
+  onCommitText,
   className,
 }: {
   deck: Deck
@@ -364,6 +389,12 @@ export function SlideView({
   onSelect?: (id: number | null, extend: boolean) => void
   /** Called once when a drag ends, with how far it went in EMU. */
   onDrag?: (drag: DragState) => void
+  /** The shape whose text is open for editing. */
+  editing?: number | null
+  /** Asked to enter a shape's text, or to leave it with `null`. */
+  onEdit?: (id: number | null) => void
+  /** The edited document, handed over when the shape is left. */
+  onCommitText?: (id: number, doc: PmNode) => void
   className?: string
 }) {
   const base = colorContextFor(deck, themes, slide)
@@ -428,6 +459,7 @@ export function SlideView({
             fill="transparent"
             onPointerDown={() => {
               onSelect(null, false)
+              onEdit?.(null)
             }}
           />
         )}
@@ -447,8 +479,18 @@ export function SlideView({
             ) : (
               <ShapeOutline drawing={drawing} />
             )}
-            <ShapeText drawing={drawing} deck={deck} slide={slide} theme={theme} />
-            {onSelect !== undefined && (
+            <ShapeText
+              drawing={drawing}
+              deck={deck}
+              slide={slide}
+              theme={theme}
+              editing={editing === drawing.shape.id}
+              onCommitText={onCommitText}
+              onLeave={() => {
+                onEdit?.(null)
+              }}
+            />
+            {onSelect !== undefined && editing !== drawing.shape.id && (
               <rect
                 // Over the shape and under the next one: an invisible target so
                 // a shape with no fill is still clickable, which is how
@@ -465,6 +507,9 @@ export function SlideView({
                   // shape moves that shape, as it does everywhere else.
                   onSelect(drawing.shape.id, event.shiftKey)
                   drag.start(event, null)
+                }}
+                onDoubleClick={() => {
+                  if (drawing.shape.text !== null) onEdit?.(drawing.shape.id)
                 }}
               />
             )}

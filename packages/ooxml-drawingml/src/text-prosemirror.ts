@@ -11,8 +11,6 @@ import {
   upsertChild,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
-import { readColor } from './color'
-import type { Color } from './color'
 import type { TextBody } from './text-body'
 
 /**
@@ -68,17 +66,6 @@ const RUN_PROPERTIES = [
   'a:extLst',
 ]
 
-const colorOf = (properties: XmlNode | undefined): Color | null => {
-  const fill =
-    properties === undefined
-      ? undefined
-      : children(properties).find((child) => tagName(child) === 'a:solidFill')
-  if (fill === undefined) return null
-
-  const source = children(fill).find((child) => (tagName(child) ?? '').startsWith('a:'))
-  return source === undefined ? null : readColor(source)
-}
-
 /** The marks a run's properties amount to. */
 function marksOf(properties: XmlNode | undefined): PmMark[] {
   if (properties === undefined) return []
@@ -95,17 +82,30 @@ function marksOf(properties: XmlNode | undefined): PmMark[] {
   const underline = attribute(properties, 'u')
   if (underline !== undefined && underline !== 'none') marks.push({ type: 'underline' })
 
+  /**
+   * Size and typeface go on one mark rather than two.
+   *
+   * That is Tiptap's `textStyle`, which is how Docs already carries run
+   * properties, and the reason the editor package serves both apps without an
+   * adapter between them.
+   */
   const size = Number(attribute(properties, 'sz'))
-  if (Number.isFinite(size)) marks.push({ type: 'fontSize', attrs: { points: size / 100 } })
-
   const latin = children(properties).find((child) => tagName(child) === 'a:latin')
   const typeface = latin === undefined ? undefined : attribute(latin, 'typeface')
-  if (typeface !== undefined) marks.push({ type: 'fontFamily', attrs: { family: typeface } })
 
-  const color = colorOf(properties)
-  if (color !== null) marks.push({ type: 'textColor', attrs: { color } })
+  const style: Record<string, unknown> = {}
+  if (Number.isFinite(size)) style['fontSize'] = size / 100
+  if (typeface !== undefined) style['fontFamily'] = typeface
+  if (Object.keys(style).length > 0) marks.push({ type: 'textStyle', attrs: style })
 
-  // Everything the marks above do not describe, carried as written.
+  /**
+   * Everything else, carried as written — the colour included.
+   *
+   * A theme colour has to stay symbolic, and there is nowhere in a CSS-shaped
+   * editor mark to put `accent1`. Keeping the whole `a:rPr` means the colour
+   * survives untouched; changing a colour is the properties panel's job, where
+   * a theme slot can be named.
+   */
   marks.push({ type: 'preservedRunProperties', attrs: { xml: serializeNode(properties) } })
 
   return marks
@@ -187,10 +187,11 @@ function propertiesFor(marks: readonly PmMark[]): XmlNode | null {
   if (has('underline')) setAttribute(properties, 'u', 'sng')
   else removeAttribute(properties, 'u')
 
-  const size = marks.find((mark) => mark.type === 'fontSize')?.attrs?.['points']
+  const style = marks.find((mark) => mark.type === 'textStyle')?.attrs
+  const size = style?.['fontSize']
   if (typeof size === 'number') setAttribute(properties, 'sz', String(Math.round(size * 100)))
 
-  const family = marks.find((mark) => mark.type === 'fontFamily')?.attrs?.['family']
+  const family = style?.['fontFamily']
   if (typeof family === 'string') {
     upsertChild(properties, element('a:latin', { typeface: family }), RUN_PROPERTIES)
   }

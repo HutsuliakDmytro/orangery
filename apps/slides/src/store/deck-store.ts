@@ -45,6 +45,8 @@ interface DeckState {
   current: number
   /** Shape ids selected on the current slide. */
   selection: number[]
+  /** The shape whose text is being edited, or null. */
+  editing: number | null
   undoStack: Edit[]
   redoStack: Edit[]
   /** What went wrong opening the last file, for the banner. */
@@ -54,6 +56,8 @@ interface DeckState {
   close: () => void
   /** Selects shapes on the current slide; `add` extends rather than replaces. */
   selectShapes: (ids: readonly number[], add?: boolean) => void
+  /** Enters a shape's text, or leaves whatever was being edited. */
+  setEditing: (id: number | null) => void
   /**
    * Runs a change against the current slide and records it.
    *
@@ -77,6 +81,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   open: null,
   current: -1,
   selection: [],
+  editing: null,
   undoStack: [],
   redoStack: [],
   error: null,
@@ -90,6 +95,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         open: { package: pkg, deck, themes: readThemes(pkg, deck), path },
         current: deck.slides.length > 0 ? 0 : -1,
         selection: [],
+        editing: null,
         undoStack: [],
         redoStack: [],
         error: null,
@@ -109,18 +115,31 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         // Selection belongs to a slide, so moving away drops it rather than
         // carrying ids that mean something else on the slide arrived at.
         selection: [],
+        editing: null,
       }
     })
   },
 
   close: () => {
-    set({ open: null, current: -1, selection: [], undoStack: [], redoStack: [], error: null })
+    set({
+      open: null,
+      current: -1,
+      selection: [],
+      editing: null,
+      undoStack: [],
+      redoStack: [],
+      error: null,
+    })
   },
 
   selectShapes: (ids, add = false) => {
     set((state) => ({
       selection: add ? [...new Set([...state.selection, ...ids])] : [...ids],
     }))
+  },
+
+  setEditing: (id) => {
+    set({ editing: id, ...(id === null ? {} : { selection: [id] }) })
   },
 
   edit: (change) => {

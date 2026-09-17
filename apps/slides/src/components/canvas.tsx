@@ -1,4 +1,5 @@
 import { writeTransform } from '@orangery/ooxml-presentation'
+import { writeTextBody } from '@orangery/ooxml-drawingml'
 import type { Transform } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
 import { applyDrag } from '../render/use-drag'
@@ -13,6 +14,8 @@ export function Canvas() {
   const selection = useDeckStore((state) => state.selection)
   const selectShapes = useDeckStore((state) => state.selectShapes)
   const edit = useDeckStore((state) => state.edit)
+  const editing = useDeckStore((state) => state.editing)
+  const setEditing = useDeckStore((state) => state.setEditing)
 
   if (error !== null) {
     return (
@@ -36,6 +39,14 @@ export function Canvas() {
         selection={selection}
         onSelect={(id, extend) => {
           selectShapes(id === null ? [] : [id], extend && id !== null)
+        }}
+        editing={editing}
+        onEdit={setEditing}
+        onCommitText={(id, doc) => {
+          edit((edited) => {
+            const shape = edited.shapes.find((one) => one.id === id)
+            return shape?.text == null ? false : writeTextBody(shape.text.node, doc)
+          })
         }}
         onDrag={(drag) => {
           const selected = useDeckStore.getState().selection

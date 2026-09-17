@@ -13,7 +13,7 @@ async function open(name: string) {
   const slide = deck.slides[0]
   if (!slide) throw new Error('fixture has no slides')
 
-  return { deck, slide, themes: readThemes(pkg, deck) }
+  return { deck, slide, themes: readThemes(pkg, deck), pkg }
 }
 
 const draw = async (name: string) => {
@@ -121,5 +121,63 @@ describe('text', () => {
   it('draws nothing for a shape with no text', async () => {
     const { container } = await draw('picture')
     expect(container.querySelector('foreignObject')).not.toBeInTheDocument()
+  })
+})
+
+describe('the background', () => {
+  it('comes from the master when the slide states none', async () => {
+    // Every slide in the corpus inherits it; reading only the slide paints
+    // everything white by accident rather than on purpose.
+    const { container } = await draw('empty')
+    const backgrounds = [...container.querySelectorAll('svg > rect')]
+
+    expect(backgrounds).toHaveLength(2)
+    expect(backgrounds[1]?.getAttribute('fill')).toBe('#FFFFFF')
+  })
+})
+
+describe('pictures', () => {
+  it('draws the image the relationship points at', async () => {
+    const { deck, slide, themes, pkg } = await open('picture')
+    const { container } = render(
+      <SlideView deck={deck} slide={slide} themes={themes} package={pkg} />,
+    )
+    const image = container.querySelector('image')
+
+    expect(image?.getAttribute('href')).toMatch(/^data:image\/png;base64,/u)
+    expect(image?.getAttribute('width')).toBe('812800')
+  })
+
+  it('draws nothing where the package was not given', async () => {
+    // The filmstrip and the canvas both pass it; a caller that does not should
+    // show an empty frame rather than a broken image.
+    const { container } = await draw('picture')
+    expect(container.querySelector('image')).not.toBeInTheDocument()
+  })
+})
+
+describe('tables', () => {
+  it('draws a cell for every one the grid shows', async () => {
+    const { container } = await draw('table')
+    const cells = [...container.querySelectorAll('foreignObject')]
+
+    // Three by three, plus the title placeholder's own text.
+    expect(cells.length).toBeGreaterThanOrEqual(9)
+  })
+
+  it('puts the cell text in it', async () => {
+    await draw('table')
+
+    expect(screen.getByText('Head 1')).toBeInTheDocument()
+    expect(screen.getByText('r2c2')).toBeInTheDocument()
+  })
+
+  it('lays the columns out from the grid widths', async () => {
+    const { container } = await draw('table')
+    const rects = [...container.querySelectorAll('rect')].filter(
+      (rect) => rect.getAttribute('width') === '2438400',
+    )
+
+    expect(rects.length).toBeGreaterThanOrEqual(3)
   })
 })

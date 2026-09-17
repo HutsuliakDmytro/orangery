@@ -38,6 +38,7 @@ export function Filmstrip() {
               deck={open.deck}
               slide={slide}
               themes={open.themes}
+              package={open.package}
               className="min-w-0 flex-1 border border-border"
             />
           </button>

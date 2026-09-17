@@ -187,3 +187,14 @@ export function referencedParts(map: PresentationMap): string[] {
 
   return [...parts].sort()
 }
+
+/**
+ * The package path a relationship on a part points at.
+ *
+ * Every part resolves its own relationships against its own directory, which is
+ * why this takes the part rather than the package alone — a slide's `rId2` and
+ * a layout's `rId2` are different files.
+ */
+export function relationshipTarget(pkg: OoxmlPackage, part: string, id: string): string | null {
+  return relationshipsOf(pkg, part).find((relationship) => relationship.id === id)?.target ?? null
+}

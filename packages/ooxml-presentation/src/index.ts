@@ -23,7 +23,7 @@ export {
   VIEW_PROPS_PART,
 } from './parts'
 
-export { readPresentation, referencedParts } from './presentation'
+export { readPresentation, referencedParts, relationshipTarget } from './presentation'
 export { layoutOf, masterOf, readDeck, readSlidePart } from './deck'
 export type { Deck, Master, Slide, SlidePart } from './deck'
 export { flatten, parseShapeTree } from './shape-tree'
@@ -53,3 +53,5 @@ export { absoluteTransform, throughGroup, withAncestors } from './group-transfor
 export type { Connection } from './shape-tree'
 export { readGraphicContent } from './graphic-frame'
 export type { GraphicContent, GraphicKind } from './graphic-frame'
+export { backgroundOf, readBackground } from './background'
+export type { Background } from './background'

@@ -26,6 +26,7 @@ export function Canvas() {
         deck={open.deck}
         slide={slide}
         themes={open.themes}
+        package={open.package}
         className="w-full max-w-4xl shadow-lg"
       />
     </div>

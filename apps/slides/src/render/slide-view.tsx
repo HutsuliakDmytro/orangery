@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import {
   absoluteTransform,
+  backgroundOf,
   colorContextFor,
   flatten,
   listStyleChain,
@@ -12,6 +13,7 @@ import {
   withAncestors,
 } from '@orangery/ooxml-presentation'
 import type { Deck, Shape, Slide, Transform } from '@orangery/ooxml-presentation'
+import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
   EMU_PER_POINT,
   fontStackFor,
@@ -20,6 +22,8 @@ import {
 } from '@orangery/ooxml-drawingml'
 import type { ColorContext, Theme } from '@orangery/ooxml-drawingml'
 import { fillPaint, linePaint } from './paint'
+import { mediaUrl } from './media'
+import { TableView } from './table-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
 
@@ -86,6 +90,46 @@ function Gradient({ definition }: { definition: GradientDefinition }) {
     <linearGradient id={definition.id} gradientTransform={`rotate(${String(degrees)} 0.5 0.5)`}>
       {stops}
     </linearGradient>
+  )
+}
+
+/**
+ * The image inside a `p:pic`.
+ *
+ * `a:srcRect` crops by a fraction from each side, and SVG has no crop: the
+ * image is drawn larger than the shape and clipped back to it, which is the
+ * same thing seen from the other end.
+ */
+function ShapeImage({ drawing, pkg, part }: { drawing: Drawing; pkg: OoxmlPackage; part: string }) {
+  const { shape, transform, key } = drawing
+  if (shape.picture === null) return null
+
+  const url = mediaUrl(pkg, part, shape.picture.relationshipId)
+  if (url === null) return null
+
+  const { left, top, right, bottom } = shape.picture.crop
+  const visibleWidth = 1 - left - right
+  const visibleHeight = 1 - top - bottom
+  if (visibleWidth <= 0 || visibleHeight <= 0) return null
+
+  const width = transform.width / visibleWidth
+  const height = transform.height / visibleHeight
+
+  return (
+    <g transform={`translate(${String(transform.x)} ${String(transform.y)})`}>
+      <clipPath id={`clip-${key}`}>
+        <rect x={0} y={0} width={transform.width} height={transform.height} />
+      </clipPath>
+      <image
+        href={url}
+        x={-left * width}
+        y={-top * height}
+        width={width}
+        height={height}
+        preserveAspectRatio="none"
+        clipPath={`url(#clip-${key})`}
+      />
+    </g>
   )
 }
 
@@ -243,11 +287,14 @@ export function SlideView({
   deck,
   slide,
   themes,
+  package: pkg,
   className,
 }: {
   deck: Deck
   slide: Slide
   themes: ReadonlyMap<string, Theme>
+  /** Needed for the media a picture points at, which lives in the zip. */
+  package?: OoxmlPackage
   className?: string
 }) {
   const base = colorContextFor(deck, themes, slide)
@@ -256,6 +303,12 @@ export function SlideView({
   const drawings = drawingsFor(deck, slide, theme, base)
 
   const { width, height } = deck.slideSize
+  const background = backgroundOf(deck, slide, theme)
+  const backgroundPaint = fillPaint(
+    background.fill,
+    { ...base, placeholderColor: background.placeholderColor ?? undefined },
+    'slide-background',
+  )
 
   return (
     <div
@@ -269,10 +322,36 @@ export function SlideView({
         role="img"
         aria-label={slideLabel(slide)}
       >
+        {backgroundPaint.definition && (
+          <defs>
+            <Gradient definition={backgroundPaint.definition} />
+          </defs>
+        )}
+        {/* White underneath: a background that resolves to nothing should look
+            like paper rather than like whatever is behind the app. */}
         <rect x={0} y={0} width={width} height={height} fill="#FFFFFF" />
+        <rect
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          fill={backgroundPaint.paint}
+          fillOpacity={backgroundPaint.opacity}
+        />
         {drawings.map((drawing) => (
           <Fragment key={drawing.key}>
-            <ShapeOutline drawing={drawing} />
+            {drawing.shape.kind === 'pic' && pkg !== undefined ? (
+              <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
+            ) : drawing.shape.graphic?.table != null ? (
+              <TableView
+                table={drawing.shape.graphic.table}
+                x={drawing.transform.x}
+                y={drawing.transform.y}
+                context={drawing.context}
+              />
+            ) : (
+              <ShapeOutline drawing={drawing} />
+            )}
             <ShapeText drawing={drawing} deck={deck} slide={slide} theme={theme} />
           </Fragment>
         ))}

@@ -164,6 +164,22 @@ export function findChildren(node: XmlNode, tag: string): XmlNode[] {
   return children(node).filter((child) => tagName(child) === tag)
 }
 
+/**
+ * The first descendant with this tag, at any depth.
+ *
+ * Depth-first, because the markup that needs this nests the thing being looked
+ * for inside two or three wrappers that carry nothing else — `a:blip` under a
+ * graphic, for instance.
+ */
+export function findDescendant(node: XmlNode, tag: string): XmlNode | undefined {
+  for (const child of children(node)) {
+    if (tagName(child) === tag) return child
+    const nested = findDescendant(child, tag)
+    if (nested) return nested
+  }
+  return undefined
+}
+
 /** Serialises a single node back to XML, for storing as passthrough. */
 export function serializeNode(node: XmlNode): string {
   return buildXml([node])

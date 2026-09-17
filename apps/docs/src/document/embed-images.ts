@@ -5,7 +5,7 @@ import { addPicture } from './odt-file'
 import type { OdtPackage } from './converters/odt'
 import { contentWidth } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
-import { fitWithin } from '../ooxml/image'
+import { fitWithin } from '@orangery/ooxml-drawingml'
 import type { ParseWarning, ProseMirrorNodeJson } from '../ooxml/parse-document'
 
 /**

@@ -15,7 +15,7 @@ import {
   withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
-import { contentTypeFor } from '../ooxml/image'
+import { contentTypeFor } from '@orangery/ooxml-drawingml'
 import { dataUrlFrom } from './data-url'
 
 /**

@@ -8,6 +8,7 @@ import {
   element,
   findChild,
   findChildren,
+  findDescendant,
   parseXml,
   serializeNode,
   stripDeclaration,
@@ -145,5 +146,26 @@ describe('declaration', () => {
 
   it('leaves declaration-free XML alone', () => {
     expect(stripDeclaration('<a/>')).toBe('<a/>')
+  })
+})
+
+describe('findDescendant', () => {
+  const tree = parseXml(
+    '<a:graphic><a:graphicData><pic:pic><pic:blipFill>' +
+      '<a:blip r:embed="rId7"/></pic:blipFill></pic:pic></a:graphicData></a:graphic>',
+  )[0]
+
+  it('finds a node several levels down', () => {
+    const blip = tree === undefined ? undefined : findDescendant(tree, 'a:blip')
+    expect(blip === undefined ? undefined : attribute(blip, 'r:embed')).toBe('rId7')
+  })
+
+  it('finds a direct child too', () => {
+    const data = tree === undefined ? undefined : findDescendant(tree, 'a:graphicData')
+    expect(data).toBeDefined()
+  })
+
+  it('returns undefined when nothing matches', () => {
+    expect(tree === undefined ? undefined : findDescendant(tree, 'a:srcRect')).toBeUndefined()
   })
 })

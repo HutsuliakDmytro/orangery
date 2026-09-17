@@ -1,0 +1,20 @@
+/**
+ * DrawingML — the markup a document and a deck have in common.
+ *
+ * `a:*` and `pic:*` describe shapes, pictures and their geometry the same way
+ * everywhere. The wrappers that place them differ per format: `wp:inline` and
+ * `wp:anchor` belong to WordprocessingML, `p:sp` and `p:spTree` to
+ * presentations, and neither belongs here.
+ */
+
+export {
+  EMU_PER_CENTIMETRE,
+  EMU_PER_INCH,
+  EMU_PER_POINT,
+  emuToPoints,
+  fitWithin,
+  pointsToEmu,
+} from './units'
+export { contentTypeFor } from './media'
+export { blipRelationshipId, pictureGraphic } from './picture'
+export type { Picture } from './picture'

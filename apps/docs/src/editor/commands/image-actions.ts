@@ -11,7 +11,7 @@ import {
 } from '../../document/media'
 import { addPicture } from '../../document/odt-file'
 import { getSession } from '../../document/session'
-import { fitWithin } from '../../ooxml/image'
+import { fitWithin } from '@orangery/ooxml-drawingml'
 import { isTauri } from '../../platform/os'
 import { contentWidth } from '../../ooxml/section'
 import { useDocumentStore } from '../../store/document-store'

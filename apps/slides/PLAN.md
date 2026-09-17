@@ -17,7 +17,8 @@
       — git розпізнав перенесення як rename, тож історія й реліз `v0.1.0` на місці. Жодного рядка логіки не змінено: ті самі 1446 тестів, корпус, clippy і cargo test. CI зелений на всіх шести джобах, збірка трьох платформ проходить
 - [x] Витягти `packages/ooxml-core`: zip, rels, content types, XML parse/serialize, passthrough-утиліти
       — `DocxPackage` став `OoxmlPackage`, а перевірка «це справді docx» винесена в параметр `readPackage(data, requiredPart)`: Slides передасть `ppt/presentation.xml`. Назви частин `word/*` лишились у Docs (`src/ooxml/parts.ts`). З passthrough переїхали примітиви — `serializeNode`/`deserializeNode` і структурне порівняння XML; сама політика збереження живе в парсері `w:`-документа й поїде з `ooxml-wordprocessing`. Тести ядра тепер будують zip у пам'яті, а не читають docx-фікстуру: корпус належить аппу
-- [ ] Витягти `packages/ooxml-drawingml`: усе, що Docs уже парсить із `a:*`/`wp:*`/`pic:*` (картинки, anchor, transforms)
+- [x] Витягти `packages/ooxml-drawingml`: усе, що Docs уже парсить із `a:*`/`wp:*`/`pic:*` (картинки, anchor, transforms)
+      — переїхало менше, ніж здавалося: EMU, `contentTypeFor`, масштабування під ширину, читання `a:blip` і побудова `pic:pic`. Решта `image.ts` — це `wp:inline`/`wp:anchor`/обтікання, тобто обгортка WordprocessingML, якої в PPTX немає: у деці фігура носить власну позицію. Лишилось у Docs свідомо, а не забуто. `findDescendant` пішов у `ooxml-core` як загальна утиліта дерева
 - [ ] Витягти `packages/editor-text`: ProseMirror-схема run/paragraph, команди форматування — без `w:`-специфіки в ядрі; Docs підключає `wordprocessing`-адаптер
 - [ ] Витягти `packages/ui-kit`: tokens, теми, тулбар/дропдаун/діалог, command registry, palette
 - [ ] Витягти `packages/platform` і `packages/tauri-shared` (atomic fs, autosave, recent, updater, menu builder)

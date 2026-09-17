@@ -8,32 +8,26 @@ import {
   tagName,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
+import {
+  blipRelationshipId,
+  emuToPoints,
+  pictureGraphic,
+  pointsToEmu,
+} from '@orangery/ooxml-drawingml'
 import type { ProseMirrorNodeJson } from './prosemirror-json'
 
 /**
- * Inline images — `w:drawing` / `wp:inline`.
+ * How a document hosts a picture — `w:drawing`, `wp:inline`, `wp:anchor`.
  *
- * DrawingML measures in EMUs (English Metric Units), 914400 per inch, chosen so
- * that both inches and centimetres divide evenly. The picture itself is a
- * relationship id pointing at a part under `word/media/`; the drawing carries
- * only the id and the display size.
+ * The picture itself is DrawingML and is shared with the rest of the suite;
+ * everything here is the wrapper WordprocessingML puts around it, which decides
+ * where on the page it sits and how text flows past it. A deck has no such
+ * wrapper — a shape carries its own position — so none of this is shared.
  *
- * Floating images (`wp:anchor`, text wrapping) are a separate shape and are
- * preserved as passthrough rather than approximated as inline — an image that
- * silently moves into the text flow is a worse outcome than one that cannot be
- * resized yet.
+ * Floating images whose wrap style we cannot reproduce are preserved as
+ * passthrough rather than approximated as inline: an image that silently moves
+ * into the text flow is a worse outcome than one that cannot be resized yet.
  */
-
-export const EMU_PER_INCH = 914400
-export const EMU_PER_POINT = EMU_PER_INCH / 72
-
-export function emuToPoints(emu: number): number {
-  return Math.round((emu / EMU_PER_POINT) * 100) / 100
-}
-
-export function pointsToEmu(points: number): number {
-  return Math.round(points * EMU_PER_POINT)
-}
 
 /**
  * How text flows around a floating image.
@@ -96,15 +90,6 @@ export interface ImageAttributes {
   drawing: string
 }
 
-function findDescendant(node: XmlNode, tag: string): XmlNode | undefined {
-  for (const child of children(node)) {
-    if (tagName(child) === tag) return child
-    const nested = findDescendant(child, tag)
-    if (nested) return nested
-  }
-  return undefined
-}
-
 /**
  * Reads a picture from a drawing.
  *
@@ -122,9 +107,8 @@ export function parseDrawing(drawing: XmlNode): ImageAttributes | null {
   if (wrap === null) return null
 
   const extent = findChild(container, 'wp:extent')
-  const blip = findDescendant(container, 'a:blip')
-  const relationshipId = blip === undefined ? undefined : attribute(blip, 'r:embed')
-  if (relationshipId === undefined) return null
+  const relationshipId = blipRelationshipId(container)
+  if (relationshipId === null) return null
 
   const docPr = findChild(container, 'wp:docPr')
   const width = parseIntAttribute(extent === undefined ? undefined : attribute(extent, 'cx'))
@@ -158,6 +142,16 @@ export function buildDrawing(image: {
   const cx = String(pointsToEmu(image.width))
   const cy = String(pointsToEmu(image.height))
   const name = `Picture ${String(image.id)}`
+
+  // The picture is identical in both forms; only the wrapper that places it
+  // on the page differs.
+  const picture = pictureGraphic({
+    relationshipId: image.relationshipId,
+    id: image.id,
+    name,
+    width: pointsToEmu(image.width),
+    height: pointsToEmu(image.height),
+  })
 
   if (image.wrap !== undefined && image.wrap !== 'inline') {
     return element('w:drawing', {}, [
@@ -206,7 +200,7 @@ export function buildDrawing(image: {
               noChangeAspect: '1',
             }),
           ]),
-          buildGraphic(image, cx, cy, name),
+          picture,
         ],
       ),
     ])
@@ -227,54 +221,9 @@ export function buildDrawing(image: {
           noChangeAspect: '1',
         }),
       ]),
-      buildGraphic(image, cx, cy, name),
+      picture,
     ]),
   ])
-}
-
-/** The picture itself, shared by the inline and anchored forms. */
-function buildGraphic(
-  image: { relationshipId: string; id: number },
-  cx: string,
-  cy: string,
-  name: string,
-): XmlNode {
-  return element(
-    'a:graphic',
-    { 'xmlns:a': 'http://schemas.openxmlformats.org/drawingml/2006/main' },
-    [
-      element(
-        'a:graphicData',
-        { uri: 'http://schemas.openxmlformats.org/drawingml/2006/picture' },
-        [
-          element(
-            'pic:pic',
-            { 'xmlns:pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture' },
-            [
-              element('pic:nvPicPr', {}, [
-                element('pic:cNvPr', { id: String(image.id), name }),
-                element('pic:cNvPicPr'),
-              ]),
-              element('pic:blipFill', {}, [
-                element('a:blip', {
-                  'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-                  'r:embed': image.relationshipId,
-                }),
-                element('a:stretch', {}, [element('a:fillRect')]),
-              ]),
-              element('pic:spPr', {}, [
-                element('a:xfrm', {}, [
-                  element('a:off', { x: '0', y: '0' }),
-                  element('a:ext', { cx, cy }),
-                ]),
-                element('a:prstGeom', { prst: 'rect' }, [element('a:avLst')]),
-              ]),
-            ],
-          ),
-        ],
-      ),
-    ],
-  )
 }
 
 /** The ProseMirror node for a parsed image. */
@@ -294,45 +243,5 @@ export function imageNode(image: ImageAttributes, src: string): ProseMirrorNodeJ
       drawingWidth: image.width,
       drawingWrap: image.wrap,
     },
-  }
-}
-
-/** Content type for a media part, from its extension. */
-export function contentTypeFor(fileName: string): string | null {
-  const extension = fileName.split('.').pop()?.toLowerCase()
-  switch (extension) {
-    case 'png':
-      return 'image/png'
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg'
-    case 'gif':
-      return 'image/gif'
-    case 'bmp':
-      return 'image/bmp'
-    case 'svg':
-      return 'image/svg+xml'
-    case 'webp':
-      return 'image/webp'
-    case 'tif':
-    case 'tiff':
-      return 'image/tiff'
-    default:
-      return null
-  }
-}
-
-/** Scales an image down to fit the text column, as Word does on insert. */
-export function fitWithin(
-  natural: { width: number; height: number },
-  maxWidth: number,
-): { width: number; height: number } {
-  if (natural.width <= 0 || natural.height <= 0) return { width: maxWidth, height: maxWidth }
-  if (natural.width <= maxWidth) return natural
-
-  const scale = maxWidth / natural.width
-  return {
-    width: Math.round(maxWidth * 100) / 100,
-    height: Math.round(natural.height * scale * 100) / 100,
   }
 }

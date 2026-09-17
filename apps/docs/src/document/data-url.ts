@@ -1,4 +1,4 @@
-import { contentTypeFor } from '../ooxml/image'
+import { contentTypeFor } from '@orangery/ooxml-drawingml'
 
 /**
  * Pictures as data URLs.

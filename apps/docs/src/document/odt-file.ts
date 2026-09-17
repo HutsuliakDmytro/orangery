@@ -8,7 +8,7 @@ import {
   withDeclaration,
 } from '@orangery/ooxml-core'
 import JSZip from 'jszip'
-import { contentTypeFor } from '../ooxml/image'
+import { contentTypeFor } from '@orangery/ooxml-drawingml'
 import {
   MANIFEST_PART,
   MIMETYPE_PART,

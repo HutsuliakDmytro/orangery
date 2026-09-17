@@ -1,14 +1,6 @@
 import { parseXml, serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
-import {
-  buildDrawing,
-  contentTypeFor,
-  EMU_PER_INCH,
-  emuToPoints,
-  fitWithin,
-  parseDrawing,
-  pointsToEmu,
-} from './image'
+import { buildDrawing, parseDrawing } from './image'
 
 const DRAWING = `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">
 <wp:extent cx="2743200" cy="1828800"/>
@@ -20,20 +12,6 @@ const DRAWING = `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">
 </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`
 
 const node = (xml: string) => parseXml(xml)[0]
-
-describe('EMU conversion', () => {
-  it('converts EMU to points', () => {
-    expect(emuToPoints(EMU_PER_INCH)).toBe(72)
-  })
-
-  it('converts points back to EMU', () => {
-    expect(pointsToEmu(72)).toBe(EMU_PER_INCH)
-  })
-
-  it('round-trips a non-round size', () => {
-    expect(emuToPoints(pointsToEmu(216))).toBe(216)
-  })
-})
 
 describe('parseDrawing', () => {
   it('reads the relationship id', () => {
@@ -108,34 +86,5 @@ describe('buildDrawing', () => {
   it('omits the description when there is no alt text', () => {
     const bare = buildDrawing({ relationshipId: 'r', width: 1, height: 1, alt: '', id: 1 })
     expect(serializeNode(bare)).not.toContain('descr=')
-  })
-})
-
-describe('contentTypeFor', () => {
-  it('maps the formats Word embeds', () => {
-    expect(contentTypeFor('a.png')).toBe('image/png')
-    expect(contentTypeFor('a.JPG')).toBe('image/jpeg')
-    expect(contentTypeFor('a.jpeg')).toBe('image/jpeg')
-    expect(contentTypeFor('a.gif')).toBe('image/gif')
-    expect(contentTypeFor('a.svg')).toBe('image/svg+xml')
-  })
-
-  it('returns null for a type it does not know', () => {
-    expect(contentTypeFor('a.heic')).toBeNull()
-    expect(contentTypeFor('noextension')).toBeNull()
-  })
-})
-
-describe('fitWithin', () => {
-  it('leaves an image that already fits alone', () => {
-    expect(fitWithin({ width: 200, height: 100 }, 468)).toEqual({ width: 200, height: 100 })
-  })
-
-  it('scales a wide image down and keeps the aspect ratio', () => {
-    expect(fitWithin({ width: 1000, height: 500 }, 468)).toEqual({ width: 468, height: 234 })
-  })
-
-  it('falls back to the column width for a zero-sized image', () => {
-    expect(fitWithin({ width: 0, height: 0 }, 468).width).toBe(468)
   })
 })

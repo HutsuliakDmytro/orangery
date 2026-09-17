@@ -1,20 +1,5 @@
-import {
-  CONTENT_TYPES_PART,
-  IMAGE_RELATIONSHIP,
-  addRelationship,
-  attribute,
-  buildXml,
-  children,
-  element,
-  getPartText,
-  parseRelationships,
-  parseXml,
-  serializeRelationships,
-  setPartText,
-  tagName,
-  withDeclaration,
-} from '@orangery/ooxml-core'
-import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { IMAGE_RELATIONSHIP, addMedia } from '@orangery/ooxml-core'
+import type { AddedMedia, OoxmlPackage } from '@orangery/ooxml-core'
 import { contentTypeFor } from '@orangery/ooxml-drawingml'
 import { dataUrlFrom } from './data-url'
 
@@ -30,50 +15,6 @@ import { dataUrlFrom } from './data-url'
 
 export const DOCUMENT_RELS_PART = 'word/_rels/document.xml.rels'
 
-export interface AddedMedia {
-  relationshipId: string
-  /** Package path, e.g. `word/media/image3.png`. */
-  path: string
-}
-
-/** Next free `imageN.ext`, so an added file never overwrites an existing one. */
-export function nextMediaName(pkg: OoxmlPackage, extension: string): string {
-  let highest = 0
-  for (const path of pkg.parts.keys()) {
-    const match = /^word\/media\/image(\d+)\./u.exec(path)
-    if (match?.[1]) highest = Math.max(highest, Number.parseInt(match[1], 10))
-  }
-  return `image${String(highest + 1)}.${extension}`
-}
-
-/** Declares an extension in `[Content_Types].xml` if it is not there already. */
-export function ensureContentType(pkg: OoxmlPackage, extension: string, contentType: string): void {
-  const xml = getPartText(pkg, CONTENT_TYPES_PART)
-  if (xml === undefined) return
-
-  const roots = parseXml(xml)
-  const types = roots.find((node) => tagName(node) === 'Types')
-  if (!types) return
-
-  const already = children(types).some(
-    (node) =>
-      tagName(node) === 'Default' &&
-      attribute(node, 'Extension')?.toLowerCase() === extension.toLowerCase(),
-  )
-  if (already) return
-
-  const list = types['Types']
-  if (!Array.isArray(list)) return
-
-  // Defaults come before Overrides in the schema; Word is strict about it.
-  const firstOverride = (list as XmlNode[]).findIndex((node) => tagName(node) === 'Override')
-  const declaration = element('Default', { Extension: extension, ContentType: contentType })
-  const index = firstOverride === -1 ? list.length : firstOverride
-  ;(list as XmlNode[]).splice(index, 0, declaration)
-
-  setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
-}
-
 export class UnsupportedImageError extends Error {
   override readonly name = 'UnsupportedImageError'
 }
@@ -84,26 +25,28 @@ export function unsupportedImageMessage(fileName: string): string {
   return `A document cannot hold ${extension === '' || extension === fileName.toLowerCase() ? 'this file type' : `.${extension}`} images.`
 }
 
+/** Where a document keeps its media, and which rels file points at it. */
+const MEDIA_DIRECTORY = 'word/media'
+
 /**
  * Adds an image to the package and returns the relationship that points at it.
+ *
+ * The package work — the bytes, the content type, the relationship — is the
+ * same in every OOXML format and lives in `@orangery/ooxml-core`. What is here
+ * is where a document puts them, and which images it will accept.
  */
 export function addImage(pkg: OoxmlPackage, fileName: string, bytes: Uint8Array): AddedMedia {
-  const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
   const contentType = contentTypeFor(fileName)
-
   if (contentType === null) throw new UnsupportedImageError(unsupportedImageMessage(fileName))
 
-  const name = nextMediaName(pkg, extension)
-  const path = `word/media/${name}`
-
-  pkg.parts.set(path, { path, bytes, date: new Date() })
-  ensureContentType(pkg, extension, contentType)
-
-  const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
-  const relationship = addRelationship(relationships, IMAGE_RELATIONSHIP, `media/${name}`)
-  setPartText(pkg, DOCUMENT_RELS_PART, serializeRelationships(relationships))
-
-  return { relationshipId: relationship.id, path }
+  return addMedia(pkg, {
+    directory: MEDIA_DIRECTORY,
+    relsPart: DOCUMENT_RELS_PART,
+    relationshipType: IMAGE_RELATIONSHIP,
+    fileName,
+    contentType,
+    bytes,
+  })
 }
 
 /** Data URL for a media part, so the webview can display it. */

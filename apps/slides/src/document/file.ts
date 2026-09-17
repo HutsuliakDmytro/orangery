@@ -37,3 +37,22 @@ export async function readDeckFile(path: string): Promise<Uint8Array> {
 export function nameOf(path: string): string {
   return path.split(/[\\/]/u).pop() ?? path
 }
+
+/** Picks a picture to put on a slide. */
+export async function pickPicturePath(): Promise<string | null> {
+  if (!isTauri()) return null
+
+  const selected = await openDialog({
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'Picture', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
+/** Reads any file the app was pointed at, through the same Rust command. */
+export async function readFileBytes(path: string): Promise<Uint8Array> {
+  const loaded = await invoke<LoadedFile>('read_document', { path })
+  return new Uint8Array(loaded.bytes)
+}

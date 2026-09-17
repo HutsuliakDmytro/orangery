@@ -1,12 +1,19 @@
 import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
-import { nameOf, pickDeckPath, readDeckFile } from '../document/file'
+import {
+  nameOf,
+  pickDeckPath,
+  pickPicturePath,
+  readDeckFile,
+  readFileBytes,
+} from '../document/file'
 import {
   alignmentBounds,
   alignShapes,
   createShape,
   deleteShapes,
+  insertPicture,
   distributeShapes,
   duplicateShape,
   groupShapes,
@@ -277,6 +284,18 @@ const PRESETS = [
   ['line', 'Line'],
 ] as const
 
+export const pictureCommands: readonly Command[] = [
+  {
+    id: 'insert.picture',
+    label: 'Picture…',
+    group: 'insert',
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void insertPictureFromDisk()
+    },
+  },
+]
+
 export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) => ({
   id: `insert.${preset}`,
   label,
@@ -309,6 +328,43 @@ export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) 
     if (made.id !== null) selectShapes([made.id])
   },
 }))
+
+/**
+ * Putting a picture on the slide.
+ *
+ * Sized to a quarter of the slide's width and the shape of the file, which
+ * needs the picture measured; until that is wired up it goes in square and can
+ * be resized, which is better than guessing an aspect ratio and being wrong.
+ */
+async function insertPictureFromDisk(): Promise<void> {
+  const path = await pickPicturePath()
+  if (path === null) return
+
+  const bytes = await readFileBytes(path)
+  const { open, current, edit, selectShapes } = useDeckStore.getState()
+  const size = open?.deck.slideSize ?? { width: 0, height: 0 }
+  const slide = open?.deck.slides[current]
+  if (open === null || slide === undefined) return
+
+  const side = size.width / 4
+  const made: { id: number | null } = { id: null }
+
+  edit((edited) => {
+    made.id = insertPicture(open.package, edited, {
+      fileName: nameOf(path),
+      bytes,
+      transform: {
+        x: (size.width - side) / 2,
+        y: (size.height - side) / 2,
+        width: side,
+        height: side,
+      },
+    })
+    return true
+  })
+
+  if (made.id !== null) selectShapes([made.id])
+}
 
 export const groupCommands: readonly Command[] = [
   {
@@ -437,6 +493,7 @@ export function registerBuiltinCommands(): void {
   registerAll(editCommands)
   registerAll(arrangeCommands)
   registerAll(insertCommands)
+  registerAll(pictureCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

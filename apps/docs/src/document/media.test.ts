@@ -3,14 +3,7 @@ import { readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  addImage,
-  DOCUMENT_RELS_PART,
-  ensureContentType,
-  mediaDataUrl,
-  nextMediaName,
-  UnsupportedImageError,
-} from './media'
+import { addImage, DOCUMENT_RELS_PART, mediaDataUrl, UnsupportedImageError } from './media'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
@@ -22,23 +15,6 @@ async function fixture(name = 'plain-paragraphs') {
 const PNG = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ])
-
-describe('nextMediaName', () => {
-  it('starts at one in a package with no media', async () => {
-    expect(nextMediaName(await fixture(), 'png')).toBe('image1.png')
-  })
-
-  it('continues past the highest existing image', async () => {
-    const pkg = await fixture()
-    pkg.parts.set('word/media/image4.jpeg', {
-      path: 'word/media/image4.jpeg',
-      bytes: new Uint8Array(),
-      date: new Date(),
-    })
-
-    expect(nextMediaName(pkg, 'png')).toBe('image5.png')
-  })
-})
 
 describe('addImage', () => {
   it('stores the bytes under word/media', async () => {
@@ -94,19 +70,6 @@ describe('addImage', () => {
 
     expect(() => addImage(pkg, 'photo.heic', PNG)).toThrow()
     expect(pkg.parts.size).toBe(before)
-  })
-})
-
-describe('ensureContentType', () => {
-  it('puts Default entries before Override entries, as the schema requires', async () => {
-    const pkg = await fixture()
-    ensureContentType(pkg, 'png', 'image/png')
-
-    const xml = getPartText(pkg, CONTENT_TYPES_PART) ?? ''
-    const lastDefault = xml.lastIndexOf('<Default')
-    const firstOverride = xml.indexOf('<Override')
-
-    expect(lastDefault).toBeLessThan(firstOverride)
   })
 })
 

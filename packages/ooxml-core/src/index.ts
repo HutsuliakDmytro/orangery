@@ -34,3 +34,11 @@ export * from './xml'
 export * from './units'
 export { compareXml, describeDifferences } from './compare'
 export type { XmlDifference } from './compare'
+export {
+  ensureChild,
+  hasAttribute,
+  removeAttribute,
+  removeChild,
+  setAttribute,
+  upsertChild,
+} from './edit'

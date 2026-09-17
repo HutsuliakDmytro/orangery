@@ -547,3 +547,15 @@
   background: rgba(255, 122, 0, 0.14);
   border-bottom: 1px solid rgba(255, 122, 0, 0.5);
 }
+
+/* Tracked changes. Coloured rather than only underlined, because a document
+   under review is read for what changed before it is read for what it says. */
+.editor-surface .revision-insertion {
+  color: #1a7f37;
+  text-decoration: underline;
+}
+
+.editor-surface .revision-deletion {
+  color: #b42318;
+  text-decoration: line-through;
+}

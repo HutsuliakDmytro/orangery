@@ -416,6 +416,9 @@ function parseRun(
     const tag = tagName(child)
 
     switch (tag) {
+      // `w:delText` is the text of a run that has been deleted with revisions
+      // being tracked. It reads the same; only the element name differs.
+      case 'w:delText':
       case 'w:t': {
         const text = children(child).filter(isTextNode).map(textValue).join('')
         if (text !== '') {
@@ -527,6 +530,30 @@ function parseParagraph(
     switch (tag) {
       case 'w:pPr':
         break
+      case 'w:ins':
+      case 'w:del': {
+        // A tracked change wraps the runs it applies to. The author and the
+        // date belong to the change, not to the text, so they ride on the mark.
+        const revision = {
+          type: tag === 'w:ins' ? 'insertion' : 'deletion',
+          attrs: {
+            revisionId: attribute(child, 'w:id') ?? '',
+            author: attribute(child, 'w:author') ?? '',
+            date: attribute(child, 'w:date') ?? '',
+          },
+        }
+
+        for (const inner of children(child)) {
+          if (tagName(inner) !== 'w:r') continue
+
+          const runs = parseRun(inner, warnings, theme, resolveImage, footnoteText)
+          const marks = commentMarks()
+
+          for (const node of runs) node.marks = [...(node.marks ?? []), ...marks, revision]
+          content.push(...runs)
+        }
+        break
+      }
       case 'w:commentRangeStart': {
         const id = parseInt2(attribute(child, 'w:id'))
         if (id !== null && !openComments.includes(id)) openComments.push(id)

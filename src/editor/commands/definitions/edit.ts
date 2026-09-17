@@ -35,4 +35,24 @@ export const editCommands: readonly Command[] = [
       selectWholeDocument(editor)
     },
   },
+  {
+    id: 'edit.accept-revisions',
+    label: 'Accept Tracked Changes',
+    group: 'edit',
+    keywords: ['revision', 'review', 'track changes'],
+    run: ({ editor }) => {
+      // The selection when there is one, the whole document when there is not:
+      // reviewing is usually a sweep, and settling one change is the exception.
+      editor.chain().focus().acceptRevisions(editor.state.selection.empty).run()
+    },
+  },
+  {
+    id: 'edit.reject-revisions',
+    label: 'Reject Tracked Changes',
+    group: 'edit',
+    keywords: ['revision', 'review', 'track changes', 'undo'],
+    run: ({ editor }) => {
+      editor.chain().focus().rejectRevisions(editor.state.selection.empty).run()
+    },
+  },
 ]

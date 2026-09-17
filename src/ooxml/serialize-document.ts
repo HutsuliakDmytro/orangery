@@ -1,4 +1,12 @@
-import { buildXml, children, deserializeNode, element, textNode, withDeclaration } from './xml'
+import {
+  buildXml,
+  children,
+  deserializeNode,
+  element,
+  tagName,
+  textNode,
+  withDeclaration,
+} from './xml'
 import type { XmlNode } from './xml'
 import { formatColor, multiplierToLineUnits, pointsToHalfPoints, pointsToTwips } from './units'
 import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse-document'
@@ -331,6 +339,58 @@ function buildCaptionLabel(node: ProseMirrorNodeJson, numbered: CaptionNumber | 
   ]
 }
 
+/**
+ * Wraps a run in the tracked change that applies to it, if any.
+ *
+ * `w:ins` and `w:del` are elements around the run rather than properties of it:
+ * a change is something that happened to the text, not a way the text looks.
+ */
+function revisionWrapper(marks: Map<string, Mark>, run: XmlNode): XmlNode {
+  const insertion = marks.get('insertion')
+  const deletion = marks.get('deletion')
+  const revision = insertion ?? deletion
+  if (revision === undefined) return run
+
+  const attributes = {
+    'w:id': stringAttr(revision.attrs, 'revisionId') ?? '1',
+    'w:author': stringAttr(revision.attrs, 'author') ?? '',
+    ...(stringAttr(revision.attrs, 'date') === null
+      ? {}
+      : { 'w:date': stringAttr(revision.attrs, 'date') ?? '' }),
+  }
+
+  return element(insertion !== undefined ? 'w:ins' : 'w:del', attributes, [
+    insertion !== undefined ? run : asDeletedText(run),
+  ])
+}
+
+/**
+ * Renames the text of a deleted run.
+ *
+ * Word writes `w:delText` inside `w:del`; a `w:t` there is text the reader
+ * shows as still present, which is the opposite of what the change says.
+ */
+function asDeletedText(run: XmlNode): XmlNode {
+  const renamed = children(run).map((child) =>
+    tagName(child) === 'w:t'
+      ? element('w:delText', attributesOf(child), children(child))
+      : child,
+  )
+
+  return element('w:r', {}, renamed)
+}
+
+function attributesOf(node: XmlNode): Record<string, string> {
+  const raw = node[':@']
+  if (typeof raw !== 'object' || raw === null) return {}
+
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    result[key.replace(/^@_/u, '')] = String(value)
+  }
+  return result
+}
+
 /** Comment ids currently open, and the ones the blocks ahead still carry. */
 interface CommentState {
   open: number[]
@@ -377,9 +437,11 @@ function buildParagraph(
       return
     }
     const properties = buildRunProperties(pending.marks)
-    paragraphChildren.push(
-      element('w:r', {}, [...(properties ? [properties] : []), ...pending.children]),
-    )
+    const run = element('w:r', {}, [...(properties ? [properties] : []), ...pending.children])
+
+    // A tracked change wraps the run it applies to, so it is put on here rather
+    // than among the run's own properties.
+    paragraphChildren.push(revisionWrapper(pending.marks, run))
     pending = null
   }
 

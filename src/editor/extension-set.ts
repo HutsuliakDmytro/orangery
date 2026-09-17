@@ -24,6 +24,7 @@ import { Footnote } from './extensions/footnote'
 import { Caption } from './extensions/caption'
 import { CharacterStyle } from './extensions/character-style'
 import { CommentMark } from './extensions/comment'
+import { Deletion, Insertion, Revisions } from './extensions/revisions'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
 import { HeadingNumbering } from './extensions/heading-numbering'
@@ -88,6 +89,9 @@ export function buildExtensions(): Extensions {
     ParagraphStyle,
     CharacterStyle,
     CommentMark,
+    Insertion,
+    Deletion,
+    Revisions,
     ParagraphSpacing,
     Indent,
     Caption.configure({

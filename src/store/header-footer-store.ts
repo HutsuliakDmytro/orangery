@@ -29,8 +29,17 @@ const EMPTY: HeaderFooterValues = { header: '', footer: '', firstHeader: '', fir
 export interface HeaderFooterState extends HeaderFooterValues {
   /** True when the user edited them since the document was opened. */
   dirty: boolean
+  /**
+   * The section these values were read from — the position of the break that
+   * ends it, or null for the one the body holds.
+   *
+   * Held so a cursor moving into another section is noticed: the values shown
+   * belong to a section, and showing one section's header while editing
+   * another's is how a header ends up in the wrong place.
+   */
+  sectionKey: number | null
 
-  load: (values: Partial<HeaderFooterValues>) => void
+  load: (values: Partial<HeaderFooterValues>, sectionKey: number | null) => void
   set: (slot: HeaderFooterSlot, text: string) => void
   reset: () => void
 }
@@ -38,14 +47,15 @@ export interface HeaderFooterState extends HeaderFooterValues {
 export const useHeaderFooterStore = create<HeaderFooterState>((set) => ({
   ...EMPTY,
   dirty: false,
+  sectionKey: null,
 
-  load: (values) => {
-    set({ ...EMPTY, ...values, dirty: false })
+  load: (values, sectionKey) => {
+    set({ ...EMPTY, ...values, sectionKey, dirty: false })
   },
   set: (slot, text) => {
     set({ [slot]: text, dirty: true })
   },
   reset: () => {
-    set({ ...EMPTY, dirty: false })
+    set({ ...EMPTY, sectionKey: null, dirty: false })
   },
 }))

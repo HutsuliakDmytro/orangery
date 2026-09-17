@@ -1,5 +1,7 @@
-import { useCurrentEditor } from '@tiptap/react'
+import { useCurrentEditor, useEditorState } from '@tiptap/react'
 import { sectionAt } from '../editor/sections'
+import { readSectionHeaders, writeSectionHeaders } from '../document/section-headers'
+import type { HeaderFooterSlot } from '../store/header-footer-store'
 import { serializeSection } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
 import { useEffect, useState } from 'react'
@@ -55,9 +57,48 @@ function Shell() {
    * the cursor sits in — the body holds only the last. Changing an earlier one
    * writes back to the break that ends it, which is where OOXML keeps it.
    */
-  const currentSection = editor
-    ? sectionAt(editor.state.doc, editor.state.selection.from, section)
-    : { from: 0, to: 0, breakPosition: null, properties: section }
+  const currentSection =
+    useEditorState({
+      editor: editor ?? null,
+      // Subscribed to rather than read while rendering: nothing else re-renders
+      // the app when the cursor crosses into another section, and the header
+      // fields would go on showing the one it left.
+      selector: ({ editor: instance }) =>
+        instance
+          ? sectionAt(instance.state.doc, instance.state.selection.from, section)
+          : { from: 0, to: 0, breakPosition: null, properties: section },
+      equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    }) ?? { from: 0, to: 0, breakPosition: null, properties: section }
+
+  /**
+   * Keeps the header fields showing the section the cursor is in.
+   *
+   * Loaded when the cursor crosses into another section, and written back on
+   * every change rather than buffered until a save: a buffer belonging to one
+   * section while the fields show another is how an edit lands in the wrong
+   * place, and there is no moment here where it can.
+   */
+  const sectionKey = currentSection.breakPosition
+  useEffect(() => {
+    const session = getSession()
+    if (session?.kind !== 'docx') return
+    if (useHeaderFooterStore.getState().sectionKey === sectionKey) return
+
+    useHeaderFooterStore
+      .getState()
+      .load(readSectionHeaders(session.docx.pkg, currentSection.properties), sectionKey)
+  }, [sectionKey, currentSection.properties])
+
+  const changeHeaderFooter = (slot: HeaderFooterSlot, text: string) => {
+    setHeaderFooter(slot, text)
+    markDirty()
+
+    const session = getSession()
+    if (session?.kind !== 'docx') return
+
+    const values = { ...useHeaderFooterStore.getState(), [slot]: text }
+    applySection(writeSectionHeaders(session.docx.pkg, currentSection.properties, values))
+  }
 
   const applySection = (next: SectionProperties) => {
     const { breakPosition } = currentSection
@@ -155,8 +196,7 @@ function Shell() {
             value={headerFooter.header}
             placeholder="Add a header — # for the page number"
             onChange={(text) => {
-              setHeaderFooter('header', text)
-              markDirty()
+              changeHeaderFooter('header', text)
             }}
           />
 
@@ -169,8 +209,7 @@ function Shell() {
               value={headerFooter.firstHeader}
               placeholder="Header for the first page only"
               onChange={(text) => {
-                setHeaderFooter('firstHeader', text)
-                markDirty()
+                changeHeaderFooter('firstHeader', text)
               }}
             />
           )}
@@ -189,8 +228,7 @@ function Shell() {
               value={headerFooter.firstFooter}
               placeholder="Footer for the first page only"
               onChange={(text) => {
-                setHeaderFooter('firstFooter', text)
-                markDirty()
+                changeHeaderFooter('firstFooter', text)
               }}
             />
           )}
@@ -200,8 +238,7 @@ function Shell() {
             value={headerFooter.footer}
             placeholder="Add a footer — # for the page number"
             onChange={(text) => {
-              setHeaderFooter('footer', text)
-              markDirty()
+              changeHeaderFooter('footer', text)
             }}
           />
 

@@ -63,13 +63,22 @@ export const SectionBreak = Node.create({
           const { $from } = state.selection
           const after = $from.after($from.depth)
 
+          const breakNode = {
+            type: this.name,
+            // The section that *ends* here keeps the setup the document has
+            // now; the one starting after it is the one the user will change.
+            attrs: { sectPr: serializeSection(section ?? { ...EMPTY_SECTION }) },
+          }
+
+          // A break at the very end starts a section with nothing in it, and an
+          // atom is not somewhere a caret can go — so the new section gets a
+          // paragraph to type into, which is what Word leaves behind too.
+          const atEnd = after >= state.doc.content.size
+          const content = atEnd ? [breakNode, { type: 'paragraph' }] : [breakNode]
+
           return chain()
-            .insertContentAt(after, {
-              type: this.name,
-              // The section that *ends* here keeps the setup the document has
-              // now; the one starting after it is the one the user will change.
-              attrs: { sectPr: serializeSection(section ?? { ...EMPTY_SECTION }) },
-            })
+            .insertContentAt(after, content)
+            .setTextSelection(after + 2)
             .run()
         },
     }

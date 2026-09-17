@@ -14,8 +14,7 @@ import { templateById } from '../../document/templates'
 import type { TemplateId } from '../../document/templates'
 import { getSession, setSession } from '../../document/session'
 import { useDocumentStore } from '../../store/document-store'
-import { readHeaderFooter, writeHeaderFooter } from '../../document/header-footer-session'
-import { paragraphsFromText, textFromParagraphs } from '../../document/header-footer-text'
+import { readSectionHeaders, writeSectionHeaders } from '../../document/section-headers'
 import { useHeaderFooterStore } from '../../store/header-footer-store'
 import { useStylesStore } from '../../store/styles-store'
 import { useViewStore } from '../../store/view-store'
@@ -45,32 +44,14 @@ function applyHeaderFooter(session: ReturnType<typeof getSession>): void {
   if (!headerFooter.dirty) return
 
   const { pkg } = session.docx
-  let section = useViewStore.getState().section
+  const section = useViewStore.getState().section
 
-  section = writeHeaderFooter(pkg, section, 'header', paragraphsFromText(headerFooter.header))
-  section = writeHeaderFooter(pkg, section, 'footer', paragraphsFromText(headerFooter.footer))
+  // Only the section the values belong to is touched. They are shown for the
+  // section the cursor is in, and writing them anywhere else would move a
+  // header into a section nobody was editing.
+  if (headerFooter.sectionKey !== null) return
 
-  // The first page's own pair is written only where the section sets that page
-  // apart. Without `w:titlePg` Word ignores the parts, so writing them would
-  // leave the file carrying two headers it never shows.
-  if (section.differentFirstPage) {
-    section = writeHeaderFooter(
-      pkg,
-      section,
-      'header',
-      paragraphsFromText(headerFooter.firstHeader),
-      'first',
-    )
-    section = writeHeaderFooter(
-      pkg,
-      section,
-      'footer',
-      paragraphsFromText(headerFooter.firstFooter),
-      'first',
-    )
-  }
-
-  useViewStore.getState().setSection(section)
+  useViewStore.getState().setSection(writeSectionHeaders(pkg, section, headerFooter))
 }
 
 async function guardBusy<T>(work: () => Promise<T>): Promise<T | null> {
@@ -127,16 +108,7 @@ export const fileOperations = {
           useStylesStore.getState().setCatalogue(opened.session.docx.styles)
 
           const { pkg, section } = opened.session.docx
-          useHeaderFooterStore.getState().load({
-            header: textFromParagraphs(readHeaderFooter(pkg, section, 'header').paragraphs),
-            footer: textFromParagraphs(readHeaderFooter(pkg, section, 'footer').paragraphs),
-            firstHeader: textFromParagraphs(
-              readHeaderFooter(pkg, section, 'header', 'first').paragraphs,
-            ),
-            firstFooter: textFromParagraphs(
-              readHeaderFooter(pkg, section, 'footer', 'first').paragraphs,
-            ),
-          })
+          useHeaderFooterStore.getState().load(readSectionHeaders(pkg, section), null)
         } else {
           // A converted format has no style catalogue of its own, and nothing
           // that says its headings are numbered.

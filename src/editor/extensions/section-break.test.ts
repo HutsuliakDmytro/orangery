@@ -82,3 +82,32 @@ describe('a section break in the file', () => {
     ])
   })
 })
+
+describe('a break at the end of the document', () => {
+  it('leaves a paragraph to type the new section into', () => {
+    // An atom is not somewhere a caret can go, so a break with nothing after it
+    // would start a section the user cannot reach.
+    editor.commands.setContent('<p>only</p>')
+    editor.commands.setTextSelection(2)
+    runCommand('insert.section-break', { editor })
+
+    expect(editor.state.doc.child(2).type.name).toBe('paragraph')
+  })
+
+  it('puts the cursor in it, in the section just started', () => {
+    editor.commands.setContent('<p>only</p>')
+    editor.commands.setTextSelection(2)
+    runCommand('insert.section-break', { editor })
+    editor.commands.insertContent('after the break')
+
+    expect(editor.state.doc.child(2).textContent).toBe('after the break')
+  })
+
+  it('adds nothing when there is already a paragraph after it', () => {
+    editor.commands.setContent('<p>one</p><p>two</p>')
+    editor.commands.setTextSelection(2)
+    runCommand('insert.section-break', { editor })
+
+    expect(editor.state.doc.childCount).toBe(3)
+  })
+})

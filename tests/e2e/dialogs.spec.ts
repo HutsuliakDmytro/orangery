@@ -180,3 +180,32 @@ test('gives the first page a header of its own only when it is set apart', async
   // The default header is still its own field, not the one just typed into.
   await expect(page.getByLabel('Header text', { exact: true })).toHaveValue('')
 })
+
+test('each section has headers of its own', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('first section')
+
+  // The break goes after the paragraph the cursor is in, and leaves a paragraph
+  // after it to type the new section into.
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Section Break')
+  await page.keyboard.press('Enter')
+  await expect(page.locator(`${editor} .section-break`)).toHaveCount(1)
+
+  await page.locator(`${editor} p`).last().click()
+  await page.keyboard.type('second section')
+
+  const header = page.getByLabel('Header text', { exact: true })
+
+  await page.locator(`${editor} p`).first().click()
+  await header.fill('Chapter')
+
+  // The second section's header is its own, and starts empty.
+  await page.locator(`${editor} p`).last().click()
+  await expect(header).toHaveValue('')
+  await header.fill('Appendix')
+
+  // Back in the first section, its own is still there.
+  await page.locator(`${editor} p`).first().click()
+  await expect(header).toHaveValue('Chapter')
+})

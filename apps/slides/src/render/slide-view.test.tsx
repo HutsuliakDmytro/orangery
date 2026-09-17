@@ -1,8 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { readDeck, readPptxPackage, readThemes } from '@orangery/ooxml-presentation'
+import { readBodyProperties } from '@orangery/ooxml-drawingml'
+import { parseXml } from '@orangery/ooxml-core'
 import { SlideView } from './slide-view'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
@@ -179,5 +181,59 @@ describe('tables', () => {
     )
 
     expect(rects.length).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('autofit', () => {
+  const withAutofit = async (bodyPr: string) => {
+    const { deck, slide, themes } = await open('text-formatting')
+    const box = slide.shapes[0]
+    if (box?.text?.bodyProperties == null) throw new Error('fixture changed')
+
+    // The fixture states no autofit, so the state under test is set here rather
+    // than kept as a second .pptx that differs in one attribute.
+    const parsed = readBodyProperties(parseXml(bodyPr)[0] ?? {})
+    const patched = {
+      ...slide,
+      shapes: [{ ...box, text: { ...box.text, bodyProperties: parsed } }, ...slide.shapes.slice(1)],
+    }
+
+    return render(<SlideView deck={deck} slide={patched} themes={themes} />)
+  }
+
+  it('draws text at the size PowerPoint shrank it to', async () => {
+    // Ignoring fontScale overflows the shape in exactly the way PowerPoint
+    // already decided it should not.
+    await withAutofit('<a:bodyPr><a:normAutofit fontScale="50000"/></a:bodyPr>')
+
+    expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700 * 0.5)}px` })
+  })
+
+  it('tightens the lines by what was recorded with it', async () => {
+    // Relative to the untightened render, because the line height itself is
+    // inherited and this test is about the reduction, not about the base.
+    const lineHeightOf = (container: HTMLElement) =>
+      Number(
+        container
+          .querySelector('foreignObject p')
+          ?.getAttribute('style')
+          ?.match(/line-height:\s*([\d.]+)/u)?.[1],
+      )
+
+    const plain = await withAutofit('<a:bodyPr><a:normAutofit fontScale="100000"/></a:bodyPr>')
+    const base = lineHeightOf(plain.container)
+    cleanup()
+
+    const tightened = await withAutofit(
+      '<a:bodyPr><a:normAutofit fontScale="100000" lnSpcReduction="20000"/></a:bodyPr>',
+    )
+
+    expect(base).toBeGreaterThan(0)
+    expect(lineHeightOf(tightened.container)).toBeCloseTo(base * 0.8, 5)
+  })
+
+  it('leaves text alone where autofit is off', async () => {
+    await withAutofit('<a:bodyPr><a:noAutofit/></a:bodyPr>')
+    expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700)}px` })
   })
 })

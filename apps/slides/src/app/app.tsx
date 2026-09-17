@@ -4,6 +4,7 @@ import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
 import { Notes } from '../components/notes'
 import { ResizeHandle } from '../components/resize-handle'
+import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -45,6 +46,8 @@ function Shell() {
           </span>
         )}
       </header>
+
+      <WarningsBanner />
 
       <div className="flex min-h-0 flex-1">
         {panels.filmstrip && (

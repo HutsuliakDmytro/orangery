@@ -193,6 +193,19 @@ function ShapeText({
   const insets = shape.text.bodyProperties?.insets
   const anchor = shape.text.bodyProperties?.anchor ?? 't'
 
+  /**
+   * What autofit has already done to this text.
+   *
+   * PowerPoint shrinks text that overflows its box and writes down what it
+   * shrank it to. Ignoring that draws the text at full size, overflowing the
+   * shape exactly as PowerPoint decided it should not — so the recorded scale
+   * is applied rather than recomputed. Working out a *new* scale after an edit
+   * needs the text measured once laid out, which is a later task.
+   */
+  const autofit = shape.text.bodyProperties?.autofit
+  const scale = autofit?.kind === 'normal' ? (autofit.fontScale ?? 1) : 1
+  const lineReduction = autofit?.kind === 'normal' ? (autofit.lineSpaceReduction ?? 0) : 0
+
   return (
     <foreignObject
       x={transform.x}
@@ -238,7 +251,10 @@ function ShapeText({
                         ? 'justify'
                         : 'left',
                 lineHeight:
-                  properties.lineSpacing?.kind === 'percent' ? properties.lineSpacing.value : 1.2,
+                  (properties.lineSpacing?.kind === 'percent'
+                    ? properties.lineSpacing.value
+                    : 1.2) *
+                  (1 - lineReduction),
               }}
             >
               {paragraph.runs.map((run, runIndex) => {
@@ -255,7 +271,7 @@ function ShapeText({
                   <span
                     key={runIndex}
                     style={{
-                      fontSize: (resolved?.size ?? 18) * EMU_PER_POINT,
+                      fontSize: (resolved?.size ?? 18) * EMU_PER_POINT * scale,
                       fontWeight: resolved?.bold === true ? 700 : 400,
                       fontStyle: resolved?.italic === true ? 'italic' : 'normal',
                       textDecoration:

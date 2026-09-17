@@ -1,5 +1,7 @@
 import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
+import { readShapeProperties, readShapeStyle } from '@orangery/ooxml-drawingml'
+import type { ShapeProperties, ShapeStyle } from '@orangery/ooxml-drawingml'
 
 /**
  * The shapes on a slide.
@@ -65,6 +67,16 @@ export interface Shape {
    */
   transform: Transform | null
   placeholder: Placeholder | null
+  /**
+   * Geometry, fill and line as the shape states them.
+   *
+   * Null where the shape has no properties element at all — a graphic frame,
+   * for instance. Inside it, null again means "not stated": the shape takes
+   * that property from its style reference or the placeholder it follows.
+   */
+  properties: ShapeProperties | null
+  /** `p:style` — the theme slots the shape falls back to. */
+  style: ShapeStyle | null
   /** Empty for everything that is not a group. */
   shapes: Shape[]
   /** The element this was read from. Written back as-is unless something edits it. */
@@ -79,6 +91,11 @@ const number = (value: string | undefined, fallback = 0): number => {
 /** The non-visual properties container, whose name differs per shape kind. */
 function nonVisualOf(shape: XmlNode): XmlNode | undefined {
   return children(shape).find((child) => /^p:nv[A-Za-z]*Pr$/u.test(tagName(child) ?? ''))
+}
+
+/** The `p:spPr` / `p:grpSpPr` a shape states its look in, if it has one. */
+function shapePropertiesOf(shape: XmlNode): XmlNode | undefined {
+  return children(shape).find((child) => /^p:(sp|grpSp)Pr$/u.test(tagName(child) ?? ''))
 }
 
 /**
@@ -142,6 +159,8 @@ function parseShape(node: XmlNode): Shape {
   const kind = KINDS[tagName(node) ?? ''] ?? 'unknown'
   const nonVisual = nonVisualOf(node)
   const identity = nonVisual === undefined ? undefined : findChild(nonVisual, 'p:cNvPr')
+  const propertiesNode = shapePropertiesOf(node)
+  const styleNode = findChild(node, 'p:style')
 
   return {
     kind,
@@ -150,6 +169,8 @@ function parseShape(node: XmlNode): Shape {
     description: (identity === undefined ? undefined : attribute(identity, 'descr')) ?? '',
     transform: parseTransform(transformNodeOf(node, kind)),
     placeholder: parsePlaceholder(nonVisual),
+    properties: propertiesNode === undefined ? null : readShapeProperties(propertiesNode),
+    style: styleNode === undefined ? null : readShapeStyle(styleNode),
     shapes: kind === 'grpSp' ? parseShapeTree(node) : [],
     node,
   }

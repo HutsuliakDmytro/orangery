@@ -2,10 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { children, tagName } from '@orangery/ooxml-core'
-import { EMU_PER_INCH } from '@orangery/ooxml-drawingml'
+import { EMU_PER_INCH, resolveColor } from '@orangery/ooxml-drawingml'
 import { layoutOf, masterOf, readDeck } from './deck'
 import { readPptxPackage } from './parts'
 import { flatten } from './shape-tree'
+import { colorContextFor, readThemes } from './theme-context'
 
 const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synthetic')
 
@@ -139,5 +140,52 @@ describe('flatten', () => {
     const shapes = deck.slides[0]?.shapes ?? []
 
     expect(flatten(shapes).map((shape) => shape.name)).toEqual(shapes.map((shape) => shape.name))
+  })
+})
+
+describe('shape properties on a real deck', () => {
+  it('reads the fill and line each shape states', async () => {
+    const deck = await deckOf('shapes')
+    const [rectangle] = deck.slides[0]?.shapes ?? []
+
+    expect(rectangle?.properties?.geometry).toMatchObject({ kind: 'preset', preset: 'rect' })
+    expect(rectangle?.properties?.fill).toMatchObject({ kind: 'solid' })
+    expect(rectangle?.properties?.line).toMatchObject({ width: 25400 })
+  })
+
+  it('resolves that fill through the deck theme', async () => {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'shapes.pptx')))
+    const deck = readDeck(pkg)
+    const themes = readThemes(pkg, deck)
+    const slide = deck.slides[0]
+    const fill = slide?.shapes[0]?.properties?.fill
+
+    const color = fill?.kind === 'solid' ? fill.color : null
+    const context = slide ? colorContextFor(deck, themes, slide) : null
+
+    expect(color && context ? resolveColor(color, context)?.hex : null).toBe('#161616')
+  })
+
+  it('reads the style reference a shape falls back to', async () => {
+    const deck = await deckOf('shapes')
+    const [rectangle] = deck.slides[0]?.shapes ?? []
+
+    expect(rectangle?.style?.fill?.index).toBe(3)
+    expect(rectangle?.style?.line?.color?.source).toEqual({ kind: 'scheme', name: 'accent1' })
+  })
+
+  it('leaves a graphic frame without shape properties, because it has none', async () => {
+    const deck = await deckOf('table')
+    const frame = deck.slides[0]?.shapes.find((shape) => shape.kind === 'graphicFrame')
+
+    expect(frame?.properties).toBeNull()
+  })
+
+  it('reads a picture as a shape with properties and no fill of its own', async () => {
+    const deck = await deckOf('picture')
+    const [picture] = deck.slides[0]?.shapes ?? []
+
+    expect(picture?.kind).toBe('pic')
+    expect(picture?.properties?.geometry).toMatchObject({ preset: 'rect' })
   })
 })

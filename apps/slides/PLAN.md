@@ -64,7 +64,8 @@
 - [ ] CI: LibreOffice headless → PDF до/після, render-diff
 
 ### 1.2 DrawingML → модель
-- [ ] `sp`: `spPr` (xfrm, prstGeom 180+ пресетів — таблиця path-ів, custGeom), fill (solid/gradient/pattern/picture/none), line (width, dash, caps, arrows), effects (shadow базово; решта passthrough)
+- [~] `sp`: `spPr` (xfrm, prstGeom 180+ пресетів — таблиця path-ів, custGeom), fill (solid/gradient/pattern/picture/none), line (width, dash, caps, arrows), effects (shadow базово; решта passthrough)
+      — читається все п'ять видів заливки, лінія з товщиною, пунктиром, торцями й стрілками, пресетна геометрія з `a:avLst`. Наскрізне правило: **відсутнє ≠ none**. Фігура без `a:solidFill` бере заливку зі style reference або плейсхолдера, а `a:noFill` — свідомо прозора; злиття цих двох зробило б кожну нестилізовану фігуру або невидимою, або не того кольору. Тому `null` усюди означає «не вказано». Значення `a:avLst` зберігаються — це радіус кута й розмір вістря, тобто рівно те, що губиться при перебудові фігури з моделі «це заокруглений прямокутник». Таблиця path-ів для 180 пресетів — робота рендерера (1.3); `custGeom` позначається, але шлях не моделюється; ефекти лише детектуються
 - [ ] `txBody`: `bodyPr` (insets, anchor, wrap, autofit, columns), `lstStyle`, `a:p`/`a:r`/`a:pPr`/`a:rPr` → ProseMirror через `editor-text`
 - [ ] Bullets: `buChar`, `buAutoNum`, `buBlip`, `buNone`, рівні 0–8 з lstStyle успадкуванням
 - [ ] `pic`: blip, crop (`srcRect`), transforms

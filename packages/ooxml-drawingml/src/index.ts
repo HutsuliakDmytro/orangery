@@ -22,3 +22,21 @@ export { readColor, readColorChild, resolveColor } from './color'
 export type { Color, ColorContext, ColorSource, ColorTransform, ResolvedColor } from './color'
 export { fontStackFor, parseTheme, resolveThemeFont } from './theme'
 export type { Theme, ThemeFonts } from './theme'
+export {
+  hasEffects,
+  readFill,
+  readLine,
+  readShapeProperties,
+  readShapeStyle,
+} from './shape-properties'
+export type {
+  Arrow,
+  Fill,
+  Geometry,
+  GradientStop,
+  Line,
+  LineCap,
+  ShapeProperties,
+  ShapeStyle,
+  StyleReference,
+} from './shape-properties'

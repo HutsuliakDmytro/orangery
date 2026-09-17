@@ -1,0 +1,8 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Built from source rather than from a prebuilt binary; everything else is
+# blocked by default, so a postinstall script cannot run without being listed.
+onlyBuiltDependencies:
+  - esbuild

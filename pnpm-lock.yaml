@@ -7,6 +7,12 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      prettier:
+        specifier: ^3.9.7
+        version: 3.9.7
+
+  apps/docs:
     dependencies:
       '@tauri-apps/plugin-dialog':
         specifier: ^2.7.3

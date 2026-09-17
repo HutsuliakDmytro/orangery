@@ -4,22 +4,25 @@ on:
   pull_request:
   push:
     branches: [main]
-    # A tag builds the same way and then publishes what it built.
-    tags: ['v*']
+    # Each app releases on its own tag, so a fix in Docs never ships a version
+    # bump for Slides. A tag builds the same way and then publishes what it built.
+    tags: ['docs-v*', 'slides-v*']
 
 concurrency:
-  group: build-macos-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.app }} — ${{ matrix.platform.label }}
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       # One platform failing should not hide the state of the others.
       fail-fast: false
       matrix:
-        include:
+        # Adding an app to the suite is adding it to this list.
+        app: [docs]
+        platform:
           - os: macos-latest
             label: macOS universal (unsigned)
             target: universal-apple-darwin
@@ -37,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Linux build dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.platform.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -56,26 +59,26 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
 
       - run: pnpm install --frozen-lockfile
 
       # Signing and notarization land in Phase 5; this only proves the app builds.
-      - run: pnpm tauri build ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --bundles ${{ matrix.bundles }}
+      - run: pnpm --filter ${{ matrix.app }} tauri build ${{ matrix.platform.target && format('--target {0}', matrix.platform.target) || '' }} --bundles ${{ matrix.platform.bundles }}
         shell: bash
 
+      # One cargo workspace, so the bundles land in the target directory at the
+      # repository root rather than under the app.
       - uses: actions/upload-artifact@v4
         with:
-          name: orangery-docs-${{ matrix.os }}
+          name: ${{ matrix.app }}-${{ matrix.platform.os }}
           path: |
-            src-tauri/target/*/release/bundle/**/*.dmg
-            src-tauri/target/release/bundle/**/*.deb
-            src-tauri/target/release/bundle/**/*.AppImage
-            src-tauri/target/release/bundle/**/*.exe
+            target/*/release/bundle/**/*.dmg
+            target/release/bundle/**/*.deb
+            target/release/bundle/**/*.AppImage
+            target/release/bundle/**/*.exe
           if-no-files-found: warn
 
   release:
@@ -83,7 +86,7 @@ jobs:
     needs: build
     # Only a tag publishes. Every other build proves the app compiles and stops
     # there.
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -91,8 +94,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `docs-v0.1.0` releases Docs. Downloading only that app's artifacts is
+      # what keeps a tag from shipping a sibling app that merely built alongside.
+      - id: app
+        run: echo "name=${GITHUB_REF_NAME%%-v*}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v4
         with:
+          pattern: ${{ steps.app.outputs.name }}-*
           path: bundles
           merge-multiple: true
 

@@ -5,8 +5,11 @@ node_modules/
 # build
 dist/
 dist-ssr/
-src-tauri/target/
-src-tauri/gen/
+# One cargo workspace, so the build directory is at the root; the per-app entry
+# stays for anyone who builds a crate on its own.
+target/
+**/src-tauri/target/
+**/src-tauri/gen/
 
 # test
 coverage/

@@ -1,9 +1,14 @@
 dist
 coverage
+target
 pnpm-lock.yaml
-src-tauri/target
-src-tauri/gen
-src-tauri/icons
-tests/fixtures
+**/src-tauri/target
+**/src-tauri/gen
+**/src-tauri/icons
+**/tests/fixtures
+# Written by hand and read by hand; Prettier reflows the tables and the
+# nested checklists into something worse.
 CLAUDE.md
 PLAN.md
+**/CLAUDE.md
+**/PLAN.md

@@ -13,7 +13,8 @@
 ### 0.1 Монорепа
 - [x] ADR `0001-monorepo.md`: pnpm workspace + cargo workspace, чому спільні пакети
       — лежить у корені (`docs/adr/`), бо стосується всього воркспейсу, а не одного аппа
-- [ ] Перенести `orangery-docs` у `apps/docs` без змін, CI зелений
+- [x] Перенести `orangery-docs` у `apps/docs` без змін, CI зелений
+      — git розпізнав перенесення як rename, тож історія й реліз `v0.1.0` на місці. Жодного рядка логіки не змінено: ті самі 1446 тестів, корпус, clippy і cargo test. CI зелений на всіх шести джобах, збірка трьох платформ проходить
 - [ ] Витягти `packages/ooxml-core`: zip, rels, content types, XML parse/serialize, passthrough-утиліти
 - [ ] Витягти `packages/ooxml-drawingml`: усе, що Docs уже парсить із `a:*`/`wp:*`/`pic:*` (картинки, anchor, transforms)
 - [ ] Витягти `packages/editor-text`: ProseMirror-схема run/paragraph, команди форматування — без `w:`-специфіки в ядрі; Docs підключає `wordprocessing`-адаптер

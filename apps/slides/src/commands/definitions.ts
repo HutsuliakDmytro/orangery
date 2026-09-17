@@ -355,6 +355,55 @@ export const textCommands: readonly Command[] = [
   })),
 ]
 
+/** Setting an attribute on the paragraph the cursor is in. */
+function setParagraph(attributes: Record<string, unknown>): void {
+  useEditorStore.getState().editor?.chain().focus().updateAttributes('paragraph', attributes).run()
+}
+
+function paragraphAttribute(name: string): unknown {
+  return useEditorStore.getState().editor?.getAttributes('paragraph')[name]
+}
+
+export const paragraphCommands: readonly Command[] = [
+  ...(
+    [
+      ['left', 'Align Text Left', 'l'],
+      ['centre', 'Centre Text', 'ctr'],
+      ['right', 'Align Text Right', 'r'],
+      ['justify', 'Justify Text', 'just'],
+    ] as const
+  ).map(([id, label, value]) => ({
+    id: `format.text-${id}`,
+    label,
+    group: 'format' as const,
+    isActive: () => paragraphAttribute('align') === value,
+    isEnabled: () => useEditorStore.getState().editor !== null,
+    run: () => {
+      // Clicking the alignment a paragraph already has clears it, which puts
+      // the inherited one back rather than freezing today's answer into the file.
+      setParagraph({ align: paragraphAttribute('align') === value ? null : value })
+    },
+  })),
+  ...(
+    [
+      ['bullet', 'Bulleted List', 'character'],
+      ['number', 'Numbered List', 'number'],
+      ['no-bullet', 'No Bullet', 'none'],
+    ] as const
+  ).map(([id, label, kind]) => ({
+    id: `format.${id}`,
+    label,
+    group: 'format' as const,
+    isActive: () => paragraphAttribute('bullet') === kind,
+    isEnabled: () => useEditorStore.getState().editor !== null,
+    run: () => {
+      // Turning off the one already set means "inherit", not "none": the level
+      // has an answer and the paragraph goes back to it.
+      setParagraph({ bullet: paragraphAttribute('bullet') === kind ? 'inherit' : kind })
+    },
+  })),
+]
+
 export const connectorCommands: readonly Command[] = [
   {
     id: 'insert.connector',
@@ -620,6 +669,7 @@ export function registerBuiltinCommands(): void {
   registerAll(tableCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)
+  registerAll(paragraphCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

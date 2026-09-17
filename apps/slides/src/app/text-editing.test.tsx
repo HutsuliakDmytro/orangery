@@ -286,3 +286,82 @@ describe('formatting the text being edited', () => {
     ).toBe(0)
   })
 })
+
+describe('paragraph formatting', () => {
+  /** Enters the first shape, runs commands, leaves, and returns the file text. */
+  async function withEditor(run: () => void) {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(run)
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    return partText()
+  }
+
+  it('centres a paragraph and the file says so', async () => {
+    const text = await withEditor(() => {
+      runCommand('format.text-centre', {})
+    })
+
+    expect(text).toContain('algn="ctr"')
+  })
+
+  it('clears the alignment when the same one is chosen again', async () => {
+    // Which puts the inherited alignment back rather than freezing today's
+    // answer into the file.
+    const text = await withEditor(() => {
+      runCommand('format.text-centre', {})
+      runCommand('format.text-centre', {})
+    })
+
+    expect(text).not.toContain('algn=')
+  })
+
+  it('turns a paragraph into a bulleted one', async () => {
+    const text = await withEditor(() => {
+      runCommand('format.bullet', {})
+    })
+
+    expect(text).toContain('a:buChar')
+  })
+
+  it("goes back to the level's bullet rather than to none", async () => {
+    const text = await withEditor(() => {
+      runCommand('format.bullet', {})
+      runCommand('format.bullet', {})
+    })
+
+    expect(text).not.toContain('a:buChar')
+    expect(text).not.toContain('a:buNone')
+  })
+
+  it('states no bullet when that is what was asked for', async () => {
+    const text = await withEditor(() => {
+      runCommand('format.no-bullet', {})
+    })
+
+    expect(text).toContain('a:buNone')
+  })
+
+  it('reports what the paragraph under the cursor has', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    expect(getCommand('format.bullet')?.isActive?.({})).toBe(false)
+
+    act(() => {
+      runCommand('format.bullet', {})
+    })
+    expect(getCommand('format.bullet')?.isActive?.({})).toBe(true)
+  })
+})

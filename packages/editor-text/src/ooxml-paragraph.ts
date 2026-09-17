@@ -36,6 +36,19 @@ export const OoxmlParagraph = Extension.create({
             renderHTML: (attributes) =>
               attributes['align'] == null ? {} : { 'data-align': String(attributes['align']) },
           },
+          /**
+           * `character`, `number`, `none`, `picture`, or `inherit`.
+           *
+           * Null and `inherit` are not the same as `none`: a paragraph that
+           * says nothing takes the bullet of its outline level, while one that
+           * says `none` has decided it has none.
+           */
+          bullet: {
+            default: null,
+            parseHTML: (element) => element.dataset['bullet'] ?? null,
+            renderHTML: (attributes) =>
+              attributes['bullet'] == null ? {} : { 'data-bullet': String(attributes['bullet']) },
+          },
           /** The original properties element, serialised. Never rendered. */
           pPrOriginal: { default: null, renderHTML: () => ({}) },
           /** What an empty paragraph would type in. Never rendered. */

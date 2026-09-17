@@ -200,3 +200,75 @@ describe('what the editor owns', () => {
     expect(after).toContain('a:buChar')
   })
 })
+
+describe('bullets', () => {
+  const withBullet = (inner: string, bullet: unknown) => {
+    const element = body(`<a:bodyPr/><a:lstStyle/>${inner}`)
+    const doc = textBodyToDoc(readTextBody(element))
+    const paragraph = doc.content?.[0]
+    if (paragraph !== undefined) paragraph.attrs = { ...paragraph.attrs, bullet }
+
+    writeTextBody(element, doc)
+    return serializeNode(element)
+  }
+
+  it('reads which kind a paragraph states', () => {
+    const doc = docOf('<a:p><a:pPr><a:buChar char="•"/></a:pPr></a:p>')
+    expect(doc.content?.[0]?.attrs?.['bullet']).toBe('character')
+  })
+
+  it('reads nothing stated as null, which is not the same as none', () => {
+    expect(docOf('<a:p><a:pPr/></a:p>').content?.[0]?.attrs?.['bullet']).toBeNull()
+    expect(docOf('<a:p><a:pPr><a:buNone/></a:pPr></a:p>').content?.[0]?.attrs?.['bullet']).toBe(
+      'none',
+    )
+  })
+
+  it('writes a character bullet with a font that has the glyph', () => {
+    const after = withBullet('<a:p><a:r><a:t>x</a:t></a:r></a:p>', 'character')
+
+    expect(after).toContain('a:buChar')
+    expect(after).toContain('typeface="Arial"')
+  })
+
+  it('writes a numbered bullet', () => {
+    expect(withBullet('<a:p><a:r><a:t>x</a:t></a:r></a:p>', 'number')).toContain('a:buAutoNum')
+  })
+
+  it('replaces one kind with another rather than keeping both', () => {
+    const after = withBullet('<a:p><a:pPr><a:buChar char="•"/></a:pPr></a:p>', 'number')
+
+    expect(after).toContain('a:buAutoNum')
+    expect(after).not.toContain('a:buChar')
+  })
+
+  it("goes back to the level's bullet when told to inherit", () => {
+    // Which is a different answer from "none": the level has one, and the
+    // paragraph stops disagreeing with it.
+    const after = withBullet('<a:p><a:pPr><a:buNone/></a:pPr></a:p>', 'inherit')
+
+    expect(after).not.toContain('a:buNone')
+    expect(after).not.toContain('a:buChar')
+  })
+
+  it('puts the bullet where the schema wants it', () => {
+    const after = withBullet(
+      '<a:p><a:pPr><a:spcBef><a:spcPts val="600"/></a:spcBef></a:pPr><a:r><a:t>x</a:t></a:r></a:p>',
+      'character',
+    )
+
+    expect(after.indexOf('a:spcBef')).toBeLessThan(after.indexOf('a:buFont'))
+    expect(after.indexOf('a:buFont')).toBeLessThan(after.indexOf('a:buChar'))
+  })
+
+  it('leaves a paragraph alone when nothing asked for a bullet', () => {
+    const { before, after } = (() => {
+      const element = body('<a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:buChar char="•"/></a:pPr></a:p>')
+      const text = serializeNode(element)
+      writeTextBody(element, textBodyToDoc(readTextBody(element)))
+      return { before: text, after: serializeNode(element) }
+    })()
+
+    expect(after).toBe(before)
+  })
+})

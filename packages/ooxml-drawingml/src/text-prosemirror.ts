@@ -4,6 +4,7 @@ import {
   deserializeNode,
   element,
   removeAttribute,
+  removeChild,
   serializeNode,
   setAttribute,
   tagName,
@@ -158,6 +159,7 @@ export function textBodyToDoc(body: TextBody): PmNode {
         attrs: {
           level: Number.isFinite(level) ? level : 0,
           align: (properties === undefined ? undefined : attribute(properties, 'algn')) ?? null,
+          bullet: properties === undefined ? null : bulletKindOf(properties),
           pPrOriginal: properties === undefined ? null : serializeNode(properties),
           // An empty paragraph carries its formatting here and nowhere else.
           endParaRPr: end === undefined ? null : serializeNode(end),
@@ -167,6 +169,89 @@ export function textBodyToDoc(body: TextBody): PmNode {
     })
 
   return { type: 'doc', content: paragraphs }
+}
+
+/** The paragraph-level bullet elements, in the order `a:pPr` wants them. */
+const PARAGRAPH_PROPERTIES = [
+  'a:lnSpc',
+  'a:spcBef',
+  'a:spcAft',
+  'a:buClrTx',
+  'a:buClr',
+  'a:buSzTx',
+  'a:buSzPct',
+  'a:buSzPts',
+  'a:buFontTx',
+  'a:buFont',
+  'a:buNone',
+  'a:buAutoNum',
+  'a:buChar',
+  'a:buBlip',
+  'a:tabLst',
+  'a:defRPr',
+  'a:extLst',
+]
+
+const BULLET_TAGS = ['a:buNone', 'a:buAutoNum', 'a:buChar', 'a:buBlip']
+
+/** What kind of bullet a paragraph states, or null when it inherits one. */
+function bulletKindOf(properties: XmlNode): string | null {
+  for (const child of children(properties)) {
+    switch (tagName(child)) {
+      case 'a:buNone':
+        return 'none'
+      case 'a:buChar':
+        return 'character'
+      case 'a:buAutoNum':
+        return 'number'
+      case 'a:buBlip':
+        return 'picture'
+      default:
+        continue
+    }
+  }
+  return null
+}
+
+/**
+ * Writes the bullet a paragraph was given.
+ *
+ * `null` means the paragraph says nothing and takes the level's — which is not
+ * the same as `none`, where it says it has one and it is nothing. Removing the
+ * elements for the first case is what puts the inherited bullet back.
+ */
+function setBullet(properties: XmlNode, kind: unknown): void {
+  if (typeof kind !== 'string') return
+
+  /**
+   * Nothing is written when nothing changed.
+   *
+   * Rewriting the same bullet is not free: the file states `a:buChar` and this
+   * would add the `a:buFont` beside it that PowerPoint writes but the original
+   * did not. A body nobody edited has to come back byte for byte, and that is
+   * what a round-trip test measures.
+   */
+  const already = bulletKindOf(properties)
+  if (kind === already) return
+  if (kind === 'inherit' && already === null) return
+
+  for (const tag of BULLET_TAGS) removeChild(properties, tag)
+  removeChild(properties, 'a:buFont')
+
+  if (kind === 'inherit') return
+  if (kind === 'none') {
+    upsertChild(properties, element('a:buNone'), PARAGRAPH_PROPERTIES)
+    return
+  }
+  if (kind === 'number') {
+    upsertChild(properties, element('a:buAutoNum', { type: 'arabicPeriod' }), PARAGRAPH_PROPERTIES)
+    return
+  }
+  if (kind === 'character') {
+    // Arial carries the glyph on every platform we ship fonts for.
+    upsertChild(properties, element('a:buFont', { typeface: 'Arial' }), PARAGRAPH_PROPERTIES)
+    upsertChild(properties, element('a:buChar', { char: '\u2022' }), PARAGRAPH_PROPERTIES)
+  }
 }
 
 /** Patches a run's properties with what the marks say, keeping the rest. */
@@ -215,7 +300,12 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
      */
     const level = Number(paragraph.attrs?.['level'] ?? 0)
     const align = paragraph.attrs?.['align']
-    const patched = properties ?? (level > 0 || typeof align === 'string' ? element('a:pPr') : null)
+    const bullet = paragraph.attrs?.['bullet']
+    const patched =
+      properties ??
+      (level > 0 || typeof align === 'string' || typeof bullet === 'string'
+        ? element('a:pPr')
+        : null)
 
     if (patched !== null) {
       if (level > 0) setAttribute(patched, 'lvl', String(level))
@@ -223,6 +313,8 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
 
       if (typeof align === 'string') setAttribute(patched, 'algn', align)
       else removeAttribute(patched, 'algn')
+
+      setBullet(patched, paragraph.attrs?.['bullet'])
     }
 
     const runs = (paragraph.content ?? []).flatMap((node): XmlNode[] => {

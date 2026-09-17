@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Editor } from '@tiptap/core'
 import { createTestEditor } from '../../test/editor-harness'
 import { normalizeBlockSelection, selectWholeDocument } from './selection'
-import { runCommand } from './registry'
+import { runCommand } from '@orangery/ui-kit'
 
 let editor: Editor
 

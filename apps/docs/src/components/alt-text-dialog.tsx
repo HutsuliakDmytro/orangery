@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 /**
  * Alt text for an image.

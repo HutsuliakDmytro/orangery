@@ -4,7 +4,7 @@ import { FONT_SIZE_PRESETS } from '@orangery/editor-text'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../i18n'
 import { useSettingsStore } from '../store/settings-store'
 import type { ThemePreference, UiLanguage } from '../store/settings-store'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 const THEMES: readonly ThemePreference[] = ['dark', 'light', 'system']
 

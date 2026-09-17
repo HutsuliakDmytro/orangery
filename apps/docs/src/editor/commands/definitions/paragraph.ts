@@ -6,7 +6,7 @@ import type { Editor } from '@tiptap/core'
 import { useViewStore } from '../../../store/view-store'
 import { requestPicker } from '../picker-store'
 import { normalizeBlockSelection } from '../selection'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 /** Mirrors Tiptap's `Level`; declared locally so the heading package stays transitive. */
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6

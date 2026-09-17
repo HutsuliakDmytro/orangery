@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CHARACTER_GROUPS, searchCharacters } from '../editor/special-characters'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 /** Insert a symbol. Searchable by name, because that is how people look. */
 export function SpecialCharactersDialog({

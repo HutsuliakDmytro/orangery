@@ -6,7 +6,7 @@ import {
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
 } from '@orangery/editor-text'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 export function FontFamilyPicker({
   current,

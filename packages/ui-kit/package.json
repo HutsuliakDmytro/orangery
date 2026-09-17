@@ -1,0 +1,38 @@
+{
+  "name": "@orangery/ui-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The command registry and the chrome around it: theme tokens, dialogs, pickers, palette.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@orangery/platform": "workspace:*",
+    "@tiptap/core": "^2.27.3",
+    "@tiptap/react": "^2.27.3",
+    "lucide-react": "^1.46.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@tiptap/starter-kit": "^2.27.3",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^10.10.0",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

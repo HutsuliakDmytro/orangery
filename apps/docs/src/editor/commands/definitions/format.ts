@@ -1,7 +1,7 @@
 import { DEFAULT_FONT_SIZE, FONT_SIZE_PRESETS } from '@orangery/editor-text'
 import { applyFormat, copyFormat, heldFormat } from '../format-painter'
 import { requestPicker } from '../picker-store'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 /**
  * Character-level formatting. Shortcuts match Word and Google Docs — see the

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { useCommand } from '../editor/commands/use-command'
+import { useCommand } from '../commands/use-command'
 
 /**
  * One toolbar control, bound to a registry command.

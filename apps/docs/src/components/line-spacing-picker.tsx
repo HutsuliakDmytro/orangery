@@ -6,7 +6,7 @@ import {
   MAX_LINE_HEIGHT,
   MIN_LINE_HEIGHT,
 } from '@orangery/editor-text'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 interface LineSpacingPickerProps {
   lineHeight: number | null

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { contrastingText, normalizeHex } from '../editor/colors'
+import { contrastingText, normalizeHex } from '../colors'
 import { PickerPopover } from './picker-popover'
 
 interface ColorPickerProps {

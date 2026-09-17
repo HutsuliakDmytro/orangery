@@ -1,6 +1,6 @@
 import { EditorContext, useEditor } from '@tiptap/react'
 import { useEffect, useMemo } from 'react'
-import { registerBuiltinCommands } from './commands'
+import { registerBuiltinCommands } from './commands/definitions'
 import { buildExtensions, setCurrentEditor } from './extension-set'
 
 // Registration happens once at module load: the registry is process-wide state,

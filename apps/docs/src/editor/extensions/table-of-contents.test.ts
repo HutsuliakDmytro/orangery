@@ -4,7 +4,7 @@ import { createTestEditor } from '../../test/editor-harness'
 import { entriesFromOutline } from './table-of-contents'
 import { buildOutline } from '../outline'
 import { useViewStore } from '../../store/view-store'
-import { runCommand } from '../commands/registry'
+import { runCommand } from '@orangery/ui-kit'
 import { serializeDocument } from '../../ooxml/serialize-document'
 import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
 

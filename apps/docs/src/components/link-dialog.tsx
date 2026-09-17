@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { normalizeUrl } from '../editor/links'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 interface LinkDialogProps {
   /** Existing href when editing a link, null when creating one. */

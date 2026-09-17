@@ -32,11 +32,11 @@ import { useCurrentEditor, useEditorState } from '@tiptap/react'
 import { useTranslation } from 'react-i18next'
 import { DEFAULT_FONT_SIZE } from '@orangery/editor-text'
 import { requestPicker } from '../editor/commands/picker-store'
-import { runCommand } from '../editor/commands/registry'
+import { runCommand } from '@orangery/ui-kit'
 import { useStylesStore } from '../store/styles-store'
 import { useViewStore, ZOOM_LEVELS } from '../store/view-store'
-import { ToolbarButton, ToolbarSeparator } from './toolbar-button'
-import { useRovingFocus } from './use-roving-focus'
+import { ToolbarButton, ToolbarSeparator } from '@orangery/ui-kit'
+import { useRovingFocus } from '@orangery/ui-kit'
 
 /**
  * Single-row toolbar in the Google Docs arrangement, not a Word ribbon

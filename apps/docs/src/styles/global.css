@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @import './fonts.css';
-@import './tokens.css';
+@import '@orangery/ui-kit/tokens.css';
 @import './editor.css';
 @import './print.css';
 

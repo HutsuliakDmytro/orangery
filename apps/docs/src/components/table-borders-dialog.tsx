@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { BORDER_STYLES } from '../ooxml/table-borders'
 import type { Border } from '../ooxml/table-borders'
-import { normalizeHex } from '../editor/colors'
-import { PickerPopover } from './picker-popover'
+import { normalizeHex } from '@orangery/ui-kit'
+import { PickerPopover } from '@orangery/ui-kit'
 
 /** Widths Word offers in its own borders dialog, in points. */
 const WIDTHS = [0.25, 0.5, 1, 1.5, 2.25, 3, 4.5, 6]

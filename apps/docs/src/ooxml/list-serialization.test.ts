@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDocument } from './parse-document'
 import { parseNumbering } from './numbering'
-import { runCommand } from '../editor/commands/registry'
+import { runCommand } from '@orangery/ui-kit'
 import { createTestEditor, selectAll } from '../test/editor-harness'
 import type { ProseMirrorNodeJson } from './prosemirror-json'
 import { serializeDocument } from './serialize-document'

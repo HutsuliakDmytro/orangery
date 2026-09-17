@@ -1,6 +1,6 @@
 import { useViewStore } from '../../../store/view-store'
 import { selectWholeDocument } from '../selection'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 /**
  * History commands. StarterKit provides the ProseMirror history plugin; the

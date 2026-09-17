@@ -1,5 +1,5 @@
 import { requestPicker } from '../picker-store'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 /**
  * Parameterised formatting. Each command opens its picker; the picker applies the

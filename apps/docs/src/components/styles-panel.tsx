@@ -6,7 +6,7 @@ import { formattingAt, newStyleFrom, saveStyle } from '../document/styles-sessio
 import { getSession } from '../document/session'
 import { useDocumentStore } from '../store/document-store'
 import { useStylesStore } from '../store/styles-store'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 import type { StyleDefinition } from '../ooxml/style-writer'
 import type { StyleOption } from '../store/styles-store'
 

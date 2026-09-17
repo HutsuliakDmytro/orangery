@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as Platform from '@orangery/platform'
 
 /**
  * The directory a snapshot lives in.
@@ -12,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // stands in for are replaced — mocking the package wholesale would silently
 // remove everything else it provides.
 vi.mock('@orangery/platform', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@orangery/platform')>()),
+  ...(await importOriginal<typeof Platform>()),
   isTauri: () => true,
   autosaveDir: () => Promise.resolve('/data/autosave'),
 }))

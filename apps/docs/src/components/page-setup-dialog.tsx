@@ -7,7 +7,7 @@ import {
   withPageSize,
 } from '../ooxml/section'
 import type { PageSizeId, SectionProperties } from '../ooxml/section'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 /**
  * Page setup. Changing any of this changes the document, so the caller marks it

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { PageNumberFormat, SectionProperties } from '../ooxml/section'
-import { PickerPopover } from './picker-popover'
+import { PickerPopover } from '@orangery/ui-kit'
 
 /**
  * Page numbering: which numerals, what to start at, and whether the first page

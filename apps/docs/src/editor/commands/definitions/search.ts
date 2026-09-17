@@ -1,5 +1,5 @@
 import { requestPicker } from '../picker-store'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 export const searchCommandDefinitions: readonly Command[] = [
   {

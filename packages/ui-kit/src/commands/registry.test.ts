@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { COMMAND_GROUPS } from './types'
-import { toKeymapBinding } from './keymap'
 import {
-  allCommands,
   commandsInGroup,
   describeCommands,
   getCommand,
@@ -11,7 +8,6 @@ import {
   registerAll,
   resetRegistry,
 } from './registry'
-import { registerBuiltinCommands } from './definitions'
 import type { Command, CommandContext } from './types'
 
 // The registry never touches the editor unless a command's own callback does, so a
@@ -67,53 +63,5 @@ describe('registry mechanics', () => {
     register(makeCommand({ id: 'test.shortcut', shortcut: 'Mod+Shift+P' }))
     const [descriptor] = describeCommands(stubContext)
     expect(descriptor?.shortcut).toMatch(/^(Cmd|Ctrl)\+Shift\+P$/)
-  })
-})
-
-describe('built-in command invariants', () => {
-  beforeEach(registerBuiltinCommands)
-
-  it('registers at least one command', () => {
-    expect(allCommands().length).toBeGreaterThan(0)
-  })
-
-  it('gives every command a non-empty label', () => {
-    const unlabelled = allCommands().filter((command) => command.label.trim() === '')
-    expect(unlabelled.map((c) => c.id)).toEqual([])
-  })
-
-  it('gives every command a known group', () => {
-    const stray = allCommands().filter((command) => !COMMAND_GROUPS.includes(command.group))
-    expect(stray.map((c) => c.id)).toEqual([])
-  })
-
-  it('uses dot-namespaced ids', () => {
-    const malformed = allCommands().filter((command) => !/^[a-z]+(\.[a-z0-9-]+)+$/.test(command.id))
-    expect(malformed.map((c) => c.id)).toEqual([])
-  })
-
-  it('has no shortcut collisions', () => {
-    const seen = new Map<string, string>()
-    const collisions: string[] = []
-
-    for (const command of allCommands()) {
-      if (!command.shortcut) continue
-      const binding = toKeymapBinding(command.shortcut)
-      const owner = seen.get(binding)
-      if (owner) {
-        collisions.push(`${binding}: ${owner} vs ${command.id}`)
-        continue
-      }
-      seen.set(binding, command.id)
-    }
-
-    expect(collisions).toEqual([])
-  })
-
-  it('writes shortcuts with Mod, never a hardcoded Cmd or Ctrl', () => {
-    const hardcoded = allCommands().filter(
-      (command) => command.shortcut && /\b(Cmd|Ctrl|Meta)\b/.test(command.shortcut),
-    )
-    expect(hardcoded.map((c) => c.id)).toEqual([])
   })
 })

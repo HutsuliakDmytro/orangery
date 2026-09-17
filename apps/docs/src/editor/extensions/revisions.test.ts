@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestEditor } from '../../test/editor-harness'
-import { runCommand } from '../commands/registry'
+import { runCommand } from '@orangery/ui-kit'
 
 let editor: Editor
 

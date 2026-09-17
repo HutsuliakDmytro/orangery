@@ -10,7 +10,7 @@ export * from './markdown'
 export * from './odt'
 export * from './rtf'
 export * from './text'
-export * from './types'
+export * from '@orangery/ui-kit'
 
 /** Converters for the flat, text-based formats. DOCX and ODT are packages. */
 const CONVERTERS: Partial<Record<DocumentFormat, Converter>> = {

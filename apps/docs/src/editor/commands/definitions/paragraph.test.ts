@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestEditor, selectAll } from '../../../test/editor-harness'
 import { INDENT_STEP_PT } from '@orangery/editor-text'
-import { describeCommands, runCommand } from '../registry'
+import { describeCommands, runCommand } from '@orangery/ui-kit'
 
 let editor: Editor
 

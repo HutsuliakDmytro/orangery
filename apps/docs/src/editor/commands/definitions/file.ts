@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri } from '@orangery/platform'
 import { fileOperations } from '../file-actions'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 /**
  * File menu. The actual work lives in `file-actions.ts` so these stay thin and

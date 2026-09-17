@@ -5,9 +5,8 @@ import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isMac } from '@orangery/platform'
-import { CommandKeymap } from './keymap'
+import { CommandKeymap, useCommand } from '@orangery/ui-kit'
 import { registerBuiltinCommands } from './definitions'
-import { useCommand } from './use-command'
 
 function Wrapper({ children }: { children: ReactNode }) {
   const editor = useEditor({

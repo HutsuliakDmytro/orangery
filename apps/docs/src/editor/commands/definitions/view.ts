@@ -1,7 +1,7 @@
 import { printDocument } from '../../../document/print'
 import { useViewStore } from '../../../store/view-store'
 import { requestPicker } from '../picker-store'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 /**
  * View commands. These change how the document is shown, not the document —

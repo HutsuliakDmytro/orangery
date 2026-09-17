@@ -1,6 +1,6 @@
 import { imageActions } from '../image-actions'
 import { requestPicker } from '../picker-store'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 const WRAPS = [
   { value: 'inline', label: 'In Line with Text' },

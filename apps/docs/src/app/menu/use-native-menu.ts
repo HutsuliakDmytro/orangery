@@ -2,7 +2,7 @@ import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useRef } from 'react'
-import { describeCommands, runCommand } from '../../editor/commands'
+import { describeCommands, runCommand } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 
 /**

@@ -2,7 +2,7 @@ import { useCommentsStore } from '../../../store/comments-store'
 import { useSettingsStore } from '../../../store/settings-store'
 import { useViewStore } from '../../../store/view-store'
 import { requestPicker } from '../picker-store'
-import type { Command } from '../types'
+import type { Command } from '@orangery/ui-kit'
 
 export const insertCommands: readonly Command[] = [
   {

@@ -29,8 +29,13 @@ export interface TocEntry {
  * `\o "1-3"` includes heading levels 1 to 3, `\h` makes the entries hyperlinks,
  * `\z` hides tab leaders in web view, `\u` uses the outline level. This is the
  * switch set Word's own Insert → Table of Contents produces.
+ *
+ * A list of figures is the same field with `\c`, which gathers one caption
+ * sequence instead of the headings — that is what makes Word update it from the
+ * captions rather than from the outline.
  */
-export function fieldCode(maxLevel: number): string {
+export function fieldCode(maxLevel: number, sequence?: string): string {
+  if (sequence !== undefined) return ` TOC \\h \\z \\c "${sequence}" `
   return ` TOC \\o "1-${String(Math.min(9, Math.max(1, maxLevel)))}" \\h \\z \\u `
 }
 
@@ -49,9 +54,14 @@ function fieldChar(type: 'begin' | 'separate' | 'end'): XmlNode {
   ])
 }
 
-function entryParagraph(entry: TocEntry, before: XmlNode[] = [], after: XmlNode[] = []): XmlNode {
+function entryParagraph(
+  entry: TocEntry,
+  before: XmlNode[] = [],
+  after: XmlNode[] = [],
+  override?: string,
+): XmlNode {
   // Word styles TOC entries by level: TOC1, TOC2, and so on.
-  const style = `TOC${String(Math.min(9, Math.max(1, entry.level)))}`
+  const style = override ?? `TOC${String(Math.min(9, Math.max(1, entry.level)))}`
 
   // Word separates a heading's number from its text with a tab, which the TOC
   // styles have a stop for. The whole entry is the cached result of the field,
@@ -72,18 +82,28 @@ function entryParagraph(entry: TocEntry, before: XmlNode[] = [], after: XmlNode[
  * An empty table of contents still produces the field, so Word can fill it in;
  * a document that has no headings yet is a normal state, not an error.
  */
-export function buildTocField(entries: readonly TocEntry[], maxLevel = 3): XmlNode[] {
+export function buildTocField(
+  entries: readonly TocEntry[],
+  maxLevel = 3,
+  sequence?: string,
+): XmlNode[] {
   const opening = [
     fieldChar('begin'),
-    run([element('w:instrText', { 'xml:space': 'preserve' }, [textNode(fieldCode(maxLevel))])]),
+    run([
+      element('w:instrText', { 'xml:space': 'preserve' }, [textNode(fieldCode(maxLevel, sequence))]),
+    ]),
     fieldChar('separate'),
   ]
+
+  // A list of figures is styled by `TableOfFigures`, which is the style Word
+  // applies to every entry of one; a contents list is styled by level.
+  const style = sequence === undefined ? undefined : 'TableOfFigures'
 
   if (entries.length === 0) {
     // Everything in one paragraph: there is no cached result to carry.
     return [
       element('w:p', {}, [
-        element('w:pPr', {}, [element('w:pStyle', { 'w:val': 'TOC1' })]),
+        element('w:pPr', {}, [element('w:pStyle', { 'w:val': style ?? 'TOC1' })]),
         ...opening,
         fieldChar('end'),
       ]),
@@ -98,6 +118,7 @@ export function buildTocField(entries: readonly TocEntry[], maxLevel = 3): XmlNo
       entry,
       index === 0 ? opening : [],
       index === entries.length - 1 ? [fieldChar('end')] : [],
+      style,
     ),
   )
 }

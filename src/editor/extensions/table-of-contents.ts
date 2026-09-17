@@ -4,6 +4,8 @@ import { TextSelection } from '@tiptap/pm/state'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { headingNumbers } from '../heading-numbers'
 import type { HeadingNumberScheme } from '../heading-numbers'
+import { captionKindOf, numberCaptions, SEQUENCE_NAMES } from '../../ooxml/captions'
+import type { CaptionKind, CaptionSource } from '../../ooxml/captions'
 import type { OutlineEntry } from '../outline'
 
 /**
@@ -22,7 +24,7 @@ import type { OutlineEntry } from '../outline'
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     tableOfContents: {
-      insertTableOfContents: () => ReturnType
+      insertTableOfContents: (source?: TocSource) => ReturnType
       refreshTableOfContents: () => ReturnType
     }
   }
@@ -35,9 +37,14 @@ export interface TocEntry {
   number?: string
 }
 
+/** What the table gathers: the outline, or one kind of caption. */
+export type TocSource = 'headings' | CaptionKind
+
 export interface TableOfContentsOptions {
   /** The scheme numbering the headings, or null when they are not numbered. */
   scheme: () => HeadingNumberScheme | null
+  /** The word a caption is labelled with, for the entries of a list of them. */
+  label: (kind: CaptionKind) => string
 }
 
 export const TableOfContents = Node.create<TableOfContentsOptions>({
@@ -47,7 +54,7 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
   selectable: true,
 
   addOptions() {
-    return { scheme: () => null }
+    return { scheme: () => null, label: (kind: CaptionKind) => SEQUENCE_NAMES[kind] }
   },
 
   addAttributes() {
@@ -56,6 +63,8 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
       entries: { default: [] as TocEntry[] },
       /** Heading levels included, matching Word's `\o "1-3"` switch. */
       maxLevel: { default: 3 },
+      /** `headings` for a contents list, or the kind of caption gathered. */
+      source: { default: 'headings' },
     }
   },
 
@@ -69,7 +78,11 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
 
     return [
       'div',
-      mergeAttributes(HTMLAttributes, { 'data-toc': 'true', class: 'table-of-contents' }),
+      mergeAttributes(HTMLAttributes, {
+        'data-toc': 'true',
+        'data-source': sourceOf(node.attrs['source']),
+        class: 'table-of-contents',
+      }),
       ...list.map((entry, index) => [
         'div',
         {
@@ -98,7 +111,8 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
               const index = Number.parseInt(entry?.getAttribute('data-index') ?? '', 10)
               if (!Number.isFinite(index)) return false
 
-              const heading = headingAt(view.state.doc, index)
+              const source = sourceOf(entry?.closest('[data-toc]')?.getAttribute('data-source'))
+              const heading = blockAt(view.state.doc, index, source)
               if (heading === null) return false
 
               // Placed inside the heading rather than on it, so the caret lands
@@ -119,7 +133,7 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
   addCommands() {
     return {
       insertTableOfContents:
-        () =>
+        (source = 'headings') =>
         ({ chain, state }) => {
           // Inserted at a block boundary, not at the caret: an atom dropped into
           // the middle of a heading splits it and leaves an empty one behind.
@@ -127,7 +141,7 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
           const atBlockStart = $from.parentOffset === 0
           const position = atBlockStart ? $from.before($from.depth) : $from.after($from.depth)
 
-          return chain().insertContentAt(position, { type: this.name }).run()
+          return chain().insertContentAt(position, { type: this.name, attrs: { source } }).run()
         },
 
       refreshTableOfContents:
@@ -136,7 +150,7 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
           // Read from the transaction rather than from the editor: in a chain
           // the editor still holds the state from before it, so a table
           // inserted and refreshed in one go would find nothing to fill in.
-          const entries = collectEntries(tr.doc, this.options.scheme())
+          const options = this.options
 
           // Collected first rather than updated inside the walk: a flag set in
           // the callback is invisible to the type checker, and reading the
@@ -154,11 +168,16 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
           for (const block of blocks) {
             const maxLevel: unknown = block.attrs['maxLevel']
             const limit = typeof maxLevel === 'number' ? maxLevel : 3
+            const source = sourceOf(block.attrs['source'])
 
-            tr.setNodeMarkup(block.position, undefined, {
-              ...block.attrs,
-              entries: entries.filter((entry) => entry.level <= limit),
-            })
+            // Each table gathers what it was inserted for, so a document can
+            // hold a contents list and a list of figures side by side.
+            const entries =
+              source === 'headings'
+                ? collectEntries(tr.doc, options.scheme()).filter((entry) => entry.level <= limit)
+                : collectCaptions(tr.doc, source, options)
+
+            tr.setNodeMarkup(block.position, undefined, { ...block.attrs, entries })
           }
 
           dispatch?.(tr)
@@ -167,6 +186,38 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
     }
   },
 })
+
+export function sourceOf(value: unknown): TocSource {
+  return value === 'figure' || value === 'table' ? value : 'headings'
+}
+
+/** Captions of one kind, in document order, for a list of figures or tables. */
+function collectCaptions(
+  doc: ProseMirrorNode,
+  kind: CaptionKind,
+  options: TableOfContentsOptions,
+): TocEntry[] {
+  const blocks: CaptionSource[] = []
+  const texts: string[] = []
+
+  doc.forEach((node) => {
+    const level: unknown = node.attrs['level']
+    blocks.push({
+      type: node.type.name,
+      level: typeof level === 'number' ? level : undefined,
+      captionKind: captionKindOf(node.attrs['captionKind']),
+    })
+    texts.push(node.textContent.trim())
+  })
+
+  return numberCaptions(blocks, options.scheme() !== null)
+    .filter((caption) => caption.kind === kind)
+    .map((caption) => ({
+      level: 1,
+      text: texts[caption.index] ?? '',
+      number: `${options.label(kind)} ${caption.number}`,
+    }))
+}
 
 /** Headings in document order, for the entries. */
 function collectEntries(doc: ProseMirrorNode, scheme: HeadingNumberScheme | null): TocEntry[] {
@@ -192,14 +243,20 @@ function collectEntries(doc: ProseMirrorNode, scheme: HeadingNumberScheme | null
   return entries
 }
 
-/** The position of the nth heading, or null when the document has fewer. */
-function headingAt(doc: ProseMirrorNode, index: number): number | null {
+/** The position of the nth block of the kind a table gathers. */
+function blockAt(doc: ProseMirrorNode, index: number, source: TocSource): number | null {
   let seen = 0
   let found: number | null = null
 
   doc.descendants((node, position) => {
     if (found !== null) return false
-    if (node.type.name !== 'heading') return true
+
+    const matches =
+      source === 'headings'
+        ? node.type.name === 'heading'
+        : captionKindOf(node.attrs['captionKind']) === source
+
+    if (!matches) return node.type.name !== 'heading'
 
     if (seen === index) found = position
     seen += 1

@@ -549,8 +549,13 @@ function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[]
       // rather than as a run of ordinary paragraphs.
       const entries = node.attrs?.['entries']
       const maxLevel = numberAttr(node.attrs, 'maxLevel')
+      const kind = captionKindOf(node.attrs?.['source'])
 
-      return buildTocField(Array.isArray(entries) ? (entries as TocEntry[]) : [], maxLevel ?? 3)
+      return buildTocField(
+        Array.isArray(entries) ? (entries as TocEntry[]) : [],
+        maxLevel ?? 3,
+        kind === undefined ? undefined : SEQUENCE_NAMES[kind],
+      )
     }
 
     case 'passthroughBlock':

@@ -5,7 +5,7 @@ import {
   LINE_HEIGHT_PRESETS,
   MAX_LINE_HEIGHT,
   MIN_LINE_HEIGHT,
-} from '../editor/extensions/paragraph-spacing'
+} from '@orangery/editor-text'
 import { PickerPopover } from './picker-popover'
 
 interface LineSpacingPickerProps {

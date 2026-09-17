@@ -27,25 +27,25 @@ import { CommentMark } from './extensions/comment'
 import { Deletion, FormatChange, Insertion, Revisions } from './extensions/revisions'
 import { TrackChanges } from './extensions/track-changes'
 import { DocumentImage } from './extensions/document-image'
-import { FontSize } from './extensions/font-size'
+import {
+  FontSize,
+  Indent,
+  ParagraphSpacing,
+  PassthroughBlock,
+  PassthroughInline,
+  PastePlainText,
+  PreservedRunProperties,
+  SmartTyping,
+  TabIndent,
+} from '@orangery/editor-text'
 import { HeadingNumbering } from './extensions/heading-numbering'
 import { ImageDrop } from './extensions/image-drop'
-import { Indent } from './extensions/indent'
 import { PageBreak } from './extensions/page-break'
 import { SectionBreak } from './extensions/section-break'
 import { PageGaps } from './extensions/page-gaps'
 import { Pagination } from './extensions/pagination'
-import { ParagraphSpacing } from './extensions/paragraph-spacing'
 import { ParagraphStyle } from './extensions/paragraph-style'
 import { TableOfContents } from './extensions/table-of-contents'
-import {
-  PassthroughBlock,
-  PassthroughInline,
-  PreservedRunProperties,
-} from './extensions/passthrough'
-import { PastePlainText } from './extensions/paste-plain-text'
-import { SmartTyping } from './extensions/smart-typing'
-import { TabIndent } from './extensions/tab-indent'
 import { TabRendering } from './extensions/tab-rendering'
 import { TabStops } from './extensions/tab-stops'
 

@@ -1,4 +1,4 @@
-import { DEFAULT_FONT_SIZE, FONT_SIZE_PRESETS } from '../../extensions/font-size'
+import { DEFAULT_FONT_SIZE, FONT_SIZE_PRESETS } from '@orangery/editor-text'
 import { applyFormat, copyFormat, heldFormat } from '../format-painter'
 import { requestPicker } from '../picker-store'
 import type { Command } from '../types'

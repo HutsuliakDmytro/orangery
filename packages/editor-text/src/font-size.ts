@@ -1,4 +1,8 @@
 import { Extension } from '@tiptap/core'
+// Imported for its declaration merging, not for a value: the size is an
+// attribute of the `textStyle` mark, and `removeEmptyTextStyle` is that
+// extension's command. Without this the chain below has no type for it.
+import '@tiptap/extension-text-style'
 
 /**
  * Font size as a `TextStyle` attribute.

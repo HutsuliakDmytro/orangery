@@ -4,9 +4,10 @@ import { Mark, Node, mergeAttributes } from '@tiptap/core'
  * Opaque OOXML we do not model.
  *
  * The parser stores the element's serialised XML here and the serialiser writes
- * it back verbatim, so an unsupported construct survives editing elsewhere in the
- * document — the mechanism the preservation guarantee rests on
- * (`docs/adr/0003-docx-native-roundtrip.md`).
+ * it back verbatim, so an unsupported construct survives editing elsewhere in
+ * the file. This is the mechanism every app's preservation guarantee rests on —
+ * see `apps/docs/docs/adr/0003-docx-native-roundtrip.md`, which is written
+ * about documents and true of decks for the same reasons.
  *
  * The content is deliberately not editable: we cannot round-trip a modification
  * to XML we do not understand, so pretending otherwise would lose data quietly.

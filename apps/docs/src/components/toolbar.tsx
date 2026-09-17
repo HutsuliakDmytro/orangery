@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import { useCurrentEditor, useEditorState } from '@tiptap/react'
 import { useTranslation } from 'react-i18next'
-import { DEFAULT_FONT_SIZE } from '../editor/extensions/font-size'
+import { DEFAULT_FONT_SIZE } from '@orangery/editor-text'
 import { requestPicker } from '../editor/commands/picker-store'
 import { runCommand } from '../editor/commands/registry'
 import { useStylesStore } from '../store/styles-store'

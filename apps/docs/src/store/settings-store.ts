@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { appDataRoot } from '../platform/paths'
 import { isTauri } from '../platform/os'
 import { DEFAULT_FONT_FAMILY } from '../editor/fonts'
-import { DEFAULT_FONT_SIZE } from '../editor/extensions/font-size'
+import { DEFAULT_FONT_SIZE } from '@orangery/editor-text'
 
 /**
  * User settings, persisted to app data.

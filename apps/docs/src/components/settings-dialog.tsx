@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { ALL_FONTS } from '../editor/fonts'
-import { FONT_SIZE_PRESETS } from '../editor/extensions/font-size'
+import { FONT_SIZE_PRESETS } from '@orangery/editor-text'
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../i18n'
 import { useSettingsStore } from '../store/settings-store'
 import type { ThemePreference, UiLanguage } from '../store/settings-store'

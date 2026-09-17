@@ -90,6 +90,52 @@ function adjoiningInsertion(
   return mark !== undefined && mark.attrs['author'] === author ? mark : null
 }
 
+/** Whether the text already carries a record of having been reformatted. */
+function alreadyRecorded(state: EditorState, from: number, to: number): boolean {
+  let found = false
+
+  state.doc.nodesBetween(from, to, (node) => {
+    if (node.isText && node.marks.some((mark) => mark.type.name === 'formatChange')) found = true
+    return !found
+  })
+
+  return found
+}
+
+/** Ranges a transaction changed the formatting of, without changing the text. */
+function formattedRanges(transaction: Transaction): { from: number; to: number }[] {
+  const ranges: { from: number; to: number }[] = []
+
+  for (const step of transaction.steps) {
+    const json: unknown = step.toJSON()
+    if (typeof json !== 'object' || json === null) continue
+
+    const { stepType, from, to } = json as { stepType?: string; from?: number; to?: number }
+    if (stepType !== 'addMark' && stepType !== 'removeMark') continue
+    if (typeof from !== 'number' || typeof to !== 'number' || to <= from) continue
+
+    ranges.push({ from, to })
+  }
+
+  return ranges
+}
+
+/**
+ * How the text looked before a change, as the marks it wore.
+ *
+ * Read where the range starts: a change made across text that was not uniform
+ * records the formatting it began from, which is as much as Word's own single
+ * `w:rPrChange` per run can say.
+ */
+function formattingBefore(state: EditorState, from: number): string {
+  const node = state.doc.nodeAt(from)
+  const marks = (node?.marks ?? [])
+    .filter((mark) => !mark.type.name.endsWith('sertion') && mark.type.name !== 'formatChange')
+    .map((mark) => ({ type: mark.type.name, attrs: { ...mark.attrs } }))
+
+  return JSON.stringify(marks)
+}
+
 /** The range a transaction added, if it added one contiguous stretch. */
 function insertedRange(transaction: Transaction): { from: number; to: number } | null {
   let range: { from: number; to: number } | null = null
@@ -120,7 +166,7 @@ export const TrackChanges = Extension.create<TrackChangesOptions>({
         key: trackChangesKey,
 
         /** Marks what arrived, once it is there to be marked. */
-        appendTransaction(transactions, _oldState, newState) {
+        appendTransaction(transactions, oldState, newState) {
           if (!enabled()) return null
           if (!transactions.some((transaction) => transaction.docChanged)) return null
           // A transaction of our own, or one settling changes, must not be
@@ -133,9 +179,30 @@ export const TrackChanges = Extension.create<TrackChangesOptions>({
           if (!insertion) return null
 
           const added = transactions.map(insertedRange).filter((range) => range !== null)
-          if (added.length === 0) return null
+          const reformatted = transactions.flatMap((transaction) => formattedRanges(transaction))
+          if (added.length === 0 && reformatted.length === 0) return null
 
           const tr = newState.tr.setMeta(trackChangesKey, true)
+
+          const formatChange = newState.schema.marks['formatChange']
+          if (formatChange) {
+            for (const range of reformatted) {
+              // Formatting the same text twice is still one change, and the one
+              // worth keeping is the first: it holds what the text looked like
+              // before any of it, which is what rejecting puts back.
+              if (alreadyRecorded(newState, range.from, range.to)) continue
+
+              // Read from the state before the change: what the text looked
+              // like is the only thing rejecting can put back.
+              const previous = formattingBefore(oldState, range.from)
+
+              tr.addMark(
+                range.from,
+                range.to,
+                formatChange.create({ ...revisionAttrs(author()), previous }),
+              )
+            }
+          }
           for (const range of added) {
             // One continuous edit is one change. A fresh id and timestamp per
             // keystroke would keep the text nodes from merging, and the file

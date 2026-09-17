@@ -24,7 +24,7 @@ import { Footnote } from './extensions/footnote'
 import { Caption } from './extensions/caption'
 import { CharacterStyle } from './extensions/character-style'
 import { CommentMark } from './extensions/comment'
-import { Deletion, Insertion, Revisions } from './extensions/revisions'
+import { Deletion, FormatChange, Insertion, Revisions } from './extensions/revisions'
 import { TrackChanges } from './extensions/track-changes'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
@@ -92,6 +92,7 @@ export function buildExtensions(): Extensions {
     CommentMark,
     Insertion,
     Deletion,
+    FormatChange,
     Revisions,
     TrackChanges.configure({
       enabled: () => useViewStore.getState().trackChanges,

@@ -16,6 +16,7 @@ import { buildDrawing } from './image'
 import { sequenceField, styleReferenceField } from './fields'
 import { captionKindOf, numberCaptions, SEQUENCE_NAMES } from './captions'
 import { rangeEnd, rangeStart, referenceRun } from './comments'
+import { decodeMarks } from '../editor/extensions/revisions'
 import { serializeTabs } from './tabs'
 import type { TabStop } from './tabs'
 import type { CaptionNumber } from './captions'
@@ -160,7 +161,39 @@ function buildRunProperties(marks: Map<string, Mark>): XmlNode | null {
 
   properties.push(...parsedNodes(stringAttr(marks.get('preservedRunProperties')?.attrs, 'xml')))
 
+  // `w:rPrChange` comes last: the run states how it looks now, and then what it
+  // looked like before the change that made it so.
+  const formatChange = marks.get('formatChange')
+  if (formatChange !== undefined) {
+    properties.push(
+      element(
+        'w:rPrChange',
+        {
+          'w:id': stringAttr(formatChange.attrs, 'revisionId') ?? '1',
+          'w:author': stringAttr(formatChange.attrs, 'author') ?? '',
+          ...(stringAttr(formatChange.attrs, 'date') === null
+            ? {}
+            : { 'w:date': stringAttr(formatChange.attrs, 'date') ?? '' }),
+        },
+        [previousRunProperties(stringAttr(formatChange.attrs, 'previous'))],
+      ),
+    )
+  }
+
   return properties.length > 0 ? element('w:rPr', {}, properties) : null
+}
+
+/**
+ * The run properties a formatting change replaced.
+ *
+ * An empty `w:rPr` is meaningful: it says the text carried no formatting of its
+ * own before, which is what taking bold off records.
+ */
+function previousRunProperties(previous: string | null): XmlNode {
+  const recorded = decodeMarks(previous)
+  const marks = new Map(recorded.map((mark) => [mark.type, { type: mark.type, attrs: mark.attrs }]))
+
+  return buildRunProperties(marks) ?? element('w:rPr')
 }
 
 /**

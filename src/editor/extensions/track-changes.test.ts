@@ -182,3 +182,95 @@ describe('one edit, one change', () => {
     expect(authors.size).toBe(2)
   })
 })
+
+describe('recording a change of formatting', () => {
+  const formatMarkAt = (position: number) =>
+    editor.state.doc.nodeAt(position)?.marks.find((mark) => mark.type.name === 'formatChange')
+
+  it('records that the formatting changed', () => {
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+
+    expect(formatMarkAt(1)).toBeDefined()
+  })
+
+  it('keeps what the formatting was, which is the only thing a reject can use', () => {
+    // Italic before the mode was on, so it is part of the document being
+    // reviewed rather than part of the change.
+    useViewStore.setState({ trackChanges: false })
+    selectText(editor, 'hello')
+    editor.commands.toggleItalic()
+
+    useViewStore.setState({ trackChanges: true })
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+
+    expect(String(formatMarkAt(1)?.attrs['previous'])).toContain('italic')
+  })
+
+  it('records one change however many times the same text is reformatted', () => {
+    // What is worth keeping is the first record: it holds the formatting from
+    // before any of the changes, which is what rejecting puts back.
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+    selectText(editor, 'hello')
+    editor.commands.toggleItalic()
+
+    const records = editor.state.doc
+      .nodeAt(1)
+      ?.marks.filter((mark) => mark.type.name === 'formatChange')
+
+    expect(records).toHaveLength(1)
+  })
+
+  it('records the absence of formatting as an absence', () => {
+    // Taking bold off is a change, and what it replaced was nothing.
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+
+    expect(String(formatMarkAt(1)?.attrs['previous'])).toBe('[]')
+  })
+
+  it('leaves the formatting alone while the mode is off', () => {
+    useViewStore.setState({ trackChanges: false })
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+
+    expect(formatMarkAt(1)).toBeUndefined()
+  })
+
+  it('accepting keeps the new formatting and drops the record', () => {
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+    editor.commands.acceptRevisions(true)
+
+    const marks = editor.state.doc.nodeAt(1)?.marks.map((mark) => mark.type.name) ?? []
+    expect(marks).toContain('bold')
+    expect(marks).not.toContain('formatChange')
+  })
+
+  it('rejecting puts the formatting back as it was', () => {
+    useViewStore.setState({ trackChanges: false })
+    selectText(editor, 'hello')
+    editor.commands.toggleItalic()
+
+    useViewStore.setState({ trackChanges: true })
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+
+    editor.commands.rejectRevisions(true)
+
+    const marks = editor.state.doc.nodeAt(1)?.marks.map((mark) => mark.type.name) ?? []
+    expect(marks).toContain('italic')
+    expect(marks).not.toContain('bold')
+    expect(marks).not.toContain('formatChange')
+  })
+
+  it('does not take the text away when it undoes the formatting', () => {
+    selectText(editor, 'hello')
+    editor.commands.toggleBold()
+    editor.commands.rejectRevisions(true)
+
+    expect(text()).toBe('hello world')
+  })
+})

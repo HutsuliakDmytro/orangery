@@ -559,3 +559,10 @@
   color: #b42318;
   text-decoration: line-through;
 }
+
+/* Text whose formatting was changed while changes were being recorded. Marked
+   by a rule under it rather than by colour: the change is to how the text
+   looks, so colouring it would hide the very thing under review. */
+.editor-surface .revision-format {
+  border-bottom: 2px solid rgba(26, 127, 55, 0.4);
+}

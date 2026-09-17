@@ -11,7 +11,6 @@ const landscape = serializeSection(withOrientation(DEFAULT_SECTION, 'landscape')
  * The shape is written with one plain character per block, so splitting it into
  * code units is exactly right — there is nothing richer in it to mishandle.
  */
-// eslint-disable-next-line @typescript-eslint/no-misused-spread -- see above
 function documentOf(shape: string) {
   const content = shape.split('').map((mark) =>
     mark === '|'

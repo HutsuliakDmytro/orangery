@@ -103,6 +103,7 @@ Brand colors: **black + orange**. Two themes, dark is default.
 1. Read `PLAN.md`, find the first unchecked task in the current phase.
 2. Before implementing anything non-trivial, write a short plan in the chat; for architectural choices, add an ADR in `docs/adr/`.
 3. Implement → run `pnpm check` (lint + typecheck + unit tests) → run the relevant e2e if it exists.
+   - A change touching `src-tauri/` also needs `cargo clippy --all-targets -- -D warnings` and `cargo test`. `--all-targets` is the part that matters: without it clippy skips the test target, so a changed struct or signature compiles clean locally and fails in CI.
 4. Tick the task in `PLAN.md` and summarize what changed.
 5. Do not start the next phase until every task in the current one is ticked and `pnpm check` is green.
 

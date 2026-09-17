@@ -185,7 +185,33 @@ mod tests {
             group: group.to_string(),
             shortcut: None,
             enabled: true,
+            active: None,
         }
+    }
+
+    fn toggle(id: &str, group: &str, on: bool) -> CommandDescriptor {
+        CommandDescriptor {
+            active: Some(on),
+            ..descriptor(id, group)
+        }
+    }
+
+    #[test]
+    fn reads_a_toggle_state_when_the_frontend_sends_one() {
+        // A command with no state is a plain item; one with a state is drawn as
+        // a check item, which is the only way to see whether it is on.
+        assert_eq!(descriptor("file.new", "file").active, None);
+        assert_eq!(toggle("format.bold", "format", true).active, Some(true));
+    }
+
+    #[test]
+    fn defaults_the_toggle_state_when_it_is_absent() {
+        let descriptor: CommandDescriptor = serde_json::from_str(
+            r#"{"id":"a","label":"A","group":"file","shortcut":null,"enabled":true}"#,
+        )
+        .expect("a descriptor without a state should still parse");
+
+        assert_eq!(descriptor.active, None);
     }
 
     #[test]

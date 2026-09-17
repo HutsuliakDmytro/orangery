@@ -250,16 +250,18 @@ export const groupCommands: readonly Command[] = [
     isEnabled: () => useDeckStore.getState().selection.length > 1,
     run: () => {
       const { edit, selectShapes } = useDeckStore.getState()
-      let created: number | null = null
+      // Held in an object because a `let` assigned inside the callback is
+      // narrowed to its initial value by the time it is read again.
+      const made: { id: number | null } = { id: null }
 
       edit((slide) => {
-        created = groupShapes(slide, selected(slide))
-        return created !== null
+        made.id = groupShapes(slide, selected(slide))
+        return made.id !== null
       })
 
       // The group becomes the selection, as it does in PowerPoint: what was
       // just made is what the next action is about.
-      if (created !== null) selectShapes([created])
+      if (made.id !== null) selectShapes([made.id])
     },
   },
   {

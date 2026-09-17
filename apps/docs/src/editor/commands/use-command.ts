@@ -1,6 +1,6 @@
 import { useCurrentEditor, useEditorState } from '@tiptap/react'
 import { useCallback } from 'react'
-import { formatShortcut } from '../../platform/keys'
+import { formatShortcut } from '@orangery/platform'
 import { getCommand, isCommandActive, isCommandEnabled } from './registry'
 import type { Command } from './types'
 

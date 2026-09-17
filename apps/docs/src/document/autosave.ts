@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
-import { autosaveDir } from '../platform/paths'
-import { isTauri } from '../platform/os'
+import { autosaveDir } from '@orangery/platform'
+import { isTauri } from '@orangery/platform'
 import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
 
 /**

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { isTauri } from '../../../platform/os'
+import { isTauri } from '@orangery/platform'
 import { fileOperations } from '../file-actions'
 import type { Command } from '../types'
 

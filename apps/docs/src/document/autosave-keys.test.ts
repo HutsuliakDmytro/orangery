@@ -8,9 +8,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * by one entry at every launch and no amount of discarding empties it.
  */
 
-vi.mock('../platform/os', () => ({ isTauri: () => true }))
+// One module now, so the real exports are kept and only the two the test
+// stands in for are replaced — mocking the package wholesale would silently
+// remove everything else it provides.
+vi.mock('@orangery/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@orangery/platform')>()),
+  isTauri: () => true,
+  autosaveDir: () => Promise.resolve('/data/autosave'),
+}))
 vi.mock('@tauri-apps/api/path', () => ({ join: (...parts: string[]) => parts.join('/') }))
-vi.mock('../platform/paths', () => ({ autosaveDir: () => Promise.resolve('/data/autosave') }))
 
 const invoke = vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>()
 vi.mock('@tauri-apps/api/core', () => ({

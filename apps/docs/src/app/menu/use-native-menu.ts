@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useRef } from 'react'
 import { describeCommands, runCommand } from '../../editor/commands'
-import { isTauri } from '../../platform/os'
+import { isTauri } from '@orangery/platform'
 
 /**
  * Keeps the native menu bar in sync with the command registry.

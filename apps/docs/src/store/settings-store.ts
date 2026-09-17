@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { create } from 'zustand'
-import { appDataRoot } from '../platform/paths'
-import { isTauri } from '../platform/os'
+import { appDataRoot } from '@orangery/platform'
+import { isTauri } from '@orangery/platform'
 import { DEFAULT_FONT_FAMILY } from '../editor/fonts'
 import { DEFAULT_FONT_SIZE } from '@orangery/editor-text'
 

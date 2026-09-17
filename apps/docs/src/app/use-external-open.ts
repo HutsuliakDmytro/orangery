@@ -4,7 +4,7 @@ import { useCurrentEditor } from '@tiptap/react'
 import { useEffect } from 'react'
 import { fileOperations } from '../editor/commands/file-actions'
 import { formatFromPath } from '../document/formats'
-import { isTauri } from '../platform/os'
+import { isTauri } from '@orangery/platform'
 import { useDocumentStore } from '../store/document-store'
 
 /**

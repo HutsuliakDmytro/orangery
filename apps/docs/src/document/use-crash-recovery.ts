@@ -1,6 +1,6 @@
 import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useState } from 'react'
-import { isTauri } from '../platform/os'
+import { isTauri } from '@orangery/platform'
 import { useDocumentStore } from '../store/document-store'
 import { clearSnapshot, listRecoverable } from './autosave'
 import type { RecoverableSnapshot } from './autosave'

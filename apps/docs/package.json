@@ -43,6 +43,7 @@
     "@orangery/editor-text": "workspace:*",
     "@orangery/ooxml-core": "workspace:*",
     "@orangery/ooxml-drawingml": "workspace:*",
+    "@orangery/platform": "workspace:*",
     "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-fs": "^2.5.2",
     "@tiptap/core": "^2.27.3",

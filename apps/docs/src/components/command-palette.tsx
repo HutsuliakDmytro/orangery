@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/react'
 import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useRef, useState } from 'react'
 import { allCommands, isCommandEnabled, runCommand, searchCommands } from '../editor/commands'
-import { formatShortcut, hasMod } from '../platform/keys'
+import { formatShortcut, hasMod } from '@orangery/platform'
 
 const PALETTE_SHORTCUT_KEY = 'p'
 

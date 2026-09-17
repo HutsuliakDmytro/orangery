@@ -1,10 +1,14 @@
 /**
- * Application paths. Resolved through Tauri so each OS gets its own convention:
+ * Application paths. Resolved through Tauri so each OS gets its own convention,
+ * under the bundle id of whichever app is asking:
  *   macOS   ~/Library/Application Support/com.orangery.docs
  *   Windows %APPDATA%\com.orangery.docs
  *   Linux   ~/.local/share/com.orangery.docs
  *
- * Nothing outside `src/platform/` should build these paths by hand.
+ * Two apps therefore never share a directory without meaning to, and neither
+ * has to know the other exists.
+ *
+ * Nothing outside this package should build these paths by hand.
  */
 
 import { appDataDir, appLogDir, join } from '@tauri-apps/api/path'

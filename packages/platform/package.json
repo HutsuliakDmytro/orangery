@@ -1,0 +1,25 @@
+{
+  "name": "@orangery/platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The only place in the workspace that asks which operating system it is on.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

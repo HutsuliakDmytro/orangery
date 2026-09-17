@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
-import { appDataRoot } from '../platform/paths'
-import { isTauri } from '../platform/os'
+import { appDataRoot } from '@orangery/platform'
+import { isTauri } from '@orangery/platform'
 import { fileNameOf } from './formats'
 
 /**

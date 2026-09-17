@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/react'
-import type { Shortcut } from '../../platform/keys'
+import type { Shortcut } from '@orangery/platform'
 
 /**
  * Menu grouping. Also decides the order commands appear in the native menu bar

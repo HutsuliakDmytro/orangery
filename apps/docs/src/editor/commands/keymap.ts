@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core'
 import { allCommands, isCommandEnabled } from './registry'
-import type { Shortcut } from '../../platform/keys'
+import type { Shortcut } from '@orangery/platform'
 
 /**
  * Converts a registry shortcut to prosemirror-keymap syntax:

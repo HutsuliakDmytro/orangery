@@ -1,4 +1,4 @@
-import { resolveShortcut } from '../../platform/keys'
+import { resolveShortcut } from '@orangery/platform'
 import type { Command, CommandContext, CommandDescriptor, CommandGroup } from './types'
 import { COMMAND_GROUPS } from './types'
 

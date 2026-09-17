@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { App } from '../app/app'
-import { isMac } from '../platform/os'
+import { isMac } from '@orangery/platform'
 
 const openPalette = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.keyboard(

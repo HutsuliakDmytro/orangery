@@ -4,7 +4,7 @@ import { useCurrentEditor } from '@tiptap/react'
 import { useEffect, useState } from 'react'
 import { clearSnapshot, snapshotKey } from '../document/autosave'
 import { fileOperations } from '../editor/commands/file-actions'
-import { isTauri } from '../platform/os'
+import { isTauri } from '@orangery/platform'
 import { useDocumentStore } from '../store/document-store'
 
 /**

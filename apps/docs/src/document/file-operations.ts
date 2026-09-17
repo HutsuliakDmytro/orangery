@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
-import { isTauri } from '../platform/os'
+import { isTauri } from '@orangery/platform'
 import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
 import { DEFAULT_SECTION } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'

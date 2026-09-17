@@ -61,3 +61,10 @@ export type {
   TextParagraph,
   TextRun,
 } from './text-body'
+export {
+  EMPTY_FORMAT_SCHEME,
+  fillForReference,
+  lineForReference,
+  readFormatScheme,
+} from './format-scheme'
+export type { FormatScheme } from './format-scheme'

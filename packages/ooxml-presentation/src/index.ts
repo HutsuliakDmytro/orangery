@@ -47,3 +47,5 @@ export {
   resolveRunProperties,
 } from './text-inheritance'
 export type { MasterTextStyles } from './text-inheritance'
+export { lookContext, shapeLook } from './shape-look'
+export type { ShapeLook } from './shape-look'

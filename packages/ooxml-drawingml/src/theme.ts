@@ -2,6 +2,8 @@ import { attribute, children, findChild, parseXml, tagName } from '@orangery/oox
 import type { XmlNode } from '@orangery/ooxml-core'
 import { readColorChild } from './color'
 import type { Color } from './color'
+import { EMPTY_FORMAT_SCHEME, readFormatScheme } from './format-scheme'
+import type { FormatScheme } from './format-scheme'
 
 /**
  * The theme: the palette and the two typefaces everything else refers to.
@@ -16,6 +18,8 @@ export interface Theme {
   /** `a:clrScheme` by slot: `dk1`, `lt1`, `dk2`, `lt2`, `accent1`…`accent6`, `hlink`, `folHlink`. */
   colors: Map<string, Color>
   fonts: ThemeFonts
+  /** `a:fmtScheme` — the fills and lines shapes refer to instead of repeating. */
+  format: FormatScheme
 }
 
 export interface ThemeFonts {
@@ -25,7 +29,12 @@ export interface ThemeFonts {
   minor: string | null
 }
 
-const EMPTY: Theme = { name: '', colors: new Map(), fonts: { major: null, minor: null } }
+const EMPTY: Theme = {
+  name: '',
+  colors: new Map(),
+  fonts: { major: null, minor: null },
+  format: EMPTY_FORMAT_SCHEME,
+}
 
 function latinOf(scheme: XmlNode, slot: string): string | null {
   const font = findChild(scheme, slot)
@@ -52,10 +61,12 @@ export function parseTheme(xml: string): Theme {
   }
 
   const fontScheme = findChild(elements, 'a:fontScheme')
+  const formatScheme = findChild(elements, 'a:fmtScheme')
 
   return {
     name: attribute(theme, 'name') ?? '',
     colors,
+    format: formatScheme === undefined ? EMPTY_FORMAT_SCHEME : readFormatScheme(formatScheme),
     fonts:
       fontScheme === undefined
         ? { major: null, minor: null }

@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "A desktop word processor that treats .docx as its own format, preserving everything it does not model.",
   "license": "MIT",
+  "author": "Dmytro Hutsuliak <dmytro.hutsuliak.dev@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HutsuliakDmytro/orangery-docs.git"
+  },
+  "homepage": "https://github.com/HutsuliakDmytro/orangery-docs#readme",
+  "bugs": {
+    "url": "https://github.com/HutsuliakDmytro/orangery-docs/issues"
+  },
   "keywords": [
     "docx",
     "ooxml",

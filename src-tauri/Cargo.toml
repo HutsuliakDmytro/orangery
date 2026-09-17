@@ -2,7 +2,9 @@
 name = "orangery-docs"
 version = "0.1.0"
 description = "Orangery Docs — desktop word processor"
-authors = ["Dmytro"]
+authors = ["Dmytro Hutsuliak <dmytro.hutsuliak.dev@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/HutsuliakDmytro/orangery-docs"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -89,8 +89,8 @@
     "category": "Productivity",
     "shortDescription": "Word processor that writes real DOCX",
     "longDescription": "Orangery Docs is a desktop word processor that uses DOCX as its native format. Opening a document and saving it without edits leaves the file byte-for-byte as Word wrote it.",
-    "copyright": "© Dmytro",
-    "publisher": "Orangery"
+    "copyright": "© Dmytro Hutsuliak",
+    "publisher": "Dmytro Hutsuliak"
   },
   "plugins": {
     "updater": {

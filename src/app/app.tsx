@@ -44,10 +44,8 @@ function Shell() {
   const dirty = useDocumentStore((state) => state.dirty)
   const markDirty = useDocumentStore((state) => state.markDirty)
   const section = useViewStore((state) => state.section)
-  const headerText = useHeaderFooterStore((state) => state.header)
-  const footerText = useHeaderFooterStore((state) => state.footer)
-  const setHeader = useHeaderFooterStore((state) => state.setHeader)
-  const setFooter = useHeaderFooterStore((state) => state.setFooter)
+  const headerFooter = useHeaderFooterStore()
+  const setHeaderFooter = useHeaderFooterStore((state) => state.set)
   const setSection = useViewStore((state) => state.setSection)
 
   /**
@@ -154,13 +152,28 @@ function Shell() {
 
           <HeaderFooterEditor
             kind="header"
-            value={headerText}
+            value={headerFooter.header}
             placeholder="Add a header — # for the page number"
             onChange={(text) => {
-              setHeader(text)
+              setHeaderFooter('header', text)
               markDirty()
             }}
           />
+
+          {/* The opening page gets a pair of its own only where the section
+              sets that page apart; otherwise there is nothing there to edit. */}
+          {currentSection.properties.differentFirstPage && (
+            <HeaderFooterEditor
+              kind="header"
+              label="First page"
+              value={headerFooter.firstHeader}
+              placeholder="Header for the first page only"
+              onChange={(text) => {
+                setHeaderFooter('firstHeader', text)
+                markDirty()
+              }}
+            />
+          )}
 
           <div className="flex min-h-0 flex-1">
             <OutlinePanel />
@@ -169,12 +182,25 @@ function Shell() {
             </main>
           </div>
 
+          {currentSection.properties.differentFirstPage && (
+            <HeaderFooterEditor
+              kind="footer"
+              label="First page"
+              value={headerFooter.firstFooter}
+              placeholder="Footer for the first page only"
+              onChange={(text) => {
+                setHeaderFooter('firstFooter', text)
+                markDirty()
+              }}
+            />
+          )}
+
           <HeaderFooterEditor
             kind="footer"
-            value={footerText}
+            value={headerFooter.footer}
             placeholder="Add a footer — # for the page number"
             onChange={(text) => {
-              setFooter(text)
+              setHeaderFooter('footer', text)
               markDirty()
             }}
           />

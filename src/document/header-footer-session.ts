@@ -5,7 +5,7 @@ import {
   partParagraphs,
   rebuildPart,
 } from '../ooxml/header-footer'
-import type { HeaderFooterKind } from '../ooxml/header-footer'
+import type { HeaderFooterKind, HeaderFooterType } from '../ooxml/header-footer'
 import {
   FOOTER_CONTENT_TYPE,
   FOOTER_RELATIONSHIP,
@@ -34,11 +34,16 @@ import type { XmlNode } from '../ooxml/xml'
 import { DOCUMENT_RELS_PART } from './media'
 
 /**
- * Reading and writing the document's default header and footer.
+ * Reading and writing a document's headers and footers.
  *
  * Creating one means four coordinated changes — part, relationship, content-type
  * override and a `w:headerReference` in `w:sectPr` — for the same reason images
  * need three: Word repairs a file where any of them is missing.
+ *
+ * A section can carry more than one of each: the default, and a `first` used on
+ * the opening page when `w:titlePg` is set. They are separate parts pointed at
+ * by references of different types, which is why the type is threaded through
+ * rather than assumed.
  */
 
 export interface HeaderFooterContent {
@@ -58,8 +63,9 @@ export function readHeaderFooter(
   pkg: DocxPackage,
   section: SectionProperties,
   kind: HeaderFooterKind,
+  type: HeaderFooterType = 'default',
 ): HeaderFooterContent {
-  const reference = findReference(parseReferences(section.preserved), kind)
+  const reference = findReference(parseReferences(section.preserved), kind, type)
   if (!reference) return { kind, path: null, paragraphs: [] }
 
   const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
@@ -105,8 +111,9 @@ export function writeHeaderFooter(
   section: SectionProperties,
   kind: HeaderFooterKind,
   paragraphs: XmlNode[],
+  type: HeaderFooterType = 'default',
 ): SectionProperties {
-  const existing = readHeaderFooter(pkg, section, kind)
+  const existing = readHeaderFooter(pkg, section, kind, type)
 
   if (existing.path !== null) {
     const current = getPartText(pkg, existing.path) ?? emptyPart(kind)
@@ -133,7 +140,7 @@ export function writeHeaderFooter(
   return {
     ...section,
     preserved: [
-      `<${referenceTag} w:type="default" r:id="${relationship.id}"/>`,
+      `<${referenceTag} w:type="${type}" r:id="${relationship.id}"/>`,
       ...section.preserved,
     ],
   }

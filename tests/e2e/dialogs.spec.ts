@@ -157,3 +157,26 @@ test('page setup changes the section the cursor is in, not the whole document', 
   const wide = (await track.boundingBox())?.width ?? 0
   expect(wide).toBeGreaterThan(900)
 })
+
+test('gives the first page a header of its own only when it is set apart', async ({ page }) => {
+  await page.locator(editor).click()
+
+  // Nothing to edit for a page that is not set apart.
+  await expect(page.getByLabel('First page Header text')).toHaveCount(0)
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Page Numbers')
+  await page.keyboard.press('Enter')
+
+  await page.getByRole('checkbox', { name: /first page/i }).check()
+  await page.getByRole('button', { name: 'Apply' }).click()
+
+  const first = page.getByLabel('First page Header text')
+  await expect(first).toHaveCount(1)
+
+  await first.fill('Title page only')
+  await expect(first).toHaveValue('Title page only')
+
+  // The default header is still its own field, not the one just typed into.
+  await expect(page.getByLabel('Header text', { exact: true })).toHaveValue('')
+})

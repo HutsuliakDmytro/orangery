@@ -18,11 +18,14 @@ export function HeaderFooterEditor({
   kind,
   value,
   placeholder,
+  label,
   onChange,
 }: {
   kind: HeaderFooterKind
   value: string
   placeholder: string
+  /** Shown instead of the kind, for the pair belonging to the first page. */
+  label?: string
   onChange: (value: string) => void
 }) {
   // Fully controlled: the document owns the text, so there is no second copy
@@ -43,15 +46,15 @@ export function HeaderFooterEditor({
         kind === 'header' ? 'border-b' : 'border-t'
       } border-dashed border-border bg-surface`}
     >
-      <span className="w-12 shrink-0 uppercase tracking-wide text-muted">
-        {kind === 'header' ? 'Header' : 'Footer'}
+      <span className="w-20 shrink-0 uppercase tracking-wide text-muted">
+        {label ?? (kind === 'header' ? 'Header' : 'Footer')}
       </span>
 
       <input
         ref={input}
         value={value}
         placeholder={placeholder}
-        aria-label={kind === 'header' ? 'Header text' : 'Footer text'}
+        aria-label={`${label === undefined ? '' : `${label} `}${kind === 'header' ? 'Header' : 'Footer'} text`}
         onChange={(event) => {
           onChange(event.target.value)
         }}

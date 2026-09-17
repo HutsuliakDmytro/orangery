@@ -50,6 +50,26 @@ function applyHeaderFooter(session: ReturnType<typeof getSession>): void {
   section = writeHeaderFooter(pkg, section, 'header', paragraphsFromText(headerFooter.header))
   section = writeHeaderFooter(pkg, section, 'footer', paragraphsFromText(headerFooter.footer))
 
+  // The first page's own pair is written only where the section sets that page
+  // apart. Without `w:titlePg` Word ignores the parts, so writing them would
+  // leave the file carrying two headers it never shows.
+  if (section.differentFirstPage) {
+    section = writeHeaderFooter(
+      pkg,
+      section,
+      'header',
+      paragraphsFromText(headerFooter.firstHeader),
+      'first',
+    )
+    section = writeHeaderFooter(
+      pkg,
+      section,
+      'footer',
+      paragraphsFromText(headerFooter.firstFooter),
+      'first',
+    )
+  }
+
   useViewStore.getState().setSection(section)
 }
 
@@ -110,6 +130,12 @@ export const fileOperations = {
           useHeaderFooterStore.getState().load({
             header: textFromParagraphs(readHeaderFooter(pkg, section, 'header').paragraphs),
             footer: textFromParagraphs(readHeaderFooter(pkg, section, 'footer').paragraphs),
+            firstHeader: textFromParagraphs(
+              readHeaderFooter(pkg, section, 'header', 'first').paragraphs,
+            ),
+            firstFooter: textFromParagraphs(
+              readHeaderFooter(pkg, section, 'footer', 'first').paragraphs,
+            ),
           })
         } else {
           // A converted format has no style catalogue of its own, and nothing

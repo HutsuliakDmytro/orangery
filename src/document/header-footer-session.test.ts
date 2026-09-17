@@ -6,6 +6,8 @@ import { parseRelationships } from '../ooxml/relationships'
 import { parseDocument } from '../ooxml/parse-document'
 import { parseSection } from '../ooxml/section'
 import { element, textValue, children } from '../ooxml/xml'
+import type { XmlNode } from '../ooxml/xml'
+import { textFromParagraphs } from './header-footer-text'
 import { DOCUMENT_RELS_PART } from './media'
 import { readHeaderFooter, writeHeaderFooter } from './header-footer-session'
 
@@ -96,5 +98,53 @@ describe('writeHeaderFooter', () => {
 
     writeHeaderFooter(pkg, section, 'header', [paragraph('Top')])
     expect(getPartText(pkg, DOCUMENT_PART)).toBe(before)
+  })
+})
+
+describe('the first page having its own', () => {
+  // The same reader the app uses, so the test cannot agree with a bug in it.
+  const textOf = (paragraphs: readonly XmlNode[]) => textFromParagraphs(paragraphs)
+
+  it('writes a separate part, not into the default one', async () => {
+    const { pkg } = await open('plain-paragraphs')
+    let section = { ...(await open('plain-paragraphs')).section, preserved: [] as string[] }
+
+    section = writeHeaderFooter(pkg, section, 'header', [paragraph('every page')])
+    section = writeHeaderFooter(pkg, section, 'header', [paragraph('title page')], 'first')
+
+    expect(textOf(readHeaderFooter(pkg, section, 'header').paragraphs)).toBe('every page')
+    expect(textOf(readHeaderFooter(pkg, section, 'header', 'first').paragraphs)).toBe('title page')
+  })
+
+  it('marks the reference with the type that makes Word use it', async () => {
+    // Without `w:type="first"` the part is a second default, and Word shows
+    // whichever reference it reads last on every page.
+    const { pkg, section } = await open('plain-paragraphs')
+    const updated = writeHeaderFooter(
+      pkg,
+      { ...section, preserved: [] },
+      'header',
+      [paragraph('title page')],
+      'first',
+    )
+
+    expect(updated.preserved.join('')).toContain('w:type="first"')
+  })
+
+  it('finds nothing for a first page in a document that has no such part', async () => {
+    const { pkg, section } = await open('headers-footers')
+    expect(readHeaderFooter(pkg, section, 'header', 'first').path).toBeNull()
+  })
+
+  it('keeps the two apart when both are rewritten', async () => {
+    const { pkg, section } = await open('plain-paragraphs')
+    let current = { ...section, preserved: [] as string[] }
+
+    current = writeHeaderFooter(pkg, current, 'footer', [paragraph('one')], 'first')
+    current = writeHeaderFooter(pkg, current, 'footer', [paragraph('two')])
+    current = writeHeaderFooter(pkg, current, 'footer', [paragraph('three')], 'first')
+
+    expect(textOf(readHeaderFooter(pkg, current, 'footer').paragraphs)).toBe('two')
+    expect(textOf(readHeaderFooter(pkg, current, 'footer', 'first').paragraphs)).toBe('three')
   })
 })

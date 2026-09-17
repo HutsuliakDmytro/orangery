@@ -5,6 +5,8 @@ import { nameOf, pickDeckPath, readDeckFile } from '../document/file'
 import {
   alignmentBounds,
   alignShapes,
+  createShape,
+  deleteShapes,
   distributeShapes,
   duplicateShape,
   groupShapes,
@@ -140,6 +142,18 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.delete',
+    label: 'Delete',
+    group: 'edit',
+    shortcut: 'Backspace',
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      const { edit, selectShapes } = useDeckStore.getState()
+      edit((slide) => deleteShapes(slide, selected(slide)))
+      selectShapes([])
+    },
+  },
+  {
     id: 'edit.duplicate',
     label: 'Duplicate',
     group: 'edit',
@@ -237,6 +251,50 @@ export const distributeCommands: readonly Command[] = (
   isEnabled: () => useDeckStore.getState().selection.length > 2,
   run: () => {
     useDeckStore.getState().edit((slide) => distributeShapes(selected(slide), axis))
+  },
+}))
+
+/** What the insert menu offers, and where a new shape lands. */
+const PRESETS = [
+  ['rect', 'Rectangle'],
+  ['roundRect', 'Rounded Rectangle'],
+  ['ellipse', 'Ellipse'],
+  ['triangle', 'Triangle'],
+  ['rightArrow', 'Arrow'],
+  ['star5', 'Star'],
+  ['line', 'Line'],
+] as const
+
+export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) => ({
+  id: `insert.${preset}`,
+  label,
+  group: 'insert' as const,
+  isEnabled: () => useDeckStore.getState().open !== null,
+  run: () => {
+    const { open, edit, selectShapes } = useDeckStore.getState()
+    const size = open?.deck.slideSize ?? { width: 0, height: 0 }
+    const made: { id: number | null } = { id: null }
+
+    // Centred on the slide at a size that reads at any slide dimension: drawing
+    // it out with the pointer comes later, and a shape that appears somewhere
+    // arbitrary is worse than one that appears where you are looking.
+    const width = size.width / 4
+    const height = preset === 'line' ? 0 : size.height / 4
+
+    edit((slide) => {
+      made.id = createShape(slide, {
+        preset,
+        transform: {
+          x: (size.width - width) / 2,
+          y: (size.height - height) / 2,
+          width,
+          height,
+        },
+      })
+      return true
+    })
+
+    if (made.id !== null) selectShapes([made.id])
   },
 }))
 
@@ -366,6 +424,7 @@ export function registerBuiltinCommands(): void {
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(arrangeCommands)
+  registerAll(insertCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

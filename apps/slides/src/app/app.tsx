@@ -3,10 +3,11 @@ import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/
 import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
 import { Notes } from '../components/notes'
+import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
-import { currentSlide, useDeckStore } from '../store/deck-store'
+import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { useCommandSource } from './command-source'
 import { useShortcuts } from './use-shortcuts'
@@ -31,7 +32,6 @@ function Shell() {
   useShortcuts()
 
   const open = useDeckStore((state) => state.open)
-  const slide = useDeckStore(currentSlide)
   const current = useDeckStore((state) => state.current)
   const panels = useViewStore((state) => state.panels)
   const sizes = useViewStore((state) => state.sizes)
@@ -111,7 +111,7 @@ function Shell() {
               style={{ width: sizes.properties }}
               className="shrink-0 overflow-y-auto bg-surface p-3 text-xs text-muted"
             >
-              {slide === null ? 'Nothing selected' : `${String(slide.shapes.length)} shapes`}
+              <PropertiesPanel />
             </aside>
           </>
         )}

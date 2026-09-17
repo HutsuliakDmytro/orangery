@@ -67,3 +67,7 @@ export {
 } from './arrange'
 export type { Alignment } from './arrange'
 export { groupShapes, ungroupShape } from './group'
+export { writeFill, writeLine } from './write-look'
+export type { LineChange } from './write-look'
+export { createShape, deleteShapes } from './create-shape'
+export type { NewShape } from './create-shape'

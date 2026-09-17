@@ -447,3 +447,92 @@ describe('grouping', () => {
     ).toBe(true)
   })
 })
+
+describe('inserting and deleting', () => {
+  it('adds a shape to the slide and selects it', async () => {
+    await openDeck('empty')
+    act(() => {
+      runCommand('insert.ellipse', {})
+    })
+
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    expect(shapes).toHaveLength(1)
+    expect(shapes[0]?.properties?.geometry?.preset).toBe('ellipse')
+    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
+  })
+
+  it('centres it on the slide', async () => {
+    await openDeck('empty')
+    act(() => {
+      runCommand('insert.rect', {})
+    })
+
+    const shape = useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.transform
+    const size = useDeckStore.getState().open?.deck.slideSize
+    expect((shape?.x ?? 0) + (shape?.width ?? 0) / 2).toBe((size?.width ?? 0) / 2)
+  })
+
+  it('deletes the selection and clears it', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.delete', {})
+    })
+
+    expect(useDeckStore.getState().open?.deck.slides[0]?.shapes).toHaveLength(3)
+    expect(useDeckStore.getState().selection).toEqual([])
+  })
+
+  it('takes a deletion back', async () => {
+    await openDeck('shapes')
+    const before = partText()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.delete', {})
+      runCommand('edit.undo', {})
+    })
+
+    expect(partText()).toBe(before)
+  })
+})
+
+describe('the properties panel', () => {
+  it('says what is selected', async () => {
+    await openDeck('shapes')
+    render(<App />)
+    expect(screen.getByText('Nothing selected')).toBeInTheDocument()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    expect(screen.getByText('Rectangle 1')).toBeInTheDocument()
+  })
+
+  it('writes a fill the file keeps', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill #FF7A00' }))
+
+    expect(partText()).toContain('FF7A00')
+  })
+
+  it('changes every selected shape at once, in one step', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('edit.select-all', {})
+    })
+    await user.click(screen.getByRole('button', { name: 'Line thick' }))
+
+    expect(partText().match(/w="57150"/gu)).toHaveLength(4)
+    expect(useDeckStore.getState().undoStack).toHaveLength(1)
+  })
+})

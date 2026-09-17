@@ -68,6 +68,32 @@ function timeOf(work: () => unknown, iterations = MEASURE_ITERATIONS): number {
   return median(samples)
 }
 
+/**
+ * Times two pieces of work against each other, alternating between them.
+ *
+ * Measuring one and then the other compares two different moments. That is
+ * fine on an idle machine and wrong on a busy one: this suite runs seven
+ * projects at once, and whichever half is measured while the machine is loaded
+ * comes out slower for reasons that have nothing to do with the code. Taking
+ * the samples in turn means a stall lands on both.
+ */
+function ratioOf(small: () => unknown, large: () => unknown, iterations = MEASURE_ITERATIONS) {
+  const smalls: number[] = []
+  const larges: number[] = []
+
+  for (let index = 0; index < iterations; index += 1) {
+    const beforeSmall = performance.now()
+    small()
+    smalls.push(performance.now() - beforeSmall)
+
+    const beforeLarge = performance.now()
+    large()
+    larges.push(performance.now() - beforeLarge)
+  }
+
+  return { small: median(smalls), large: median(larges) }
+}
+
 function timeTyping(instance: Editor, iterations = MEASURE_ITERATIONS): number {
   return timeOf(() => instance.commands.insertContentAt(1, 'x'), iterations)
 }
@@ -121,8 +147,10 @@ describe('derived views', () => {
     editor.commands.setContent(buildLargeDocument(200))
     const largeDoc = editor.state.doc
 
-    const small = timeOf(() => buildOutline(smallDoc))
-    const large = timeOf(() => buildOutline(largeDoc))
+    const { small, large } = ratioOf(
+      () => buildOutline(smallDoc),
+      () => buildOutline(largeDoc),
+    )
 
     expect(buildOutline(largeDoc)).toHaveLength(200)
     expect(large).toBeLessThan(allowanceFrom(small))
@@ -136,8 +164,10 @@ describe('derived views', () => {
     editor.commands.setContent(buildLargeDocument(200))
     const largeText = editor.getText({ blockSeparator: '\n' })
 
-    const small = timeOf(() => computeStatistics(smallText))
-    const large = timeOf(() => computeStatistics(largeText))
+    const { small, large } = ratioOf(
+      () => computeStatistics(smallText),
+      () => computeStatistics(largeText),
+    )
 
     expect(computeStatistics(largeText).words).toBeGreaterThan(90_000)
     expect(large).toBeLessThan(allowanceFrom(small))

@@ -1,6 +1,6 @@
 [package]
 name = "orangery-docs"
-version = "0.0.0"
+version = "0.1.0"
 description = "Orangery Docs — desktop word processor"
 authors = ["Dmytro"]
 edition = "2021"

@@ -1,6 +1,6 @@
 {
   "name": "orangery-docs",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A desktop word processor that treats .docx as its own format, preserving everything it does not model.",
   "license": "MIT",
   "keywords": [

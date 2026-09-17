@@ -532,3 +532,11 @@
   text-transform: uppercase;
   color: #777777;
 }
+
+/* Text columns. Set on the editable itself, because the blocks that flow into
+   the columns are its children — the page wrapper only passes the values down. */
+.editor-surface {
+  column-count: var(--page-columns, auto);
+  column-gap: var(--page-column-gap, normal);
+  column-rule: var(--page-column-rule, none);
+}

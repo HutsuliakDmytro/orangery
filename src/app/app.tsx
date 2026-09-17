@@ -47,7 +47,7 @@ function Shell() {
   const markDirty = useDocumentStore((state) => state.markDirty)
   const section = useViewStore((state) => state.section)
   const headerFooter = useHeaderFooterStore()
-  const setHeaderFooter = useHeaderFooterStore((state) => state.set)
+  const loadHeaderFooter = useHeaderFooterStore((state) => state.load)
   const setSection = useViewStore((state) => state.setSection)
 
   /**
@@ -71,52 +71,64 @@ function Shell() {
     }) ?? { from: 0, to: 0, breakPosition: null, properties: section }
 
   /**
-   * Keeps the header fields showing the section the cursor is in.
+   * The header and footer text of the section the cursor is in.
    *
-   * Loaded when the cursor crosses into another section, and written back on
-   * every change rather than buffered until a save: a buffer belonging to one
-   * section while the fields show another is how an edit lands in the wrong
-   * place, and there is no moment here where it can.
+   * Read straight from the package whenever the store is holding another
+   * section's, rather than loaded by an effect: an effect runs after the render
+   * that moved the cursor, and in that gap the fields show one section while
+   * an edit would be written to it — which is the whole bug this avoids.
    */
   const sectionKey = currentSection.breakPosition
-  useEffect(() => {
-    const session = getSession()
-    if (session?.kind !== 'docx') return
-    if (useHeaderFooterStore.getState().sectionKey === sectionKey) return
+  const session = getSession()
+  const packaged = session?.kind === 'docx' ? session.docx.pkg : null
 
-    useHeaderFooterStore
-      .getState()
-      .load(readSectionHeaders(session.docx.pkg, currentSection.properties), sectionKey)
-  }, [sectionKey, currentSection.properties])
+  const headerValues =
+    headerFooter.sectionKey === sectionKey || packaged === null
+      ? headerFooter
+      : readSectionHeaders(packaged, currentSection.properties)
+
+  /**
+   * Writes the page setup of one section back where that section keeps it.
+   *
+   * Identified by the break that ends it, or by nothing for the one the body
+   * holds — the same key the header fields are loaded against.
+   */
+  const applyToSection = (key: number | null, next: SectionProperties) => {
+    if (!editor || key === null) {
+      setSection(next)
+      return
+    }
+
+    const node = editor.state.doc.nodeAt(key)
+    if (!node) return
+
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(key, undefined, {
+        ...node.attrs,
+        sectPr: serializeSection(next),
+      }),
+    )
+  }
 
   const changeHeaderFooter = (slot: HeaderFooterSlot, text: string) => {
-    setHeaderFooter(slot, text)
     markDirty()
+    if (packaged === null || !editor) return
 
-    const session = getSession()
-    if (session?.kind !== 'docx') return
+    // Worked out now rather than taken from the render: an edit can arrive
+    // before React has re-rendered for the click that moved the cursor, and the
+    // section from that render is the one the cursor has just left.
+    const live = sectionAt(editor.state.doc, editor.state.selection.from, section)
 
-    const values = { ...useHeaderFooterStore.getState(), [slot]: text }
-    applySection(writeSectionHeaders(session.docx.pkg, currentSection.properties, values))
+    // Built on that section's own values, so nothing of the section being
+    // shown a moment ago can be carried into it.
+    const values = { ...readSectionHeaders(packaged, live.properties), [slot]: text }
+
+    loadHeaderFooter(values, live.breakPosition)
+    applyToSection(live.breakPosition, writeSectionHeaders(packaged, live.properties, values))
   }
 
   const applySection = (next: SectionProperties) => {
-    const { breakPosition } = currentSection
-
-    if (editor && breakPosition !== null) {
-      const node = editor.state.doc.nodeAt(breakPosition)
-      if (node) {
-        editor.view.dispatch(
-          editor.state.tr.setNodeMarkup(breakPosition, undefined, {
-            ...node.attrs,
-            sectPr: serializeSection(next),
-          }),
-        )
-      }
-    } else {
-      setSection(next)
-    }
-
+    applyToSection(currentSection.breakPosition, next)
     // Page setup is part of the document, unlike zoom.
     markDirty()
   }
@@ -193,7 +205,7 @@ function Shell() {
 
           <HeaderFooterEditor
             kind="header"
-            value={headerFooter.header}
+            value={headerValues.header}
             placeholder="Add a header — # for the page number"
             onChange={(text) => {
               changeHeaderFooter('header', text)
@@ -206,7 +218,7 @@ function Shell() {
             <HeaderFooterEditor
               kind="header"
               label="First page"
-              value={headerFooter.firstHeader}
+              value={headerValues.firstHeader}
               placeholder="Header for the first page only"
               onChange={(text) => {
                 changeHeaderFooter('firstHeader', text)
@@ -225,7 +237,7 @@ function Shell() {
             <HeaderFooterEditor
               kind="footer"
               label="First page"
-              value={headerFooter.firstFooter}
+              value={headerValues.firstFooter}
               placeholder="Footer for the first page only"
               onChange={(text) => {
                 changeHeaderFooter('firstFooter', text)
@@ -235,7 +247,7 @@ function Shell() {
 
           <HeaderFooterEditor
             kind="footer"
-            value={headerFooter.footer}
+            value={headerValues.footer}
             placeholder="Add a footer — # for the page number"
             onChange={(text) => {
               changeHeaderFooter('footer', text)

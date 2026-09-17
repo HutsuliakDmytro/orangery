@@ -192,20 +192,43 @@ test('each section has headers of its own', async ({ page }) => {
   await page.keyboard.press('Enter')
   await expect(page.locator(`${editor} .section-break`)).toHaveCount(1)
 
-  await page.locator(`${editor} p`).last().click()
-  await page.keyboard.type('second section')
-
   const header = page.getByLabel('Header text', { exact: true })
 
-  await page.locator(`${editor} p`).first().click()
-  await header.fill('Chapter')
-
-  // The second section's header is its own, and starts empty.
   await page.locator(`${editor} p`).last().click()
-  await expect(header).toHaveValue('')
+  await page.keyboard.type('second section')
   await header.fill('Appendix')
 
-  // Back in the first section, its own is still there.
+  // Waiting on the field rather than on a delay: the browser reports a click's
+  // new selection on a later task, so the section only changes once it has.
+  await page.locator(`${editor} p`).first().click()
+  await expect(header).toHaveValue('')
+
+  await header.fill('Chapter')
+
+  await page.locator(`${editor} p`).last().click()
+  await expect(header).toHaveValue('Appendix')
+
   await page.locator(`${editor} p`).first().click()
   await expect(header).toHaveValue('Chapter')
+})
+
+
+test('lays the page out in columns', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('text that will be laid out in columns')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Page Setup')
+  await page.keyboard.press('Enter')
+
+  await page.getByLabel('Columns').selectOption('2')
+  await page.getByRole('button', { name: 'Apply' }).click()
+
+  // CSS lays columns out on a container, so this is the one place the setting
+  // can be seen to have taken effect.
+  const count = await page
+    .locator(editor)
+    .evaluate((node: Element) => getComputedStyle(node).columnCount)
+
+  expect(count).toBe('2')
 })

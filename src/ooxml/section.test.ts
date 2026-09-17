@@ -42,10 +42,10 @@ describe('parseSection', () => {
   })
 
   it('preserves children it does not model', () => {
-    const xml = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:headerReference r:id="rId5"/><w:cols w:num="2"/></w:sectPr>`
+    const xml = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:headerReference r:id="rId5"/><w:lnNumType w:countBy="1"/></w:sectPr>`
     const section = parseSection(xml)
     expect(section.preserved.join('')).toContain('w:headerReference')
-    expect(section.preserved.join('')).toContain('w:cols')
+    expect(section.preserved.join('')).toContain('w:lnNumType')
   })
 
   it('returns defaults for a missing or malformed section', () => {
@@ -232,5 +232,69 @@ describe('the order of the section properties', () => {
     )
 
     expect(xml.indexOf('w:unknownOne')).toBeLessThan(xml.indexOf('w:unknownTwo'))
+  })
+})
+
+describe('text columns', () => {
+  const sectPr = (body: string) =>
+    `<w:sectPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${body}</w:sectPr>`
+
+  it('says nothing for a section that declares none', () => {
+    expect(parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>')).columns).toBeNull()
+  })
+
+  it('reads the count, the gap and the rule', () => {
+    const columns = parseSection(sectPr('<w:cols w:num="2" w:space="567" w:sep="1"/>')).columns
+
+    expect(columns?.count).toBe(2)
+    expect(columns?.spacing).toBe(28.35)
+    expect(columns?.separator).toBe(true)
+  })
+
+  it('reads a section with no count as one column, which is what Word means', () => {
+    expect(parseSection(sectPr('<w:cols w:space="425"/>')).columns?.count).toBe(1)
+  })
+
+  it('reads no rule where none is declared', () => {
+    expect(parseSection(sectPr('<w:cols w:num="2"/>')).columns?.separator).toBe(false)
+  })
+
+  it('writes the original back while the modelled values still say the same', () => {
+    // A section whose columns are not all the same width lists each one, and
+    // those widths are not modelled — rebuilding would make them equal.
+    const source = sectPr(
+      '<w:cols w:num="2" w:space="567" w:equalWidth="0"><w:col w:w="3000"/><w:col w:w="6000"/></w:cols>',
+    )
+    const xml = serializeSection(parseSection(source))
+
+    expect(xml).toContain('<w:col w:w="3000"/>')
+    expect(xml).toContain('w:equalWidth="0"')
+  })
+
+  it('rebuilds once the count is changed, since the old widths no longer fit', () => {
+    const parsed = parseSection(
+      sectPr('<w:cols w:num="2" w:space="567" w:equalWidth="0"><w:col w:w="3000"/></w:cols>'),
+    )
+    const xml = serializeSection({
+      ...parsed,
+      columns: { ...(parsed.columns ?? { spacing: 0, separator: false, original: null }), count: 3 },
+    })
+
+    expect(xml).toContain('w:num="3"')
+    expect(xml).not.toContain('<w:col ')
+  })
+
+  it('round-trips a plain two-column section', () => {
+    const source = sectPr('<w:pgSz w:w="12240" w:h="15840"/><w:cols w:num="2" w:space="425"/>')
+    const again = parseSection(serializeSection(parseSection(source)))
+
+    expect(again.columns?.count).toBe(2)
+    expect(again.columns?.spacing).toBe(21.25)
+  })
+
+  it('writes nothing for a section that has none', () => {
+    expect(serializeSection(parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>')))).not.toContain(
+      'w:cols',
+    )
   })
 })

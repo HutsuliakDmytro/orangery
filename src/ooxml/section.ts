@@ -37,6 +37,24 @@ export interface PageNumbering {
   start: number | null
 }
 
+/**
+ * Text columns — `w:cols`.
+ *
+ * Word states the count and the gap between them; a section with columns of
+ * unequal width lists each one instead. Those widths are not modelled, so the
+ * original markup is kept and written back untouched unless the count, the gap
+ * or the rule between them is changed.
+ */
+export interface ColumnLayout {
+  count: number
+  /** Gap between columns, in points. */
+  spacing: number
+  /** Whether a rule is drawn down the gap. */
+  separator: boolean
+  /** The `w:cols` as it was read, so unequal widths survive. */
+  original: string | null
+}
+
 export interface SectionProperties {
   /** Page width in points. */
   width: number
@@ -45,6 +63,8 @@ export interface SectionProperties {
   margins: PageMargins
   /** Null when the file says nothing, which means decimal and carrying on. */
   pageNumbering: PageNumbering | null
+  /** Null when the section says nothing, which is one column. */
+  columns: ColumnLayout | null
   /**
    * Whether the first page has a header and footer of its own.
    *
@@ -125,11 +145,12 @@ export const DEFAULT_SECTION: SectionProperties = {
   orientation: 'portrait',
   margins: DEFAULT_MARGINS,
   pageNumbering: null,
+  columns: null,
   differentFirstPage: false,
   preserved: [],
 }
 
-const MODELLED = new Set(['w:pgSz', 'w:pgMar', 'w:pgNumType', 'w:titlePg'])
+const MODELLED = new Set(['w:pgSz', 'w:pgMar', 'w:pgNumType', 'w:titlePg', 'w:cols'])
 
 /** Matches a known page size within half a point, which covers rounding in twips. */
 export function pageSizeIdFor(width: number, height: number): PageSizeId | null {
@@ -197,6 +218,20 @@ export function parseSection(xml: string | null): SectionProperties {
       continue
     }
 
+    if (tag === 'w:cols') {
+      const count = parseIntAttribute(attribute(child, 'w:num'))
+      const space = parseIntAttribute(attribute(child, 'w:space'))
+
+      section.columns = {
+        // Word omits `w:num` for a single column, which is also the default.
+        count: count === null || count < 1 ? 1 : count,
+        spacing: space === null ? DEFAULT_COLUMN_SPACING : twipsToPoints(space),
+        separator: parseToggle(attribute(child, 'w:sep')) && attribute(child, 'w:sep') !== undefined,
+        original: serializeNode(child),
+      }
+      continue
+    }
+
     if (tag === 'w:titlePg') {
       section.differentFirstPage = parseToggle(attribute(child, 'w:val'))
       continue
@@ -242,6 +277,8 @@ export function serializeSection(section: SectionProperties): string {
     )
   }
 
+  if (section.columns !== null) nodes.push(buildColumns(section.columns))
+
   // Written only when set: the element's absence is what "every page the same"
   // means, and `w:val="0"` says the same thing more loudly than Word does.
   if (section.differentFirstPage) nodes.push(element('w:titlePg'))
@@ -251,6 +288,38 @@ export function serializeSection(section: SectionProperties): string {
   }
 
   return serializeNode(element('w:sectPr', {}, inSchemaOrder(nodes)))
+}
+
+/** Word's own default gap between columns: half a centimetre. */
+export const DEFAULT_COLUMN_SPACING = 21.3
+
+function buildColumns(columns: ColumnLayout): XmlNode {
+  // Unchanged since it was read, and the original may carry widths for columns
+  // that are not all the same — rebuilding would make them equal.
+  if (columns.original !== null) {
+    const parsed = parseXml(columns.original).find((node) => tagName(node) === 'w:cols')
+    if (parsed && matchesOriginal(parsed, columns)) return parsed
+  }
+
+  return element('w:cols', {
+    'w:num': String(Math.max(1, columns.count)),
+    'w:space': String(pointsToTwips(columns.spacing)),
+    ...(columns.separator ? { 'w:sep': '1' } : {}),
+    'w:equalWidth': '1',
+  })
+}
+
+/** Whether the modelled values still say what the original markup says. */
+function matchesOriginal(parsed: XmlNode, columns: ColumnLayout): boolean {
+  const count = parseIntAttribute(attribute(parsed, 'w:num')) ?? 1
+  const space = parseIntAttribute(attribute(parsed, 'w:space'))
+  const separator = parseToggle(attribute(parsed, 'w:sep')) && attribute(parsed, 'w:sep') !== undefined
+
+  return (
+    count === columns.count &&
+    (space === null ? DEFAULT_COLUMN_SPACING : twipsToPoints(space)) === columns.spacing &&
+    separator === columns.separator
+  )
 }
 
 /**

@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { PAGE_SIZES, pageSizeIdFor, withOrientation, withPageSize } from '../ooxml/section'
+import {
+  DEFAULT_COLUMN_SPACING,
+  PAGE_SIZES,
+  pageSizeIdFor,
+  withOrientation,
+  withPageSize,
+} from '../ooxml/section'
 import type { PageSizeId, SectionProperties } from '../ooxml/section'
 import { PickerPopover } from './picker-popover'
 
@@ -71,6 +77,53 @@ export function PageSetupDialog({
             </label>
           ))}
         </fieldset>
+
+        <label className="flex items-center gap-2 text-sm text-text">
+          <span className="w-20 shrink-0 text-muted">Columns</span>
+          <select
+            value={String(draft.columns?.count ?? 1)}
+            onChange={(event) => {
+              const count = Number.parseInt(event.target.value, 10)
+              setDraft({
+                ...draft,
+                // One column is what a section with nothing to say means, so it
+                // is written as nothing rather than as a count of one.
+                columns:
+                  count <= 1
+                    ? null
+                    : {
+                        count,
+                        spacing: draft.columns?.spacing ?? DEFAULT_COLUMN_SPACING,
+                        separator: draft.columns?.separator ?? false,
+                        original: draft.columns?.original ?? null,
+                      },
+              })
+            }}
+            className="rounded border border-border bg-surface-2 px-2 py-1 text-sm text-text outline-none"
+          >
+            {[1, 2, 3].map((count) => (
+              <option key={count} value={String(count)}>
+                {count}
+              </option>
+            ))}
+          </select>
+
+          {draft.columns !== null && (
+            <label className="flex items-center gap-1 text-xs text-muted">
+              <input
+                type="checkbox"
+                checked={draft.columns.separator}
+                onChange={(event) => {
+                  const columns = draft.columns
+                  if (columns === null) return
+                  setDraft({ ...draft, columns: { ...columns, separator: event.target.checked } })
+                }}
+                className="accent-accent"
+              />
+              Rule between
+            </label>
+          )}
+        </label>
 
         <fieldset className="grid grid-cols-2 gap-2">
           <legend className="mb-1 text-xs text-muted">Margins (inches)</legend>

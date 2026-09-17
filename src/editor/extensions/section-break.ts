@@ -1,5 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { serializeSection } from '../../ooxml/section'
+import { DEFAULT_SECTION, serializeSection } from '../../ooxml/section'
 import type { SectionProperties } from '../../ooxml/section'
 
 /**
@@ -85,13 +85,13 @@ export const SectionBreak = Node.create({
   },
 })
 
-/** Page setup for a break inserted with nothing to copy from. */
+/**
+ * Page setup for a break inserted with nothing to copy from.
+ *
+ * The document's own defaults, rather than a second copy of them: a copy drifts
+ * the moment either is changed.
+ */
 const EMPTY_SECTION: SectionProperties = {
-  width: 612,
-  height: 792,
-  orientation: 'portrait',
-  margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36, gutter: 0 },
-  pageNumbering: null,
-  differentFirstPage: false,
-  preserved: [],
+  ...DEFAULT_SECTION,
+  margins: { ...DEFAULT_SECTION.margins },
 }

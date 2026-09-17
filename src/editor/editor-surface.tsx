@@ -16,6 +16,29 @@ export function EditorSurface() {
   const zoom = useViewStore((state) => state.zoom)
   const section = useViewStore((state) => state.section)
 
+  /**
+   * Text columns, drawn only for a document that is a single section.
+   *
+   * CSS lays out columns on a container, and a section is a run of blocks with
+   * no container of its own — so a document that changes column layout part-way
+   * through cannot be drawn this way. It still round-trips: the file keeps what
+   * each section says, and Word lays it out. See `PLAN.md`, phase 4.5.3.
+   */
+  const columns = editor?.state.doc.content.content.some(
+    (node) => node.type.name === 'sectionBreak',
+  )
+    ? null
+    : section.columns
+
+  // Passed down as custom properties rather than set on the element: the
+  // children that flow into columns are the paragraphs, so the layout belongs
+  // on the editable itself, which React does not render.
+  const columnStyle = {
+    '--page-columns': columns === null ? 'auto' : String(columns.count),
+    '--page-column-gap': `${String(columns?.spacing ?? 0)}pt`,
+    '--page-column-rule': columns?.separator === true ? '1px solid #cccccc' : 'none',
+  }
+
   return (
     <div className="h-full overflow-auto bg-surface-2 py-8">
       <div
@@ -36,6 +59,7 @@ export function EditorSurface() {
             '--page-margin-bottom': `${String(section.margins.bottom)}pt`,
             '--page-margin-left': `${String(section.margins.left + section.margins.gutter)}pt`,
             '--page-margin-right': `${String(section.margins.right)}pt`,
+            ...columnStyle,
             transform: `scale(${String(zoom)})`,
             // Scaling from the top keeps the page under the ruler as zoom changes.
             transformOrigin: 'top center',
@@ -47,7 +71,10 @@ export function EditorSurface() {
           } as CSSProperties
         }
       >
-        <EditorContent editor={editor} style={{ maxWidth: `${String(contentWidth(section))}pt` }} />
+        <EditorContent
+          editor={editor}
+          style={{ maxWidth: `${String(contentWidth(section))}pt` }}
+        />
       </div>
     </div>
   )

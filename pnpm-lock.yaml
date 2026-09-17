@@ -240,6 +240,12 @@ importers:
       '@orangery/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
+      '@tauri-apps/plugin-dialog':
+        specifier: ^2.7.3
+        version: 2.7.3
+      '@tauri-apps/plugin-fs':
+        specifier: ^2.5.2
+        version: 2.5.2
       lucide-react:
         specifier: ^1.46.0
         version: 1.46.0(react@19.3.0)

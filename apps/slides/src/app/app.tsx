@@ -1,8 +1,11 @@
 import { useRef } from 'react'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
+import { Canvas } from '../components/canvas'
+import { Filmstrip } from '../components/filmstrip'
+import { Notes } from '../components/notes'
 import { ResizeHandle } from '../components/resize-handle'
-import { WelcomeScreen } from '../components/welcome-screen'
 import { registerBuiltinCommands } from '../commands/definitions'
+import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { useCommandSource } from './command-source'
 import { useTheme } from './use-theme'
@@ -24,6 +27,9 @@ function Shell() {
   useTheme()
   useNativeMenu()
 
+  const open = useDeckStore((state) => state.open)
+  const slide = useDeckStore(currentSlide)
+  const current = useDeckStore((state) => state.current)
   const panels = useViewStore((state) => state.panels)
   const sizes = useViewStore((state) => state.sizes)
   const resize = useViewStore((state) => state.resize)
@@ -32,7 +38,12 @@ function Shell() {
   return (
     <div className="flex h-full flex-col bg-bg text-text">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
-        <span className="font-medium">Untitled presentation</span>
+        <span className="font-medium">{title(open?.path ?? null)}</span>
+        {open !== null && (
+          <span className="text-xs text-muted">
+            Slide {current + 1} of {open.deck.slides.length}
+          </span>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -41,9 +52,9 @@ function Shell() {
             <aside
               aria-label="Slides"
               style={{ width: sizes.filmstrip }}
-              className="shrink-0 overflow-y-auto bg-surface p-2 text-xs text-muted"
+              className="shrink-0 overflow-y-auto bg-surface"
             >
-              No slides yet
+              <Filmstrip />
             </aside>
             <ResizeHandle
               orientation="vertical"
@@ -57,7 +68,7 @@ function Shell() {
 
         <div ref={middle} className="flex min-h-0 min-w-0 flex-1 flex-col">
           <main className="min-h-0 flex-1 bg-surface-2">
-            <WelcomeScreen />
+            <Canvas />
           </main>
 
           {panels.notes && (
@@ -73,9 +84,9 @@ function Shell() {
               <section
                 aria-label="Speaker notes"
                 style={{ height: sizes.notes }}
-                className="shrink-0 overflow-y-auto bg-surface p-3 text-xs text-muted"
+                className="shrink-0 overflow-y-auto bg-surface p-3"
               >
-                Notes appear here
+                <Notes />
               </section>
             </>
           )}
@@ -95,7 +106,7 @@ function Shell() {
               style={{ width: sizes.properties }}
               className="shrink-0 overflow-y-auto bg-surface p-3 text-xs text-muted"
             >
-              Nothing selected
+              {slide === null ? 'Nothing selected' : `${String(slide.shapes.length)} shapes`}
             </aside>
           </>
         )}
@@ -104,6 +115,11 @@ function Shell() {
       <CommandPalette />
     </div>
   )
+}
+
+/** What the window is called: the file, or the app when there is none. */
+function title(path: string | null): string {
+  return path === null ? 'Orangery Slides' : (path.split(/[\\/]/u).pop() ?? path)
 }
 
 export function App() {

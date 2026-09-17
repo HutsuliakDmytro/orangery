@@ -1,5 +1,8 @@
 import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
+import { isTauri } from '@orangery/platform'
+import { nameOf, pickDeckPath, readDeckFile } from '../document/file'
+import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 
 /**
@@ -9,10 +12,10 @@ import { useViewStore } from '../store/view-store'
  * native menu and the command palette without either being told separately
  * (`apps/docs/docs/adr/0002-command-registry.md`).
  *
- * The file commands are registered disabled rather than left out. The menu is
- * the shape of the application, and a File menu with nothing in it says the app
- * cannot open a deck at all; a greyed-out Open says it cannot do so yet. They
- * become real in phase 1, when there is a package to read.
+ * A command that is not implemented yet is registered disabled rather than left
+ * out. The menu is the shape of the application: a File menu with nothing in it
+ * says the app cannot open a deck at all, while a greyed-out Save says it
+ * cannot do so yet.
  */
 
 const notYet = (id: string, label: string, shortcut?: string): Command => ({
@@ -28,9 +31,63 @@ const notYet = (id: string, label: string, shortcut?: string): Command => ({
 })
 
 export const fileCommands: readonly Command[] = [
+  {
+    id: 'file.open',
+    label: 'Open…',
+    group: 'file',
+    shortcut: 'Mod+o',
+    // Nothing to pick a file with outside the app shell, so the browser build
+    // shows the command greyed out rather than failing when it is used.
+    isEnabled: () => isTauri(),
+    run: () => {
+      void openDeck()
+    },
+  },
+  {
+    id: 'file.close',
+    label: 'Close Presentation',
+    group: 'file',
+    shortcut: 'Mod+w',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useDeckStore.getState().close()
+    },
+  },
   notYet('file.new', 'New Presentation', 'Mod+n'),
-  notYet('file.open', 'Open…', 'Mod+o'),
   notYet('file.save', 'Save', 'Mod+s'),
+]
+
+async function openDeck(): Promise<void> {
+  const path = await pickDeckPath()
+  if (path === null) return
+
+  await useDeckStore.getState().load(await readDeckFile(path), path)
+  document.title = `${nameOf(path)} — Orangery Slides`
+}
+
+export const slideCommands: readonly Command[] = [
+  {
+    id: 'view.next-slide',
+    label: 'Next Slide',
+    group: 'view',
+    shortcut: 'PageDown',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { current, select } = useDeckStore.getState()
+      select(current + 1)
+    },
+  },
+  {
+    id: 'view.previous-slide',
+    label: 'Previous Slide',
+    group: 'view',
+    shortcut: 'PageUp',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { current, select } = useDeckStore.getState()
+      select(current - 1)
+    },
+  },
 ]
 
 export const viewCommands: readonly Command[] = [
@@ -79,6 +136,7 @@ export const appearanceCommands: readonly Command[] = (['dark', 'light', 'system
 export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(fileCommands)
+  registerAll(slideCommands)
   registerAll(viewCommands)
   registerAll(appearanceCommands)
 }

@@ -28,6 +28,8 @@
     "@orangery/ooxml-presentation": "workspace:*",
     "@orangery/platform": "workspace:*",
     "@orangery/ui-kit": "workspace:*",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "@tauri-apps/plugin-fs": "^2.5.2",
     "lucide-react": "^1.46.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

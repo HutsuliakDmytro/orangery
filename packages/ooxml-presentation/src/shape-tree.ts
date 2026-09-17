@@ -7,6 +7,8 @@ import {
   readTextBody,
 } from '@orangery/ooxml-drawingml'
 import type { BlipFill, ShapeProperties, ShapeStyle, TextBody } from '@orangery/ooxml-drawingml'
+import { readGraphicContent } from './graphic-frame'
+import type { GraphicContent } from './graphic-frame'
 
 /**
  * The shapes on a slide.
@@ -106,6 +108,8 @@ export interface Shape {
   picture: BlipFill | null
   /** What a connector is attached to, for a `p:cxnSp`. */
   connection: Connection | null
+  /** What is inside a `p:graphicFrame`: a table, a chart, a diagram, an object. */
+  graphic: GraphicContent | null
   /** Empty for everything that is not a group. */
   shapes: Shape[]
   /** The element this was read from. Written back as-is unless something edits it. */
@@ -220,6 +224,7 @@ function parseShape(node: XmlNode): Shape {
     text: textNode === undefined ? null : readTextBody(textNode),
     picture: pictureNode === undefined ? null : readBlipFill(pictureNode),
     connection: kind === 'cxnSp' ? readConnection(nonVisual) : null,
+    graphic: kind === 'graphicFrame' ? readGraphicContent(node) : null,
     shapes: kind === 'grpSp' ? parseShapeTree(node) : [],
     node,
   }

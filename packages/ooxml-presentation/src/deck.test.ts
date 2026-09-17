@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { children, tagName } from '@orangery/ooxml-core'
+import { children, parseXml, tagName } from '@orangery/ooxml-core'
 import { EMU_PER_INCH, resolveColor, textOfBody } from '@orangery/ooxml-drawingml'
 import { layoutOf, masterOf, readDeck } from './deck'
 import { readPptxPackage } from './parts'
 import { flatten } from './shape-tree'
 import { colorContextFor, readThemes } from './theme-context'
+import { readGraphicContent } from './graphic-frame'
 
 const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synthetic')
 
@@ -240,5 +241,58 @@ describe('text on a real deck', () => {
 
     expect(connector?.text).toBeNull()
     expect(box?.text?.paragraphs.length).toBeGreaterThan(0)
+  })
+})
+
+describe('what a graphic frame holds', () => {
+  it('reads a table from the real fixture', async () => {
+    const deck = await deckOf('table')
+    const frame = deck.slides[0]?.shapes.find((shape) => shape.kind === 'graphicFrame')
+
+    expect(frame?.graphic?.kind).toBe('table')
+    expect(frame?.graphic?.table?.columns).toHaveLength(3)
+    expect(frame?.graphic?.table?.rows).toHaveLength(3)
+  })
+
+  it('reads the cell text', async () => {
+    const deck = await deckOf('table')
+    const frame = deck.slides[0]?.shapes.find((shape) => shape.kind === 'graphicFrame')
+    const header = frame?.graphic?.table?.rows[0]?.cells ?? []
+
+    expect(header.map((cell) => (cell.text ? textOfBody(cell.text) : null))).toEqual([
+      'Head 1',
+      'Head 2',
+      'Head 3',
+    ])
+  })
+
+  it('tells the kind from the uri, not from what is inside', () => {
+    // A chart and a diagram both hold one element carrying a relationship id
+    // and nothing else to tell them apart.
+    const chart = readGraphicContent(
+      parseXml(
+        '<p:graphicFrame><a:graphic><a:graphicData ' +
+          'uri="http://schemas.openxmlformats.org/drawingml/2006/chart">' +
+          '<c:chart r:id="rId7"/></a:graphicData></a:graphic></p:graphicFrame>',
+      )[0] ?? {},
+    )
+
+    expect(chart).toMatchObject({ kind: 'chart', relationshipId: 'rId7' })
+    expect(chart?.table).toBeNull()
+  })
+
+  it('names an unknown graphic rather than discarding it', () => {
+    const unknown = readGraphicContent(
+      parseXml(
+        '<p:graphicFrame><a:graphic><a:graphicData uri="urn:something:else"/></a:graphic></p:graphicFrame>',
+      )[0] ?? {},
+    )
+
+    expect(unknown).toMatchObject({ kind: 'unknown', uri: 'urn:something:else' })
+  })
+
+  it('leaves a plain shape without a graphic', async () => {
+    const deck = await deckOf('shapes')
+    expect(deck.slides[0]?.shapes[0]?.graphic).toBeNull()
   })
 })

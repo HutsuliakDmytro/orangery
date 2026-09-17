@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { resolveColor } from '@orangery/ooxml-drawingml'
 import { readDeck, layoutOf, masterOf } from './deck'
 import { readPptxPackage } from './parts'
+import { parseXml } from '@orangery/ooxml-core'
+import { parseShapeTree } from './shape-tree'
 import { lookContext, shapeLook } from './shape-look'
 import { colorContextFor, readThemes } from './theme-context'
 
@@ -83,21 +85,19 @@ describe('the index into the theme', () => {
     const { theme } = await load('shapes')
     if (!theme) throw new Error('fixture has no theme')
 
-    const shape = (index: number) => ({
-      kind: 'sp' as const,
-      id: 1,
-      name: '',
-      description: '',
-      transform: null,
-      placeholder: null,
-      properties: null,
-      style: { line: null, fill: { index, color: null }, effect: null, font: null },
-      text: null,
-      picture: null,
-      connection: null,
-      shapes: [],
-      node: {},
-    })
+    // Parsed rather than written out: a hand-built Shape literal has to be
+    // edited every time the model grows a field, and says nothing while it is
+    // being edited.
+    const shape = (index: number) => {
+      const [parsed] = parseShapeTree(
+        parseXml(
+          '<p:spTree><p:sp><p:nvSpPr><p:cNvPr id="1" name="x"/><p:nvPr/></p:nvSpPr>' +
+            `<p:style><a:fillRef idx="${String(index)}"/></p:style></p:sp></p:spTree>`,
+        )[0] ?? {},
+      )
+      if (parsed === undefined) throw new Error('could not build the shape')
+      return parsed
+    }
 
     expect(shapeLook(shape(1), theme).fill).toBe(theme.format.fills[0])
     expect(shapeLook(shape(0), theme).fill).toBeNull()

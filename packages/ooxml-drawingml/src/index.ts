@@ -68,3 +68,5 @@ export {
   readFormatScheme,
 } from './format-scheme'
 export type { FormatScheme } from './format-scheme'
+export { readCellProperties, readTable, visibleCells } from './table'
+export type { CellProperties, Table, TableCell, TableProperties, TableRow } from './table'

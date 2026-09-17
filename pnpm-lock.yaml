@@ -225,6 +225,15 @@ importers:
       '@orangery/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@orangery/ooxml-core':
+        specifier: workspace:*
+        version: link:../../packages/ooxml-core
+      '@orangery/ooxml-drawingml':
+        specifier: workspace:*
+        version: link:../../packages/ooxml-drawingml
+      '@orangery/ooxml-presentation':
+        specifier: workspace:*
+        version: link:../../packages/ooxml-presentation
       '@orangery/platform':
         specifier: workspace:*
         version: link:../../packages/platform

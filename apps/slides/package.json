@@ -23,6 +23,9 @@
   },
   "dependencies": {
     "@orangery/fonts": "workspace:*",
+    "@orangery/ooxml-core": "workspace:*",
+    "@orangery/ooxml-drawingml": "workspace:*",
+    "@orangery/ooxml-presentation": "workspace:*",
     "@orangery/platform": "workspace:*",
     "@orangery/ui-kit": "workspace:*",
     "lucide-react": "^1.46.0",

@@ -2,6 +2,7 @@ import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import { nameOf, pickDeckPath, readDeckFile } from '../document/file'
+import { moveShape } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 
@@ -90,6 +91,75 @@ export const slideCommands: readonly Command[] = [
   },
 ]
 
+/** One nudge of an arrow key: a point, which is what PowerPoint moves by. */
+const NUDGE = 12700
+
+function nudge(dx: number, dy: number): void {
+  const { selection, edit } = useDeckStore.getState()
+  if (selection.length === 0) return
+
+  edit((slide) =>
+    slide.shapes
+      .filter((shape) => selection.includes(shape.id))
+      .map((shape) => moveShape(shape, { x: dx, y: dy }))
+      // Reduced rather than `some`, so every selected shape moves before the
+      // answer is worked out.
+      .reduce((moved: boolean, one) => moved || one, false),
+  )
+}
+
+export const editCommands: readonly Command[] = [
+  {
+    id: 'edit.undo',
+    label: 'Undo',
+    group: 'edit',
+    shortcut: 'Mod+z',
+    isEnabled: () => useDeckStore.getState().undoStack.length > 0,
+    run: () => {
+      useDeckStore.getState().undo()
+    },
+  },
+  {
+    id: 'edit.redo',
+    label: 'Redo',
+    group: 'edit',
+    shortcut: 'Mod+Shift+z',
+    isEnabled: () => useDeckStore.getState().redoStack.length > 0,
+    run: () => {
+      useDeckStore.getState().redo()
+    },
+  },
+  {
+    id: 'edit.select-all',
+    label: 'Select All',
+    group: 'edit',
+    shortcut: 'Mod+a',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { open, current, selectShapes } = useDeckStore.getState()
+      const slide = open?.deck.slides[current]
+      selectShapes((slide?.shapes ?? []).map((shape) => shape.id))
+    },
+  },
+  ...(
+    [
+      ['left', 'Left', -NUDGE, 0],
+      ['right', 'Right', NUDGE, 0],
+      ['up', 'Up', 0, -NUDGE],
+      ['down', 'Down', 0, NUDGE],
+    ] as const
+  ).map(([id, label, dx, dy]) => ({
+    id: `edit.nudge-${id}`,
+    label: `Nudge ${label}`,
+    group: 'edit' as const,
+    shortcut: `Arrow${label}`,
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      nudge(dx, dy)
+    },
+  })),
+]
+
 export const viewCommands: readonly Command[] = [
   {
     id: 'view.filmstrip',
@@ -136,6 +206,7 @@ export const appearanceCommands: readonly Command[] = (['dark', 'light', 'system
 export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(fileCommands)
+  registerAll(editCommands)
   registerAll(slideCommands)
   registerAll(viewCommands)
   registerAll(appearanceCommands)

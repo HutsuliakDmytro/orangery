@@ -7,6 +7,8 @@ export function Canvas() {
   const open = useDeckStore((state) => state.open)
   const slide = useDeckStore(currentSlide)
   const error = useDeckStore((state) => state.error)
+  const selection = useDeckStore((state) => state.selection)
+  const selectShapes = useDeckStore((state) => state.selectShapes)
 
   if (error !== null) {
     return (
@@ -27,6 +29,10 @@ export function Canvas() {
         slide={slide}
         themes={open.themes}
         package={open.package}
+        selection={selection}
+        onSelect={(id, extend) => {
+          selectShapes(id === null ? [] : [id], extend && id !== null)
+        }}
         className="w-full max-w-4xl shadow-lg"
       />
     </div>

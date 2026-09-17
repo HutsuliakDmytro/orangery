@@ -346,6 +346,8 @@ export function SlideView({
   slide,
   themes,
   package: pkg,
+  selection,
+  onSelect,
   className,
 }: {
   deck: Deck
@@ -353,6 +355,10 @@ export function SlideView({
   themes: ReadonlyMap<string, Theme>
   /** Needed for the media a picture points at, which lives in the zip. */
   package?: OoxmlPackage
+  /** Shape ids drawn with handles. Absent in a thumbnail, which is not editable. */
+  selection?: readonly number[]
+  /** Given the shape clicked and whether the click was extending a selection. */
+  onSelect?: (id: number | null, extend: boolean) => void
   className?: string
 }) {
   const base = colorContextFor(deck, themes, slide)
@@ -396,6 +402,20 @@ export function SlideView({
           fill={backgroundPaint.paint}
           fillOpacity={backgroundPaint.opacity}
         />
+        {onSelect !== undefined && (
+          // Catches a click that hit no shape, which is how a selection is
+          // cleared. Behind everything, so a shape's own click wins.
+          <rect
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            fill="transparent"
+            onPointerDown={() => {
+              onSelect(null, false)
+            }}
+          />
+        )}
         {drawings.map((drawing) => (
           <Fragment key={drawing.key}>
             {drawing.shape.kind === 'pic' && pkg !== undefined ? (
@@ -413,10 +433,76 @@ export function SlideView({
               <ShapeOutline drawing={drawing} />
             )}
             <ShapeText drawing={drawing} deck={deck} slide={slide} theme={theme} />
+            {onSelect !== undefined && (
+              <rect
+                // Over the shape and under the next one: an invisible target so
+                // a shape with no fill is still clickable, which is how
+                // PowerPoint behaves too.
+                x={drawing.transform.x}
+                y={drawing.transform.y}
+                width={drawing.transform.width}
+                height={drawing.transform.height}
+                fill="transparent"
+                role="button"
+                aria-label={drawing.shape.name === '' ? 'Shape' : drawing.shape.name}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  onSelect(drawing.shape.id, event.shiftKey)
+                }}
+              />
+            )}
           </Fragment>
         ))}
+        {drawings
+          .filter((drawing) => selection?.includes(drawing.shape.id) === true)
+          .map((drawing) => (
+            <SelectionFrame key={`selected-${drawing.key}`} transform={drawing.transform} />
+          ))}
       </svg>
     </div>
+  )
+}
+
+/**
+ * The frame around a selected shape.
+ *
+ * Drawn after every shape so it is never hidden behind one, and sized in EMU
+ * like everything else — the handles come out the right size because the
+ * viewBox scales them with the slide.
+ */
+function SelectionFrame({ transform }: { transform: Transform }) {
+  const handle = 76200
+  const corners = [
+    [transform.x, transform.y],
+    [transform.x + transform.width, transform.y],
+    [transform.x, transform.y + transform.height],
+    [transform.x + transform.width, transform.y + transform.height],
+  ] as const
+
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={transform.x}
+        y={transform.y}
+        width={transform.width}
+        height={transform.height}
+        fill="none"
+        stroke="#FF7A00"
+        strokeWidth={19050}
+      />
+      {corners.map(([x, y]) => (
+        <rect
+          key={`${String(x)},${String(y)}`}
+          x={x - handle / 2}
+          y={y - handle / 2}
+          width={handle}
+          height={handle}
+          fill="#FFFFFF"
+          stroke="#FF7A00"
+          strokeWidth={19050}
+        />
+      ))}
+    </g>
   )
 }
 

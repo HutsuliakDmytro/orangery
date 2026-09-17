@@ -9,6 +9,7 @@ import { registerBuiltinCommands } from '../commands/definitions'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { useCommandSource } from './command-source'
+import { useShortcuts } from './use-shortcuts'
 import { useTheme } from './use-theme'
 
 // Registration happens once at module load: the registry is process-wide state,
@@ -27,6 +28,7 @@ registerBuiltinCommands()
 function Shell() {
   useTheme()
   useNativeMenu()
+  useShortcuts()
 
   const open = useDeckStore((state) => state.open)
   const slide = useDeckStore(currentSlide)

@@ -1,0 +1,286 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { act } from 'react'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { getCommand, runCommand } from '@orangery/ui-kit'
+import { getPartText } from '@orangery/ooxml-core'
+import { isMac } from '@orangery/platform'
+import { App } from './app'
+import { useDeckStore } from '../store/deck-store'
+
+/**
+ * Selecting and moving shapes, and taking it back.
+ *
+ * The state under test is the file: every assertion about an edit reads what
+ * the slide part says, because the model is a view over it and agreeing with
+ * itself proves nothing.
+ */
+
+const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
+
+async function openDeck(name: string) {
+  const bytes = await readFile(join(FIXTURES, `${name}.pptx`))
+  await act(async () => {
+    await useDeckStore.getState().load(new Uint8Array(bytes), `/decks/${name}.pptx`)
+  })
+}
+
+/** The slide part as text, which is what a save would write. */
+const partText = () => {
+  const { open, current } = useDeckStore.getState()
+  const slide = open?.deck.slides[current]
+  return open === null || slide === undefined ? '' : (getPartText(open.package, slide.path) ?? '')
+}
+
+const firstShapeId = () => useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.id ?? -1
+
+beforeEach(() => {
+  useDeckStore.setState({
+    open: null,
+    current: -1,
+    selection: [],
+    undoStack: [],
+    redoStack: [],
+    error: null,
+  })
+})
+
+describe('selecting', () => {
+  it('selects the shape that was clicked', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    await user.click(screen.getAllByRole('button', { name: 'Rectangle 1' })[0] as HTMLElement)
+
+    expect(useDeckStore.getState().selection).toEqual([firstShapeId()])
+  })
+
+  it('replaces the selection unless shift is held', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    await user.click(screen.getAllByRole('button', { name: 'Rectangle 1' })[0] as HTMLElement)
+    await user.click(screen.getAllByRole('button', { name: 'Oval 2' })[0] as HTMLElement)
+    expect(useDeckStore.getState().selection).toHaveLength(1)
+
+    await user.keyboard('{Shift>}')
+    await user.click(screen.getAllByRole('button', { name: 'Rectangle 1' })[0] as HTMLElement)
+    await user.keyboard('{/Shift}')
+    expect(useDeckStore.getState().selection).toHaveLength(2)
+  })
+
+  it('draws a frame around what is selected', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+
+    const outlines = [...document.querySelectorAll('rect[stroke="#FF7A00"]')]
+    // The frame itself and four corner handles.
+    expect(outlines).toHaveLength(5)
+  })
+
+  it('drops the selection on moving to another slide', async () => {
+    // The ids mean something else there.
+    await openDeck('many-slides')
+    act(() => {
+      useDeckStore.getState().selectShapes([2])
+      useDeckStore.getState().select(1)
+    })
+
+    expect(useDeckStore.getState().selection).toEqual([])
+  })
+
+  it('selects everything on the slide from the registry', async () => {
+    await openDeck('shapes')
+    act(() => {
+      runCommand('edit.select-all', {})
+    })
+
+    expect(useDeckStore.getState().selection).toHaveLength(4)
+  })
+})
+
+describe('nudging', () => {
+  it('moves the selected shape in the file, not only in the model', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.nudge-right', {})
+    })
+
+    // 457200 plus one point.
+    expect(partText()).toContain('x="469900"')
+  })
+
+  it('does nothing with nothing selected', async () => {
+    await openDeck('shapes')
+    const before = partText()
+
+    expect(getCommand('edit.nudge-right')?.isEnabled?.({})).toBe(false)
+    act(() => {
+      runCommand('edit.nudge-right', {})
+    })
+
+    expect(partText()).toBe(before)
+    expect(useDeckStore.getState().undoStack).toHaveLength(0)
+  })
+
+  it('moves every selected shape, not just the first', async () => {
+    await openDeck('shapes')
+    act(() => {
+      runCommand('edit.select-all', {})
+      runCommand('edit.nudge-down', {})
+    })
+
+    const text = partText()
+    // All four started at y=1371600.
+    expect(text.match(/y="1384300"/gu)).toHaveLength(4)
+  })
+})
+
+describe('undo', () => {
+  it('puts the file back exactly as it was', async () => {
+    await openDeck('shapes')
+    const before = partText()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.nudge-right', {})
+    })
+    expect(partText()).not.toBe(before)
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+    expect(partText()).toBe(before)
+  })
+
+  it('redoes what it took back', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.nudge-right', {})
+    })
+    const moved = partText()
+
+    act(() => {
+      runCommand('edit.undo', {})
+      runCommand('edit.redo', {})
+    })
+
+    expect(partText()).toBe(moved)
+  })
+
+  it('walks back through several steps', async () => {
+    await openDeck('shapes')
+    const before = partText()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.nudge-right', {})
+      runCommand('edit.nudge-right', {})
+      runCommand('edit.nudge-down', {})
+    })
+    expect(useDeckStore.getState().undoStack).toHaveLength(3)
+
+    act(() => {
+      runCommand('edit.undo', {})
+      runCommand('edit.undo', {})
+      runCommand('edit.undo', {})
+    })
+    expect(partText()).toBe(before)
+  })
+
+  it('drops what was undone once something new is done', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.nudge-right', {})
+      runCommand('edit.undo', {})
+    })
+    expect(useDeckStore.getState().redoStack).toHaveLength(1)
+
+    act(() => {
+      runCommand('edit.nudge-down', {})
+    })
+    expect(useDeckStore.getState().redoStack).toHaveLength(0)
+  })
+
+  it('is greyed out with nothing to take back', async () => {
+    await openDeck('shapes')
+    expect(getCommand('edit.undo')?.isEnabled?.({})).toBe(false)
+    expect(getCommand('edit.redo')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('leaves the model agreeing with the file after undoing', async () => {
+    // The model is re-read from the package, so a stale one would show the
+    // shape in the moved position with the file saying otherwise.
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.nudge-right', {})
+      runCommand('edit.undo', {})
+    })
+
+    expect(useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.transform?.x).toBe(457200)
+  })
+})
+
+describe('the keyboard', () => {
+  it('runs a registry command from its own shortcut', async () => {
+    // A menu that shows a shortcut which does nothing is worse than no shortcut.
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.keyboard('{ArrowRight}')
+
+    expect(partText()).toContain('x="469900"')
+  })
+
+  it('undoes with the platform modifier', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    const before = partText()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.keyboard('{ArrowRight}')
+    await user.keyboard(isMac ? '{Meta>}z{/Meta}' : '{Control>}z{/Control}')
+
+    expect(partText()).toBe(before)
+  })
+
+  it('leaves a shortcut alone while something is being typed into', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(
+      <>
+        <App />
+        <input aria-label="somewhere to type" />
+      </>,
+    )
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    const before = partText()
+
+    await user.click(screen.getByLabelText('somewhere to type'))
+    await user.keyboard('{ArrowRight}')
+
+    expect(partText()).toBe(before)
+  })
+})

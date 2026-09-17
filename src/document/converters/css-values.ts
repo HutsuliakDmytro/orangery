@@ -99,6 +99,9 @@ export function cssLengthToPoints(value: string | undefined): number | null {
 export function cssFontFamily(value: string | undefined): string | null {
   if (value === undefined) return null
 
-  const first = value.split(',')[0]?.trim().replace(/^["']|["']$/gu, '')
+  const first = value
+    .split(',')[0]
+    ?.trim()
+    .replace(/^["']|["']$/gu, '')
   return first === undefined || first === '' ? null : first
 }

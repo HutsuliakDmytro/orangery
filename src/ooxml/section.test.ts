@@ -210,7 +210,9 @@ describe('the order of the section properties', () => {
     // repair a section whose properties are not in the sequence the schema sets.
     const xml = serializeSection(
       parseSection(
-        sectPr('<w:pgSz w:w="12240" w:h="15840"/><w:headerReference w:type="default" r:id="rId4"/>'),
+        sectPr(
+          '<w:pgSz w:w="12240" w:h="15840"/><w:headerReference w:type="default" r:id="rId4"/>',
+        ),
       ),
     )
 
@@ -277,7 +279,10 @@ describe('text columns', () => {
     )
     const xml = serializeSection({
       ...parsed,
-      columns: { ...(parsed.columns ?? { spacing: 0, separator: false, original: null }), count: 3 },
+      columns: {
+        ...(parsed.columns ?? { spacing: 0, separator: false, original: null }),
+        count: 3,
+      },
     })
 
     expect(xml).toContain('w:num="3"')
@@ -293,8 +298,8 @@ describe('text columns', () => {
   })
 
   it('writes nothing for a section that has none', () => {
-    expect(serializeSection(parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>')))).not.toContain(
-      'w:cols',
-    )
+    expect(
+      serializeSection(parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>'))),
+    ).not.toContain('w:cols')
   })
 })

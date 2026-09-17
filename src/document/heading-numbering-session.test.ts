@@ -73,7 +73,9 @@ describe('numbered headings in the package', () => {
 
   it('leaves the file alone when the caller says nothing', async () => {
     const document = await createNewDocx()
-    const numbered = await openDocx(await saveDocx(document, headings, { headingNumbering: 'decimal' }))
+    const numbered = await openDocx(
+      await saveDocx(document, headings, { headingNumbering: 'decimal' }),
+    )
 
     const again = await saveDocx(numbered, headings)
     expect((await openDocx(again)).headingNumbering).toBe('decimal')

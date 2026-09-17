@@ -49,12 +49,7 @@ export interface ListBuilder {
    * `start` is the number a list counts from, and is only read from the item
    * that opens one.
    */
-  addItem: (
-    kind: ListKind,
-    depth: number,
-    blocks: ProseMirrorNodeJson[],
-    start?: number,
-  ) => void
+  addItem: (kind: ListKind, depth: number, blocks: ProseMirrorNodeJson[], start?: number) => void
   /** Ends every open list, so the next block is not swallowed into one. */
   close: () => void
 }

@@ -230,7 +230,9 @@ function listLines(list: ProseMirrorNodeJson, indent: string): string[] {
 
     // An item holding nothing but a nested list still needs a marker of its own,
     // or the nesting has nothing to hang from.
-    let started = !blocks.some((child) => child.type !== 'bulletList' && child.type !== 'orderedList')
+    let started = !blocks.some(
+      (child) => child.type !== 'bulletList' && child.type !== 'orderedList',
+    )
     if (started) lines.push(`${indent}${marker}`)
 
     for (const child of blocks) {

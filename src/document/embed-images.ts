@@ -152,5 +152,9 @@ export function embedOdtImages(
   doc: ProseMirrorNodeJson,
   options: { section: SectionProperties; measure?: MeasureImage },
 ): Promise<EmbedResult> {
-  return embedImages(doc, (bytes, extension) => ({ href: addPicture(pkg, extension, bytes) }), options)
+  return embedImages(
+    doc,
+    (bytes, extension) => ({ href: addPicture(pkg, extension, bytes) }),
+    options,
+  )
 }

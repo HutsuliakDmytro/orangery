@@ -208,11 +208,7 @@ export const TrackChanges = Extension.create<TrackChangesOptions>({
             // keystroke would keep the text nodes from merging, and the file
             // would carry a `w:ins` around every single character.
             const existing = adjoiningInsertion(newState, range.from, author())
-            tr.addMark(
-              range.from,
-              range.to,
-              existing ?? insertion.create(revisionAttrs(author())),
-            )
+            tr.addMark(range.from, range.to, existing ?? insertion.create(revisionAttrs(author())))
           }
 
           return tr

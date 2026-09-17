@@ -329,7 +329,10 @@ function parseGraphicStyles(root: XmlNode): Map<string, OdtGraphicStyle> {
  * drawn behind or in front of the text have no equivalent and return null, so
  * they stay preserved rather than being dropped into the flow.
  */
-function frameWrap(node: XmlNode, ctx: OdtContext): 'inline' | 'left' | 'right' | 'topAndBottom' | null {
+function frameWrap(
+  node: XmlNode,
+  ctx: OdtContext,
+): 'inline' | 'left' | 'right' | 'topAndBottom' | null {
   const anchor = attribute(node, 'text:anchor-type') ?? 'paragraph'
   if (anchor === 'as-char') return 'inline'
   if (anchor === 'page' || anchor === 'frame') return null
@@ -482,7 +485,9 @@ function parseTextStyles(root: XmlNode): {
   return { text, paragraph }
 }
 
-function marksFor(style: OdtStyle | undefined): { type: string; attrs?: Record<string, unknown> }[] {
+function marksFor(
+  style: OdtStyle | undefined,
+): { type: string; attrs?: Record<string, unknown> }[] {
   if (!style) return []
 
   const marks: { type: string; attrs?: Record<string, unknown> }[] = []
@@ -1023,9 +1028,7 @@ function buildFrame(node: ProseMirrorNodeJson, index: number, usedGraphics: Set<
         'xlink:show': 'embed',
         'xlink:actuate': 'onLoad',
       }),
-      ...(typeof alt === 'string' && alt !== ''
-        ? [element('svg:desc', {}, [textNode(alt)])]
-        : []),
+      ...(typeof alt === 'string' && alt !== '' ? [element('svg:desc', {}, [textNode(alt)])] : []),
     ],
   )
 }

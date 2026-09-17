@@ -74,16 +74,17 @@ export function Ruler() {
     [editor, breakPosition, setBodySection],
   )
 
-  const attributes = useEditorState({
-    editor: editor ?? null,
-    selector: ({ editor: instance }) => {
-      if (!instance) return {}
-      return instance.isActive('heading')
-        ? instance.getAttributes('heading')
-        : instance.getAttributes('paragraph')
-    },
-    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  }) ?? {}
+  const attributes =
+    useEditorState({
+      editor: editor ?? null,
+      selector: ({ editor: instance }) => {
+        if (!instance) return {}
+        return instance.isActive('heading')
+          ? instance.getAttributes('heading')
+          : instance.getAttributes('paragraph')
+      },
+      equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    }) ?? {}
   const indentLeft = typeof attributes['indentLeft'] === 'number' ? attributes['indentLeft'] : 0
   const stops = tabStopsOf(attributes)
   const firstLine =

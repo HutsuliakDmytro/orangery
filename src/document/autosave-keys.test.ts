@@ -17,9 +17,8 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (command: string, args?: Record<string, unknown>) => invoke(command, args),
 }))
 
-const { buildSnapshot, clearSnapshot, listRecoverable, snapshotKey, writeSnapshot } = await import(
-  './autosave'
-)
+const { buildSnapshot, clearSnapshot, listRecoverable, snapshotKey, writeSnapshot } =
+  await import('./autosave')
 
 const doc = { type: 'doc', content: [{ type: 'paragraph' }] }
 

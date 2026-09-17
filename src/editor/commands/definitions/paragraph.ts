@@ -218,13 +218,14 @@ const blocks: readonly Command[] = [
  * "off" are different documents — `widowControl` is on unless a paragraph says
  * otherwise.
  */
-const PAGINATION_LABELS: Readonly<Record<PaginationAttribute, { label: string; keywords: string[] }>> =
-  {
-    keepNext: { label: 'Keep with Next Paragraph', keywords: ['together', 'orphan', 'heading'] },
-    keepLines: { label: 'Keep Lines Together', keywords: ['split', 'break', 'paragraph'] },
-    pageBreakBefore: { label: 'Page Break Before', keywords: ['new page', 'start'] },
-    widowControl: { label: 'Widow and Orphan Control', keywords: ['single line', 'dangling'] },
-  }
+const PAGINATION_LABELS: Readonly<
+  Record<PaginationAttribute, { label: string; keywords: string[] }>
+> = {
+  keepNext: { label: 'Keep with Next Paragraph', keywords: ['together', 'orphan', 'heading'] },
+  keepLines: { label: 'Keep Lines Together', keywords: ['split', 'break', 'paragraph'] },
+  pageBreakBefore: { label: 'Page Break Before', keywords: ['new page', 'start'] },
+  widowControl: { label: 'Widow and Orphan Control', keywords: ['single line', 'dangling'] },
+}
 
 const pagination: readonly Command[] = PAGINATION_ATTRIBUTES.map((name) => ({
   id: `paragraph.${name.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`,
@@ -263,22 +264,20 @@ const SCHEME_LABELS: Readonly<Record<HeadingNumberScheme, string>> = {
 }
 
 const numbering: readonly Command[] = [
-  ...HEADING_NUMBER_SCHEMES.map(
-    (scheme): Command => ({
-      id: `paragraph.heading-numbers-${scheme}`,
-      label: SCHEME_LABELS[scheme],
-      group: 'format',
-      keywords: ['multilevel', 'outline', 'chapter', 'section'],
-      run: ({ editor }) => {
-        const { headingNumbering, setHeadingNumbering } = useViewStore.getState()
-        // Running the scheme that is already on turns numbering off, so the
-        // command behaves like the toggle its tick in the menu says it is.
-        setHeadingNumbering(headingNumbering === scheme ? null : scheme)
-        redrawNumbers(editor)
-      },
-      isActive: () => useViewStore.getState().headingNumbering === scheme,
-    }),
-  ),
+  ...HEADING_NUMBER_SCHEMES.map((scheme): Command => ({
+    id: `paragraph.heading-numbers-${scheme}`,
+    label: SCHEME_LABELS[scheme],
+    group: 'format',
+    keywords: ['multilevel', 'outline', 'chapter', 'section'],
+    run: ({ editor }) => {
+      const { headingNumbering, setHeadingNumbering } = useViewStore.getState()
+      // Running the scheme that is already on turns numbering off, so the
+      // command behaves like the toggle its tick in the menu says it is.
+      setHeadingNumbering(headingNumbering === scheme ? null : scheme)
+      redrawNumbers(editor)
+    },
+    isActive: () => useViewStore.getState().headingNumbering === scheme,
+  })),
   {
     id: 'paragraph.heading-numbers-none',
     label: 'No Heading Numbers',

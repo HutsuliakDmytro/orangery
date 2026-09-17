@@ -19,9 +19,13 @@ function docWith(image: Record<string, unknown>): ProseMirrorNodeJson {
 describe('embedImagesInto', () => {
   it('adds the bytes to the package and points the node at them', async () => {
     const pkg = (await createNewDocx()).pkg
-    const { doc, warnings } = await embedImagesInto(pkg, docWith({ src: PNG, width: 72, height: 36 }), {
-      section,
-    })
+    const { doc, warnings } = await embedImagesInto(
+      pkg,
+      docWith({ src: PNG, width: 72, height: 36 }),
+      {
+        section,
+      },
+    )
 
     const image = doc.content?.[0]?.content?.[0]
     expect(image?.attrs?.['relationshipId']).toMatch(/^rId\d+$/u)
@@ -87,8 +91,14 @@ describe('embedImagesInto', () => {
       {
         type: 'doc',
         content: [
-          { type: 'paragraph', content: [{ type: 'image', attrs: { src: PNG, width: 10, height: 10 } }] },
-          { type: 'paragraph', content: [{ type: 'image', attrs: { src: PNG, width: 10, height: 10 } }] },
+          {
+            type: 'paragraph',
+            content: [{ type: 'image', attrs: { src: PNG, width: 10, height: 10 } }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'image', attrs: { src: PNG, width: 10, height: 10 } }],
+          },
         ],
       },
       { section },

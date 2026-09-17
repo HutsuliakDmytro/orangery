@@ -352,7 +352,10 @@ function buildParagraphProperties(
  * renumbers them itself when a figure is inserted above, and a reader that
  * cannot calculate fields still shows the number as it stood.
  */
-function buildCaptionLabel(node: ProseMirrorNodeJson, numbered: CaptionNumber | undefined): XmlNode[] {
+function buildCaptionLabel(
+  node: ProseMirrorNodeJson,
+  numbered: CaptionNumber | undefined,
+): XmlNode[] {
   const kind = captionKindOf(node.attrs?.['captionKind'])
   if (kind === undefined || numbered === undefined) return []
 
@@ -360,7 +363,9 @@ function buildCaptionLabel(node: ProseMirrorNodeJson, numbered: CaptionNumber | 
   const own = numbered.chapter === null ? numbered.number : (ownValue ?? numbered.number)
 
   return [
-    element('w:r', {}, [element('w:t', { 'xml:space': 'preserve' }, [textNode(`${SEQUENCE_NAMES[kind]} `)])]),
+    element('w:r', {}, [
+      element('w:t', { 'xml:space': 'preserve' }, [textNode(`${SEQUENCE_NAMES[kind]} `)]),
+    ]),
     ...(numbered.chapter === null
       ? []
       : [
@@ -405,9 +410,7 @@ function revisionWrapper(marks: Map<string, Mark>, run: XmlNode): XmlNode {
  */
 function asDeletedText(run: XmlNode): XmlNode {
   const renamed = children(run).map((child) =>
-    tagName(child) === 'w:t'
-      ? element('w:delText', attributesOf(child), children(child))
-      : child,
+    tagName(child) === 'w:t' ? element('w:delText', attributesOf(child), children(child)) : child,
   )
 
   return element('w:r', {}, renamed)
@@ -800,20 +803,26 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
     // open past it.
     commentState.ahead = blocks.slice(index + 1).flatMap((ahead) => commentIdsIn(ahead))
 
-    body.push(...buildBlock(node, { ...context, ...(sectPr === null ? {} : { sectionBreak: sectPr }) }))
+    body.push(
+      ...buildBlock(node, { ...context, ...(sectPr === null ? {} : { sectionBreak: sectPr }) }),
+    )
 
     // Nothing in front of it that can carry the properties — a table, or the
     // very start of the document — so the break needs a paragraph of its own.
     const orphan = blocks[index + 1]
     if (orphan?.type === 'sectionBreak' && sectPr === null) {
-      body.push(element('w:p', {}, [element('w:pPr', {}, parsedNodes(stringAttr(orphan.attrs, 'sectPr')))]))
+      body.push(
+        element('w:p', {}, [element('w:pPr', {}, parsedNodes(stringAttr(orphan.attrs, 'sectPr')))]),
+      )
     }
   }
 
   // A break with nothing before it at all still ends a section.
   if (blocks[0]?.type === 'sectionBreak') {
     body.unshift(
-      element('w:p', {}, [element('w:pPr', {}, parsedNodes(stringAttr(blocks[0].attrs, 'sectPr')))]),
+      element('w:p', {}, [
+        element('w:pPr', {}, parsedNodes(stringAttr(blocks[0].attrs, 'sectPr'))),
+      ]),
     )
   }
   body.push(...parsedNodes(options.sectionProperties))

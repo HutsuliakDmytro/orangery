@@ -1,6 +1,16 @@
 {
   "name": "orangery-docs",
   "version": "0.0.0",
+  "description": "A desktop word processor that treats .docx as its own format, preserving everything it does not model.",
+  "license": "MIT",
+  "keywords": [
+    "docx",
+    "ooxml",
+    "word-processor",
+    "editor",
+    "tauri",
+    "prosemirror"
+  ],
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.18.0",

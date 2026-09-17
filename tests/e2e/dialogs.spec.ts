@@ -133,7 +133,9 @@ test('numbers the headings and carries the numbers into the contents', async ({ 
   await expect(page.locator(`${editor} .toc-entry`).nth(1)).toHaveText('1.1. Under')
 })
 
-test('page setup changes the section the cursor is in, not the whole document', async ({ page }) => {
+test('page setup changes the section the cursor is in, not the whole document', async ({
+  page,
+}) => {
   await page.locator(editor).click()
   await page.keyboard.type('first section')
 
@@ -211,7 +213,6 @@ test('each section has headers of its own', async ({ page }) => {
   await page.locator(`${editor} p`).first().click()
   await expect(header).toHaveValue('Chapter')
 })
-
 
 test('lays the page out in columns', async ({ page }) => {
   await page.locator(editor).click()

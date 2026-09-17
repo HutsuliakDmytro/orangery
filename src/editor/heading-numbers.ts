@@ -108,10 +108,7 @@ function label(scheme: HeadingNumberScheme, counters: readonly number[], level: 
  * first heading is a Heading 2 numbers it `0.1.` in Word, and leaving the gap
  * visible is more honest than quietly promoting it.
  */
-export function headingNumbers(
-  doc: ProseMirrorNode,
-  scheme: HeadingNumberScheme,
-): HeadingNumber[] {
+export function headingNumbers(doc: ProseMirrorNode, scheme: HeadingNumberScheme): HeadingNumber[] {
   const counters = new Array<number>(LEVELS).fill(0)
   const numbers: HeadingNumber[] = []
 

@@ -17,7 +17,10 @@ const CONTENT = (body: string, styles = '') => `<?xml version="1.0" encoding="UT
 <office:body><office:text>${body}</office:text></office:body>
 </office:document-content>`
 
-async function packageOf(content: string, styles = '<office:document-styles/>'): Promise<Uint8Array> {
+async function packageOf(
+  content: string,
+  styles = '<office:document-styles/>',
+): Promise<Uint8Array> {
   const zip = new JSZip()
   zip.file('mimetype', 'application/vnd.oasis.opendocument.text')
   zip.file('content.xml', content)
@@ -39,7 +42,9 @@ const NUMBERED = `<text:list-style style:name="WWNum1">
 describe('list styles', () => {
   it('reads the kind from the list style rather than its name', () => {
     const { doc } = parseOdtContent(
-      CONTENT('<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      CONTENT(
+        '<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>',
+      ),
       { listStyles: parseOdtListStyles(STYLES(NUMBERED)) },
     )
 
@@ -50,7 +55,9 @@ describe('list styles', () => {
     const bullet = `<text:list-style style:name="WWNum1"><text:list-level-style-bullet text:level="1" text:bullet-char="\u2022"/></text:list-style>`
 
     const { doc } = parseOdtContent(
-      CONTENT('<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      CONTENT(
+        '<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>',
+      ),
       { listStyles: parseOdtListStyles(STYLES(bullet)) },
     )
 
@@ -81,7 +88,9 @@ describe('list styles', () => {
     const none = `<text:list-style style:name="L1"><text:list-level-style-number text:level="1" style:num-format=""/></text:list-style>`
 
     const { doc } = parseOdtContent(
-      CONTENT('<text:list text:style-name="L1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      CONTENT(
+        '<text:list text:style-name="L1"><text:list-item><text:p>one</text:p></text:list-item></text:list>',
+      ),
       { listStyles: parseOdtListStyles(STYLES(none)) },
     )
 
@@ -118,7 +127,9 @@ describe('list styles', () => {
 
   it('falls back to the name when nothing in the package declares the style', () => {
     const { doc } = parseOdtContent(
-      CONTENT('<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>'),
+      CONTENT(
+        '<text:list text:style-name="WWNum1"><text:list-item><text:p>one</text:p></text:list-item></text:list>',
+      ),
     )
 
     expect(doc.content?.[0]?.type).toBe('orderedList')
@@ -247,7 +258,9 @@ describe('images', () => {
 
   it('preserves a frame that holds something other than a picture', () => {
     const { doc } = parseOdtContent(
-      CONTENT(FRAME('text:anchor-type="as-char"', '<draw:text-box><text:p>x</text:p></draw:text-box>')),
+      CONTENT(
+        FRAME('text:anchor-type="as-char"', '<draw:text-box><text:p>x</text:p></draw:text-box>'),
+      ),
     )
 
     expect(doc.content?.[0]?.content?.[0]?.type).toBe('passthroughInline')
@@ -633,7 +646,9 @@ describe('odt character formatting', () => {
 
   it('round-trips colour, highlight, family and size', () => {
     const source = parseOdtContent(
-      styled('fo:color="#FF0000" fo:background-color="#FFFF00" fo:font-family="Georgia" fo:font-size="14pt"'),
+      styled(
+        'fo:color="#FF0000" fo:background-color="#FFFF00" fo:font-family="Georgia" fo:font-size="14pt"',
+      ),
     )
     const again = parseOdtContent(
       serializeOdtContent(source.doc, { contentAttributes: source.contentAttributes }),
@@ -654,9 +669,21 @@ describe('odt character formatting', () => {
           {
             type: 'paragraph',
             content: [
-              { type: 'text', text: 'a', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
-              { type: 'text', text: 'b', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
-              { type: 'text', text: 'c', marks: [{ type: 'textStyle', attrs: { color: '#00FF00' } }] },
+              {
+                type: 'text',
+                text: 'a',
+                marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+              },
+              {
+                type: 'text',
+                text: 'b',
+                marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+              },
+              {
+                type: 'text',
+                text: 'c',
+                marks: [{ type: 'textStyle', attrs: { color: '#00FF00' } }],
+              },
             ],
           },
         ],
@@ -696,7 +723,11 @@ describe('odt paragraph alignment', () => {
       {
         type: 'doc',
         content: [
-          { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: 'x' }] },
+          {
+            type: 'paragraph',
+            attrs: { textAlign: 'right' },
+            content: [{ type: 'text', text: 'x' }],
+          },
         ],
       },
       { contentAttributes: {} },

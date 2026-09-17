@@ -319,16 +319,16 @@ describe('html character formatting', () => {
 
 describe('html alignment', () => {
   it('reads alignment from CSS and from the older attribute', () => {
-    expect(parseHtml('<p style="text-align: center">x</p>').doc.content?.[0]?.attrs?.['textAlign']).toBe(
-      'center',
-    )
+    expect(
+      parseHtml('<p style="text-align: center">x</p>').doc.content?.[0]?.attrs?.['textAlign'],
+    ).toBe('center')
     expect(parseHtml('<p align="right">x</p>').doc.content?.[0]?.attrs?.['textAlign']).toBe('right')
   })
 
   it('reads the direction-relative names as the sides the editor names', () => {
-    expect(parseHtml('<p style="text-align: end">x</p>').doc.content?.[0]?.attrs?.['textAlign']).toBe(
-      'right',
-    )
+    expect(
+      parseHtml('<p style="text-align: end">x</p>').doc.content?.[0]?.attrs?.['textAlign'],
+    ).toBe('right')
   })
 
   it('round-trips an aligned heading', () => {
@@ -373,9 +373,9 @@ describe('html paragraph properties', () => {
   })
 
   it('reads a line height given as a percentage', () => {
-    expect(parseHtml('<p style="line-height: 150%">x</p>').doc.content?.[0]?.attrs?.['lineHeight']).toBe(
-      1.5,
-    )
+    expect(
+      parseHtml('<p style="line-height: 150%">x</p>').doc.content?.[0]?.attrs?.['lineHeight'],
+    ).toBe(1.5)
   })
 
   it('leaves a line height given as a length alone', () => {

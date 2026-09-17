@@ -51,7 +51,9 @@ describe('buildStyle', () => {
 
   it('leaves the paragraph properties off a character style', () => {
     const xml = serializeNode(
-      buildStyle(definition({ type: 'character', formatting: { bold: true, textAlign: 'center' } })),
+      buildStyle(
+        definition({ type: 'character', formatting: { bold: true, textAlign: 'center' } }),
+      ),
     )
 
     expect(xml).toContain('<w:b/>')

@@ -2,7 +2,13 @@ import type { Editor } from '@tiptap/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestEditor } from '../../test/editor-harness'
 import { useSettingsStore } from '../../store/settings-store'
-import { ELLIPSIS, EM_DASH, NO_BREAK_SPACE, quoteLanguage, RIGHT_SINGLE_QUOTE } from './smart-typing'
+import {
+  ELLIPSIS,
+  EM_DASH,
+  NO_BREAK_SPACE,
+  quoteLanguage,
+  RIGHT_SINGLE_QUOTE,
+} from './smart-typing'
 
 let editor: Editor
 
@@ -135,7 +141,6 @@ describe('the setting', () => {
     expect(text()).toBe(`a${ELLIPSIS} b...`)
   })
 })
-
 
 describe('leaving room for the rules around it', () => {
   it('does not take the hyphens that open a horizontal rule', () => {

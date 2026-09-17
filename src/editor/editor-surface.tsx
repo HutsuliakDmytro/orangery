@@ -71,10 +71,7 @@ export function EditorSurface() {
           } as CSSProperties
         }
       >
-        <EditorContent
-          editor={editor}
-          style={{ maxWidth: `${String(contentWidth(section))}pt` }}
-        />
+        <EditorContent editor={editor} style={{ maxWidth: `${String(contentWidth(section))}pt` }} />
       </div>
     </div>
   )

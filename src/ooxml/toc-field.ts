@@ -90,7 +90,9 @@ export function buildTocField(
   const opening = [
     fieldChar('begin'),
     run([
-      element('w:instrText', { 'xml:space': 'preserve' }, [textNode(fieldCode(maxLevel, sequence))]),
+      element('w:instrText', { 'xml:space': 'preserve' }, [
+        textNode(fieldCode(maxLevel, sequence)),
+      ]),
     ]),
     fieldChar('separate'),
   ]

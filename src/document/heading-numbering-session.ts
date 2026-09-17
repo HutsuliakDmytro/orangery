@@ -73,7 +73,9 @@ export function readHeadingNumbering(pkg: DocxPackage): HeadingNumberScheme | nu
     (node) => tagName(node) === 'w:num' && attribute(node, 'w:numId') === String(numId),
   )
   const abstractId =
-    instance === undefined ? undefined : attribute(findChild(instance, 'w:abstractNumId') ?? {}, 'w:val')
+    instance === undefined
+      ? undefined
+      : attribute(findChild(instance, 'w:abstractNumId') ?? {}, 'w:val')
 
   const abstract = children(root).find(
     (node) =>
@@ -134,7 +136,9 @@ export function writeHeadingNumbering(
   const ours = list.find((node) => tagName(node) === 'w:abstractNum' && isHeadingAbstractNum(node))
 
   const abstractId =
-    ours === undefined ? freeId(list, 'w:abstractNum', 'w:abstractNumId', 0) : idOf(ours, 'w:abstractNumId')
+    ours === undefined
+      ? freeId(list, 'w:abstractNum', 'w:abstractNumId', 0)
+      : idOf(ours, 'w:abstractNumId')
 
   const definition = buildHeadingAbstractNum(abstractId, scheme)
 
@@ -153,7 +157,8 @@ export function writeHeadingNumbering(
       attribute(findChild(node, 'w:abstractNumId') ?? {}, 'w:val') === String(abstractId),
   )
 
-  const numId = instance === undefined ? freeId(list, 'w:num', 'w:numId', 1) : idOf(instance, 'w:numId')
+  const numId =
+    instance === undefined ? freeId(list, 'w:num', 'w:numId', 1) : idOf(instance, 'w:numId')
   if (instance === undefined) list.push(buildNum(numId, abstractId))
 
   setPartText(pkg, NUMBERING_PART, withDeclaration(buildXml(roots)))

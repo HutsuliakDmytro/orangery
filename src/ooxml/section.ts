@@ -25,11 +25,7 @@ export interface PageMargins {
 
 /** The numbering systems `w:pgNumType` can state. */
 export type PageNumberFormat =
-  | 'decimal'
-  | 'upperRoman'
-  | 'lowerRoman'
-  | 'upperLetter'
-  | 'lowerLetter'
+  'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter'
 
 export interface PageNumbering {
   format: PageNumberFormat
@@ -226,7 +222,8 @@ export function parseSection(xml: string | null): SectionProperties {
         // Word omits `w:num` for a single column, which is also the default.
         count: count === null || count < 1 ? 1 : count,
         spacing: space === null ? DEFAULT_COLUMN_SPACING : twipsToPoints(space),
-        separator: parseToggle(attribute(child, 'w:sep')) && attribute(child, 'w:sep') !== undefined,
+        separator:
+          parseToggle(attribute(child, 'w:sep')) && attribute(child, 'w:sep') !== undefined,
         original: serializeNode(child),
       }
       continue
@@ -313,7 +310,8 @@ function buildColumns(columns: ColumnLayout): XmlNode {
 function matchesOriginal(parsed: XmlNode, columns: ColumnLayout): boolean {
   const count = parseIntAttribute(attribute(parsed, 'w:num')) ?? 1
   const space = parseIntAttribute(attribute(parsed, 'w:space'))
-  const separator = parseToggle(attribute(parsed, 'w:sep')) && attribute(parsed, 'w:sep') !== undefined
+  const separator =
+    parseToggle(attribute(parsed, 'w:sep')) && attribute(parsed, 'w:sep') !== undefined
 
   return (
     count === columns.count &&

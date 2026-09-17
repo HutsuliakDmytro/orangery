@@ -12,11 +12,13 @@ const landscape = serializeSection(withOrientation(DEFAULT_SECTION, 'landscape')
  * code units is exactly right — there is nothing richer in it to mishandle.
  */
 function documentOf(shape: string) {
-  const content = shape.split('').map((mark) =>
-    mark === '|'
-      ? { type: 'sectionBreak', attrs: { sectPr: landscape } }
-      : { type: 'paragraph', content: [{ type: 'text', text: mark }] },
-  )
+  const content = shape
+    .split('')
+    .map((mark) =>
+      mark === '|'
+        ? { type: 'sectionBreak', attrs: { sectPr: landscape } }
+        : { type: 'paragraph', content: [{ type: 'text', text: mark }] },
+    )
 
   return createTestEditor({ type: 'doc', content } as never)
 }

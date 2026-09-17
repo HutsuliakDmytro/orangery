@@ -267,16 +267,13 @@ describe('rtf lists', () => {
   })
 
   it('reads a lettered marker as a numbered list too', () => {
-    const { doc } = parseRtf(
-      '{\\rtf1\\ansi\\pard\\li720{\\listtext\\f0 a)\\tab}One\\par}',
-    )
+    const { doc } = parseRtf('{\\rtf1\\ansi\\pard\\li720{\\listtext\\f0 a)\\tab}One\\par}')
 
     expect(doc.content?.[0]?.type).toBe('orderedList')
   })
 
   it('ends the list at the first paragraph without a marker', () => {
-    const rtf =
-      "{\\rtf1\\ansi\\pard\\li720{\\listtext\\f0 \\'b7\\tab}Item\\par\\pard After\\par}"
+    const rtf = "{\\rtf1\\ansi\\pard\\li720{\\listtext\\f0 \\'b7\\tab}Item\\par\\pard After\\par}"
     const { doc } = parseRtf(rtf)
 
     expect(doc.content?.[0]?.type).toBe('bulletList')
@@ -298,8 +295,14 @@ describe('rtf tables', () => {
       {
         type: 'tableRow',
         content: [
-          { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] }] },
-          { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] }] },
+          {
+            type: 'tableCell',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] }],
+          },
+          {
+            type: 'tableCell',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] }],
+          },
         ],
       },
     ],
@@ -333,8 +336,7 @@ describe('rtf tables', () => {
   })
 
   it('ends the table at the first paragraph that follows it', () => {
-    const rtf =
-      '{\\rtf1\\ansi\\trowd\\cellx9360 a\\cell\\row\\pard After\\par}'
+    const rtf = '{\\rtf1\\ansi\\trowd\\cellx9360 a\\cell\\row\\pard After\\par}'
     const { doc } = parseRtf(rtf)
 
     expect(doc.content?.[0]?.type).toBe('table')
@@ -359,8 +361,14 @@ describe('rtf tables', () => {
         {
           type: 'tableRow',
           content: [
-            { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] },
-            { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'y' }] }] },
+            {
+              type: 'tableCell',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
+            },
+            {
+              type: 'tableCell',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'y' }] }],
+            },
           ],
         },
       ],
@@ -532,8 +540,16 @@ describe('rtf character formatting', () => {
         {
           type: 'paragraph',
           content: [
-            { type: 'text', text: 'a', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
-            { type: 'text', text: 'b', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+            {
+              type: 'text',
+              text: 'a',
+              marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+            },
+            {
+              type: 'text',
+              text: 'b',
+              marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+            },
           ],
         },
       ],
@@ -553,7 +569,10 @@ describe('rtf character formatting', () => {
               type: 'text',
               text: 'x',
               marks: [
-                { type: 'textStyle', attrs: { color: '#FF0000', fontFamily: 'Georgia', fontSize: 14 } },
+                {
+                  type: 'textStyle',
+                  attrs: { color: '#FF0000', fontFamily: 'Georgia', fontSize: 14 },
+                },
                 { type: 'highlight', attrs: { color: '#FFFF00' } },
               ],
             },
@@ -579,7 +598,11 @@ describe('rtf character formatting', () => {
           {
             type: 'paragraph',
             content: [
-              { type: 'text', text: 'red', marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }] },
+              {
+                type: 'text',
+                text: 'red',
+                marks: [{ type: 'textStyle', attrs: { color: '#FF0000' } }],
+              },
               { type: 'text', text: 'plain' },
             ],
           },
@@ -610,7 +633,11 @@ describe('rtf alignment', () => {
     const source: ProseMirrorNodeJson = {
       type: 'doc',
       content: [
-        { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: 'a' }] },
+        {
+          type: 'paragraph',
+          attrs: { textAlign: 'right' },
+          content: [{ type: 'text', text: 'a' }],
+        },
         {
           type: 'heading',
           attrs: { level: 2, textAlign: 'center' },

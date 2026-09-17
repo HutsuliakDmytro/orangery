@@ -117,8 +117,12 @@ describe('where a comment applies', () => {
     )
     const { doc } = parseDocument(across)
 
-    expect(doc.content?.[0]?.content?.[0]?.marks?.some((mark) => mark.type === 'comment')).toBe(true)
-    expect(doc.content?.[1]?.content?.[0]?.marks?.some((mark) => mark.type === 'comment')).toBe(true)
+    expect(doc.content?.[0]?.content?.[0]?.marks?.some((mark) => mark.type === 'comment')).toBe(
+      true,
+    )
+    expect(doc.content?.[1]?.content?.[0]?.marks?.some((mark) => mark.type === 'comment')).toBe(
+      true,
+    )
   })
 
   it('closes a range the document left open at the end of its paragraph', () => {

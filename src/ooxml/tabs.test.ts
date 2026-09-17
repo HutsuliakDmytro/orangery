@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseDocument } from './parse-document'
 import { serializeDocument } from './serialize-document'
-import {
-  defaultStopAfter,
-  nextStop,
-  parseTabs,
-  serializeTabs,
-  withoutStop,
-  withStop,
-} from './tabs'
+import { defaultStopAfter, nextStop, parseTabs, serializeTabs, withoutStop, withStop } from './tabs'
 import type { TabStop } from './tabs'
 import { parseXml } from './xml'
 
@@ -147,7 +140,9 @@ describe('tab stops through a document', () => {
 
   it('keeps the order the schema requires when it rebuilds', () => {
     const parsed = parseDocument(
-      paragraph('<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:tabs><w:tab w:val="left" w:pos="1440"/></w:tabs>'),
+      paragraph(
+        '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:tabs><w:tab w:val="left" w:pos="1440"/></w:tabs>',
+      ),
     )
     const block = parsed.doc.content?.[0]
     if (block?.attrs) block.attrs['spaceAfter'] = 6

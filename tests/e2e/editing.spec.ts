@@ -137,9 +137,7 @@ test('replaces quotes, dashes and the ellipsis while typing', async ({ page }) =
   // fire: they run on text input and deliberately not on paste.
   await page.keyboard.type('he said "hello" wait... a--b')
 
-  await expect(page.locator(`${editor} p`).first()).toHaveText(
-    'he said “hello” wait… a—b',
-  )
+  await expect(page.locator(`${editor} p`).first()).toHaveText('he said “hello” wait… a—b')
 })
 
 test('picks the quotation marks from the language being typed', async ({ page }) => {

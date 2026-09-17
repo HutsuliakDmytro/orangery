@@ -97,25 +97,20 @@ function paragraphProperties(formatting: StyleFormatting): XmlNode | null {
 }
 
 export function buildStyle(definition: StyleDefinition): XmlNode {
-  const paragraph = definition.type === 'paragraph' ? paragraphProperties(definition.formatting) : null
+  const paragraph =
+    definition.type === 'paragraph' ? paragraphProperties(definition.formatting) : null
   const run = runProperties(definition.formatting)
 
-  return element(
-    'w:style',
-    { 'w:type': definition.type, 'w:styleId': definition.id },
-    [
-      element('w:name', { 'w:val': definition.name }),
-      ...(definition.basedOn === null
-        ? []
-        : [element('w:basedOn', { 'w:val': definition.basedOn })]),
-      ...(definition.next === null ? [] : [element('w:next', { 'w:val': definition.next })]),
-      // `w:qFormat` is what puts a style in Word's own gallery; without it a
-      // style the user just made is one they cannot find again.
-      element('w:qFormat'),
-      ...(paragraph ? [paragraph] : []),
-      ...(run ? [run] : []),
-    ],
-  )
+  return element('w:style', { 'w:type': definition.type, 'w:styleId': definition.id }, [
+    element('w:name', { 'w:val': definition.name }),
+    ...(definition.basedOn === null ? [] : [element('w:basedOn', { 'w:val': definition.basedOn })]),
+    ...(definition.next === null ? [] : [element('w:next', { 'w:val': definition.next })]),
+    // `w:qFormat` is what puts a style in Word's own gallery; without it a
+    // style the user just made is one they cannot find again.
+    element('w:qFormat'),
+    ...(paragraph ? [paragraph] : []),
+    ...(run ? [run] : []),
+  ])
 }
 
 /**

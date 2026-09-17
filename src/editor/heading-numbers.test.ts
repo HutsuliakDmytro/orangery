@@ -15,7 +15,14 @@ function labels(html: string, scheme: HeadingNumberScheme = 'decimal'): string[]
 
 describe('toRoman', () => {
   it('writes the numerals', () => {
-    expect([1, 4, 9, 14, 40, 1987].map(toRoman)).toEqual(['I', 'IV', 'IX', 'XIV', 'XL', 'MCMLXXXVII'])
+    expect([1, 4, 9, 14, 40, 1987].map(toRoman)).toEqual([
+      'I',
+      'IV',
+      'IX',
+      'XIV',
+      'XL',
+      'MCMLXXXVII',
+    ])
   })
 
   it('has nothing to write for zero', () => {
@@ -86,8 +93,8 @@ describe('headingNumbers', () => {
   })
 
   it('starts the gallery over past its fifth level', () => {
-    expect(labels('<h1>a</h1><h2>b</h2><h3>c</h3><h4>d</h4><h5>e</h5><h6>f</h6>', 'outline')).toEqual(
-      ['I.', 'A.', '1.', 'a)', 'i)', 'I.'],
-    )
+    expect(
+      labels('<h1>a</h1><h2>b</h2><h3>c</h3><h4>d</h4><h5>e</h5><h6>f</h6>', 'outline'),
+    ).toEqual(['I.', 'A.', '1.', 'a)', 'i)', 'I.'])
   })
 })

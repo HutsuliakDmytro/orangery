@@ -98,9 +98,7 @@ function buildComment(comment: Comment): XmlNode {
           element('w:rPr', {}, [element('w:rStyle', { 'w:val': 'CommentReference' })]),
           element('w:annotationRef'),
         ]),
-        element('w:r', {}, [
-          element('w:t', { 'xml:space': 'preserve' }, [textNode(line)]),
-        ]),
+        element('w:r', {}, [element('w:t', { 'xml:space': 'preserve' }, [textNode(line)])]),
       ]),
     ),
   )

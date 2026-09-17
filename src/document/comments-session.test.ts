@@ -11,7 +11,13 @@ const commented = (id: number): ProseMirrorNodeJson => ({
   content: [
     {
       type: 'paragraph',
-      content: [{ type: 'text', text: 'about this', marks: [{ type: 'comment', attrs: { commentId: id } }] }],
+      content: [
+        {
+          type: 'text',
+          text: 'about this',
+          marks: [{ type: 'comment', attrs: { commentId: id } }],
+        },
+      ],
     },
   ],
 })
@@ -54,7 +60,14 @@ describe('writing the comments part', () => {
   it('drops a comment the body no longer points at', async () => {
     // Its text would otherwise stay in the file for ever, attached to nothing.
     const document = await createNewDocx()
-    writeComments(document.pkg, new Map([[0, comment(0)], [1, comment(1, 'orphan')]]), commented(0))
+    writeComments(
+      document.pkg,
+      new Map([
+        [0, comment(0)],
+        [1, comment(1, 'orphan')],
+      ]),
+      commented(0),
+    )
 
     expect(getPartText(document.pkg, COMMENTS_PART)).not.toContain('orphan')
   })

@@ -67,8 +67,7 @@ export function buildCharacterOptions(catalogue: StyleCatalogue | null): StyleOp
 
   return [...catalogue.styles.values()]
     .filter(
-      (style) =>
-        style.type === 'character' && !style.hidden && style.id !== 'DefaultParagraphFont',
+      (style) => style.type === 'character' && !style.hidden && style.id !== 'DefaultParagraphFont',
     )
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((style) => ({ id: style.id, label: style.name, headingLevel: null }))

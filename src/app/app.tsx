@@ -59,18 +59,17 @@ function Shell() {
    * the cursor sits in — the body holds only the last. Changing an earlier one
    * writes back to the break that ends it, which is where OOXML keeps it.
    */
-  const currentSection =
-    useEditorState({
-      editor: editor ?? null,
-      // Subscribed to rather than read while rendering: nothing else re-renders
-      // the app when the cursor crosses into another section, and the header
-      // fields would go on showing the one it left.
-      selector: ({ editor: instance }) =>
-        instance
-          ? sectionAt(instance.state.doc, instance.state.selection.from, section)
-          : { from: 0, to: 0, breakPosition: null, properties: section },
-      equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-    }) ?? { from: 0, to: 0, breakPosition: null, properties: section }
+  const currentSection = useEditorState({
+    editor: editor ?? null,
+    // Subscribed to rather than read while rendering: nothing else re-renders
+    // the app when the cursor crosses into another section, and the header
+    // fields would go on showing the one it left.
+    selector: ({ editor: instance }) =>
+      instance
+        ? sectionAt(instance.state.doc, instance.state.selection.from, section)
+        : { from: 0, to: 0, breakPosition: null, properties: section },
+    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  }) ?? { from: 0, to: 0, breakPosition: null, properties: section }
 
   /**
    * The header and footer text of the section the cursor is in.

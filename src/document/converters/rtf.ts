@@ -394,7 +394,12 @@ export function parseRtf(text: string): ConversionResult {
     }
 
     if (isItem) {
-      lists.addItem(kindOf(marker ?? ''), levelOf(itemLevel, itemIndent), [block], startOf(marker ?? ''))
+      lists.addItem(
+        kindOf(marker ?? ''),
+        levelOf(itemLevel, itemIndent),
+        [block],
+        startOf(marker ?? ''),
+      )
     } else {
       lists.close()
 
@@ -654,7 +659,10 @@ export function parseRtf(text: string): ConversionResult {
           break
         case 'f':
           flushText()
-          state = { ...state, fontFamily: parameter === null ? null : (fonts.get(parameter) ?? null) }
+          state = {
+            ...state,
+            fontFamily: parameter === null ? null : (fonts.get(parameter) ?? null),
+          }
           break
         case 'fs':
           flushText()
@@ -807,7 +815,8 @@ function createTables(): RtfTables {
 
       const colorTable = colors
         .map((hex) => {
-          const channel = (offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16) || 0
+          const channel = (offset: number) =>
+            Number.parseInt(hex.slice(offset, offset + 2), 16) || 0
           return `\\red${String(channel(1))}\\green${String(channel(3))}\\blue${String(channel(5))};`
         })
         .join('')

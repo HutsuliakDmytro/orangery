@@ -11,7 +11,9 @@ import { useViewStore } from '../../store/view-store'
 let editor: Editor
 
 beforeEach(() => {
-  useViewStore.setState({ section: { ...DEFAULT_SECTION, margins: { ...DEFAULT_SECTION.margins } } })
+  useViewStore.setState({
+    section: { ...DEFAULT_SECTION, margins: { ...DEFAULT_SECTION.margins } },
+  })
   editor = createTestEditor('<p>one</p><p>two</p>')
 })
 

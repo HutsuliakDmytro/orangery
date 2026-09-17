@@ -190,11 +190,7 @@ describe('reading a list back out of a document', () => {
     const body = item('one', 1) + '<w:p><w:r><w:t>after</w:t></w:r></w:p>' + item('two', 1)
     const { doc } = parseDocument(wrap(body), { numbering: numbering('bullet') })
 
-    expect(doc.content?.map((node) => node.type)).toEqual([
-      'bulletList',
-      'paragraph',
-      'bulletList',
-    ])
+    expect(doc.content?.map((node) => node.type)).toEqual(['bulletList', 'paragraph', 'bulletList'])
   })
 
   it('round-trips without adding a definition of its own', () => {

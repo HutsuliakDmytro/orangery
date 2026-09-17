@@ -1,7 +1,8 @@
+import { getPartText } from '@orangery/ooxml-core'
+import { STYLES_PART } from '../ooxml/parts'
 import { describe, expect, it } from 'vitest'
 import { createTestEditor, selectText } from '../test/editor-harness'
 import { createNewDocx } from './docx-file'
-import { getPartText, STYLES_PART } from '../ooxml/package'
 import { parseStyles } from '../ooxml/styles'
 import { formattingAt, newStyleFrom, saveStyle } from './styles-session'
 

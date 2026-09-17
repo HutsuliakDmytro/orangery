@@ -1,4 +1,4 @@
-import { attribute, children, findChild, parseXml, tagName } from './xml'
+import { attribute, children, findChild, parseXml, tagName } from '@orangery/ooxml-core'
 
 /**
  * Font resolution for OOXML documents.

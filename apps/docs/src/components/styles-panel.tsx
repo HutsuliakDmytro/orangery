@@ -1,3 +1,4 @@
+import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { useCurrentEditor, useEditorState } from '@tiptap/react'
 import { useState } from 'react'
 import type { Editor } from '@tiptap/core'
@@ -6,7 +7,6 @@ import { getSession } from '../document/session'
 import { useDocumentStore } from '../store/document-store'
 import { useStylesStore } from '../store/styles-store'
 import { PickerPopover } from './picker-popover'
-import type { DocxPackage } from '../ooxml/package'
 import type { StyleDefinition } from '../ooxml/style-writer'
 import type { StyleOption } from '../store/styles-store'
 
@@ -59,7 +59,7 @@ export function StylesPanel({ onClose }: { onClose: () => void }) {
    * document no longer has.
    */
   const writeStyle = (
-    build: (pkg: DocxPackage, instance: Editor) => StyleDefinition,
+    build: (pkg: OoxmlPackage, instance: Editor) => StyleDefinition,
   ): StyleDefinition | null => {
     const session = getSession()
     if (session?.kind !== 'docx' || !editor) return null

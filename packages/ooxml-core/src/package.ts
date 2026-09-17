@@ -1,25 +1,26 @@
 import JSZip from 'jszip'
 
 /**
- * The DOCX package, held as read.
+ * An OOXML package, held as read.
  *
- * Every part is kept: the ones we parse and the ones we do not. On save, only
- * `word/document.xml` is regenerated and everything else is written back from
- * these buffers, which is what makes preservation possible at all — see
- * `docs/adr/0003-docx-native-roundtrip.md`.
+ * Every OOXML format — `.docx`, `.pptx`, `.xlsx` — is the same thing underneath:
+ * a zip whose entries are parts, tied together by relationship files and
+ * declared in `[Content_Types].xml`. Which part carries the content is the only
+ * difference, and that belongs to the app, not here.
+ *
+ * Every part is kept: the ones the app parses and the ones it does not. On save,
+ * only the regenerated parts are rebuilt and everything else is written back
+ * from these buffers, which is what makes preservation possible at all — see
+ * `docs/adr/0001-monorepo.md` and `apps/docs/docs/adr/0003-docx-native-roundtrip.md`.
  */
 
-export const DOCUMENT_PART = 'word/document.xml'
-export const STYLES_PART = 'word/styles.xml'
-export const NUMBERING_PART = 'word/numbering.xml'
-export const SETTINGS_PART = 'word/settings.xml'
-export const FONT_TABLE_PART = 'word/fontTable.xml'
+/** Declares the type of every part; the one file present in any OOXML package. */
 export const CONTENT_TYPES_PART = '[Content_Types].xml'
 
 /** Parts whose bytes are text; everything else (media) stays binary. */
 const TEXT_PART = /\.(xml|rels)$/i
 
-export interface DocxPart {
+export interface OoxmlPart {
   /** Path inside the zip, e.g. `word/styles.xml`. */
   path: string
   /** Decoded text for XML parts, undefined for binary ones. */
@@ -30,18 +31,33 @@ export interface DocxPart {
   date: Date
 }
 
-export interface DocxPackage {
+export interface OoxmlPackage {
   /** Insertion order mirrors the zip's entry order, which Word is sensitive to. */
-  parts: Map<string, DocxPart>
+  parts: Map<string, OoxmlPart>
+}
+
+export class OoxmlFormatError extends Error {
+  override readonly name = 'OoxmlFormatError'
 }
 
 export function isTextPart(path: string): boolean {
   return TEXT_PART.test(path)
 }
 
-export async function readPackage(data: ArrayBuffer | Uint8Array): Promise<DocxPackage> {
+/**
+ * Reads a zip into parts.
+ *
+ * `requiredPart` is how an app says what it is opening: Docs passes
+ * `word/document.xml`, so a `.pptx` renamed to `.docx` fails here with
+ * something a person can read, rather than three layers deeper as a missing
+ * element.
+ */
+export async function readPackage(
+  data: ArrayBuffer | Uint8Array,
+  requiredPart?: string,
+): Promise<OoxmlPackage> {
   const zip = await JSZip.loadAsync(data)
-  const parts = new Map<string, DocxPart>()
+  const parts = new Map<string, OoxmlPart>()
 
   // `zip.files` preserves the order entries appeared in the archive.
   for (const path of Object.keys(zip.files)) {
@@ -49,29 +65,25 @@ export async function readPackage(data: ArrayBuffer | Uint8Array): Promise<DocxP
     if (!entry || entry.dir) continue
 
     const bytes = await entry.async('uint8array')
-    const part: DocxPart = { path, bytes, date: entry.date }
+    const part: OoxmlPart = { path, bytes, date: entry.date }
     if (isTextPart(path)) part.text = new TextDecoder().decode(bytes)
 
     parts.set(path, part)
   }
 
-  if (!parts.has(DOCUMENT_PART)) {
-    throw new DocxFormatError(`not a DOCX package: ${DOCUMENT_PART} is missing`)
+  if (requiredPart !== undefined && !parts.has(requiredPart)) {
+    throw new OoxmlFormatError(`not the expected package: ${requiredPart} is missing`)
   }
 
   return { parts }
 }
 
-export class DocxFormatError extends Error {
-  override readonly name = 'DocxFormatError'
-}
-
-export function getPartText(pkg: DocxPackage, path: string): string | undefined {
+export function getPartText(pkg: OoxmlPackage, path: string): string | undefined {
   return pkg.parts.get(path)?.text
 }
 
 /** Replaces a text part, leaving every other part untouched. */
-export function setPartText(pkg: DocxPackage, path: string, text: string): void {
+export function setPartText(pkg: OoxmlPackage, path: string, text: string): void {
   const existing = pkg.parts.get(path)
   const bytes = new TextEncoder().encode(text)
 
@@ -83,7 +95,7 @@ export function setPartText(pkg: DocxPackage, path: string, text: string): void 
   })
 }
 
-export async function writePackage(pkg: DocxPackage): Promise<Uint8Array> {
+export async function writePackage(pkg: OoxmlPackage): Promise<Uint8Array> {
   const zip = new JSZip()
 
   for (const part of pkg.parts.values()) {
@@ -99,9 +111,4 @@ export async function writePackage(pkg: DocxPackage): Promise<Uint8Array> {
     // Word uses default deflate; matching it keeps sizes comparable.
     compressionOptions: { level: 6 },
   })
-}
-
-/** Media files, for mapping relationship targets to bytes. */
-export function mediaParts(pkg: DocxPackage): DocxPart[] {
-  return [...pkg.parts.values()].filter((part) => part.path.startsWith('word/media/'))
 }

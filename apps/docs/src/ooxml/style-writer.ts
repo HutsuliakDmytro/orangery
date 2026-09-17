@@ -1,6 +1,17 @@
-import { attribute, buildXml, children, element, parseXml, tagName, withDeclaration } from './xml'
-import type { XmlNode } from './xml'
-import { formatColor, multiplierToLineUnits, pointsToHalfPoints, pointsToTwips } from './units'
+import {
+  attribute,
+  buildXml,
+  children,
+  element,
+  formatColor,
+  multiplierToLineUnits,
+  parseXml,
+  pointsToHalfPoints,
+  pointsToTwips,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import type { StyleFormatting, StyleType } from './styles'
 
 /**

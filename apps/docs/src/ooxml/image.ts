@@ -1,6 +1,13 @@
-import { attribute, children, element, findChild, serializeNode, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { parseIntAttribute } from './units'
+import {
+  attribute,
+  children,
+  element,
+  findChild,
+  parseIntAttribute,
+  serializeNode,
+  tagName,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import type { ProseMirrorNodeJson } from './prosemirror-json'
 
 /**

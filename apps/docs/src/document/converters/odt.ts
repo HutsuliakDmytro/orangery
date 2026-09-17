@@ -1,18 +1,18 @@
-import JSZip from 'jszip'
 import {
   attribute,
   buildXml,
   children,
   element,
   findChild,
+  isTextNode,
   parseXml,
   serializeNode,
   tagName,
   textNode,
   textValue,
-  isTextNode,
-} from '../../ooxml/xml'
-import type { XmlNode } from '../../ooxml/xml'
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
+import JSZip from 'jszip'
 import { dataUrlFrom } from '../data-url'
 import {
   attributesFor,

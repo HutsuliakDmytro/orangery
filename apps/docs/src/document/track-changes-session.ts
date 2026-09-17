@@ -1,16 +1,17 @@
-import { getPartText, SETTINGS_PART, setPartText } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
-import { parseToggle } from '../ooxml/units'
 import {
   attribute,
   buildXml,
   children,
   element,
+  getPartText,
+  parseToggle,
   parseXml,
+  setPartText,
   tagName,
   withDeclaration,
-} from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { SETTINGS_PART } from '../ooxml/parts'
 
 /**
  * Whether the document records edits as tracked changes — `w:trackChanges`.
@@ -22,7 +23,7 @@ import type { XmlNode } from '../ooxml/xml'
 
 const FLAG = 'w:trackChanges'
 
-export function readTrackChanges(pkg: DocxPackage): boolean {
+export function readTrackChanges(pkg: OoxmlPackage): boolean {
   const xml = getPartText(pkg, SETTINGS_PART)
   if (xml === undefined) return false
 
@@ -40,7 +41,7 @@ export function readTrackChanges(pkg: DocxPackage): boolean {
  * removes it rather than writing a nay-saying one — which is what Word does and
  * what keeps a file that never had the element unchanged.
  */
-export function writeTrackChanges(pkg: DocxPackage, on: boolean): void {
+export function writeTrackChanges(pkg: OoxmlPackage, on: boolean): void {
   const xml = getPartText(pkg, SETTINGS_PART)
   if (xml === undefined) return
 

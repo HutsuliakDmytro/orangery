@@ -1,3 +1,5 @@
+import { getPartText } from '@orangery/ooxml-core'
+import { NUMBERING_PART, readDocxPackage } from './parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -8,7 +10,6 @@ import {
   parseNumbering,
   resolveNumbering,
 } from './numbering'
-import { getPartText, NUMBERING_PART, readPackage } from './package'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
@@ -144,7 +145,7 @@ describe('allocating new ids', () => {
 
 describe('real fixtures', () => {
   it('reads the numbering catalogue from a document with lists', async () => {
-    const pkg = await readPackage(await readFile(join(FIXTURES, 'lists.docx')))
+    const pkg = await readDocxPackage(await readFile(join(FIXTURES, 'lists.docx')))
     const catalogue = parseNumbering(getPartText(pkg, NUMBERING_PART) ?? '')
 
     expect(catalogue.abstract.size).toBeGreaterThan(0)

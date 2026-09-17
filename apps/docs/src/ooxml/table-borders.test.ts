@@ -1,5 +1,12 @@
+import {
+  compareXml,
+  describeDifferences,
+  findChild,
+  parseXml,
+  serializeNode,
+  tagName,
+} from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
-import { compareXml, describeDifferences } from './compare'
 import {
   bordersFrom,
   borderToCss,
@@ -10,7 +17,6 @@ import {
   uniformBorders,
   withBorders,
 } from './table-borders'
-import { findChild, parseXml, serializeNode, tagName } from './xml'
 
 const TBL_PR =
   '<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/>' +

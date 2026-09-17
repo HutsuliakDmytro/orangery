@@ -1,5 +1,3 @@
-import JSZip from 'jszip'
-import { contentTypeFor } from '../ooxml/image'
 import {
   attribute,
   buildXml,
@@ -8,7 +6,9 @@ import {
   parseXml,
   tagName,
   withDeclaration,
-} from '../ooxml/xml'
+} from '@orangery/ooxml-core'
+import JSZip from 'jszip'
+import { contentTypeFor } from '../ooxml/image'
 import {
   MANIFEST_PART,
   MIMETYPE_PART,

@@ -1,3 +1,4 @@
+import { serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import {
   footnoteParagraph,
@@ -10,7 +11,6 @@ import {
   separatorFootnotes,
   serializeFootnotes,
 } from './footnotes'
-import { serializeNode } from './xml'
 
 const PART = `<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>

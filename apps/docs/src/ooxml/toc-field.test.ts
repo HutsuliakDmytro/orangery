@@ -1,6 +1,6 @@
+import { serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { buildTocField, fieldCode } from './toc-field'
-import { serializeNode } from './xml'
 
 const xmlOf = (nodes: ReturnType<typeof buildTocField>) => nodes.map(serializeNode).join('')
 

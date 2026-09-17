@@ -1,4 +1,21 @@
 import {
+  CONTENT_TYPES_PART,
+  addRelationship,
+  attribute,
+  buildXml,
+  children,
+  element,
+  getPartText,
+  parseRelationships,
+  parseXml,
+  resolveTarget,
+  serializeRelationships,
+  setPartText,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import {
   emptyPart,
   findReference,
   parseReferences,
@@ -12,25 +29,7 @@ import {
   HEADER_CONTENT_TYPE,
   HEADER_RELATIONSHIP,
 } from '../ooxml/header-footer'
-import { CONTENT_TYPES_PART, getPartText, setPartText } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
-import {
-  addRelationship,
-  parseRelationships,
-  resolveTarget,
-  serializeRelationships,
-} from '../ooxml/relationships'
 import type { SectionProperties } from '../ooxml/section'
-import {
-  attribute,
-  buildXml,
-  children,
-  element,
-  parseXml,
-  tagName,
-  withDeclaration,
-} from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
 import { DOCUMENT_RELS_PART } from './media'
 
 /**
@@ -53,14 +52,14 @@ export interface HeaderFooterContent {
   paragraphs: XmlNode[]
 }
 
-function partPathFor(pkg: DocxPackage, kind: HeaderFooterKind): string {
+function partPathFor(pkg: OoxmlPackage, kind: HeaderFooterKind): string {
   let index = 1
   while (pkg.parts.has(`word/${kind}${String(index)}.xml`)) index += 1
   return `word/${kind}${String(index)}.xml`
 }
 
 export function readHeaderFooter(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   section: SectionProperties,
   kind: HeaderFooterKind,
   type: HeaderFooterType = 'default',
@@ -80,7 +79,7 @@ export function readHeaderFooter(
 }
 
 /** Adds a content-type override for a part, which headers and footers need. */
-function ensureOverride(pkg: DocxPackage, partName: string, contentType: string): void {
+function ensureOverride(pkg: OoxmlPackage, partName: string, contentType: string): void {
   const xml = getPartText(pkg, CONTENT_TYPES_PART)
   if (xml === undefined) return
 
@@ -107,7 +106,7 @@ function ensureOverride(pkg: DocxPackage, partName: string, contentType: string)
  * Returns the section, with a reference added when one had to be created.
  */
 export function writeHeaderFooter(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   section: SectionProperties,
   kind: HeaderFooterKind,
   paragraphs: XmlNode[],

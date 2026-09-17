@@ -1,3 +1,4 @@
+import { parseXml, serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import {
   buildDrawing,
@@ -8,7 +9,6 @@ import {
   parseDrawing,
   pointsToEmu,
 } from './image'
-import { parseXml, serializeNode } from './xml'
 
 const DRAWING = `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">
 <wp:extent cx="2743200" cy="1828800"/>

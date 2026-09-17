@@ -1,14 +1,15 @@
+import { getPartText } from '@orangery/ooxml-core'
+import { DOCUMENT_PART, readDocxPackage } from './parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseDocument } from './parse-document'
 import type { ProseMirrorNodeJson } from './parse-document'
-import { DOCUMENT_PART, getPartText, readPackage } from './package'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
 async function parseFixture(name: string) {
-  const pkg = await readPackage(await readFile(join(FIXTURES, `${name}.docx`)))
+  const pkg = await readDocxPackage(await readFile(join(FIXTURES, `${name}.docx`)))
   return parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
 }
 

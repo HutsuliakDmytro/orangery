@@ -1,6 +1,7 @@
+import { getPartText } from '@orangery/ooxml-core'
+import { SETTINGS_PART } from '../ooxml/parts'
 import { describe, expect, it } from 'vitest'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
-import { getPartText, SETTINGS_PART } from '../ooxml/package'
 import { readTrackChanges, writeTrackChanges } from './track-changes-session'
 
 const doc = { type: 'doc', content: [{ type: 'paragraph' }] }

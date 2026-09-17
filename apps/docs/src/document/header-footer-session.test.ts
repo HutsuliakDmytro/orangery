@@ -1,12 +1,18 @@
+import {
+  CONTENT_TYPES_PART,
+  children,
+  element,
+  getPartText,
+  parseRelationships,
+  textValue,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
+import { DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { CONTENT_TYPES_PART, DOCUMENT_PART, getPartText, readPackage } from '../ooxml/package'
-import { parseRelationships } from '../ooxml/relationships'
 import { parseDocument } from '../ooxml/parse-document'
 import { parseSection } from '../ooxml/section'
-import { element, textValue, children } from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
 import { textFromParagraphs } from './header-footer-text'
 import { DOCUMENT_RELS_PART } from './media'
 import { readHeaderFooter, writeHeaderFooter } from './header-footer-session'
@@ -14,7 +20,7 @@ import { readHeaderFooter, writeHeaderFooter } from './header-footer-session'
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
 async function open(name: string) {
-  const pkg = await readPackage(await readFile(join(FIXTURES, `${name}.docx`)))
+  const pkg = await readDocxPackage(await readFile(join(FIXTURES, `${name}.docx`)))
   const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
   return { pkg, section: parseSection(parsed.sectionProperties) }
 }

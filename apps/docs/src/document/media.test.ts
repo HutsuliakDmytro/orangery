@@ -1,8 +1,8 @@
+import { CONTENT_TYPES_PART, getPartText, parseRelationships } from '@orangery/ooxml-core'
+import { readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { CONTENT_TYPES_PART, getPartText, readPackage } from '../ooxml/package'
-import { parseRelationships } from '../ooxml/relationships'
 import {
   addImage,
   DOCUMENT_RELS_PART,
@@ -15,7 +15,7 @@ import {
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
 async function fixture(name = 'plain-paragraphs') {
-  return readPackage(await readFile(join(FIXTURES, `${name}.docx`)))
+  return readDocxPackage(await readFile(join(FIXTURES, `${name}.docx`)))
 }
 
 /** A one-pixel PNG, enough to exercise the package plumbing. */

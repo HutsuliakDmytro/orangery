@@ -1,5 +1,5 @@
-import { element, textNode } from './xml'
-import type { XmlNode } from './xml'
+import { element, textNode } from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * The table of contents as a Word field.

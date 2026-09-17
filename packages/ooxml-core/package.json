@@ -1,0 +1,26 @@
+{
+  "name": "@orangery/ooxml-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The OOXML package itself: zip parts, relationships, content types, XML.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "fast-xml-builder": "^1.3.1",
+    "fast-xml-parser": "^5.11.1",
+    "jszip": "^3.10.2"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

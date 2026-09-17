@@ -1,13 +1,17 @@
-import { attribute, children, findChild, parseXml, tagName } from './xml'
-import type { XmlNode } from './xml'
 import {
+  attribute,
+  children,
+  findChild,
   halfPointsToPoints,
   lineUnitsToMultiplier,
   parseColor,
   parseIntAttribute,
   parseToggle,
+  parseXml,
+  tagName,
   twipsToPoints,
-} from './units'
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * `word/styles.xml` → a resolved style catalogue.

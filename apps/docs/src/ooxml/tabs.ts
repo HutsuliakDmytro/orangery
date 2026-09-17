@@ -1,6 +1,13 @@
-import { attribute, children, element, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { parseIntAttribute, pointsToTwips, twipsToPoints } from './units'
+import {
+  attribute,
+  children,
+  element,
+  parseIntAttribute,
+  pointsToTwips,
+  tagName,
+  twipsToPoints,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * Tab stops — `w:pPr/w:tabs`.

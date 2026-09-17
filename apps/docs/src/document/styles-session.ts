@@ -1,6 +1,7 @@
+import { getPartText, setPartText } from '@orangery/ooxml-core'
+import type { OoxmlPackage } from '@orangery/ooxml-core'
+import { STYLES_PART } from '../ooxml/parts'
 import type { Editor } from '@tiptap/core'
-import { getPartText, setPartText, STYLES_PART } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
 import { freeStyleId, upsertStyle } from '../ooxml/style-writer'
 import type { StyleDefinition } from '../ooxml/style-writer'
 import { parseStyles } from '../ooxml/styles'
@@ -76,7 +77,7 @@ export interface SavedStyle {
  * Returns null when the document has no styles part to write into, which is a
  * document that is not a DOCX rather than an error.
  */
-export function saveStyle(pkg: DocxPackage, definition: StyleDefinition): SavedStyle | null {
+export function saveStyle(pkg: OoxmlPackage, definition: StyleDefinition): SavedStyle | null {
   const xml = getPartText(pkg, STYLES_PART)
   if (xml === undefined) return null
 
@@ -88,7 +89,7 @@ export function saveStyle(pkg: DocxPackage, definition: StyleDefinition): SavedS
 
 /** A definition for a style the document does not have yet. */
 export function newStyleFrom(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   editor: Editor,
   name: string,
   type: StyleType,

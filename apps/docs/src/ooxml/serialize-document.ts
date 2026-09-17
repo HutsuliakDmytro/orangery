@@ -3,12 +3,15 @@ import {
   children,
   deserializeNode,
   element,
+  formatColor,
+  multiplierToLineUnits,
+  pointsToHalfPoints,
+  pointsToTwips,
   tagName,
   textNode,
   withDeclaration,
-} from './xml'
-import type { XmlNode } from './xml'
-import { formatColor, multiplierToLineUnits, pointsToHalfPoints, pointsToTwips } from './units'
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse-document'
 import type { ParsedDocument, ProseMirrorNodeJson } from './parse-document'
 import { footnoteReferenceRun } from './footnotes'

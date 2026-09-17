@@ -1,6 +1,6 @@
+import { children, element, textValue } from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import { dateField, pageNumberField } from '../ooxml/header-footer'
-import { element, textValue, children } from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
 
 /**
  * Converting between a header's text and its OOXML paragraphs.

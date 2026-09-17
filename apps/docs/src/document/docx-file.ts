@@ -1,14 +1,22 @@
-import { parseThemeFonts } from '../ooxml/fonts'
 import {
   CONTENT_TYPES_PART,
-  DOCUMENT_PART,
+  addRelationship,
+  buildXml,
+  element,
+  findByTarget,
   getPartText,
-  NUMBERING_PART,
-  readPackage,
+  parseRelationships,
+  parseXml,
+  resolveTarget,
+  serializeRelationships,
   setPartText,
+  tagName,
+  withDeclaration,
   writePackage,
-} from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { DOCUMENT_PART, NUMBERING_PART, readDocxPackage } from '../ooxml/parts'
+import { parseThemeFonts } from '../ooxml/fonts'
 import { parseNumbering } from '../ooxml/numbering'
 import {
   allocateNumbering,
@@ -16,9 +24,6 @@ import {
   NUMBERING_CONTENT_TYPE,
   NUMBERING_RELATIONSHIP,
 } from '../ooxml/numbering-builder'
-import { buildXml, element, parseXml, tagName, withDeclaration } from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
-import { addRelationship, findByTarget, serializeRelationships } from '../ooxml/relationships'
 import { DOCUMENT_RELS_PART } from './media'
 import type { NumberingCatalogue } from '../ooxml/numbering'
 import { parseDocument } from '../ooxml/parse-document'
@@ -30,7 +35,6 @@ import {
   FOOTNOTES_PART,
   parseFootnotes,
 } from '../ooxml/footnotes'
-import { parseRelationships, resolveTarget } from '../ooxml/relationships'
 import { mediaDataUrl } from './media'
 import type { Footnote } from '../ooxml/footnotes'
 import { writeFootnotes } from './footnotes-session'
@@ -56,7 +60,7 @@ const THEME_PART = 'word/theme/theme1.xml'
 
 export interface OpenDocx {
   /** Held for the session; saving writes it back with one part replaced. */
-  pkg: DocxPackage
+  pkg: OoxmlPackage
   doc: ProseMirrorNodeJson
   warnings: ParseWarning[]
   styles: StyleCatalogue
@@ -77,7 +81,7 @@ export interface OpenDocx {
 }
 
 export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
-  const pkg = await readPackage(bytes)
+  const pkg = await readDocxPackage(bytes)
 
   const theme = parseThemeFonts(getPartText(pkg, THEME_PART) ?? '')
   const relationships = parseRelationships(getPartText(pkg, 'word/_rels/document.xml.rels') ?? '')
@@ -182,7 +186,7 @@ export async function saveDocx(
  * document had none — with its relationship and content-type override, without
  * which Word repairs the file.
  */
-function writeNumbering(pkg: DocxPackage, added: readonly XmlNode[]): void {
+function writeNumbering(pkg: OoxmlPackage, added: readonly XmlNode[]): void {
   const existing = getPartText(pkg, NUMBERING_PART)
   setPartText(pkg, NUMBERING_PART, mergeNumbering(existing, added))
 
@@ -195,7 +199,7 @@ function writeNumbering(pkg: DocxPackage, added: readonly XmlNode[]): void {
  * Without the relationship and the content-type override Word repairs the file,
  * so this runs whichever way the part came to exist.
  */
-function declareNumberingPart(pkg: DocxPackage): void {
+function declareNumberingPart(pkg: OoxmlPackage): void {
   const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
   if (!findByTarget(relationships, 'numbering.xml')) {
     addRelationship(relationships, NUMBERING_RELATIONSHIP, 'numbering.xml')

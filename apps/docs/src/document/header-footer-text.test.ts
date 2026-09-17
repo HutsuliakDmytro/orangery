@@ -1,6 +1,6 @@
+import { serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { emptyPart, partParagraphs, rebuildPart } from '../ooxml/header-footer'
-import { serializeNode } from '../ooxml/xml'
 import {
   DATE_TOKEN,
   PAGE_NUMBER_TOKEN,
@@ -75,7 +75,7 @@ describe('textFromParagraphs', () => {
       '<w:r><w:t>cached</w:t></w:r>' +
       '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>'
 
-    const { parseXml } = await import('../ooxml/xml')
+    const { parseXml } = await import('@orangery/ooxml-core')
     expect(textFromParagraphs(parseXml(xml))).toBe('')
   })
 

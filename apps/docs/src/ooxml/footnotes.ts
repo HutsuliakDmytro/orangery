@@ -1,6 +1,14 @@
-import { attribute, buildXml, children, element, parseXml, tagName, withDeclaration } from './xml'
-import type { XmlNode } from './xml'
-import { parseIntAttribute } from './units'
+import {
+  attribute,
+  buildXml,
+  children,
+  element,
+  parseIntAttribute,
+  parseXml,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * Footnotes — `word/footnotes.xml`.

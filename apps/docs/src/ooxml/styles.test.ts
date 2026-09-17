@@ -1,7 +1,8 @@
+import { getPartText } from '@orangery/ooxml-core'
+import { STYLES_PART, readDocxPackage } from './parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getPartText, readPackage, STYLES_PART } from './package'
 import { headingLevelOf, parseStyles, resolveStyle, visibleParagraphStyles } from './styles'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
@@ -155,7 +156,7 @@ describe('malformed input', () => {
 
 describe('real fixtures', () => {
   it('reads the style catalogue from a generated document', async () => {
-    const pkg = await readPackage(await readFile(join(FIXTURES, 'headings.docx')))
+    const pkg = await readDocxPackage(await readFile(join(FIXTURES, 'headings.docx')))
     const catalogue = parseStyles(getPartText(pkg, STYLES_PART) ?? '')
 
     expect(catalogue.styles.size).toBeGreaterThan(5)
@@ -164,7 +165,7 @@ describe('real fixtures', () => {
   })
 
   it('resolves a heading style to something bigger than body text', async () => {
-    const pkg = await readPackage(await readFile(join(FIXTURES, 'headings.docx')))
+    const pkg = await readDocxPackage(await readFile(join(FIXTURES, 'headings.docx')))
     const catalogue = parseStyles(getPartText(pkg, STYLES_PART) ?? '')
 
     const heading = resolveStyle(catalogue, 'Heading1')

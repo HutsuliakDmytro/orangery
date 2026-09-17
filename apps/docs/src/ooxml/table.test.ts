@@ -1,10 +1,15 @@
+import {
+  compareXml,
+  describeDifferences,
+  findChild,
+  parseXml,
+  stripDeclaration,
+} from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
-import { compareXml, describeDifferences } from './compare'
 import { parseDocument } from './parse-document'
 import type { ProseMirrorNodeJson } from './parse-document'
 import { serializeParsed } from './serialize-document'
 import { parseGrid } from './table'
-import { findChild, parseXml, stripDeclaration } from './xml'
 
 function wrap(body: string): string {
   return `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`

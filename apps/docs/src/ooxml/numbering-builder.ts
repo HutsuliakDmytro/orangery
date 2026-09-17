@@ -3,12 +3,12 @@ import {
   children,
   element,
   parseXml,
+  pointsToTwips,
   serializeNode,
   tagName,
   withDeclaration,
-} from './xml'
-import type { XmlNode } from './xml'
-import { pointsToTwips } from './units'
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import type { NumberingCatalogue } from './numbering'
 import { nextAbstractNumId, nextNumId } from './numbering'
 

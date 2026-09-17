@@ -1,8 +1,7 @@
+import { compareXml, describeDifferences, stripDeclaration } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
-import { compareXml, describeDifferences } from './compare'
 import { parseThemeFonts } from './fonts'
 import { parseDocument } from './parse-document'
-import { stripDeclaration } from './xml'
 import { serializeParsed } from './serialize-document'
 
 const THEME = parseThemeFonts(

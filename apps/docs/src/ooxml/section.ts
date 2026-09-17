@@ -1,6 +1,16 @@
-import { attribute, children, element, parseXml, serializeNode, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { parseIntAttribute, parseToggle, pointsToTwips, twipsToPoints } from './units'
+import {
+  attribute,
+  children,
+  element,
+  parseIntAttribute,
+  parseToggle,
+  parseXml,
+  pointsToTwips,
+  serializeNode,
+  tagName,
+  twipsToPoints,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * Section properties — OOXML `w:sectPr`.

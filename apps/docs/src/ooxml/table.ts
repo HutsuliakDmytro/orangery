@@ -1,6 +1,18 @@
-import { attribute, children, element, findChild, parseXml, serializeNode, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { parseColor, parseIntAttribute, twipsToPoints, pointsToTwips, formatColor } from './units'
+import {
+  attribute,
+  children,
+  element,
+  findChild,
+  formatColor,
+  parseColor,
+  parseIntAttribute,
+  parseXml,
+  pointsToTwips,
+  serializeNode,
+  tagName,
+  twipsToPoints,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import { bordersFrom } from './table-borders'
 import type { ProseMirrorNodeJson } from './prosemirror-json'
 

@@ -1,6 +1,14 @@
-import { attribute, children, element, parseXml, serializeNode, tagName, textNode } from './xml'
-import type { XmlNode } from './xml'
-import { parseIntAttribute } from './units'
+import {
+  attribute,
+  children,
+  element,
+  parseIntAttribute,
+  parseXml,
+  serializeNode,
+  tagName,
+  textNode,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * Comments — `word/comments.xml` and the markers that anchor them.

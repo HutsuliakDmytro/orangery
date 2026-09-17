@@ -1,23 +1,22 @@
-import { contentTypeFor } from '../ooxml/image'
-import { dataUrlFrom } from './data-url'
-import { CONTENT_TYPES_PART, getPartText, setPartText } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
 import {
-  addRelationship,
+  CONTENT_TYPES_PART,
   IMAGE_RELATIONSHIP,
-  parseRelationships,
-  serializeRelationships,
-} from '../ooxml/relationships'
-import {
+  addRelationship,
   attribute,
   buildXml,
   children,
   element,
+  getPartText,
+  parseRelationships,
   parseXml,
+  serializeRelationships,
+  setPartText,
   tagName,
   withDeclaration,
-} from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { contentTypeFor } from '../ooxml/image'
+import { dataUrlFrom } from './data-url'
 
 /**
  * Adding an image to a DOCX package.
@@ -38,7 +37,7 @@ export interface AddedMedia {
 }
 
 /** Next free `imageN.ext`, so an added file never overwrites an existing one. */
-export function nextMediaName(pkg: DocxPackage, extension: string): string {
+export function nextMediaName(pkg: OoxmlPackage, extension: string): string {
   let highest = 0
   for (const path of pkg.parts.keys()) {
     const match = /^word\/media\/image(\d+)\./u.exec(path)
@@ -48,7 +47,7 @@ export function nextMediaName(pkg: DocxPackage, extension: string): string {
 }
 
 /** Declares an extension in `[Content_Types].xml` if it is not there already. */
-export function ensureContentType(pkg: DocxPackage, extension: string, contentType: string): void {
+export function ensureContentType(pkg: OoxmlPackage, extension: string, contentType: string): void {
   const xml = getPartText(pkg, CONTENT_TYPES_PART)
   if (xml === undefined) return
 
@@ -88,7 +87,7 @@ export function unsupportedImageMessage(fileName: string): string {
 /**
  * Adds an image to the package and returns the relationship that points at it.
  */
-export function addImage(pkg: DocxPackage, fileName: string, bytes: Uint8Array): AddedMedia {
+export function addImage(pkg: OoxmlPackage, fileName: string, bytes: Uint8Array): AddedMedia {
   const extension = fileName.split('.').pop()?.toLowerCase() ?? ''
   const contentType = contentTypeFor(fileName)
 
@@ -108,7 +107,7 @@ export function addImage(pkg: DocxPackage, fileName: string, bytes: Uint8Array):
 }
 
 /** Data URL for a media part, so the webview can display it. */
-export function mediaDataUrl(pkg: DocxPackage, path: string): string | null {
+export function mediaDataUrl(pkg: OoxmlPackage, path: string): string | null {
   const part = pkg.parts.get(path)
   return part === undefined ? null : dataUrlFrom(part.bytes, path)
 }

@@ -1,8 +1,8 @@
+import { compareXml, describeDifferences, getPartText } from '@orangery/ooxml-core'
+import { DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { compareXml, describeDifferences } from '../ooxml/compare'
-import { DOCUMENT_PART, getPartText, readPackage } from '../ooxml/package'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
@@ -51,7 +51,7 @@ describe('saveDocx', () => {
     const before = getPartText(document.pkg, DOCUMENT_PART) ?? ''
 
     const saved = await saveDocx(document, document.doc)
-    const after = getPartText(await readPackage(saved), DOCUMENT_PART) ?? ''
+    const after = getPartText(await readDocxPackage(saved), DOCUMENT_PART) ?? ''
 
     expect(describeDifferences(compareXml(before, after))).toBe('no differences')
   })
@@ -62,7 +62,7 @@ describe('saveDocx', () => {
       [...document.pkg.parts].map(([path, part]) => [path, new Uint8Array(part.bytes)]),
     )
 
-    const saved = await readPackage(await saveDocx(document, document.doc))
+    const saved = await readDocxPackage(await saveDocx(document, document.doc))
 
     for (const [path, bytes] of original) {
       if (path === DOCUMENT_PART) continue
@@ -138,7 +138,8 @@ describe('createNewDocx', () => {
     const document = await createNewDocx()
     const before = getPartText(document.pkg, DOCUMENT_PART) ?? ''
     const after =
-      getPartText(await readPackage(await saveDocx(document, document.doc)), DOCUMENT_PART) ?? ''
+      getPartText(await readDocxPackage(await saveDocx(document, document.doc)), DOCUMENT_PART) ??
+      ''
 
     expect(describeDifferences(compareXml(before, after))).toBe('no differences')
   })

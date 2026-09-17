@@ -1,4 +1,21 @@
 import {
+  CONTENT_TYPES_PART,
+  addRelationship,
+  attribute,
+  buildXml,
+  children,
+  element,
+  findByTarget,
+  getPartText,
+  parseRelationships,
+  parseXml,
+  serializeRelationships,
+  setPartText,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import {
   FOOTNOTES_CONTENT_TYPE,
   FOOTNOTES_PART,
   FOOTNOTES_RELATIONSHIP,
@@ -8,24 +25,6 @@ import {
   serializeFootnotes,
 } from '../ooxml/footnotes'
 import type { Footnote } from '../ooxml/footnotes'
-import { CONTENT_TYPES_PART, getPartText, setPartText } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
-import {
-  addRelationship,
-  findByTarget,
-  parseRelationships,
-  serializeRelationships,
-} from '../ooxml/relationships'
-import {
-  attribute,
-  buildXml,
-  children,
-  element,
-  parseXml,
-  tagName,
-  withDeclaration,
-} from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
 import { DOCUMENT_RELS_PART } from './media'
 
@@ -58,7 +57,7 @@ export function collectFootnotes(doc: ProseMirrorNodeJson): { id: number; text: 
   return found
 }
 
-function ensureOverride(pkg: DocxPackage): void {
+function ensureOverride(pkg: OoxmlPackage): void {
   const xml = getPartText(pkg, CONTENT_TYPES_PART)
   if (xml === undefined) return
 
@@ -81,7 +80,7 @@ function ensureOverride(pkg: DocxPackage): void {
   setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
 }
 
-function ensureRelationship(pkg: DocxPackage): void {
+function ensureRelationship(pkg: OoxmlPackage): void {
   const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
   if (findByTarget(relationships, 'footnotes.xml')) return
 
@@ -97,7 +96,7 @@ function ensureRelationship(pkg: DocxPackage): void {
  * as it was.
  */
 export function writeFootnotes(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   existing: Map<number, Footnote>,
   doc: ProseMirrorNodeJson,
 ): void {

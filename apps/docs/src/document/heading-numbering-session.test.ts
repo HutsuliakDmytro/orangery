@@ -1,6 +1,7 @@
+import { getPartText } from '@orangery/ooxml-core'
+import { NUMBERING_PART, STYLES_PART } from '../ooxml/parts'
 import { describe, expect, it } from 'vitest'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
-import { getPartText, NUMBERING_PART, STYLES_PART } from '../ooxml/package'
 import { readHeadingNumbering } from './heading-numbering-session'
 
 const headings = {

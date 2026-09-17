@@ -4,17 +4,22 @@ import {
   children,
   element,
   findChild,
+  halfPointsToPoints,
   isTextNode,
+  lineUnitsToMultiplier,
+  parseColor,
+  parseIntAttribute,
+  parseToggle,
   parseXml,
   serializeNode,
   tagName,
   textValue,
-} from './xml'
-import type { XmlNode } from './xml'
+  twipsToPoints,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import type { ProseMirrorMarkJson, ProseMirrorNodeJson } from './prosemirror-json'
 import { resolveThemeFont } from './fonts'
 import { imageNode, parseDrawing } from './image'
-import { parseIntAttribute as parseInt2 } from './units'
 import { listBuilder } from './list-nesting'
 import { isBulletList } from './numbering'
 import type { NumberingCatalogue } from './numbering'
@@ -22,14 +27,6 @@ import { parseTable } from './table'
 import { parseTabs } from './tabs'
 import type { TabStop } from './tabs'
 import type { ThemeFonts } from './fonts'
-import {
-  halfPointsToPoints,
-  lineUnitsToMultiplier,
-  parseColor,
-  parseIntAttribute,
-  parseToggle,
-  twipsToPoints,
-} from './units'
 
 /**
  * `word/document.xml` → ProseMirror JSON.
@@ -451,7 +448,7 @@ function parseRun(
       case 'w:rPr':
         break
       case 'w:footnoteReference': {
-        const id = parseInt2(attribute(child, 'w:id'))
+        const id = parseIntAttribute(attribute(child, 'w:id'))
         if (id !== null) {
           nodes.push({
             type: 'footnote',
@@ -555,12 +552,12 @@ function parseParagraph(
         break
       }
       case 'w:commentRangeStart': {
-        const id = parseInt2(attribute(child, 'w:id'))
+        const id = parseIntAttribute(attribute(child, 'w:id'))
         if (id !== null && !openComments.includes(id)) openComments.push(id)
         break
       }
       case 'w:commentRangeEnd': {
-        const id = parseInt2(attribute(child, 'w:id'))
+        const id = parseIntAttribute(attribute(child, 'w:id'))
         openComments = openComments.filter((open) => open !== id)
         break
       }

@@ -1,9 +1,9 @@
+import { parseXml } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { parseDocument } from './parse-document'
 import { serializeDocument } from './serialize-document'
 import { defaultStopAfter, nextStop, parseTabs, serializeTabs, withoutStop, withStop } from './tabs'
 import type { TabStop } from './tabs'
-import { parseXml } from './xml'
 
 const tabsNode = (body: string) =>
   parseXml(

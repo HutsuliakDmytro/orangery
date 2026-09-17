@@ -1,7 +1,7 @@
+import { serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { parseStyles } from './styles'
 import { buildStyle, freeStyleId, upsertStyle } from './style-writer'
-import { serializeNode } from './xml'
 
 const EMPTY = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`

@@ -15,7 +15,8 @@
       — лежить у корені (`docs/adr/`), бо стосується всього воркспейсу, а не одного аппа
 - [x] Перенести `orangery-docs` у `apps/docs` без змін, CI зелений
       — git розпізнав перенесення як rename, тож історія й реліз `v0.1.0` на місці. Жодного рядка логіки не змінено: ті самі 1446 тестів, корпус, clippy і cargo test. CI зелений на всіх шести джобах, збірка трьох платформ проходить
-- [ ] Витягти `packages/ooxml-core`: zip, rels, content types, XML parse/serialize, passthrough-утиліти
+- [x] Витягти `packages/ooxml-core`: zip, rels, content types, XML parse/serialize, passthrough-утиліти
+      — `DocxPackage` став `OoxmlPackage`, а перевірка «це справді docx» винесена в параметр `readPackage(data, requiredPart)`: Slides передасть `ppt/presentation.xml`. Назви частин `word/*` лишились у Docs (`src/ooxml/parts.ts`). З passthrough переїхали примітиви — `serializeNode`/`deserializeNode` і структурне порівняння XML; сама політика збереження живе в парсері `w:`-документа й поїде з `ooxml-wordprocessing`. Тести ядра тепер будують zip у пам'яті, а не читають docx-фікстуру: корпус належить аппу
 - [ ] Витягти `packages/ooxml-drawingml`: усе, що Docs уже парсить із `a:*`/`wp:*`/`pic:*` (картинки, anchor, transforms)
 - [ ] Витягти `packages/editor-text`: ProseMirror-схема run/paragraph, команди форматування — без `w:`-специфіки в ядрі; Docs підключає `wordprocessing`-адаптер
 - [ ] Витягти `packages/ui-kit`: tokens, теми, тулбар/дропдаун/діалог, command registry, palette

@@ -1,4 +1,21 @@
 import {
+  CONTENT_TYPES_PART,
+  addRelationship,
+  attribute,
+  buildXml,
+  children,
+  element,
+  findByTarget,
+  getPartText,
+  parseRelationships,
+  parseXml,
+  serializeRelationships,
+  setPartText,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import {
   COMMENTS_CONTENT_TYPE,
   COMMENTS_PART,
   COMMENTS_RELATIONSHIP,
@@ -6,24 +23,6 @@ import {
   serializeComments,
 } from '../ooxml/comments'
 import type { Comment } from '../ooxml/comments'
-import { CONTENT_TYPES_PART, getPartText, setPartText } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
-import {
-  addRelationship,
-  findByTarget,
-  parseRelationships,
-  serializeRelationships,
-} from '../ooxml/relationships'
-import {
-  attribute,
-  buildXml,
-  children,
-  element,
-  parseXml,
-  tagName,
-  withDeclaration,
-} from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
 import { DOCUMENT_RELS_PART } from './media'
 
@@ -35,11 +34,11 @@ import { DOCUMENT_RELS_PART } from './media'
  * three is missing.
  */
 
-export function readComments(pkg: DocxPackage): Map<number, Comment> {
+export function readComments(pkg: OoxmlPackage): Map<number, Comment> {
   return parseComments(getPartText(pkg, COMMENTS_PART) ?? '')
 }
 
-function ensureOverride(pkg: DocxPackage): void {
+function ensureOverride(pkg: OoxmlPackage): void {
   const xml = getPartText(pkg, CONTENT_TYPES_PART)
   if (xml === undefined) return
 
@@ -62,7 +61,7 @@ function ensureOverride(pkg: DocxPackage): void {
   setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
 }
 
-function ensureRelationship(pkg: DocxPackage): void {
+function ensureRelationship(pkg: OoxmlPackage): void {
   const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
   if (findByTarget(relationships, 'comments.xml')) return
 
@@ -93,7 +92,7 @@ export function anchoredComments(doc: ProseMirrorNodeJson): Set<number> {
  * stay in the file for ever, attached to nothing and shown by nobody.
  */
 export function writeComments(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   comments: ReadonlyMap<number, Comment>,
   doc: ProseMirrorNodeJson,
 ): void {

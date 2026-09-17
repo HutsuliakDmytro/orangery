@@ -1,6 +1,14 @@
-import { attribute, children, element, findChild, parseXml, serializeNode, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { pointsToTwips } from './units'
+import {
+  attribute,
+  children,
+  element,
+  findChild,
+  parseXml,
+  pointsToTwips,
+  serializeNode,
+  tagName,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import type { HeadingNumberScheme } from '../editor/heading-numbers'
 
 /**

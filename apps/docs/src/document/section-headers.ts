@@ -1,6 +1,6 @@
+import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { readHeaderFooter, writeHeaderFooter } from './header-footer-session'
 import { paragraphsFromText, textFromParagraphs } from './header-footer-text'
-import type { DocxPackage } from '../ooxml/package'
 import type { SectionProperties } from '../ooxml/section'
 import type { HeaderFooterValues } from '../store/header-footer-store'
 
@@ -15,7 +15,7 @@ import type { HeaderFooterValues } from '../store/header-footer-store'
 
 /** What the section says, with the first-page pair empty when it has none. */
 export function readSectionHeaders(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   section: SectionProperties,
 ): HeaderFooterValues {
   return {
@@ -35,7 +35,7 @@ export function readSectionHeaders(
  * headers it never shows.
  */
 export function writeSectionHeaders(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   section: SectionProperties,
   values: HeaderFooterValues,
 ): SectionProperties {

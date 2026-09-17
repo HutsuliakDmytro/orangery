@@ -15,6 +15,8 @@
  * Usage: pnpm test:render [--threshold 0.001] [--keep]
  */
 
+import { getPartText, setPartText, writePackage } from '@orangery/ooxml-core'
+import { DOCUMENT_PART, readDocxPackage } from '../src/ooxml/parts'
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -22,13 +24,6 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
-import {
-  DOCUMENT_PART,
-  getPartText,
-  readPackage,
-  setPartText,
-  writePackage,
-} from '../src/ooxml/package'
 import { parseDocument } from '../src/ooxml/parse-document'
 import { serializeParsed } from '../src/ooxml/serialize-document'
 
@@ -166,7 +161,7 @@ export async function corpusFiles(): Promise<{ label: string; path: string }[]> 
 }
 
 async function roundTrip(inputPath: string, outputPath: string): Promise<void> {
-  const pkg = await readPackage(await readFile(inputPath))
+  const pkg = await readDocxPackage(await readFile(inputPath))
   const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
   setPartText(pkg, DOCUMENT_PART, serializeParsed(parsed))
   await writeFile(outputPath, await writePackage(pkg))

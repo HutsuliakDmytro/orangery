@@ -1,3 +1,11 @@
+import {
+  children,
+  element,
+  parseXml,
+  serializeNode,
+  tagName,
+  textValue,
+} from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import {
   dateField,
@@ -8,7 +16,6 @@ import {
   partParagraphs,
   rebuildPart,
 } from './header-footer'
-import { element, parseXml, serializeNode, tagName, textValue, children } from './xml'
 
 const SECT_PRESERVED = [
   '<w:headerReference w:type="default" r:id="rId4"/>',

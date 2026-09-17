@@ -1,7 +1,7 @@
+import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { decodeDataUrl } from './data-url'
 import { addImage, UnsupportedImageError } from './media'
 import { addPicture } from './odt-file'
-import type { DocxPackage } from '../ooxml/package'
 import type { OdtPackage } from './converters/odt'
 import { contentWidth } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
@@ -133,7 +133,7 @@ export async function embedImages(
 
 /** Pictures into `word/media/`, named by the relationship that points at them. */
 export function embedImagesInto(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   doc: ProseMirrorNodeJson,
   options: { section: SectionProperties; measure?: MeasureImage },
 ): Promise<EmbedResult> {

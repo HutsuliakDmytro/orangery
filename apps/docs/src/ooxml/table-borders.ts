@@ -1,6 +1,16 @@
-import { attribute, children, element, findChild, parseXml, serializeNode, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { formatColor, parseColor, parseIntAttribute } from './units'
+import {
+  attribute,
+  children,
+  element,
+  findChild,
+  formatColor,
+  parseColor,
+  parseIntAttribute,
+  parseXml,
+  serializeNode,
+  tagName,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * Table borders — `w:tblBorders` and `w:tcBorders`.

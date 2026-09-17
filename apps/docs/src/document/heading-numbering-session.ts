@@ -1,5 +1,18 @@
-import { NUMBERING_PART, STYLES_PART, getPartText, setPartText } from '../ooxml/package'
-import type { DocxPackage } from '../ooxml/package'
+import {
+  attribute,
+  buildXml,
+  children,
+  element,
+  findChild,
+  getPartText,
+  parseXml,
+  serializeNode,
+  setPartText,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { NUMBERING_PART, STYLES_PART } from '../ooxml/parts'
 import {
   buildHeadingAbstractNum,
   HEADING_STYLE_IDS,
@@ -8,18 +21,6 @@ import {
   withHeadingNumbering,
 } from '../ooxml/heading-numbering'
 import { buildNum } from '../ooxml/numbering-builder'
-import {
-  attribute,
-  buildXml,
-  children,
-  element,
-  findChild,
-  parseXml,
-  serializeNode,
-  tagName,
-  withDeclaration,
-} from '../ooxml/xml'
-import type { XmlNode } from '../ooxml/xml'
 import type { HeadingNumberScheme } from '../editor/heading-numbers'
 
 /**
@@ -33,7 +34,7 @@ import type { HeadingNumberScheme } from '../editor/heading-numbers'
 
 const NUMBERING_ROOT = 'w:numbering'
 
-function numberingRoots(pkg: DocxPackage): XmlNode[] {
+function numberingRoots(pkg: OoxmlPackage): XmlNode[] {
   const existing = getPartText(pkg, NUMBERING_PART)
   if (existing !== undefined) return parseXml(existing)
 
@@ -55,7 +56,7 @@ function listOf(root: XmlNode): XmlNode[] {
 }
 
 /** Reads back what the file says about numbered headings, if anything. */
-export function readHeadingNumbering(pkg: DocxPackage): HeadingNumberScheme | null {
+export function readHeadingNumbering(pkg: OoxmlPackage): HeadingNumberScheme | null {
   const styles = getPartText(pkg, STYLES_PART)
   const numbering = getPartText(pkg, NUMBERING_PART)
   if (styles === undefined || numbering === undefined) return null
@@ -116,7 +117,7 @@ function headingNumId(stylesXml: string): number | null {
  * cannot open without.
  */
 export function writeHeadingNumbering(
-  pkg: DocxPackage,
+  pkg: OoxmlPackage,
   scheme: HeadingNumberScheme | null,
 ): { createdNumberingPart: boolean } {
   const styles = getPartText(pkg, STYLES_PART)

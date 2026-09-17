@@ -1,5 +1,5 @@
+import { compareXml, describeDifferences } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
-import { compareXml, describeDifferences } from './compare'
 import {
   contentHeight,
   contentWidth,

@@ -1,7 +1,7 @@
+import { getPartText } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
 import { COMMENTS_PART } from '../ooxml/comments'
-import { getPartText } from '../ooxml/package'
 import { anchoredComments, writeComments } from './comments-session'
 import { initialsOf } from '../store/comments-store'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'

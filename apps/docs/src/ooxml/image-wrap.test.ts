@@ -1,6 +1,6 @@
+import { parseXml, serializeNode } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { buildDrawing, parseDrawing } from './image'
-import { parseXml, serializeNode } from './xml'
 
 const node = (xml: string) => parseXml(xml)[0]
 

@@ -1,7 +1,7 @@
+import { CONTENT_TYPES_PART, getPartText, parseRelationships } from '@orangery/ooxml-core'
+import { NUMBERING_PART, readDocxPackage } from '../ooxml/parts'
 import { describe, expect, it } from 'vitest'
-import { NUMBERING_PART, CONTENT_TYPES_PART, getPartText, readPackage } from '../ooxml/package'
 import { parseNumbering, resolveNumbering } from '../ooxml/numbering'
-import { parseRelationships } from '../ooxml/relationships'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
 import { DOCUMENT_RELS_PART } from './media'
@@ -41,14 +41,14 @@ describe('saving a document with a new list', () => {
 
   it('creates the numbering part', async () => {
     const document = await createNewDocx()
-    const pkg = await readPackage(await saveDocx(document, listDoc))
+    const pkg = await readDocxPackage(await saveDocx(document, listDoc))
 
     expect(pkg.parts.has(NUMBERING_PART)).toBe(true)
   })
 
   it('defines the numbering the paragraphs point at', async () => {
     const document = await createNewDocx()
-    const saved = await readPackage(await saveDocx(document, listDoc))
+    const saved = await readDocxPackage(await saveDocx(document, listDoc))
 
     const numbering = parseNumbering(getPartText(saved, NUMBERING_PART) ?? '')
     const referenced = (getPartText(saved, 'word/document.xml') ?? '').match(
@@ -61,7 +61,7 @@ describe('saving a document with a new list', () => {
 
   it('defines a bullet glyph for the first level', async () => {
     const document = await createNewDocx()
-    const saved = await readPackage(await saveDocx(document, listDoc))
+    const saved = await readDocxPackage(await saveDocx(document, listDoc))
     const numbering = parseNumbering(getPartText(saved, NUMBERING_PART) ?? '')
 
     const level = resolveNumbering(numbering, 1, 0)
@@ -71,7 +71,7 @@ describe('saving a document with a new list', () => {
 
   it('adds the relationship and content type the part needs', async () => {
     const document = await createNewDocx()
-    const saved = await readPackage(await saveDocx(document, listDoc))
+    const saved = await readDocxPackage(await saveDocx(document, listDoc))
 
     const relationships = parseRelationships(getPartText(saved, DOCUMENT_RELS_PART) ?? '')
     expect([...relationships.values()].some((entry) => entry.target === 'numbering.xml')).toBe(true)
@@ -92,7 +92,7 @@ describe('saving a document with a new list', () => {
   it('does not add a second definition for a list it read from the file', async () => {
     const document = await createNewDocx()
     const once = await openDocx(await saveDocx(document, listDoc))
-    const twice = await readPackage(await saveDocx(once, once.doc))
+    const twice = await readDocxPackage(await saveDocx(once, once.doc))
 
     const numbering = getPartText(twice, NUMBERING_PART) ?? ''
     expect(numbering.match(/<w:num /gu)).toHaveLength(1)
@@ -100,7 +100,7 @@ describe('saving a document with a new list', () => {
 
   it('does not add a numbering part to a document with no lists', async () => {
     const document = await createNewDocx()
-    const saved = await readPackage(await saveDocx(document, document.doc))
+    const saved = await readDocxPackage(await saveDocx(document, document.doc))
 
     expect(saved.parts.has(NUMBERING_PART)).toBe(false)
   })
@@ -108,7 +108,7 @@ describe('saving a document with a new list', () => {
   it('does not add a second relationship when saving twice', async () => {
     const document = await createNewDocx()
     await saveDocx(document, listDoc)
-    const saved = await readPackage(await saveDocx(document, listDoc))
+    const saved = await readDocxPackage(await saveDocx(document, listDoc))
 
     const relationships = parseRelationships(getPartText(saved, DOCUMENT_RELS_PART) ?? '')
     const pointing = [...relationships.values()].filter((entry) => entry.target === 'numbering.xml')

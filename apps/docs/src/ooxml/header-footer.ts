@@ -1,5 +1,13 @@
-import { attribute, buildXml, children, element, parseXml, tagName, withDeclaration } from './xml'
-import type { XmlNode } from './xml'
+import {
+  attribute,
+  buildXml,
+  children,
+  element,
+  parseXml,
+  tagName,
+  withDeclaration,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * Headers and footers.

@@ -1,6 +1,13 @@
-import { attribute, children, findChild, parseXml, tagName } from './xml'
-import type { XmlNode } from './xml'
-import { parseIntAttribute, twipsToPoints } from './units'
+import {
+  attribute,
+  children,
+  findChild,
+  parseIntAttribute,
+  parseXml,
+  tagName,
+  twipsToPoints,
+} from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 
 /**
  * `word/numbering.xml` → list definitions.

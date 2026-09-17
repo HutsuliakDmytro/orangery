@@ -26,7 +26,7 @@ export {
 export { readPresentation, referencedParts, relationshipTarget } from './presentation'
 export { layoutOf, masterOf, readDeck, readSlidePart } from './deck'
 export type { Deck, Master, Slide, SlidePart } from './deck'
-export { flatten, parseShapeTree } from './shape-tree'
+export { flatten, parseShape, parseShapeTree } from './shape-tree'
 export type { Placeholder, Shape, ShapeKind, Transform } from './shape-tree'
 export type { MasterParts, PresentationMap, SlideParts, SlideSize } from './presentation'
 export { declarationOf, rewriteEveryPart, saveDeck, writePart, writeSlidePart } from './save'
@@ -57,3 +57,12 @@ export { backgroundOf, readBackground } from './background'
 export type { Background } from './background'
 export { moveShape, writeTransform } from './write-shape'
 export { reorderShapes } from './z-order'
+export {
+  alignmentBounds,
+  alignShapes,
+  distributeShapes,
+  duplicateShape,
+  nextShapeId,
+  offsetShape,
+} from './arrange'
+export type { Alignment } from './arrange'

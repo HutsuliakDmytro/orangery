@@ -203,7 +203,8 @@ function parsePlaceholder(nonVisual: XmlNode | undefined): Placeholder | null {
   }
 }
 
-function parseShape(node: XmlNode): Shape {
+/** Reads one shape element, for a node that is not being walked as a tree. */
+export function parseShape(node: XmlNode): Shape {
   const kind = KINDS[tagName(node) ?? ''] ?? 'unknown'
   const nonVisual = nonVisualOf(node)
   const identity = nonVisual === undefined ? undefined : findChild(nonVisual, 'p:cNvPr')

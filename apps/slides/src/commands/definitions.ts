@@ -2,7 +2,15 @@ import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import { nameOf, pickDeckPath, readDeckFile } from '../document/file'
-import { moveShape, reorderShapes } from '@orangery/ooxml-presentation'
+import {
+  alignmentBounds,
+  alignShapes,
+  distributeShapes,
+  duplicateShape,
+  moveShape,
+  reorderShapes,
+} from '@orangery/ooxml-presentation'
+import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 
@@ -130,6 +138,29 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.duplicate',
+    label: 'Duplicate',
+    group: 'edit',
+    shortcut: 'Mod+d',
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      const { selection, edit, selectShapes } = useDeckStore.getState()
+      const copies: number[] = []
+
+      edit((slide) => {
+        for (const shape of slide.shapes.filter((one) => selection.includes(one.id))) {
+          const id = duplicateShape(slide, shape)
+          if (id !== null) copies.push(id)
+        }
+        return copies.length > 0
+      })
+
+      // The copies become the selection, as they do everywhere else: the next
+      // thing anyone does is move them.
+      if (copies.length > 0) selectShapes(copies)
+    },
+  },
+  {
     id: 'edit.select-all',
     label: 'Select All',
     group: 'edit',
@@ -159,6 +190,53 @@ export const editCommands: readonly Command[] = [
     },
   })),
 ]
+
+/** The shapes the selection names, on the slide being shown. */
+function selected(slide: Slide): Shape[] {
+  const { selection } = useDeckStore.getState()
+  return slide.shapes.filter((shape) => selection.includes(shape.id))
+}
+
+export const alignCommands: readonly Command[] = (
+  [
+    ['left', 'Align Left'],
+    ['centre', 'Align Centre'],
+    ['right', 'Align Right'],
+    ['top', 'Align Top'],
+    ['middle', 'Align Middle'],
+    ['bottom', 'Align Bottom'],
+  ] as const
+).map(([alignment, label]: readonly [Alignment, string]) => ({
+  id: `format.align-${alignment}`,
+  label,
+  group: 'format' as const,
+  isEnabled: () => useDeckStore.getState().selection.length > 0,
+  run: () => {
+    const { open, edit } = useDeckStore.getState()
+    const size = open?.deck.slideSize ?? { width: 0, height: 0 }
+
+    edit((slide) => {
+      const shapes = selected(slide)
+      return alignShapes(shapes, alignment, alignmentBounds(shapes, size))
+    })
+  },
+}))
+
+export const distributeCommands: readonly Command[] = (
+  [
+    ['horizontal', 'Distribute Horizontally'],
+    ['vertical', 'Distribute Vertically'],
+  ] as const
+).map(([axis, label]) => ({
+  id: `format.distribute-${axis}`,
+  label,
+  group: 'format' as const,
+  // Two shapes have no gap to divide; the command says so by being greyed out.
+  isEnabled: () => useDeckStore.getState().selection.length > 2,
+  run: () => {
+    useDeckStore.getState().edit((slide) => distributeShapes(selected(slide), axis))
+  },
+}))
 
 /** The four z-order moves, which are all the same call. */
 export const arrangeCommands: readonly Command[] = (
@@ -233,6 +311,8 @@ export function registerBuiltinCommands(): void {
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(arrangeCommands)
+  registerAll(alignCommands)
+  registerAll(distributeCommands)
   registerAll(slideCommands)
   registerAll(viewCommands)
   registerAll(appearanceCommands)

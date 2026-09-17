@@ -314,3 +314,66 @@ describe('dragging', () => {
     expect(partText()).toBe(before)
   })
 })
+
+describe('arranging', () => {
+  it('aligns the selection to its own bounds', async () => {
+    await openDeck('shapes')
+    act(() => {
+      runCommand('edit.select-all', {})
+      runCommand('format.align-left', {})
+    })
+
+    // All four to the leftmost shape's x.
+    expect(partText().match(/x="457200"/gu)?.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('spreads three or more evenly and greys out below that', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    expect(getCommand('format.distribute-horizontal')?.isEnabled?.({})).toBe(false)
+
+    act(() => {
+      runCommand('edit.select-all', {})
+    })
+    expect(getCommand('format.distribute-horizontal')?.isEnabled?.({})).toBe(true)
+  })
+
+  it('brings a shape to the front in the file', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('format.front', {})
+    })
+
+    const text = partText()
+    expect(text.lastIndexOf('Rectangle 1')).toBeGreaterThan(text.indexOf('5-Point Star 4'))
+  })
+
+  it('duplicates the selection and selects the copies', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.duplicate', {})
+    })
+
+    const slide = useDeckStore.getState().open?.deck.slides[0]
+    expect(slide?.shapes).toHaveLength(5)
+    expect(useDeckStore.getState().selection).toEqual([slide?.shapes[4]?.id])
+  })
+
+  it('takes a duplicate back in one step', async () => {
+    // Duplicating is one action; undoing it should not need two.
+    await openDeck('shapes')
+    const before = partText()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+      runCommand('edit.duplicate', {})
+      runCommand('edit.undo', {})
+    })
+
+    expect(partText()).toBe(before)
+  })
+})

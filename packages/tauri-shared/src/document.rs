@@ -384,11 +384,11 @@ pub async fn open_window<R: tauri::Runtime>(
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT_LABEL: AtomicU32 = AtomicU32::new(1);
 
-    let label = format!("doc-{}", NEXT_LABEL.fetch_add(1, Ordering::Relaxed));
+    let label = format!("win-{}", NEXT_LABEL.fetch_add(1, Ordering::Relaxed));
 
     let window =
         tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
-            .title("Orangery Docs")
+            .title(app.package_info().name.as_str())
             .inner_size(1280.0, 840.0)
             .min_inner_size(720.0, 480.0)
             .build()?;

@@ -111,10 +111,14 @@ pub fn build<R: Runtime>(
     // The submenu named after the application is a macOS convention, and the
     // items in it — Services, Hide Others, Show All — do nothing anywhere else.
     // On Windows and Linux there is no such menu and Quit belongs in File.
+    //
+    // The name comes from the app's own package info rather than a literal, so
+    // each app in the suite names its own menu and neither can drift from what
+    // its tauri.conf.json says.
     let app_menu = if ON_MACOS {
         Some(Submenu::with_items(
             app,
-            "Orangery Docs",
+            app.package_info().name.as_str(),
             true,
             &[
                 &PredefinedMenuItem::about(app, None, Some(AboutMetadata::default()))?,

@@ -1,9 +1,11 @@
-mod diagnostics;
-mod document;
-mod error;
-mod menu;
+//! Orangery Docs, the native side.
+//!
+//! Everything that is not about documents — atomic writes, autosave, the menu
+//! builder, diagnostics — lives in `orangery-tauri-shared` and is registered
+//! from here. What is left is this app's own wiring: which plugins it loads,
+//! which files it answers to, and what it does when a window is asked to close.
 
-pub use error::AppError;
+use orangery_tauri_shared::{diagnostics, document, menu};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -52,7 +54,7 @@ pub fn run() {
             // is handed to it rather than answered here. It calls back through
             // `confirm_close` once the user has chosen.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if crate::document::close_is_confirmed(window.label()) {
+                if document::close_is_confirmed(window.label()) {
                     return;
                 }
                 api.prevent_close();

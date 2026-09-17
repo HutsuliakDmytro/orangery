@@ -25,6 +25,7 @@ import { Caption } from './extensions/caption'
 import { CharacterStyle } from './extensions/character-style'
 import { CommentMark } from './extensions/comment'
 import { Deletion, Insertion, Revisions } from './extensions/revisions'
+import { TrackChanges } from './extensions/track-changes'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
 import { HeadingNumbering } from './extensions/heading-numbering'
@@ -92,6 +93,10 @@ export function buildExtensions(): Extensions {
     Insertion,
     Deletion,
     Revisions,
+    TrackChanges.configure({
+      enabled: () => useViewStore.getState().trackChanges,
+      author: () => useSettingsStore.getState().authorName,
+    }),
     ParagraphSpacing,
     Indent,
     Caption.configure({

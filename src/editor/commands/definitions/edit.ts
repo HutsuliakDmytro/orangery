@@ -1,3 +1,4 @@
+import { useViewStore } from '../../../store/view-store'
 import { selectWholeDocument } from '../selection'
 import type { Command } from '../types'
 
@@ -54,5 +55,21 @@ export const editCommands: readonly Command[] = [
     run: ({ editor }) => {
       editor.chain().focus().rejectRevisions(editor.state.selection.empty).run()
     },
+  },
+  {
+    id: 'edit.track-changes',
+    label: 'Track Changes',
+    group: 'edit',
+    // No shortcut: the one Word uses for this is already centre alignment here,
+    // and a mode switched on once a document is worth a menu trip.
+    keywords: ['revision', 'review', 'record'],
+    run: ({ editor }) => {
+      const { trackChanges, setTrackChanges } = useViewStore.getState()
+      setTrackChanges(!trackChanges)
+      // The plugin reads the store on each change; an empty transaction gets
+      // the menu's tick and the toolbar to notice at once.
+      editor.view.dispatch(editor.state.tr)
+    },
+    isActive: () => useViewStore.getState().trackChanges,
   },
 ]

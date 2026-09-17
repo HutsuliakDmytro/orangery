@@ -27,6 +27,13 @@ export interface ViewState {
    * file as a numbering definition attached to the heading styles.
    */
   headingNumbering: HeadingNumberScheme | null
+  /**
+   * Whether edits are recorded as tracked changes.
+   *
+   * A property of the document — Word keeps it in `settings.xml` — rather than
+   * of the app: a reviewer turns it on for the document they were sent.
+   */
+  trackChanges: boolean
   outlineOpen: boolean
 
   setZoom: (zoom: number) => void
@@ -35,6 +42,7 @@ export interface ViewState {
   resetZoom: () => void
   setSection: (section: SectionProperties) => void
   setHeadingNumbering: (scheme: HeadingNumberScheme | null) => void
+  setTrackChanges: (on: boolean) => void
   toggleOutline: () => void
 }
 
@@ -54,6 +62,7 @@ export const useViewStore = create<ViewState>((set) => ({
   zoom: 1,
   section: { ...DEFAULT_SECTION, margins: { ...DEFAULT_SECTION.margins } },
   headingNumbering: null,
+  trackChanges: false,
   outlineOpen: false,
 
   setZoom: (zoom) => {
@@ -70,6 +79,10 @@ export const useViewStore = create<ViewState>((set) => ({
   },
   setHeadingNumbering: (scheme) => {
     set({ headingNumbering: scheme })
+  },
+
+  setTrackChanges: (on) => {
+    set({ trackChanges: on })
   },
 
   setSection: (section) => {

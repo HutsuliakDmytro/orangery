@@ -140,6 +140,7 @@ export interface SaveOptions {
   section?: SectionProperties
   headingNumbering?: HeadingNumberScheme | null
   comments?: ReadonlyMap<number, Comment>
+  trackChanges?: boolean
 }
 
 export async function saveDocumentTo(

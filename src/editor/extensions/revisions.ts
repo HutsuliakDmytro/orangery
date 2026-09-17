@@ -31,6 +31,11 @@ function revisionMark(name: RevisionKind, className: string) {
     // mark may exclude the other.
     excludes: '',
 
+    // A change covers the text it was made to and nothing else. Left
+    // inclusive, text typed against the edge of a deletion would be marked as
+    // deleted too — and then dropped by the accept that follows.
+    inclusive: false,
+
     addAttributes() {
       return {
         revisionId: { default: null },

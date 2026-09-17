@@ -87,6 +87,7 @@ export const fileOperations = {
         useViewStore.getState().setHeadingNumbering(docx.headingNumbering)
         useStylesStore.getState().setCatalogue(docx.styles)
         useCommentsStore.getState().reset()
+        useViewStore.getState().setTrackChanges(false)
         useHeaderFooterStore.getState().reset()
         editor.commands.setContent(templateById(template).build())
         useDocumentStore.getState().newDocument()
@@ -109,6 +110,7 @@ export const fileOperations = {
           useViewStore.getState().setHeadingNumbering(opened.session.docx.headingNumbering)
           useStylesStore.getState().setCatalogue(opened.session.docx.styles)
           useCommentsStore.getState().load(opened.session.docx.comments)
+          useViewStore.getState().setTrackChanges(opened.session.docx.trackChanges)
 
           const { pkg, section } = opened.session.docx
           useHeaderFooterStore.getState().load(readSectionHeaders(pkg, section), null)
@@ -151,6 +153,7 @@ export const fileOperations = {
           section: useViewStore.getState().section,
           headingNumbering: useViewStore.getState().headingNumbering,
           comments: useCommentsStore.getState().comments,
+          trackChanges: useViewStore.getState().trackChanges,
         })
         useDocumentStore.getState().markSaved(result.path, format)
         // A conversion may have left something behind; the banner says what.
@@ -181,6 +184,7 @@ export const fileOperations = {
           section: useViewStore.getState().section,
           headingNumbering: useViewStore.getState().headingNumbering,
           comments: useCommentsStore.getState().comments,
+          trackChanges: useViewStore.getState().trackChanges,
         })
         useDocumentStore.getState().markSaved(result.path, targetFormat)
         if (result.warnings) useDocumentStore.getState().addWarnings(result.warnings)

@@ -199,3 +199,32 @@ test('types a tab in the middle of a line and indents at its start', async ({ pa
   await page.keyboard.press('Tab')
   await expect(page.locator(`${editor} .doc-tab`)).toHaveCount(1)
 })
+
+test('records what is typed and deleted as tracked changes', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('the original text')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Track Changes')
+  await page.keyboard.press('Enter')
+
+  // Select-all goes through the editor's own keymap, so the selection is where
+  // the next keystroke will see it — a click or an arrow key is reported by the
+  // browser a task later.
+  await page.locator(editor).click()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type('replacement')
+
+  // The old text stays, struck through, until somebody decides.
+  await expect(page.locator(`${editor} .revision-deletion`)).toHaveCount(1)
+  await expect(page.locator(`${editor} .revision-insertion`)).toHaveCount(1)
+  await expect(page.locator(`${editor} p`).first()).toContainText('the original text')
+  await expect(page.locator(`${editor} p`).first()).toContainText('replacement')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Reject Tracked Changes')
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator(`${editor} p`).first()).toHaveText('the original text')
+  await expect(page.locator(`${editor} .revision-insertion`)).toHaveCount(0)
+})

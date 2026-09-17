@@ -32,6 +32,51 @@ pub struct CommandDescriptor {
 
 /// Menu-bar order. A group with no commands is still rendered when it carries
 /// predefined items (Edit, View), and skipped otherwise.
+/// An item the operating system owns rather than the command registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Trailing {
+    CloseWindow,
+    Separator,
+    Quit,
+    Cut,
+    Copy,
+    Paste,
+    Fullscreen,
+}
+
+/// Which OS-owned items a menu gets, and where.
+///
+/// Stated apart from the building so the platform rule can be checked without a
+/// running application — it is the part that differs between machines, and so
+/// the part least likely to be noticed when it is wrong.
+pub fn trailing_items(group: &str, on_macos: bool) -> Vec<Trailing> {
+    match group {
+        "file" => {
+            let mut items = vec![Trailing::CloseWindow];
+
+            // Without the application submenu there is nowhere else for it.
+            if !on_macos {
+                items.push(Trailing::Separator);
+                items.push(Trailing::Quit);
+            }
+
+            items
+        }
+        "edit" => vec![Trailing::Cut, Trailing::Copy, Trailing::Paste],
+        // Full screen is a macOS menu item; elsewhere the window manager owns
+        // it and the menu entry does nothing.
+        "view" if on_macos => vec![Trailing::Fullscreen],
+        _ => Vec::new(),
+    }
+}
+
+/// Whether this build runs on macOS.
+///
+/// A constant rather than `#[cfg]` around the code that uses it: both branches
+/// are then compiled everywhere, so a mistake in the one this machine does not
+/// run still fails the build here rather than only on somebody else's.
+const ON_MACOS: bool = cfg!(target_os = "macos");
+
 const GROUP_ORDER: [(&str, &str); 5] = [
     ("file", "File"),
     ("edit", "Edit"),
@@ -63,22 +108,29 @@ pub fn build<R: Runtime>(
 ) -> Result<Menu<R>, AppError> {
     let grouped = group_items(descriptors);
 
-    let app_menu = Submenu::with_items(
-        app,
-        "Orangery Docs",
-        true,
-        &[
-            &PredefinedMenuItem::about(app, None, Some(AboutMetadata::default()))?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::services(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, None)?,
-            &PredefinedMenuItem::hide_others(app, None)?,
-            &PredefinedMenuItem::show_all(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
-        ],
-    )?;
+    // The submenu named after the application is a macOS convention, and the
+    // items in it — Services, Hide Others, Show All — do nothing anywhere else.
+    // On Windows and Linux there is no such menu and Quit belongs in File.
+    let app_menu = if ON_MACOS {
+        Some(Submenu::with_items(
+            app,
+            "Orangery Docs",
+            true,
+            &[
+                &PredefinedMenuItem::about(app, None, Some(AboutMetadata::default()))?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::services(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::hide(app, None)?,
+                &PredefinedMenuItem::hide_others(app, None)?,
+                &PredefinedMenuItem::show_all(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::quit(app, None)?,
+            ],
+        )?)
+    } else {
+        None
+    };
 
     let mut submenus: Vec<Submenu<R>> = Vec::new();
 
@@ -86,19 +138,20 @@ pub fn build<R: Runtime>(
         let commands = grouped.get(group).cloned().unwrap_or_default();
 
         // Items the OS must own, appended after the registry-driven ones.
-        let trailing: Vec<Box<dyn tauri::menu::IsMenuItem<R>>> = match group {
-            "file" => vec![Box::new(PredefinedMenuItem::close_window(
-                app,
-                Some("Close Window"),
-            )?)],
-            "edit" => vec![
-                Box::new(PredefinedMenuItem::cut(app, None)?),
-                Box::new(PredefinedMenuItem::copy(app, None)?),
-                Box::new(PredefinedMenuItem::paste(app, None)?),
-            ],
-            "view" => vec![Box::new(PredefinedMenuItem::fullscreen(app, None)?)],
-            _ => Vec::new(),
-        };
+        let mut trailing: Vec<Box<dyn tauri::menu::IsMenuItem<R>>> = Vec::new();
+        for item in trailing_items(group, ON_MACOS) {
+            trailing.push(match item {
+                Trailing::CloseWindow => {
+                    Box::new(PredefinedMenuItem::close_window(app, Some("Close Window"))?)
+                }
+                Trailing::Separator => Box::new(PredefinedMenuItem::separator(app)?),
+                Trailing::Quit => Box::new(PredefinedMenuItem::quit(app, None)?),
+                Trailing::Cut => Box::new(PredefinedMenuItem::cut(app, None)?),
+                Trailing::Copy => Box::new(PredefinedMenuItem::copy(app, None)?),
+                Trailing::Paste => Box::new(PredefinedMenuItem::paste(app, None)?),
+                Trailing::Fullscreen => Box::new(PredefinedMenuItem::fullscreen(app, None)?),
+            });
+        }
 
         if commands.is_empty() && trailing.is_empty() {
             continue;
@@ -145,7 +198,10 @@ pub fn build<R: Runtime>(
 
     let help_menu = Submenu::with_items(app, "Help", true, &[])?;
 
-    let mut refs: Vec<&dyn tauri::menu::IsMenuItem<R>> = vec![&app_menu];
+    let mut refs: Vec<&dyn tauri::menu::IsMenuItem<R>> = Vec::new();
+    if let Some(menu) = &app_menu {
+        refs.push(menu);
+    }
     refs.extend(
         submenus
             .iter()
@@ -194,6 +250,41 @@ mod tests {
             active: Some(on),
             ..descriptor(id, group)
         }
+    }
+
+    #[test]
+    fn quit_sits_in_the_file_menu_where_there_is_no_application_menu() {
+        // macOS puts it under the application's own name; Windows and Linux
+        // have no such menu, so without this there is no way to quit at all.
+        assert!(trailing_items("file", false).contains(&Trailing::Quit));
+        assert!(!trailing_items("file", true).contains(&Trailing::Quit));
+    }
+
+    #[test]
+    fn closing_a_window_is_offered_everywhere() {
+        for on_macos in [true, false] {
+            assert!(trailing_items("file", on_macos).contains(&Trailing::CloseWindow));
+        }
+    }
+
+    #[test]
+    fn full_screen_is_offered_only_where_the_menu_item_does_something() {
+        assert_eq!(trailing_items("view", true), vec![Trailing::Fullscreen]);
+        assert!(trailing_items("view", false).is_empty());
+    }
+
+    #[test]
+    fn the_clipboard_items_are_the_same_on_every_platform() {
+        let expected = vec![Trailing::Cut, Trailing::Copy, Trailing::Paste];
+
+        assert_eq!(trailing_items("edit", true), expected);
+        assert_eq!(trailing_items("edit", false), expected);
+    }
+
+    #[test]
+    fn a_menu_the_system_owns_nothing_in_gets_nothing() {
+        assert!(trailing_items("format", true).is_empty());
+        assert!(trailing_items("insert", false).is_empty());
     }
 
     #[test]

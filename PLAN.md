@@ -237,7 +237,8 @@
 ## Update 1 — Windows + Linux (тижні 14–17)
 
 - [x] Аудит `src/platform/`: усі OS-залежності лише там (paths, shortcuts, dialogs, menu accelerators)
-- [ ] Windows: Ctrl замість Cmd, `Alt`-меню, WebView2 bootstrapper в інсталяторі
+- [~] Windows: Ctrl замість Cmd, `Alt`-меню, WebView2 bootstrapper в інсталяторі
+      — `Mod` уже розкривається в Ctrl; меню розведене по платформах (Quit у File, без Services/Hide Others/Full Screen). Лишились `Alt`-меню й bootstrapper
 - [ ] Windows: NSIS/MSI інсталятор, підпис коду (Azure Trusted Signing або сертифікат), реєстрація `.docx`/`.odt` як "Open with" (не за замовчуванням, щоб не бісити людей з Word)
 - [ ] Linux: AppImage + .deb, WebKitGTK, перевірка на Ubuntu 24.04 і Fedora
 - [x] Bundled fonts (Inter, Liberation Sans/Serif/Mono) — однаковий вигляд документа на всіх ОС

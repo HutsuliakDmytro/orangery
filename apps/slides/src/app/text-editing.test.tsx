@@ -6,7 +6,9 @@ import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getPartText } from '@orangery/ooxml-core'
 import { App } from './app'
+import { getCommand, runCommand } from '@orangery/ui-kit'
 import { useDeckStore } from '../store/deck-store'
+import { useEditorStore } from '../store/editor-store'
 
 /**
  * Editing the text inside a shape.
@@ -156,5 +158,131 @@ describe('leaving a shape', () => {
     })
 
     expect(useDeckStore.getState().editing).toBeNull()
+  })
+})
+
+describe('an empty placeholder', () => {
+  /** A deck whose title placeholder has had its text removed. */
+  async function withEmptyTitle() {
+    await openDeck('placeholders')
+    const title = useDeckStore
+      .getState()
+      .open?.deck.slides[0]?.shapes.find((shape) => shape.placeholder?.type === 'title')
+
+    act(() => {
+      useDeckStore.getState().setEditing(title?.id ?? null)
+    })
+    act(() => {
+      useEditorStore.getState().editor?.commands.clearContent()
+      useDeckStore.getState().setEditing(null)
+    })
+
+    return title
+  }
+
+  it('shows a prompt on the slide', async () => {
+    const { rerender } = render(<App />)
+    await withEmptyTitle()
+    rerender(<App />)
+
+    expect(screen.getAllByText('Click to add title').length).toBeGreaterThan(0)
+  })
+
+  it('never writes the prompt into the file', async () => {
+    // A deck of untouched placeholders must open elsewhere as empty boxes, not
+    // as the word "Title".
+    const { rerender } = render(<App />)
+    await withEmptyTitle()
+    rerender(<App />)
+
+    expect(partText()).not.toContain('Click to add')
+  })
+
+  it('says nothing in a text box somebody emptied on purpose', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    expect(screen.queryByText('Click to add text')).not.toBeInTheDocument()
+  })
+})
+
+describe('formatting the text being edited', () => {
+  it('is greyed out while nothing is being edited', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    expect(getCommand('format.bold')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('bolds the selection and writes it', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(() => {
+      useEditorStore.getState().editor?.commands.selectAll()
+      runCommand('format.bold', {})
+    })
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    expect(partText()).toContain('b="1"')
+  })
+
+  it('reports whether the cursor is in bold text', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    expect(getCommand('format.bold')?.isActive?.({})).toBe(false)
+
+    act(() => {
+      useEditorStore.getState().editor?.commands.selectAll()
+      runCommand('format.bold', {})
+    })
+    expect(getCommand('format.bold')?.isActive?.({})).toBe(true)
+  })
+
+  it('demotes a paragraph and the level survives the file', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(() => {
+      runCommand('format.demote', {})
+      runCommand('format.demote', {})
+    })
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    const shape = useDeckStore.getState().open?.deck.slides[0]?.shapes[0]
+    expect(shape?.text?.paragraphs[0]?.properties.level).toBe(2)
+  })
+
+  it('stops at the outermost level rather than going negative', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(() => {
+      runCommand('format.promote', {})
+      runCommand('format.promote', {})
+    })
+
+    expect(
+      Number(useEditorStore.getState().editor?.getAttributes('paragraph')['level'] ?? -1),
+    ).toBe(0)
   })
 })

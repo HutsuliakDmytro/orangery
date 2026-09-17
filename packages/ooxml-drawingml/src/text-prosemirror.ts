@@ -205,6 +205,26 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
     const original = paragraph.attrs?.['pPrOriginal']
     const properties = typeof original === 'string' ? deserializeNode(original) : null
 
+    /**
+     * The properties the editor owns, patched onto the ones it does not.
+     *
+     * Without this the level and the alignment are read, edited and silently
+     * not saved — the failure ADR 0002 names, and the reason every modelled
+     * property needs a test that edits, saves and reads back rather than one
+     * that only parses.
+     */
+    const level = Number(paragraph.attrs?.['level'] ?? 0)
+    const align = paragraph.attrs?.['align']
+    const patched = properties ?? (level > 0 || typeof align === 'string' ? element('a:pPr') : null)
+
+    if (patched !== null) {
+      if (level > 0) setAttribute(patched, 'lvl', String(level))
+      else removeAttribute(patched, 'lvl')
+
+      if (typeof align === 'string') setAttribute(patched, 'algn', align)
+      else removeAttribute(patched, 'algn')
+    }
+
     const runs = (paragraph.content ?? []).flatMap((node): XmlNode[] => {
       if (node.type === 'hardBreak') return [element('a:br')]
       if (node.type !== 'text' || node.text === undefined) return []
@@ -222,7 +242,7 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
     const endNode = typeof end === 'string' ? deserializeNode(end) : null
 
     return element('a:p', {}, [
-      ...(properties === null ? [] : [properties]),
+      ...(patched === null ? [] : [patched]),
       ...runs,
       ...(endNode === null ? [] : [endNode]),
     ])

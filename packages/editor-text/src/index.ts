@@ -49,3 +49,5 @@ export {
   SmartTyping,
 } from './smart-typing'
 export type { QuoteLanguage, SmartTypingOptions } from './smart-typing'
+
+export { OoxmlParagraph } from './ooxml-paragraph'

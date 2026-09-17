@@ -25,6 +25,7 @@ import {
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
+import { useEditorStore } from '../store/editor-store'
 import { useViewStore } from '../store/view-store'
 
 /**
@@ -298,6 +299,62 @@ export const pictureCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * Formatting the text being edited.
+ *
+ * These act on the editor rather than on the shape: a run is a stretch of the
+ * selection, not a property of the box around it. With nothing being edited
+ * they grey out — bolding a whole shape is a different feature, and pretending
+ * these do it would set the formatting of text nobody selected.
+ */
+export const textCommands: readonly Command[] = [
+  ...(
+    [
+      ['bold', 'Bold', 'Mod+b'],
+      ['italic', 'Italic', 'Mod+i'],
+      ['underline', 'Underline', 'Mod+u'],
+    ] as const
+  ).map(([mark, label, shortcut]) => ({
+    id: `format.${mark}`,
+    label,
+    group: 'format' as const,
+    shortcut,
+    isActive: () => {
+      const { editor } = useEditorStore.getState()
+      return editor?.isActive(mark) ?? false
+    },
+    isEnabled: () => useEditorStore.getState().editor !== null,
+    run: () => {
+      const { editor } = useEditorStore.getState()
+      if (mark === 'bold') editor?.chain().focus().toggleBold().run()
+      if (mark === 'italic') editor?.chain().focus().toggleItalic().run()
+      if (mark === 'underline') editor?.chain().focus().toggleUnderline().run()
+    },
+  })),
+  ...(
+    [
+      ['demote', 'Demote', 'Tab', 1],
+      ['promote', 'Promote', 'Shift+Tab', -1],
+    ] as const
+  ).map(([id, label, shortcut, by]) => ({
+    id: `format.${id}`,
+    label,
+    group: 'format' as const,
+    shortcut,
+    isEnabled: () => useEditorStore.getState().editor !== null,
+    run: () => {
+      const { editor } = useEditorStore.getState()
+      if (editor === null) return
+
+      // Nine levels, counted from zero, which is what the file says and what
+      // every list style is keyed by.
+      const current = Number(editor.getAttributes('paragraph')['level'] ?? 0)
+      const level = Math.min(Math.max(current + by, 0), 8)
+      editor.chain().focus().updateAttributes('paragraph', { level }).run()
+    },
+  })),
+]
+
 export const connectorCommands: readonly Command[] = [
   {
     id: 'insert.connector',
@@ -562,6 +619,7 @@ export function registerBuiltinCommands(): void {
   registerAll(pictureCommands)
   registerAll(tableCommands)
   registerAll(connectorCommands)
+  registerAll(textCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

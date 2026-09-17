@@ -143,3 +143,60 @@ describe('writing a document back', () => {
     expect(serializeNode(element)).toContain('<a:t>typed</a:t>')
   })
 })
+
+describe('what the editor owns', () => {
+  it('writes a level that was changed', () => {
+    // Read, edited and silently not saved is the failure this guards: the file
+    // is the only place the answer counts.
+    const element = body('<a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>x</a:t></a:r></a:p>')
+    const doc = textBodyToDoc(readTextBody(element))
+    const paragraph = doc.content?.[0]
+    if (paragraph !== undefined) paragraph.attrs = { ...paragraph.attrs, level: 3 }
+
+    writeTextBody(element, doc)
+    expect(serializeNode(element)).toContain('lvl="3"')
+  })
+
+  it('removes the level when it goes back to the outermost', () => {
+    const element = body(
+      '<a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="2"/><a:r><a:t>x</a:t></a:r></a:p>',
+    )
+    const doc = textBodyToDoc(readTextBody(element))
+    const paragraph = doc.content?.[0]
+    if (paragraph !== undefined) paragraph.attrs = { ...paragraph.attrs, level: 0 }
+
+    writeTextBody(element, doc)
+    expect(serializeNode(element)).not.toContain('lvl=')
+  })
+
+  it('writes an alignment onto a paragraph that had no properties at all', () => {
+    const element = body('<a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>x</a:t></a:r></a:p>')
+    const doc = textBodyToDoc(readTextBody(element))
+    const paragraph = doc.content?.[0]
+    if (paragraph !== undefined) paragraph.attrs = { ...paragraph.attrs, align: 'ctr' }
+
+    writeTextBody(element, doc)
+    const after = serializeNode(element)
+
+    expect(after).toContain('algn="ctr"')
+    // First child of the paragraph, where the schema puts it.
+    expect(after.indexOf('<a:pPr')).toBeLessThan(after.indexOf('<a:r>'))
+  })
+
+  it('keeps the rest of the properties while changing one', () => {
+    const element = body(
+      '<a:bodyPr/><a:lstStyle/><a:p><a:pPr lvl="1" marL="342900"><a:buChar char="•"/></a:pPr>' +
+        '<a:r><a:t>x</a:t></a:r></a:p>',
+    )
+    const doc = textBodyToDoc(readTextBody(element))
+    const paragraph = doc.content?.[0]
+    if (paragraph !== undefined) paragraph.attrs = { ...paragraph.attrs, level: 2 }
+
+    writeTextBody(element, doc)
+    const after = serializeNode(element)
+
+    expect(after).toContain('lvl="2"')
+    expect(after).toContain('marL="342900"')
+    expect(after).toContain('a:buChar')
+  })
+})

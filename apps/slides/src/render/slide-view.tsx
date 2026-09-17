@@ -239,9 +239,21 @@ function ShapeText({
   onLeave?: () => void
 }) {
   const { shape, transform, context } = drawing
+  const empty = shape.text !== null && textOfBody(shape.text) === ''
+
+  /**
+   * What an empty placeholder says before anyone types in it.
+   *
+   * Drawn and never written: PowerPoint shows the same prompt and keeps the
+   * shape's text body empty in the file, so a deck full of untouched
+   * placeholders opens elsewhere as empty boxes rather than as the word
+   * "Title".
+   */
+  const prompt = empty && !(editing === true) ? promptFor(shape) : null
+
   // A shape being edited shows its editor even when it holds no text yet —
   // that is the only way to put the first word into an empty box.
-  if (shape.text === null || (textOfBody(shape.text) === '' && editing !== true)) return null
+  if (shape.text === null || (empty && editing !== true && prompt === null)) return null
 
   const chain = listStyleChain(deck, slide, shape)
   const insets = shape.text.bodyProperties?.insets
@@ -285,7 +297,9 @@ function ShapeText({
           overflow: 'hidden',
         }}
       >
-        {editing === true ? (
+        {prompt !== null ? (
+          <p style={{ margin: 0, opacity: 0.45 }}>{prompt}</p>
+        ) : editing === true ? (
           <TextEditor
             doc={textBodyToDoc(shape.text)}
             onCommit={(edited) => {
@@ -533,6 +547,27 @@ export function SlideView({
       </svg>
     </div>
   )
+}
+
+/** The words PowerPoint shows in an empty placeholder of each kind. */
+function promptFor(shape: Shape): string | null {
+  switch (shape.placeholder?.type) {
+    case 'title':
+    case 'ctrTitle':
+      return 'Click to add title'
+    case 'subTitle':
+      return 'Click to add subtitle'
+    case undefined:
+      // Not a placeholder: an empty text box a person made is empty on purpose.
+      return null
+    case 'dt':
+    case 'ftr':
+    case 'sldNum':
+      // Filled by the show, not by typing, so a prompt would be a lie.
+      return null
+    default:
+      return 'Click to add text'
+  }
 }
 
 /**

@@ -3,8 +3,9 @@ import StarterKit from '@tiptap/starter-kit'
 import TextStyle from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
 import { useEffect } from 'react'
-import { FontSize, PreservedRunProperties } from '@orangery/editor-text'
+import { FontSize, OoxmlParagraph, PreservedRunProperties } from '@orangery/editor-text'
 import type { PmNode } from '@orangery/ooxml-drawingml'
+import { useEditorStore } from '../store/editor-store'
 
 /**
  * Editing the text inside one shape.
@@ -44,10 +45,16 @@ export function TextEditor({
       Underline,
       TextStyle,
       FontSize,
+      OoxmlParagraph,
       PreservedRunProperties,
     ],
     content: doc as never,
     autofocus: 'end',
+    onTransaction: () => {
+      // What a formatting command can do depends on where the cursor is, so the
+      // registry is told something moved.
+      useEditorStore.getState().touch()
+    },
     editorProps: {
       attributes: { class: 'slide-text' },
       handleKeyDown: (_view, event) => {
@@ -58,6 +65,14 @@ export function TextEditor({
       },
     },
   })
+
+  // Published so the registry's formatting commands can reach it.
+  useEffect(() => {
+    useEditorStore.getState().set(editor)
+    return () => {
+      useEditorStore.getState().set(null)
+    }
+  }, [editor])
 
   // Committed on unmount rather than on blur: leaving the shape is what ends
   // the edit, and a blur fires for a toolbar click too.

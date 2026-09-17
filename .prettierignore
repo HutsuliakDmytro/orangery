@@ -9,6 +9,5 @@ pnpm-lock.yaml
 # Written by hand and read by hand; Prettier reflows the tables and the
 # nested checklists into something worse.
 CLAUDE.md
-PLAN.md
 **/CLAUDE.md
-**/PLAN.md
+**/PLAN*.md

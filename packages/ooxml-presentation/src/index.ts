@@ -75,3 +75,5 @@ export { insertPicture, relsPartFor, UnsupportedPictureError } from './insert-pi
 export type { NewPicture } from './insert-picture'
 export { defaultTableStyle, insertTable } from './insert-table'
 export type { NewTable } from './insert-table'
+export { facingSites, insertConnector, SITES } from './insert-connector'
+export type { NewConnector, Site } from './insert-connector'

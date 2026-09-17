@@ -573,3 +573,36 @@ describe('tables', () => {
     expect(partText()).toBe(before)
   })
 })
+
+describe('connectors', () => {
+  it('needs exactly two shapes', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    expect(getCommand('insert.connector')?.isEnabled?.({})).toBe(false)
+
+    act(() => {
+      runCommand('edit.select-all', {})
+    })
+    // Four selected says nothing about which pair to join.
+    expect(getCommand('insert.connector')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('joins the two that are selected', async () => {
+    await openDeck('shapes')
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapes[0]?.id ?? 0, shapes[1]?.id ?? 0])
+      runCommand('insert.connector', {})
+    })
+
+    const after = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    const connector = after[after.length - 1]
+
+    expect(connector?.kind).toBe('cxnSp')
+    expect(connector?.connection?.start?.shapeId).toBe(shapes[0]?.id)
+    expect(connector?.connection?.end?.shapeId).toBe(shapes[1]?.id)
+  })
+})

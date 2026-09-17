@@ -13,6 +13,7 @@ import {
   alignShapes,
   createShape,
   deleteShapes,
+  insertConnector,
   insertPicture,
   insertTable,
   distributeShapes,
@@ -297,6 +298,34 @@ export const pictureCommands: readonly Command[] = [
   },
 ]
 
+export const connectorCommands: readonly Command[] = [
+  {
+    id: 'insert.connector',
+    label: 'Connect Shapes',
+    group: 'insert',
+    // Exactly two: three shapes do not say which pair to join, and the command
+    // greys out rather than picking for you.
+    isEnabled: () => useDeckStore.getState().selection.length === 2,
+    run: () => {
+      const { selection, edit, selectShapes } = useDeckStore.getState()
+      const made: { id: number | null } = { id: null }
+
+      edit((slide) => {
+        // In the order they were selected, so the arrow runs the way it was drawn.
+        const [from, to] = selection.flatMap((id) =>
+          slide.shapes.filter((shape) => shape.id === id),
+        )
+        if (from === undefined || to === undefined) return false
+
+        made.id = insertConnector(slide, { from, to })
+        return made.id !== null
+      })
+
+      if (made.id !== null) selectShapes([made.id])
+    },
+  },
+]
+
 export const tableCommands: readonly Command[] = [
   {
     id: 'insert.table',
@@ -532,6 +561,7 @@ export function registerBuiltinCommands(): void {
   registerAll(insertCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)
+  registerAll(connectorCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

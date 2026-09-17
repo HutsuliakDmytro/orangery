@@ -1,3 +1,5 @@
+import { useCommentsStore } from '../../../store/comments-store'
+import { useSettingsStore } from '../../../store/settings-store'
 import { useViewStore } from '../../../store/view-store'
 import { requestPicker } from '../picker-store'
 import type { Command } from '../types'
@@ -31,6 +33,21 @@ export const insertCommands: readonly Command[] = [
     run: ({ editor }) => {
       editor.chain().focus().insertTableOfContents().refreshTableOfContents().run()
     },
+  },
+  {
+    id: 'insert.comment',
+    label: 'Comment',
+    group: 'insert',
+    shortcut: 'Mod+Alt+m',
+    keywords: ['note', 'review', 'remark'],
+    run: ({ editor }) => {
+      const author = useSettingsStore.getState().authorName
+      const id = useCommentsStore.getState().add(author, '')
+
+      editor.chain().focus().setComment(id).run()
+    },
+    // A comment is about a stretch of text, so there has to be one selected.
+    isEnabled: ({ editor }) => !editor.state.selection.empty,
   },
   {
     id: 'insert.section-break',

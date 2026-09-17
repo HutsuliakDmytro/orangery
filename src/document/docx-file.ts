@@ -37,6 +37,8 @@ import { writeFootnotes } from './footnotes-session'
 import { parseSection, serializeSection } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
 import { serializeDocument } from '../ooxml/serialize-document'
+import { readComments, writeComments } from './comments-session'
+import type { Comment } from '../ooxml/comments'
 import { readHeadingNumbering, writeHeadingNumbering } from './heading-numbering-session'
 import type { HeadingNumberScheme } from '../editor/heading-numbers'
 
@@ -62,6 +64,8 @@ export interface OpenDocx {
   section: SectionProperties
   /** Notes from `word/footnotes.xml`, keyed by id. */
   footnotes: Map<number, Footnote>
+  /** Comments from `word/comments.xml`, keyed by id. */
+  comments: Map<number, Comment>
   /** The scheme numbering the heading styles, or null when they are not. */
   headingNumbering: HeadingNumberScheme | null
   /** Whether the source declared `xml:space` on every run. */
@@ -107,6 +111,7 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     warnings: parsed.warnings,
     styles: parseStyles(getPartText(pkg, 'word/styles.xml') ?? ''),
     footnotes,
+    comments: readComments(pkg),
     alwaysPreserveSpace: parsed.alwaysPreserveSpace,
     numbering,
     headingNumbering: readHeadingNumbering(pkg),
@@ -120,6 +125,8 @@ export interface SaveDocxOptions {
   section?: SectionProperties
   /** Undefined leaves whatever the file already says about numbered headings. */
   headingNumbering?: HeadingNumberScheme | null
+  /** Undefined keeps the comments the file was opened with. */
+  comments?: ReadonlyMap<number, Comment>
 }
 
 export async function saveDocx(
@@ -158,6 +165,7 @@ export async function saveDocx(
   setPartText(open.pkg, DOCUMENT_PART, xml)
   // Footnotes live in their own part, so they are written alongside the body.
   writeFootnotes(open.pkg, open.footnotes, doc)
+  writeComments(open.pkg, options.comments ?? open.comments, doc)
 
   return writePackage(open.pkg)
 }

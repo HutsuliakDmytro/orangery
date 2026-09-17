@@ -5,6 +5,7 @@ import type { ProseMirrorNodeJson } from '../ooxml/parse-document'
 import { DEFAULT_SECTION } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
 import type { HeadingNumberScheme } from '../editor/heading-numbers'
+import type { Comment } from '../ooxml/comments'
 import { converterFor } from './converters'
 import { embedImagesInto, embedOdtImages } from './embed-images'
 import { createNewOdt } from './odt-file'
@@ -138,6 +139,7 @@ export async function openDocumentFrom(path: string): Promise<OpenedDocument> {
 export interface SaveOptions {
   section?: SectionProperties
   headingNumbering?: HeadingNumberScheme | null
+  comments?: ReadonlyMap<number, Comment>
 }
 
 export async function saveDocumentTo(

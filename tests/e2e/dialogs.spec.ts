@@ -272,3 +272,23 @@ test('makes a style out of the selection and offers it afterwards', async ({ pag
   await expect(panel.getByRole('button', { name: 'Pull Quote', exact: true })).toHaveCount(1)
   await expect(page.locator(`${editor} p[data-style-id="PullQuote"]`)).toHaveCount(1)
 })
+
+test('comments on a stretch of text', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('a sentence worth remarking on')
+
+  // A comment is about a stretch of text, so one has to be selected.
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.press('ControlOrMeta+Alt+m')
+
+  const panel = page.getByRole('complementary', { name: 'Comments' })
+  await expect(panel).toBeVisible()
+
+  await panel.getByRole('textbox').fill('Needs a source.')
+  await expect(page.locator(`${editor} .comment-range`)).toHaveCount(1)
+
+  // Deleting takes the text and the range together: a range nobody can open is
+  // worse than none.
+  await panel.getByRole('button', { name: /Delete comment/ }).click()
+  await expect(page.locator(`${editor} .comment-range`)).toHaveCount(0)
+})

@@ -12,6 +12,7 @@ import { FindReplacePanel } from '../components/find-replace-panel'
 import { FootnotesPanel } from '../components/footnotes-panel'
 import { HeaderFooterEditor } from '../components/header-footer-editor'
 import { FormatPickers } from '../components/format-pickers'
+import { CommentsPanel } from '../components/comments-panel'
 import { OutlinePanel } from '../components/outline-panel'
 import { PageNumbersDialog } from '../components/page-numbers-dialog'
 import { PageSetupDialog } from '../components/page-setup-dialog'
@@ -232,6 +233,7 @@ function Shell() {
             <main className="min-h-0 flex-1">
               <EditorSurface />
             </main>
+            <CommentsPanel />
           </div>
 
           {currentSection.properties.differentFirstPage && (

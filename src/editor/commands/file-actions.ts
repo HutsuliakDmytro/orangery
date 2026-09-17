@@ -16,6 +16,7 @@ import { getSession, setSession } from '../../document/session'
 import { useDocumentStore } from '../../store/document-store'
 import { readSectionHeaders, writeSectionHeaders } from '../../document/section-headers'
 import { useHeaderFooterStore } from '../../store/header-footer-store'
+import { useCommentsStore } from '../../store/comments-store'
 import { useStylesStore } from '../../store/styles-store'
 import { useViewStore } from '../../store/view-store'
 import type { ProseMirrorNodeJson } from '../../ooxml/parse-document'
@@ -85,6 +86,7 @@ export const fileOperations = {
         useViewStore.getState().setSection(docx.section)
         useViewStore.getState().setHeadingNumbering(docx.headingNumbering)
         useStylesStore.getState().setCatalogue(docx.styles)
+        useCommentsStore.getState().reset()
         useHeaderFooterStore.getState().reset()
         editor.commands.setContent(templateById(template).build())
         useDocumentStore.getState().newDocument()
@@ -106,6 +108,7 @@ export const fileOperations = {
           useViewStore.getState().setSection(opened.session.docx.section)
           useViewStore.getState().setHeadingNumbering(opened.session.docx.headingNumbering)
           useStylesStore.getState().setCatalogue(opened.session.docx.styles)
+          useCommentsStore.getState().load(opened.session.docx.comments)
 
           const { pkg, section } = opened.session.docx
           useHeaderFooterStore.getState().load(readSectionHeaders(pkg, section), null)
@@ -113,6 +116,7 @@ export const fileOperations = {
           // A converted format has no style catalogue of its own, and nothing
           // that says its headings are numbered.
           useStylesStore.getState().setCatalogue(null)
+          useCommentsStore.getState().reset()
           useViewStore.getState().setHeadingNumbering(null)
         }
         editor.commands.setContent(opened.doc)
@@ -146,6 +150,7 @@ export const fileOperations = {
         const result = await saveDocumentTo(session, docJson(editor), path, {
           section: useViewStore.getState().section,
           headingNumbering: useViewStore.getState().headingNumbering,
+          comments: useCommentsStore.getState().comments,
         })
         useDocumentStore.getState().markSaved(result.path, format)
         // A conversion may have left something behind; the banner says what.
@@ -175,6 +180,7 @@ export const fileOperations = {
         const result = await saveDocumentTo(session, docJson(editor), target, {
           section: useViewStore.getState().section,
           headingNumbering: useViewStore.getState().headingNumbering,
+          comments: useCommentsStore.getState().comments,
         })
         useDocumentStore.getState().markSaved(result.path, targetFormat)
         if (result.warnings) useDocumentStore.getState().addWarnings(result.warnings)

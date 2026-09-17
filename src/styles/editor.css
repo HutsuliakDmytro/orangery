@@ -540,3 +540,10 @@
   column-gap: var(--page-column-gap, normal);
   column-rule: var(--page-column-rule, none);
 }
+
+/* Text a comment is about. Marked lightly: the comment itself is beside the
+   page, and a heavy mark would compete with the text it is about. */
+.editor-surface .comment-range {
+  background: rgba(255, 122, 0, 0.14);
+  border-bottom: 1px solid rgba(255, 122, 0, 0.5);
+}

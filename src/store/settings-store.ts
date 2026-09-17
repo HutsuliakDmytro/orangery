@@ -26,6 +26,8 @@ export interface Settings {
   keepBackups: boolean
   /** Typographic substitutions while typing — quotes, dashes, the ellipsis. */
   smartTyping: boolean
+  /** Signed on comments and tracked changes; empty means the file says nobody. */
+  authorName: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autosaveEnabled: true,
   keepBackups: true,
   smartTyping: true,
+  authorName: '',
 }
 
 /** Rejects anything not recognised rather than trusting the file on disk. */
@@ -80,6 +83,10 @@ export function parseSettings(contents: string): Settings {
       typeof candidate['smartTyping'] === 'boolean'
         ? candidate['smartTyping']
         : DEFAULT_SETTINGS.smartTyping,
+    authorName:
+      typeof candidate['authorName'] === 'string'
+        ? candidate['authorName']
+        : DEFAULT_SETTINGS.authorName,
   }
 }
 

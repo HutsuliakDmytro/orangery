@@ -3,6 +3,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { EditorView } from '@tiptap/pm/view'
 import { contentHeight } from '../../ooxml/section'
+import { sectionsOf } from '../sections'
 import { useViewStore } from '../../store/view-store'
 
 /**
@@ -33,7 +34,14 @@ const POINTS_TO_PIXELS = 96 / 72
  * worth checking, and it needs no DOM.
  */
 export function breakPositions(
-  blocks: readonly { position: number; top: number; height: number; forced?: boolean }[],
+  blocks: readonly {
+    position: number
+    top: number
+    height: number
+    forced?: boolean
+    /** Height of the page this block sits on, when its section differs. */
+    pageHeight?: number
+  }[],
   pageHeightPx: number,
 ): number[] {
   if (pageHeightPx <= 0 || blocks.length === 0) return []
@@ -56,7 +64,10 @@ export function breakPositions(
       continue
     }
 
-    if (block.top + block.height > pageTop + pageHeightPx) {
+    // Each section has its own page size, so the height a block is measured
+    // against is the one of the section it belongs to.
+    const height = block.pageHeight ?? pageHeightPx
+    if (block.top + block.height > pageTop + height) {
       positions.push(block.position)
       pageTop = block.top
     }
@@ -76,7 +87,13 @@ function outerHeight(element: HTMLElement): number {
 }
 
 function buildDecorations(view: EditorView, pageHeightPx: number): DecorationSet {
-  const blocks: { position: number; top: number; height: number; forced?: boolean }[] = []
+  const blocks: {
+    position: number
+    top: number
+    height: number
+    forced?: boolean
+    pageHeight?: number
+  }[] = []
   const { doc } = view.state
 
   // The page's own top padding is the top margin of the sheet, not content, so
@@ -89,6 +106,14 @@ function buildDecorations(view: EditorView, pageHeightPx: number): DecorationSet
   // makes the break move on every re-measure.
   let gapHeight = 0
 
+  /** Set once a section break has been passed, so the next block starts a page. */
+  let previousWasBreak = false
+
+  // Page setup can change part-way through the document, so each block is
+  // measured against the section it falls in rather than against the body's.
+  const sections = sectionsOf(doc, useViewStore.getState().section)
+  let sectionIndex = 0
+
   doc.forEach((node, nodePosition) => {
     const dom = view.nodeDOM(nodePosition)
     if (!(dom instanceof HTMLElement)) return
@@ -98,12 +123,28 @@ function buildDecorations(view: EditorView, pageHeightPx: number): DecorationSet
       gapHeight += outerHeight(previous)
     }
 
+    while (
+      sectionIndex < sections.length - 1 &&
+      nodePosition >= (sections[sectionIndex]?.to ?? Number.POSITIVE_INFINITY)
+    ) {
+      sectionIndex += 1
+    }
+
+    const section = sections[sectionIndex]
+    const sectionHeight =
+      section === undefined ? pageHeightPx : contentHeight(section.properties) * POINTS_TO_PIXELS
+
     blocks.push({
       position: nodePosition,
       top: dom.offsetTop - paddingTop - gapHeight,
       height: dom.offsetHeight,
-      ...(node.attrs['pageBreakBefore'] === true ? { forced: true } : {}),
+      pageHeight: sectionHeight,
+      // A section break starts a new page, whether or not the one it ends is
+      // full — that is what makes it a break rather than a change of setup.
+      ...(node.attrs['pageBreakBefore'] === true || previousWasBreak ? { forced: true } : {}),
     })
+
+    previousWasBreak = node.type.name === 'sectionBreak'
   })
 
   const positions = breakPositions(blocks, pageHeightPx)

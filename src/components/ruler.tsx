@@ -3,6 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useViewStore } from '../store/view-store'
 import { tabStopsOf } from '../editor/extensions/tab-stops'
 import type { TabAlignment, TabLeader, TabStop } from '../ooxml/tabs'
+import { sectionAt } from '../editor/sections'
+import { serializeSection } from '../ooxml/section'
+import type { SectionProperties } from '../ooxml/section'
 
 /**
  * Horizontal ruler with draggable page margins and paragraph indents.
@@ -19,8 +22,8 @@ type Handle = 'left-margin' | 'right-margin' | 'first-line' | 'hanging'
 export function Ruler() {
   const { editor } = useCurrentEditor()
   const zoom = useViewStore((state) => state.zoom)
-  const section = useViewStore((state) => state.section)
-  const setSection = useViewStore((state) => state.setSection)
+  const bodySection = useViewStore((state) => state.section)
+  const setBodySection = useViewStore((state) => state.setSection)
 
   const [dragging, setDragging] = useState<Handle | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -32,6 +35,45 @@ export function Ruler() {
    * ruler when the cursor moves into a paragraph with different indents, or
    * when a tab stop is added to the one it is already in.
    */
+  /**
+   * The page setup where the cursor is.
+   *
+   * A document can hold several sections; the body holds only the last, so the
+   * margins the ruler draws are the ones of the section being edited.
+   */
+  const current = useEditorState({
+    editor: editor ?? null,
+    selector: ({ editor: instance }) =>
+      instance
+        ? sectionAt(instance.state.doc, instance.state.selection.from, bodySection)
+        : { from: 0, to: 0, breakPosition: null, properties: bodySection },
+    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  }) ?? { from: 0, to: 0, breakPosition: null, properties: bodySection }
+
+  const section = current.properties
+
+  /** Writes the setup back where the section keeps it. */
+  const breakPosition = current.breakPosition
+  const setSection = useCallback(
+    (next: SectionProperties) => {
+      if (!editor || breakPosition === null) {
+        setBodySection(next)
+        return
+      }
+
+      const node = editor.state.doc.nodeAt(breakPosition)
+      if (!node) return
+
+      editor.view.dispatch(
+        editor.state.tr.setNodeMarkup(breakPosition, undefined, {
+          ...node.attrs,
+          sectPr: serializeSection(next),
+        }),
+      )
+    },
+    [editor, breakPosition, setBodySection],
+  )
+
   const attributes = useEditorState({
     editor: editor ?? null,
     selector: ({ editor: instance }) => {

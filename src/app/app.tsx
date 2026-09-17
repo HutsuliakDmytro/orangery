@@ -1,4 +1,7 @@
 import { useCurrentEditor } from '@tiptap/react'
+import { sectionAt } from '../editor/sections'
+import { serializeSection } from '../ooxml/section'
+import type { SectionProperties } from '../ooxml/section'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CommandPalette } from '../components/command-palette'
@@ -46,6 +49,38 @@ function Shell() {
   const setHeader = useHeaderFooterStore((state) => state.setHeader)
   const setFooter = useHeaderFooterStore((state) => state.setFooter)
   const setSection = useViewStore((state) => state.setSection)
+
+  /**
+   * The page setup where the cursor is, and how to change it.
+   *
+   * A document can hold several sections, and the one being edited is the one
+   * the cursor sits in — the body holds only the last. Changing an earlier one
+   * writes back to the break that ends it, which is where OOXML keeps it.
+   */
+  const currentSection = editor
+    ? sectionAt(editor.state.doc, editor.state.selection.from, section)
+    : { from: 0, to: 0, breakPosition: null, properties: section }
+
+  const applySection = (next: SectionProperties) => {
+    const { breakPosition } = currentSection
+
+    if (editor && breakPosition !== null) {
+      const node = editor.state.doc.nodeAt(breakPosition)
+      if (node) {
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(breakPosition, undefined, {
+            ...node.attrs,
+            sectPr: serializeSection(next),
+          }),
+        )
+      }
+    } else {
+      setSection(next)
+    }
+
+    // Page setup is part of the document, unlike zoom.
+    markDirty()
+  }
 
   const [welcomeDismissed, setWelcomeDismissed] = useState(false)
 
@@ -154,23 +189,16 @@ function Shell() {
 
       {openPicker === 'page-numbers' && (
         <PageNumbersDialog
-          section={section}
-          onApply={(next) => {
-            setSection(next)
-            markDirty()
-          }}
+          section={currentSection.properties}
+          onApply={applySection}
           onClose={closePicker}
         />
       )}
 
       {openPicker === 'page-setup' && (
         <PageSetupDialog
-          section={section}
-          onApply={(next) => {
-            setSection(next)
-            // Page setup is part of the document, unlike zoom.
-            markDirty()
-          }}
+          section={currentSection.properties}
+          onApply={applySection}
           onClose={closePicker}
         />
       )}

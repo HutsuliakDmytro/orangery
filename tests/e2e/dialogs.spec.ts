@@ -132,3 +132,28 @@ test('numbers the headings and carries the numbers into the contents', async ({ 
   await expect(page.locator(`${editor} .toc-entry`)).toHaveCount(2)
   await expect(page.locator(`${editor} .toc-entry`).nth(1)).toHaveText('1.1. Under')
 })
+
+test('page setup changes the section the cursor is in, not the whole document', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('first section')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Section Break')
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator(`${editor} .section-break`)).toHaveCount(1)
+
+  // The cursor is still in the first section, so page setup applies to it.
+  await page.locator(`${editor} p`).first().click()
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Page Setup')
+  await page.keyboard.press('Enter')
+
+  await page.getByRole('radio', { name: 'Landscape' }).check()
+  await page.getByRole('button', { name: 'Apply' }).click()
+
+  // The ruler follows the cursor, so it is showing the section just changed.
+  const track = page.locator('[aria-label="Left margin"]').locator('..')
+  const wide = (await track.boundingBox())?.width ?? 0
+  expect(wide).toBeGreaterThan(900)
+})

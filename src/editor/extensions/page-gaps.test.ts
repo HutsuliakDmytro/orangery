@@ -88,3 +88,23 @@ describe('breakPositions with a forced break', () => {
     expect(breakPositions(blocks, PAGE)).toEqual([1, 2])
   })
 })
+
+describe('breakPositions across sections', () => {
+  const tall = (position: number, top: number, height: number, pageHeight: number) => ({
+    position,
+    top,
+    height,
+    pageHeight,
+  })
+
+  it('measures each block against the page of its own section', () => {
+    // The second block sits on a shorter page, so it overruns where a block of
+    // the same size on the first page would not.
+    const blocks = [tall(0, 0, 400, PAGE), tall(1, 400, 300, 500)]
+    expect(breakPositions(blocks, PAGE)).toEqual([1])
+  })
+
+  it('falls back to the document page for a block that states none', () => {
+    expect(breakPositions([block(0, 0, 100), block(1, 100, 700)], PAGE)).toEqual([1])
+  })
+})

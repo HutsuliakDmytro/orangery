@@ -22,6 +22,7 @@ import { CommandKeymap } from './commands/keymap'
 import { FindReplace } from './extensions/find-replace'
 import { Footnote } from './extensions/footnote'
 import { Caption } from './extensions/caption'
+import { CharacterStyle } from './extensions/character-style'
 import { DocumentImage } from './extensions/document-image'
 import { FontSize } from './extensions/font-size'
 import { HeadingNumbering } from './extensions/heading-numbering'
@@ -84,6 +85,7 @@ export function buildExtensions(): Extensions {
     TaskList,
     TaskItem.configure({ nested: true }),
     ParagraphStyle,
+    CharacterStyle,
     ParagraphSpacing,
     Indent,
     Caption.configure({

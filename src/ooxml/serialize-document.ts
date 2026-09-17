@@ -87,6 +87,11 @@ function buildRunProperties(marks: Map<string, Mark>): XmlNode | null {
 
   const properties: XmlNode[] = []
 
+  // `w:rStyle` comes first among the run properties, and everything after it
+  // refines what the style already says.
+  const characterStyle = stringAttr(marks.get('characterStyle')?.attrs, 'styleId')
+  if (characterStyle !== null) properties.push(element('w:rStyle', { 'w:val': characterStyle }))
+
   if (marks.has('bold')) properties.push(element('w:b'))
   if (marks.has('italic')) properties.push(element('w:i'))
   if (marks.has('strike')) properties.push(element('w:strike'))

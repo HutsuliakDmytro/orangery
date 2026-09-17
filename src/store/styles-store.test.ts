@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseStyles } from '../ooxml/styles'
-import { buildOptions } from './styles-store'
+import type { DocumentStyle, StyleCatalogue } from '../ooxml/styles'
+import { buildCharacterOptions, buildOptions } from './styles-store'
 
 function catalogue(body: string) {
   return parseStyles(
@@ -66,5 +67,51 @@ describe('buildOptions', () => {
       catalogue(style('Normal', 'Normal') + style('Hidden', 'Hidden', '<w:semiHidden/>')),
     )
     expect(options.map((option) => option.id)).not.toContain('Hidden')
+  })
+})
+
+describe('buildCharacterOptions', () => {
+  const catalogue = (styles: DocumentStyle[]): StyleCatalogue => ({
+    styles: new Map(styles.map((style) => [style.id, style])),
+    defaults: {},
+    defaultParagraphStyleId: null,
+  })
+
+  const style = (id: string, overrides: Partial<DocumentStyle> = {}): DocumentStyle => ({
+    id,
+    type: 'character',
+    name: id,
+    basedOn: null,
+    next: null,
+    isDefault: false,
+    hidden: false,
+    own: {},
+    ...overrides,
+  })
+
+  it('offers the character styles a document defines', () => {
+    const options = buildCharacterOptions(catalogue([style('Emphasis'), style('Strong')]))
+    expect(options.map((option) => option.id)).toEqual(['Emphasis', 'Strong'])
+  })
+
+  it('leaves out the paragraph styles', () => {
+    const options = buildCharacterOptions(
+      catalogue([style('Emphasis'), style('Heading1', { type: 'paragraph' })]),
+    )
+    expect(options.map((option) => option.id)).toEqual(['Emphasis'])
+  })
+
+  it('leaves out the one that means no style at all', () => {
+    // Word keeps `DefaultParagraphFont` out of its own gallery: offering it
+    // would look like a style that does nothing, because it is.
+    expect(buildCharacterOptions(catalogue([style('DefaultParagraphFont')]))).toEqual([])
+  })
+
+  it('leaves out the ones the document hides', () => {
+    expect(buildCharacterOptions(catalogue([style('Internal', { hidden: true })]))).toEqual([])
+  })
+
+  it('has nothing to offer without a catalogue', () => {
+    expect(buildCharacterOptions(null)).toEqual([])
   })
 })

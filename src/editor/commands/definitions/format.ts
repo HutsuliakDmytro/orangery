@@ -1,5 +1,6 @@
 import { DEFAULT_FONT_SIZE, FONT_SIZE_PRESETS } from '../../extensions/font-size'
 import { applyFormat, copyFormat, heldFormat } from '../format-painter'
+import { requestPicker } from '../picker-store'
 import type { Command } from '../types'
 
 /**
@@ -123,6 +124,18 @@ const sizing: readonly Command[] = [
   },
 ]
 
+const styles: readonly Command[] = [
+  {
+    id: 'format.styles',
+    label: 'Styles…',
+    group: 'format',
+    keywords: ['style', 'gallery', 'emphasis', 'heading'],
+    run: () => {
+      requestPicker('styles')
+    },
+  },
+]
+
 const clearing: readonly Command[] = [
   {
     id: 'format.clear',
@@ -169,4 +182,10 @@ const painter: readonly Command[] = [
   },
 ]
 
-export const formatCommands: readonly Command[] = [...marks, ...sizing, ...clearing, ...painter]
+export const formatCommands: readonly Command[] = [
+  ...marks,
+  ...sizing,
+  ...styles,
+  ...clearing,
+  ...painter,
+]

@@ -19,6 +19,7 @@ import { RecentFilesMenu } from '../components/recent-files-menu'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Ruler } from '../components/ruler'
 import { SettingsDialog } from '../components/settings-dialog'
+import { StylesPanel } from '../components/styles-panel'
 import { StatusBar } from '../components/status-bar'
 import { Toolbar } from '../components/toolbar'
 import { WarningsBanner } from '../components/warnings-banner'
@@ -277,6 +278,8 @@ function Shell() {
           onClose={closePicker}
         />
       )}
+
+      {openPicker === 'styles' && <StylesPanel onClose={closePicker} />}
 
       {openPicker === 'settings' && <SettingsDialog onClose={closePicker} />}
 

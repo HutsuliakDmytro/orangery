@@ -33,6 +33,8 @@ export interface StyleOption {
 export interface StylesState {
   catalogue: StyleCatalogue | null
   options: StyleOption[]
+  /** Character styles, which apply to a run of text rather than a paragraph. */
+  characterOptions: StyleOption[]
   setCatalogue: (catalogue: StyleCatalogue | null) => void
 }
 
@@ -53,12 +55,36 @@ export function buildOptions(catalogue: StyleCatalogue | null): StyleOption[] {
     }))
 }
 
+/**
+ * The character styles worth offering.
+ *
+ * `DefaultParagraphFont` is the absence of one, and Word keeps it out of its own
+ * gallery for that reason — offering it would look like a style that does
+ * nothing, because it is.
+ */
+export function buildCharacterOptions(catalogue: StyleCatalogue | null): StyleOption[] {
+  if (!catalogue) return []
+
+  return [...catalogue.styles.values()]
+    .filter(
+      (style) =>
+        style.type === 'character' && !style.hidden && style.id !== 'DefaultParagraphFont',
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((style) => ({ id: style.id, label: style.name, headingLevel: null }))
+}
+
 export const useStylesStore = create<StylesState>((set) => ({
   catalogue: null,
   options: [],
+  characterOptions: [],
 
   setCatalogue: (catalogue) => {
-    set({ catalogue, options: buildOptions(catalogue) })
+    set({
+      catalogue,
+      options: buildOptions(catalogue),
+      characterOptions: buildCharacterOptions(catalogue),
+    })
   },
 }))
 

@@ -19,6 +19,7 @@ export type PickerKind =
   | 'find-replace'
   | 'page-setup'
   | 'page-numbers'
+  | 'styles'
   | 'settings'
   | 'image-alt'
   | 'special-characters'

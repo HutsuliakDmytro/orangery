@@ -232,3 +232,22 @@ test('lays the page out in columns', async ({ page }) => {
 
   expect(count).toBe('2')
 })
+
+test('applies a style from the styles panel', async ({ page }) => {
+  await page.locator(editor).click()
+  await page.keyboard.type('a line of text')
+
+  await page.keyboard.press('ControlOrMeta+Shift+p')
+  await page.getByLabel('Search commands').fill('Styles')
+  await page.keyboard.press('Enter')
+
+  const panel = page.getByRole('dialog', { name: 'Styles' })
+  await expect(panel).toBeVisible()
+
+  // The list comes from the document, so what it offers is what the file has.
+  await panel.getByRole('button', { name: 'Title', exact: true }).click()
+
+  const styled = page.locator(`${editor} p[data-style-id="Title"]`)
+  await expect(styled).toHaveCount(1)
+  await expect(styled).toContainText('a line of text')
+})

@@ -13,7 +13,8 @@ import { Extension } from '@tiptap/core'
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     paragraphStyle: {
-      setParagraphStyle: (styleId: NamedParagraphStyle) => ReturnType
+      /** Any style the document defines, not only the ones named here. */
+      setParagraphStyle: (styleId: string) => ReturnType
       clearParagraphStyle: () => ReturnType
     }
   }
@@ -60,7 +61,7 @@ export const ParagraphStyle = Extension.create<ParagraphStyleOptions>({
   addCommands() {
     return {
       setParagraphStyle:
-        (styleId: NamedParagraphStyle) =>
+        (styleId: string) =>
         ({ chain }) =>
           // A styled paragraph is still a paragraph: drop any heading first so
           // Title applied to an H2 does not leave both markers on the block.

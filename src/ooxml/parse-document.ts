@@ -80,8 +80,6 @@ const MODELLED_RUN_PROPERTIES = new Set([
   'w:szCs',
   'w:rFonts',
   'w:rStyle',
-  'w:lang',
-  'w:noProof',
 ])
 
 const HEADING_STYLE = /^Heading([1-6])$/i
@@ -147,6 +145,15 @@ function parseRunProperties(
         // did not have — see `docs/adr/0003-docx-native-roundtrip.md`.
         textStyle['szCs'] = value ?? null
         break
+      case 'w:rStyle': {
+        // The name of a style, not a description of one: the run wears it, and
+        // what it looks like is stated once in `styles.xml`.
+        const styleId = attribute(property, 'w:val')
+        if (styleId !== undefined) {
+          marks.push({ type: 'characterStyle', attrs: { styleId } })
+        }
+        break
+      }
       case 'w:rFonts': {
         const fonts = attributes(property)
         // A theme slot names the font indirectly; resolving it here means the

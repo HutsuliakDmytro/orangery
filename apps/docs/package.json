@@ -6,11 +6,12 @@
   "author": "Dmytro Hutsuliak <dmytro.hutsuliak.dev@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HutsuliakDmytro/orangery-docs.git"
+    "url": "git+https://github.com/HutsuliakDmytro/orangery.git",
+    "directory": "apps/docs"
   },
-  "homepage": "https://github.com/HutsuliakDmytro/orangery-docs#readme",
+  "homepage": "https://github.com/HutsuliakDmytro/orangery/tree/main/apps/docs#readme",
   "bugs": {
-    "url": "https://github.com/HutsuliakDmytro/orangery-docs/issues"
+    "url": "https://github.com/HutsuliakDmytro/orangery/issues"
   },
   "keywords": [
     "docx",

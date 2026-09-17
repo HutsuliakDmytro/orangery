@@ -10,10 +10,10 @@ with everything it does not model kept exactly as it was found.
 
 ## Apps
 
-| App                                       | Native format | Status                                                                                                          |
-| ----------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------- |
-| **[Docs](apps/docs)** — word processor    | `.docx`       | pre-release, [`v0.1.0`](https://github.com/HutsuliakDmytro/orangery-docs/releases) — macOS built and used daily |
-| **[Slides](apps/slides)** — presentations | `.pptx`       | in development                                                                                                  |
+| App                                       | Native format | Status                                                                                                     |
+| ----------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------- |
+| **[Docs](apps/docs)** — word processor    | `.docx`       | pre-release, [`v0.1.0`](https://github.com/HutsuliakDmytro/orangery/releases) — macOS built and used daily |
+| **[Slides](apps/slides)** — presentations | `.pptx`       | in development                                                                                             |
 
 Each app is its own product: its own binary, its own icon, its own release tag,
 its own updater channel. Nothing in one requires the other to be installed. They

@@ -7,7 +7,7 @@
   "author": "Dmytro Hutsuliak <dmytro.hutsuliak.dev@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HutsuliakDmytro/orangery-docs.git"
+    "url": "git+https://github.com/HutsuliakDmytro/orangery.git"
   },
   "packageManager": "pnpm@10.18.0",
   "scripts": {

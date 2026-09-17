@@ -30,3 +30,11 @@ export { flatten, parseShapeTree } from './shape-tree'
 export type { Placeholder, Shape, ShapeKind, Transform } from './shape-tree'
 export type { MasterParts, PresentationMap, SlideParts, SlideSize } from './presentation'
 export { declarationOf, rewriteEveryPart, saveDeck, writePart, writeSlidePart } from './save'
+export {
+  findInLayout,
+  findInMaster,
+  inheritanceChain,
+  masterKindOf,
+  resolveTransform,
+} from './placeholders'
+export type { MasterPlaceholder } from './placeholders'

@@ -71,7 +71,7 @@ export function readHeaderFooter(
   const relationship = relationships.get(reference.relationshipId)
   if (!relationship) return { kind, path: null, paragraphs: [] }
 
-  const path = resolveTarget(relationship.target)
+  const path = resolveTarget(relationship.target, 'word')
   const xml = getPartText(pkg, path)
   if (xml === undefined) return { kind, path: null, paragraphs: [] }
 

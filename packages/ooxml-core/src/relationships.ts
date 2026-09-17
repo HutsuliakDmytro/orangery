@@ -98,11 +98,38 @@ export function addRelationship(
   return relationship
 }
 
-/** Resolves a relationship target to its package path. */
-export function resolveTarget(target: string): string {
+/**
+ * Resolves a relationship target to its path in the package.
+ *
+ * `base` is the directory of the part that owns the rels file — `word` for a
+ * document's, `ppt/slides` for a slide's. It used to be hardcoded to `word`,
+ * which was fine while documents were the only format: a deck's rels reach
+ * sideways with `../slideLayouts/slideLayout1.xml`, and that has to land in
+ * `ppt/slideLayouts/`, not under the slide.
+ */
+export function resolveTarget(target: string, base: string): string {
+  // An absolute target is already a package path, minus the leading slash.
   if (target.startsWith('/')) return target.slice(1)
-  // Targets are relative to `word/`, the part that owns the rels file.
-  return `word/${target.replace(/^\.\//u, '')}`
+
+  const segments = [...base.split('/').filter(Boolean), ...target.split('/')]
+  const path: string[] = []
+
+  for (const segment of segments) {
+    if (segment === '' || segment === '.') continue
+    if (segment === '..') {
+      path.pop()
+      continue
+    }
+    path.push(segment)
+  }
+
+  return path.join('/')
+}
+
+/** The directory a part lives in, which is the base for its own relationships. */
+export function partDirectory(path: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut === -1 ? '' : path.slice(0, cut)
 }
 
 export function findByTarget(

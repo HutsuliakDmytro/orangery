@@ -91,7 +91,7 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
   const resolveImage = (relationshipId: string): string | null => {
     const relationship = relationships.get(relationshipId)
     if (!relationship || relationship.external) return null
-    return mediaDataUrl(pkg, resolveTarget(relationship.target))
+    return mediaDataUrl(pkg, resolveTarget(relationship.target, 'word'))
   }
 
   const footnotes = parseFootnotes(getPartText(pkg, FOOTNOTES_PART) ?? '')

@@ -5,6 +5,7 @@ import {
   IMAGE_RELATIONSHIP,
   nextRelationshipId,
   parseRelationships,
+  partDirectory,
   resolveTarget,
   serializeRelationships,
 } from './relationships'
@@ -90,15 +91,37 @@ describe('addRelationship', () => {
 
 describe('resolveTarget', () => {
   it('resolves a relative target against the word part', () => {
-    expect(resolveTarget('media/image1.png')).toBe('word/media/image1.png')
+    expect(resolveTarget('media/image1.png', 'word')).toBe('word/media/image1.png')
   })
 
   it('resolves an absolute target from the package root', () => {
-    expect(resolveTarget('/word/media/image1.png')).toBe('word/media/image1.png')
+    expect(resolveTarget('/word/media/image1.png', 'word')).toBe('word/media/image1.png')
   })
 
   it('strips a leading ./', () => {
-    expect(resolveTarget('./media/image1.png')).toBe('word/media/image1.png')
+    expect(resolveTarget('./media/image1.png', 'word')).toBe('word/media/image1.png')
+  })
+
+  it("walks out of the owning directory, the way a deck's rels do", () => {
+    expect(resolveTarget('../slideLayouts/slideLayout1.xml', 'ppt/slides')).toBe(
+      'ppt/slideLayouts/slideLayout1.xml',
+    )
+    expect(resolveTarget('../media/image1.png', 'ppt/slides')).toBe('ppt/media/image1.png')
+  })
+
+  it('resolves against the root when there is no base', () => {
+    expect(resolveTarget('ppt/presentation.xml', '')).toBe('ppt/presentation.xml')
+  })
+})
+
+describe('partDirectory', () => {
+  it("is what a part's own relationships resolve against", () => {
+    expect(partDirectory('ppt/slides/slide1.xml')).toBe('ppt/slides')
+    expect(partDirectory('word/document.xml')).toBe('word')
+  })
+
+  it('is empty for a part at the root', () => {
+    expect(partDirectory('[Content_Types].xml')).toBe('')
   })
 })
 

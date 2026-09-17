@@ -23,6 +23,7 @@ export {
   HYPERLINK_RELATIONSHIP,
   IMAGE_RELATIONSHIP,
   nextRelationshipId,
+  partDirectory,
   parseRelationships,
   resolveTarget,
   serializeRelationships,

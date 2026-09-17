@@ -35,7 +35,8 @@
       — тут Slides уперше показав, що реєстр команд був заточений під Docs: `CommandContext` — це був Tiptap-редактор, якого в деки немає. Тепер контекст оголошує апп через augmentation, а хром бере його з `CommandSource` (прочитати зараз + підписатися на зміни). Меню, палітра й `useCommand` більше не знають про редактор. Команди файлів зареєстровані **вимкненими**, а не пропущені: меню — це форма застосунку, і порожній File каже «не вміє відкривати деки», а сірий Open — «ще не вміє». **Іконка тимчасово скопійована з Docs** — своя у фазі 4
 - [x] Layout-каркас: filmstrip (ліво) / canvas (центр) / properties (право) / notes (низ), resizable панелі
       — розтягування через pointer capture, а не слухачі на вікні: курсор, що зійшов з роздільника посеред перетягування, це норма, а не крайній випадок. Панелі вмикаються командами з реєстру, тож у меню вони з галочками. `@theme inline` переїхав у спільний `tokens.css`: він лежав у `global.css` Docs, і Slides отримав би змінні без утиліт — кожен `bg-surface` у спільному компоненті мовчки нічого б не робив
-- [ ] `tests/fixtures/pptx/`: 20+ реальних дек — PowerPoint mac/win, Google Slides export, Keynote export, LibreOffice Impress; з анімаціями, діаграмами, відео, SmartArt, таблицями, групами
+- [~] `tests/fixtures/pptx/`: 20+ реальних дек — PowerPoint mac/win, Google Slides export, Keynote export, LibreOffice Impress; з анімаціями, діаграмами, відео, SmartArt, таблицями, групами
+      — синтетична половина готова: 10 дек через python-pptx, кожна ізолює одну конструкцію. `real/` порожня і чекає на файли, які не шкода тримати в публічному git. Дві «хиби» генератора зробили фікстури кращими: `sixteen-by-nine` лишає `type="screen4x3"` при 16:9 розмірах (парсер, що вірить атрибуту замість cx/cy, на цьому падає), і кожна дека везе 11 layout-ів, з яких використано один — саме так роблять справжні деки, і жоден не можна загубити
 - [x] Bundled fonts: Carlito, Liberation Sans/Serif, Inter
       — спільний пакет `@orangery/fonts`, не копія в кожному аппі: файли підключаються відносними URL, тож бандлер сам їх розкладає. Додався ще Caladea — метричний відповідник Cambria, серифної пари Calibri у темі Office; везти одну без другої означає лишити половину типового документа з чужими метриками. По дорозі знайшлась справжня помилка в Docs: Calibri падав на Liberation Sans, метрично сумісний з **Arial**, а Arial узагалі падав на `sans-serif` — тобто документ переверстувався на машині без Office. Підстановка тепер окреме поле `substitute`, а не здогадка всередині рядка стека, і Georgia з Verdana чесно кажуть, що відповідника не існує
 
@@ -48,9 +49,12 @@
 Мета: відкрити чужу деку, побачити її правильно, зберегти без змін — PowerPoint не помічає різниці.
 
 ### 1.1 Пакет
-- [ ] ADR `0002-pptx-roundtrip.md`: per-shape passthrough, що моделюємо в MVP, що ні
-- [ ] `ooxml-presentation`: читання `presentation.xml`, `slides/*`, `slideLayouts/*`, `slideMasters/*`, `theme/*`, `notesSlides/*`, `notesMaster`, `handoutMaster`, `tableStyles`, `viewProps`, `presProps`, comments — усе в `PptxPackage`
-- [ ] Порядок слайдів з `sldIdLst`, rels на layout/master/notes/media
+- [x] ADR `0002-pptx-roundtrip.md`: per-shape passthrough, що моделюємо в MVP, що ні
+      — головна різниця з Docs записана: у документі незмодельоване лежить *поруч* із абзацами, у деки воно *всередині* фігури. Звичайний прямокутник із текстом везе ефекти, 3D, adjustment-значення геометрії й extLst із creation id для Morph. Тому фігура не перебудовується з моделі, а патчиться на місці; незмодельований тип не перебудовується взагалі. Названо й головний ризик: забутий writer тихо не збереже правку, тож кожна змодельована властивість потребує тесту «зміни → збережи → перечитай», а не лише «розпарси»
+- [~] `ooxml-presentation`: читання `presentation.xml`, `slides/*`, `slideLayouts/*`, `slideMasters/*`, `theme/*`, `notesSlides/*`, `notesMaster`, `handoutMaster`, `tableStyles`, `viewProps`, `presProps`, comments — усе в `PptxPackage`
+      — пакет тримає всі частини як прочитані (це `ooxml-core`), а цей шар будує *карту*: які частини є і як вони одна на одну посилаються. Слайди, їхні layout-и й нотатки, майстри з їхніми layout-ами й темою, notesMaster, розміри. `handoutMaster` і comments поки не в карті — вони зберігаються, але ще нікому не потрібні
+- [~] Порядок слайдів з `sldIdLst`, rels на layout/master/notes/media
+      — порядок береться зі списку, а не з rels-файлу, і це перевірено на деці з 8 слайдів. По дорозі знайшлась Docs-специфіка, що пролізла в спільне ядро: `resolveTarget` був зашитий на `word/`, а rels слайда ходять убік через `../slideLayouts/`. Тепер резолвер приймає базову теку. Media ще не в карті
 - [ ] Модель: `Presentation → Master[] → Layout[] → Slide[]`, `spTree`, EMU-координати
 - [ ] Серіалізатор: перегенеровуються тільки змодельовані частини; `p:timing`, `p:transition` (поки), `mc:AlternateContent`, невідомі елементи — verbatim
 - [ ] Round-trip тест: open → save без правок → структурний diff XML на всьому корпусі

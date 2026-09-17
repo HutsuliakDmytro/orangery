@@ -30,6 +30,8 @@ import { TableView } from './table-view'
 import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
+import { applyDrag, useDrag } from './use-drag'
+import type { DragState, Handle } from './use-drag'
 
 /**
  * A slide, drawn.
@@ -348,6 +350,7 @@ export function SlideView({
   package: pkg,
   selection,
   onSelect,
+  onDrag,
   className,
 }: {
   deck: Deck
@@ -359,6 +362,8 @@ export function SlideView({
   selection?: readonly number[]
   /** Given the shape clicked and whether the click was extending a selection. */
   onSelect?: (id: number | null, extend: boolean) => void
+  /** Called once when a drag ends, with how far it went in EMU. */
+  onDrag?: (drag: DragState) => void
   className?: string
 }) {
   const base = colorContextFor(deck, themes, slide)
@@ -367,6 +372,16 @@ export function SlideView({
   const drawings = drawingsFor(deck, slide, theme, base)
 
   const { width, height } = deck.slideSize
+  const drag = useDrag({ slideWidth: width, onCommit: (state) => onDrag?.(state) })
+
+  /** While dragging, the selection is drawn where it is being taken. */
+  const shown = (drawing: Drawing): Transform => {
+    if (drag.state === null || selection?.includes(drawing.shape.id) !== true) {
+      return drawing.transform
+    }
+    return { ...drawing.transform, ...applyDrag(drawing.transform, drag.state) }
+  }
+
   const background = backgroundOf(deck, slide, theme)
   const backgroundPaint = fillPaint(
     background.fill,
@@ -446,8 +461,10 @@ export function SlideView({
                 role="button"
                 aria-label={drawing.shape.name === '' ? 'Shape' : drawing.shape.name}
                 onPointerDown={(event) => {
-                  event.stopPropagation()
+                  // Selecting first means a drag that starts on an unselected
+                  // shape moves that shape, as it does everywhere else.
                   onSelect(drawing.shape.id, event.shiftKey)
+                  drag.start(event, null)
                 }}
               />
             )}
@@ -456,7 +473,17 @@ export function SlideView({
         {drawings
           .filter((drawing) => selection?.includes(drawing.shape.id) === true)
           .map((drawing) => (
-            <SelectionFrame key={`selected-${drawing.key}`} transform={drawing.transform} />
+            <SelectionFrame
+              key={`selected-${drawing.key}`}
+              transform={shown(drawing)}
+              onHandle={
+                onDrag === undefined
+                  ? undefined
+                  : (event, handle) => {
+                      drag.start(event, handle)
+                    }
+              }
+            />
           ))}
       </svg>
     </div>
@@ -470,17 +497,23 @@ export function SlideView({
  * like everything else — the handles come out the right size because the
  * viewBox scales them with the slide.
  */
-function SelectionFrame({ transform }: { transform: Transform }) {
+function SelectionFrame({
+  transform,
+  onHandle,
+}: {
+  transform: Transform
+  onHandle?: (event: React.PointerEvent, handle: Handle) => void
+}) {
   const handle = 76200
   const corners = [
-    [transform.x, transform.y],
-    [transform.x + transform.width, transform.y],
-    [transform.x, transform.y + transform.height],
-    [transform.x + transform.width, transform.y + transform.height],
+    ['nw', transform.x, transform.y],
+    ['ne', transform.x + transform.width, transform.y],
+    ['sw', transform.x, transform.y + transform.height],
+    ['se', transform.x + transform.width, transform.y + transform.height],
   ] as const
 
   return (
-    <g pointerEvents="none">
+    <g>
       <rect
         x={transform.x}
         y={transform.y}
@@ -489,10 +522,11 @@ function SelectionFrame({ transform }: { transform: Transform }) {
         fill="none"
         stroke="#FF7A00"
         strokeWidth={19050}
+        pointerEvents="none"
       />
-      {corners.map(([x, y]) => (
+      {corners.map(([corner, x, y]) => (
         <rect
-          key={`${String(x)},${String(y)}`}
+          key={corner}
           x={x - handle / 2}
           y={y - handle / 2}
           width={handle}
@@ -500,6 +534,12 @@ function SelectionFrame({ transform }: { transform: Transform }) {
           fill="#FFFFFF"
           stroke="#FF7A00"
           strokeWidth={19050}
+          role={onHandle === undefined ? undefined : 'button'}
+          aria-label={onHandle === undefined ? undefined : `Resize ${corner}`}
+          pointerEvents={onHandle === undefined ? 'none' : undefined}
+          onPointerDown={(event) => {
+            onHandle?.(event, corner)
+          }}
         />
       ))}
     </g>

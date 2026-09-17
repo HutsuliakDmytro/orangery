@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -281,6 +281,36 @@ describe('the keyboard', () => {
     await user.click(screen.getByLabelText('somewhere to type'))
     await user.keyboard('{ArrowRight}')
 
+    expect(partText()).toBe(before)
+  })
+})
+
+describe('dragging', () => {
+  /** A drag that starts on the shape and ends elsewhere, in pixels. */
+  function dragBy(label: string, dx: number, dy: number) {
+    const target = screen.getAllByRole('button', { name: label })[0] as HTMLElement
+    // jsdom reports a zero-sized canvas, so the scale is given directly.
+    fireEvent.pointerDown(target, { clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(window, { clientX: dx, clientY: dy })
+    fireEvent.pointerUp(window, { clientX: dx, clientY: dy })
+  }
+
+  it('selects the shape it starts on', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    dragBy('Rectangle 1', 10, 10)
+    expect(useDeckStore.getState().selection).toEqual([firstShapeId()])
+  })
+
+  it('leaves the file alone when the canvas has no size to scale by', async () => {
+    // jsdom lays nothing out, so every rectangle is zero wide. A drag that
+    // cannot work out its scale must do nothing rather than divide by zero.
+    await openDeck('shapes')
+    render(<App />)
+    const before = partText()
+
+    dragBy('Rectangle 1', 100, 100)
     expect(partText()).toBe(before)
   })
 })

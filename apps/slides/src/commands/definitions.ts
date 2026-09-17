@@ -2,7 +2,7 @@ import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import { nameOf, pickDeckPath, readDeckFile } from '../document/file'
-import { moveShape } from '@orangery/ooxml-presentation'
+import { moveShape, reorderShapes } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 
@@ -160,6 +160,31 @@ export const editCommands: readonly Command[] = [
   })),
 ]
 
+/** The four z-order moves, which are all the same call. */
+export const arrangeCommands: readonly Command[] = (
+  [
+    ['front', 'Bring to Front'],
+    ['forward', 'Bring Forward'],
+    ['backward', 'Send Backward'],
+    ['back', 'Send to Back'],
+  ] as const
+).map(([move, label]) => ({
+  id: `format.${move}`,
+  label,
+  group: 'format' as const,
+  isEnabled: () => useDeckStore.getState().selection.length > 0,
+  run: () => {
+    const { selection, edit } = useDeckStore.getState()
+    edit((slide) =>
+      reorderShapes(
+        slide,
+        slide.shapes.filter((shape) => selection.includes(shape.id)),
+        move,
+      ),
+    )
+  },
+}))
+
 export const viewCommands: readonly Command[] = [
   {
     id: 'view.filmstrip',
@@ -207,6 +232,7 @@ export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(fileCommands)
   registerAll(editCommands)
+  registerAll(arrangeCommands)
   registerAll(slideCommands)
   registerAll(viewCommands)
   registerAll(appearanceCommands)

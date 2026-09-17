@@ -50,7 +50,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm exec playwright install chromium --with-deps
+      - run: pnpm --filter docs exec playwright install chromium --with-deps
 
       # These run against the Vite dev server. `tauri-driver` supports Linux and
       # Windows only — macOS is a TODO in its own README — so the shell-level

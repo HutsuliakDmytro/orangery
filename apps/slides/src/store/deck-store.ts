@@ -22,18 +22,20 @@ export interface OpenDeck {
 }
 
 /**
- * One undoable change, as the text of the part before and after it.
+ * One undoable change, as the text of every part it touched.
  *
  * The unit is the part rather than the model because an edit mutates the parsed
  * XML in place — that is what preserves everything we do not model (ADR 0002),
  * and it means there is no immutable model to keep older versions of. A slide
  * part is a few kilobytes, so keeping a hundred of them costs less than the
  * machinery for anything cleverer.
+ *
+ * A step holds several parts because some actions are not about one slide:
+ * replacing a word across the deck is one thing a person did and has to be one
+ * thing they can take back.
  */
 interface Edit {
-  part: string
-  before: string
-  after: string
+  parts: { path: string; before: string; after: string }[]
 }
 
 /** What a hundred steps of history costs before the oldest is dropped. */
@@ -67,6 +69,8 @@ interface DeckState {
    * step behind.
    */
   edit: (change: (slide: Slide) => boolean) => void
+  /** The same, for a change that may touch any number of slides. */
+  editDeck: (change: (deck: Deck) => boolean) => void
   undo: () => void
   redo: () => void
 }
@@ -143,20 +147,39 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   },
 
   edit: (change) => {
-    const { open, current } = get()
+    const { open, current, editDeck } = get()
     const slide = open?.deck.slides[current]
-    if (open === null || slide === undefined) return
+    if (slide === undefined) return
 
-    const before = getPartText(open.package, slide.path) ?? ''
-    if (!change(slide)) return
+    editDeck((deck) => {
+      const current = deck.slides.find((one) => one.path === slide.path)
+      return current === undefined ? false : change(current)
+    })
+  },
 
-    writeSlidePart(open.package, slide)
-    const after = getPartText(open.package, slide.path) ?? ''
-    if (after === before) return
+  editDeck: (change) => {
+    const { open } = get()
+    if (open === null) return
+
+    const before = new Map(
+      open.deck.slides.map((slide) => [slide.path, getPartText(open.package, slide.path) ?? '']),
+    )
+    if (!change(open.deck)) return
+
+    for (const slide of open.deck.slides) writeSlidePart(open.package, slide)
+
+    // Only the parts that actually differ are recorded: writing every slide
+    // back is how the change is applied, not a claim that all of them changed.
+    const parts = open.deck.slides.flatMap((slide) => {
+      const after = getPartText(open.package, slide.path) ?? ''
+      const original = before.get(slide.path) ?? ''
+      return after === original ? [] : [{ path: slide.path, before: original, after }]
+    })
+    if (parts.length === 0) return
 
     set((state) => ({
       open: reread(open),
-      undoStack: [...state.undoStack, { part: slide.path, before, after }].slice(-HISTORY_LIMIT),
+      undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
       // A new change is a new branch; what was undone is no longer reachable.
       redoStack: [],
     }))
@@ -167,7 +190,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     const step = undoStack[undoStack.length - 1]
     if (open === null || step === undefined) return
 
-    setPartText(open.package, step.part, step.before)
+    for (const part of step.parts) setPartText(open.package, part.path, part.before)
     set((state) => ({
       open: reread(open),
       undoStack: state.undoStack.slice(0, -1),
@@ -180,7 +203,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     const step = redoStack[redoStack.length - 1]
     if (open === null || step === undefined) return
 
-    setPartText(open.package, step.part, step.after)
+    for (const part of step.parts) setPartText(open.package, part.path, part.after)
     set((state) => ({
       open: reread(open),
       undoStack: [...state.undoStack, step],

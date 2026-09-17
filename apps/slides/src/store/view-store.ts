@@ -11,10 +11,13 @@ export interface Panels {
 
 interface ViewState {
   theme: Theme
+  /** Whether the find and replace strip is showing. */
+  finding: boolean
   panels: Panels
   /** Widths and heights in pixels, so a drag can be written straight back. */
   sizes: { filmstrip: number; properties: number; notes: number }
   setTheme: (theme: Theme) => void
+  setFinding: (finding: boolean) => void
   togglePanel: (panel: keyof Panels) => void
   resize: (panel: keyof Panels, size: number) => void
 }
@@ -30,11 +33,16 @@ const LIMITS: Record<keyof Panels, { min: number; max: number }> = {
 
 export const useViewStore = create<ViewState>((set) => ({
   theme: 'dark',
+  finding: false,
   panels: { filmstrip: true, properties: true, notes: true },
   sizes: DEFAULT_SIZES,
 
   setTheme: (theme) => {
     set({ theme })
+  },
+
+  setFinding: (finding) => {
+    set({ finding })
   },
 
   togglePanel: (panel) => {

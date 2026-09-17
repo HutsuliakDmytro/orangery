@@ -152,6 +152,18 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.find',
+    label: 'Find and Replace…',
+    group: 'edit',
+    shortcut: 'Mod+f',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    isActive: () => useViewStore.getState().finding,
+    run: () => {
+      const { finding, setFinding } = useViewStore.getState()
+      setFinding(!finding)
+    },
+  },
+  {
     id: 'edit.leave-text',
     label: 'Finish Editing Text',
     group: 'edit',

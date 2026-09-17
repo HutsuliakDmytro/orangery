@@ -9,6 +9,7 @@ import { getPartText } from '@orangery/ooxml-core'
 import { isMac } from '@orangery/platform'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
+import { useViewStore } from '../store/view-store'
 
 /**
  * Selecting and moving shapes, and taking it back.
@@ -45,6 +46,9 @@ beforeEach(() => {
     redoStack: [],
     error: null,
   })
+  // The find strip is a toggle, so a test that left it open would flip it shut
+  // for the next one — which is how three of these failed before this line.
+  useViewStore.setState({ finding: false })
 })
 
 describe('selecting', () => {
@@ -604,5 +608,85 @@ describe('connectors', () => {
     expect(connector?.kind).toBe('cxnSp')
     expect(connector?.connection?.start?.shapeId).toBe(shapes[0]?.id)
     expect(connector?.connection?.end?.shapeId).toBe(shapes[1]?.id)
+  })
+})
+
+describe('find and replace', () => {
+  const open = () => {
+    act(() => {
+      runCommand('edit.find', {})
+    })
+  }
+
+  it('opens from the registry', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    expect(screen.getByRole('region', { name: 'Find and replace' })).toBeInTheDocument()
+  })
+
+  it('counts the matches and the slides they are on', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    expect(screen.getByText('8 on 8 slides')).toBeInTheDocument()
+  })
+
+  it('says so when there is nothing', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'nowhere')
+    expect(screen.getByText('No matches')).toBeInTheDocument()
+  })
+
+  it('replaces across every slide as one undoable step', async () => {
+    // Replacing a word through a deck is one thing a person did.
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Replace all' }))
+
+    expect(partText()).toContain('Page 1')
+    expect(useDeckStore.getState().undoStack).toHaveLength(1)
+  })
+
+  it('takes the whole replacement back in one step', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    const before = partText()
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Replace all' }))
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(partText()).toBe(before)
+    // And the slides it touched beyond this one are back too.
+    const second = useDeckStore.getState().open?.deck.slides[1]
+    expect(second?.shapes[0]?.text?.paragraphs[0]?.runs[0]?.text).toBe('Slide 2')
+  })
+
+  it('leaves the button alone when there is nothing to replace', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    expect(screen.getByRole('button', { name: 'Replace all' })).toBeDisabled()
   })
 })

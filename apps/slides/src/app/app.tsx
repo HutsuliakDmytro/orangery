@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
+import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
@@ -33,6 +34,8 @@ function Shell() {
 
   const open = useDeckStore((state) => state.open)
   const current = useDeckStore((state) => state.current)
+  const finding = useViewStore((state) => state.finding)
+  const setFinding = useViewStore((state) => state.setFinding)
   const panels = useViewStore((state) => state.panels)
   const sizes = useViewStore((state) => state.sizes)
   const resize = useViewStore((state) => state.resize)
@@ -48,6 +51,14 @@ function Shell() {
           </span>
         )}
       </header>
+
+      {finding && (
+        <FindPanel
+          onClose={() => {
+            setFinding(false)
+          }}
+        />
+      )}
 
       <WarningsBanner />
 

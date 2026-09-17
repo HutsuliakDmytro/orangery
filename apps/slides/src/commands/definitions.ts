@@ -7,8 +7,10 @@ import {
   alignShapes,
   distributeShapes,
   duplicateShape,
+  groupShapes,
   moveShape,
   reorderShapes,
+  ungroupShape,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
@@ -238,6 +240,57 @@ export const distributeCommands: readonly Command[] = (
   },
 }))
 
+export const groupCommands: readonly Command[] = [
+  {
+    id: 'format.group',
+    label: 'Group',
+    group: 'format',
+    shortcut: 'Mod+g',
+    // One shape is not a group; the command says so rather than making one.
+    isEnabled: () => useDeckStore.getState().selection.length > 1,
+    run: () => {
+      const { edit, selectShapes } = useDeckStore.getState()
+      let created: number | null = null
+
+      edit((slide) => {
+        created = groupShapes(slide, selected(slide))
+        return created !== null
+      })
+
+      // The group becomes the selection, as it does in PowerPoint: what was
+      // just made is what the next action is about.
+      if (created !== null) selectShapes([created])
+    },
+  },
+  {
+    id: 'format.ungroup',
+    label: 'Ungroup',
+    group: 'format',
+    shortcut: 'Mod+Shift+g',
+    isEnabled: () => {
+      const { open, current, selection } = useDeckStore.getState()
+      const shapes = open?.deck.slides[current]?.shapes ?? []
+      return shapes.some((shape) => selection.includes(shape.id) && shape.kind === 'grpSp')
+    },
+    run: () => {
+      const { edit, selectShapes } = useDeckStore.getState()
+      const freed: number[] = []
+
+      edit((slide) =>
+        selected(slide)
+          .filter((shape) => shape.kind === 'grpSp')
+          .map((group) => {
+            freed.push(...group.shapes.map((child) => child.id))
+            return ungroupShape(slide, group)
+          })
+          .reduce((changed: boolean, one) => changed || one, false),
+      )
+
+      if (freed.length > 0) selectShapes(freed)
+    },
+  },
+]
+
 /** The four z-order moves, which are all the same call. */
 export const arrangeCommands: readonly Command[] = (
   [
@@ -311,6 +364,7 @@ export function registerBuiltinCommands(): void {
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(arrangeCommands)
+  registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)
   registerAll(slideCommands)

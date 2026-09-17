@@ -377,3 +377,73 @@ describe('arranging', () => {
     expect(partText()).toBe(before)
   })
 })
+
+describe('grouping', () => {
+  it('needs more than one shape', async () => {
+    await openDeck('shapes')
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+
+    expect(getCommand('format.group')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('groups the selection and selects the group', async () => {
+    await openDeck('shapes')
+    act(() => {
+      runCommand('edit.select-all', {})
+      runCommand('format.group', {})
+    })
+
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    expect(shapes).toHaveLength(1)
+    expect(shapes[0]?.kind).toBe('grpSp')
+    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
+  })
+
+  it('offers to ungroup only a group', async () => {
+    await openDeck('shapes')
+    act(() => {
+      runCommand('edit.select-all', {})
+    })
+    expect(getCommand('format.ungroup')?.isEnabled?.({})).toBe(false)
+
+    act(() => {
+      runCommand('format.group', {})
+    })
+    expect(getCommand('format.ungroup')?.isEnabled?.({})).toBe(true)
+  })
+
+  it('puts the shapes back where they were, through the file', async () => {
+    await openDeck('shapes')
+    const before = partText()
+
+    act(() => {
+      runCommand('edit.select-all', {})
+      runCommand('format.group', {})
+      runCommand('format.ungroup', {})
+    })
+
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    expect(shapes).toHaveLength(4)
+    expect(shapes[0]?.transform?.x).toBe(457200)
+    expect(before).toContain('x="457200"')
+  })
+
+  it('is two undo steps, because it was two actions', async () => {
+    await openDeck('shapes')
+    act(() => {
+      runCommand('edit.select-all', {})
+      runCommand('format.group', {})
+      runCommand('format.ungroup', {})
+    })
+    expect(useDeckStore.getState().undoStack).toHaveLength(2)
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+    expect(
+      useDeckStore.getState().open?.deck.slides[0]?.shapes.some((shape) => shape.kind === 'grpSp'),
+    ).toBe(true)
+  })
+})

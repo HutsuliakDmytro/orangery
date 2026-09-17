@@ -66,3 +66,4 @@ export {
   offsetShape,
 } from './arrange'
 export type { Alignment } from './arrange'
+export { groupShapes, ungroupShape } from './group'

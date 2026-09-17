@@ -40,3 +40,24 @@ export type {
   ShapeStyle,
   StyleReference,
 } from './shape-properties'
+export {
+  readBodyProperties,
+  readListStyle,
+  readParagraph,
+  readParagraphProperties,
+  readRunProperties,
+  readTextBody,
+  textOfBody,
+} from './text-body'
+export type {
+  Autofit,
+  BodyProperties,
+  Bullet,
+  ListStyle,
+  ParagraphProperties,
+  RunProperties,
+  Spacing,
+  TextBody,
+  TextParagraph,
+  TextRun,
+} from './text-body'

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { children, tagName } from '@orangery/ooxml-core'
-import { EMU_PER_INCH, resolveColor } from '@orangery/ooxml-drawingml'
+import { EMU_PER_INCH, resolveColor, textOfBody } from '@orangery/ooxml-drawingml'
 import { layoutOf, masterOf, readDeck } from './deck'
 import { readPptxPackage } from './parts'
 import { flatten } from './shape-tree'
@@ -187,5 +187,53 @@ describe('shape properties on a real deck', () => {
 
     expect(picture?.kind).toBe('pic')
     expect(picture?.properties?.geometry).toMatchObject({ preset: 'rect' })
+  })
+})
+
+describe('text on a real deck', () => {
+  it('reads the runs of a paragraph with their own formatting', async () => {
+    const deck = await deckOf('text-formatting')
+    const [box] = deck.slides[0]?.shapes ?? []
+    const [first] = box?.text?.paragraphs ?? []
+
+    expect(first?.runs.map((run) => run.text)).toEqual([
+      'Plain ',
+      'bold ',
+      'italic ',
+      'large ',
+      'orange',
+    ])
+    expect(first?.runs[1]?.properties?.bold).toBe(true)
+    expect(first?.runs[3]?.properties?.size).toBe(32)
+    expect(first?.runs[4]?.properties?.color?.source).toEqual({ kind: 'srgb', hex: '#FF7A00' })
+  })
+
+  it('reads the outline level of a nested paragraph', async () => {
+    const deck = await deckOf('text-formatting')
+    const paragraphs = deck.slides[0]?.shapes[0]?.text?.paragraphs ?? []
+
+    expect(paragraphs.map((paragraph) => paragraph.properties.level)).toEqual([0, 1])
+  })
+
+  it('reads the text of a placeholder', async () => {
+    const deck = await deckOf('placeholders')
+    const title = deck.slides[0]?.shapes.find((shape) => shape.placeholder?.type === 'title')
+
+    expect(title?.text ? textOfBody(title.text) : null).toBe('Placeholder inheritance')
+  })
+
+  it('gives a picture no text body, because it holds none', async () => {
+    const deck = await deckOf('picture')
+    expect(deck.slides[0]?.shapes[0]?.text).toBeNull()
+  })
+
+  it('gives a shape that holds no text an empty body rather than null', async () => {
+    // The difference matters: one cannot take text, the other has none yet.
+    const deck = await deckOf('groups-and-connectors')
+    const connector = deck.slides[0]?.shapes.find((shape) => shape.kind === 'cxnSp')
+    const box = deck.slides[0]?.shapes.find((shape) => shape.kind === 'sp')
+
+    expect(connector?.text).toBeNull()
+    expect(box?.text?.paragraphs.length).toBeGreaterThan(0)
   })
 })

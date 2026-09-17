@@ -1,7 +1,7 @@
 import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
-import { readShapeProperties, readShapeStyle } from '@orangery/ooxml-drawingml'
-import type { ShapeProperties, ShapeStyle } from '@orangery/ooxml-drawingml'
+import { readShapeProperties, readShapeStyle, readTextBody } from '@orangery/ooxml-drawingml'
+import type { ShapeProperties, ShapeStyle, TextBody } from '@orangery/ooxml-drawingml'
 
 /**
  * The shapes on a slide.
@@ -77,6 +77,13 @@ export interface Shape {
   properties: ShapeProperties | null
   /** `p:style` — the theme slots the shape falls back to. */
   style: ShapeStyle | null
+  /**
+   * The text inside the shape, or null when it holds none.
+   *
+   * A picture and a connector have no text body at all; a shape that can hold
+   * text always has one, even when it is empty.
+   */
+  text: TextBody | null
   /** Empty for everything that is not a group. */
   shapes: Shape[]
   /** The element this was read from. Written back as-is unless something edits it. */
@@ -161,6 +168,7 @@ function parseShape(node: XmlNode): Shape {
   const identity = nonVisual === undefined ? undefined : findChild(nonVisual, 'p:cNvPr')
   const propertiesNode = shapePropertiesOf(node)
   const styleNode = findChild(node, 'p:style')
+  const textNode = findChild(node, 'p:txBody')
 
   return {
     kind,
@@ -171,6 +179,7 @@ function parseShape(node: XmlNode): Shape {
     placeholder: parsePlaceholder(nonVisual),
     properties: propertiesNode === undefined ? null : readShapeProperties(propertiesNode),
     style: styleNode === undefined ? null : readShapeStyle(styleNode),
+    text: textNode === undefined ? null : readTextBody(textNode),
     shapes: kind === 'grpSp' ? parseShapeTree(node) : [],
     node,
   }

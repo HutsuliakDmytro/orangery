@@ -13,6 +13,7 @@ import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
 import { CommentsPanel } from '../components/comments-panel'
+import { ReviewPanel } from '../components/review-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
 import { RecentDecks } from '../components/recent-decks'
@@ -219,6 +220,8 @@ function Shell() {
         {/* Beside the format panel rather than inside it: a comment is about
             the slide, not about the shape that happens to be picked out. */}
         <CommentsPanel />
+
+        <ReviewPanel />
       </div>
 
       {prompting && (

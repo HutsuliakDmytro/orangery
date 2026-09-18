@@ -67,6 +67,7 @@ import { stepsPerSlide } from '../render/animation'
 import { groupAfterEscape } from '../render/selection'
 import { insertPictureOnSlide } from '../document/insert-picture'
 import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
+import { startReview } from '../document/review'
 import { copyFormatting, heldFormat, pasteFormatting } from '../document/format-painter'
 import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
@@ -1473,6 +1474,19 @@ export const painterCommands: readonly Command[] = [
   },
 ]
 
+export const reviewCommands: readonly Command[] = [
+  {
+    id: 'review.compare',
+    label: 'Compare with Another Deck\u2026',
+    group: 'view',
+    keywords: ['review', 'changes', 'accept', 'merge'],
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void startReview()
+    },
+  },
+]
+
 export const commentCommands: readonly Command[] = [
   {
     id: 'review.comments',
@@ -1771,6 +1785,7 @@ export function registerBuiltinCommands(): void {
   registerAll(footerCommands)
   registerAll(diagramCommands)
   registerAll(commentCommands)
+  registerAll(reviewCommands)
   registerAll(painterCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)

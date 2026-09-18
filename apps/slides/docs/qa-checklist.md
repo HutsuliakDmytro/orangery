@@ -251,6 +251,11 @@ These are the ones that matter most. Take them seriously.
       are in the pane, with the right names, and cannot be deleted here.
 - [ ] Say something yourself, save, open in PowerPoint. The comment is there
       and attributed, and the older and newer ones sit side by side.
+- [ ] Send a deck to somebody, have them change a title and move a box, then
+      Compare with their copy. Both changes are listed against the right
+      slides; accepting takes them and rejecting does not.
+- [ ] Have them delete a slide. It is listed and marked as shown only — known,
+      and better than a button that does half the job.
 
 ## Getting a deck in
 

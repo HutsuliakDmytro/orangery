@@ -45,6 +45,8 @@ export { hiddenUntilAnimated, readAnimations } from './animations'
 export { addEffect, moveStep, removeEffect, setEffectTiming } from './write-animations'
 export { cellsOf, patchedWorkbook, writeChartCache } from './chart-data'
 export type { ChartValues } from './chart-data'
+export { applicable, applyChange, compareDecks, describeChange } from './compare'
+export type { Change, ShapeChange } from './compare'
 export {
   addComment,
   hasComments,

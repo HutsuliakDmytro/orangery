@@ -6,6 +6,7 @@ import {
   alignShapes,
   distributeShapes,
   duplicateShape,
+  flipShapes,
   nextShapeId,
   offsetShape,
 } from './arrange'
@@ -31,6 +32,28 @@ async function change(
 
   const reopened = readDeck(await readPptxPackage(await saveDeck(pkg)))
   return reopened.slides[0]?.shapes ?? []
+}
+
+/** The same change applied twice, each time to a freshly read deck. */
+async function changeTwice(
+  name: string,
+  apply: (shapes: Shape[], slide: ReturnType<typeof readDeck>['slides'][0]) => void,
+) {
+  const pkg = await readPptxPackage(await readFile(join(FIXTURES, `${name}.pptx`)))
+
+  let bytes = await saveDeck(pkg)
+  for (let round = 0; round < 2; round += 1) {
+    const opened = await readPptxPackage(bytes)
+    const deck = readDeck(opened)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+
+    apply(slide.shapes, slide)
+    writeSlidePart(opened, slide)
+    bytes = await saveDeck(opened)
+  }
+
+  return readDeck(await readPptxPackage(bytes)).slides[0]?.shapes ?? []
 }
 
 const xs = (shapes: readonly Shape[]) => shapes.map((shape) => shape.transform?.x)
@@ -183,5 +206,50 @@ describe('duplicating', () => {
 
     // Ids start at 2, the tree itself being 1.
     expect(nextShapeId(slide ?? { path: '', root: {}, tree: {}, shapes: [] })).toBe(6)
+  })
+})
+
+describe('flipping', () => {
+  it('mirrors a shape, and the file says so', async () => {
+    const shapes = await change('shapes', (all) => {
+      flipShapes(all.slice(0, 1), 'horizontal')
+    })
+
+    expect(shapes[0]?.transform?.flipHorizontal).toBe(true)
+  })
+
+  it('mirrors each selected shape about its own middle, not the group about theirs', async () => {
+    const before = await change('shapes', () => undefined)
+    const after = await change('shapes', (all) => {
+      flipShapes(all.slice(0, 2), 'vertical')
+    })
+
+    expect(after[0]?.transform?.flipVertical).toBe(true)
+    expect(after[1]?.transform?.flipVertical).toBe(true)
+    // Nothing moved: flipping is about the shape, not about the arrangement.
+    expect(xs(after)).toEqual(xs(before))
+    expect(ys(after)).toEqual(ys(before))
+  })
+
+  it('puts a shape back when flipped again', async () => {
+    // Twice over, not twice in a row: a writer patches the XML and the parsed
+    // shape beside it is the reading it came from, so the second flip has to
+    // see the first one written and read back — which is what the editor does
+    // between one command and the next.
+    const once = await changeTwice('shapes', (all) => {
+      flipShapes(all.slice(0, 1), 'horizontal')
+    })
+
+    expect(once[0]?.transform?.flipHorizontal).toBe(false)
+  })
+
+  it('leaves alone a shape that states no transform of its own', async () => {
+    // A placeholder takes its box from the layout; flipping it would have to
+    // write a transform it never had, which is a different change entirely.
+    const shapes = await change('placeholders', (all) => {
+      flipShapes(all, 'horizontal')
+    })
+
+    expect(shapes.every((shape) => shape.transform?.flipHorizontal !== true)).toBe(true)
   })
 })

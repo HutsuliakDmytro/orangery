@@ -65,6 +65,7 @@ export {
   alignShapes,
   distributeShapes,
   duplicateShape,
+  flipShapes,
   nextShapeId,
   offsetShape,
 } from './arrange'

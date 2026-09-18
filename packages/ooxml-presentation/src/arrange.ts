@@ -196,3 +196,29 @@ export function offsetShape(shape: Shape, by: { x: number; y: number }): boolean
     y: shape.transform.y + by.y,
   })
 }
+
+/**
+ * Mirrors shapes about their own middles.
+ *
+ * Each about itself rather than the selection about its bounds: PowerPoint
+ * flips every selected shape in place, and flipping the group's arrangement
+ * instead would move shapes nobody asked to move. Two flips of the same axis
+ * put a shape back, which is what makes the command its own undo.
+ */
+export function flipShapes(shapes: readonly Shape[], axis: 'horizontal' | 'vertical'): boolean {
+  let changed = false
+
+  for (const shape of shapes) {
+    const transform = shape.transform
+    if (transform === null) continue
+
+    const flipped =
+      axis === 'horizontal'
+        ? { ...transform, flipHorizontal: !transform.flipHorizontal }
+        : { ...transform, flipVertical: !transform.flipVertical }
+
+    if (writeTransform(shape, flipped)) changed = true
+  }
+
+  return changed
+}

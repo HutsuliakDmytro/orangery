@@ -28,6 +28,7 @@ import {
   removeSlides,
   distributeShapes,
   duplicateShape,
+  flipShapes,
   groupShapes,
   moveShape,
   reorderShapes,
@@ -381,6 +382,21 @@ export const alignCommands: readonly Command[] = (
       const shapes = selected(slide)
       return alignShapes(shapes, alignment, alignmentBounds(shapes, size))
     })
+  },
+}))
+
+export const flipCommands: readonly Command[] = (
+  [
+    ['horizontal', 'Flip Horizontal'],
+    ['vertical', 'Flip Vertical'],
+  ] as const
+).map(([axis, label]) => ({
+  id: `format.flip-${axis}`,
+  label,
+  group: 'format' as const,
+  isEnabled: () => useDeckStore.getState().selection.length > 0,
+  run: () => {
+    useDeckStore.getState().edit((slide) => flipShapes(selected(slide), axis))
   },
 }))
 
@@ -1345,6 +1361,7 @@ export function registerBuiltinCommands(): void {
   registerAll(zoomCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
+  registerAll(flipCommands)
   registerAll(distributeCommands)
   registerAll(slideCommands)
   registerAll(viewCommands)

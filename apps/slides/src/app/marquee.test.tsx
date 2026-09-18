@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getCommand, runCommand } from '@orangery/ui-kit'
 import { flatten } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
@@ -193,5 +194,51 @@ describe('the handles around a selected shape', () => {
     expect((after.rotation - before.rotation + full) % full).toBeCloseTo(quarter, -2)
     expect(after.width).toBe(before.width)
     expect(after.height).toBe(before.height)
+  })
+})
+
+describe('flipping', () => {
+  const firstShape = () => flatten(topLevel())[0]
+
+  it('mirrors what is selected, and the slide shows it', () => {
+    render(<App />)
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShape()?.id ?? 0])
+    })
+
+    act(() => {
+      runCommand('format.flip-horizontal', {})
+    })
+
+    expect(firstShape()?.transform?.flipHorizontal).toBe(true)
+    // Drawn, not merely recorded: before this, a deck full of mirrored arrows
+    // was drawn with every one of them the wrong way round.
+    expect(document.querySelector('g[transform*="scale(-1 1)"]')).not.toBeNull()
+  })
+
+  it('turns it back on a second go', () => {
+    render(<App />)
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShape()?.id ?? 0])
+    })
+
+    act(() => {
+      runCommand('format.flip-vertical', {})
+    })
+    act(() => {
+      runCommand('format.flip-vertical', {})
+    })
+
+    expect(firstShape()?.transform?.flipVertical).toBe(false)
+  })
+
+  it('is offered only when something is selected', () => {
+    render(<App />)
+    expect(getCommand('format.flip-horizontal')?.isEnabled?.({})).toBe(false)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShape()?.id ?? 0])
+    })
+    expect(getCommand('format.flip-horizontal')?.isEnabled?.({})).toBe(true)
   })
 })

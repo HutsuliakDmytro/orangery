@@ -242,15 +242,19 @@ function ShapeImage({ drawing, pkg, part }: { drawing: Drawing; pkg: OoxmlPackag
       <clipPath id={`clip-${key}`}>
         <rect x={0} y={0} width={transform.width} height={transform.height} />
       </clipPath>
-      <image
-        href={url}
-        x={-left * width}
-        y={-top * height}
-        width={width}
-        height={height}
-        preserveAspectRatio="none"
-        clipPath={`url(#clip-${key})`}
-      />
+      {/* A picture turns and mirrors like any other shape; it had been doing
+          neither, so a deck with a rotated photograph came out square. */}
+      <g transform={placement(transform)}>
+        <image
+          href={url}
+          x={-left * width}
+          y={-top * height}
+          width={width}
+          height={height}
+          preserveAspectRatio="none"
+          clipPath={`url(#clip-${key})`}
+        />
+      </g>
     </g>
   )
 }
@@ -403,6 +407,41 @@ function ChartFrame({
   )
 }
 
+/**
+ * How a shape sits in its own box: turned, mirrored, or neither.
+ *
+ * Written mirror-last so it happens first, because SVG applies a list right to
+ * left and OOXML mirrors the geometry and then turns the result. The other
+ * order puts an arrow that was flipped and rotated on the wrong side of its box.
+ */
+function placement(transform: Transform): string | undefined {
+  const rotation =
+    transform.rotation === 0
+      ? ''
+      : `rotate(${String(transform.rotation / 60000)} ${String(transform.width / 2)} ${String(
+          transform.height / 2,
+        )})`
+
+  return `${rotation} ${flipTransform(transform)}`.trim() || undefined
+}
+
+/**
+ * The mirroring part of a transform, as SVG, about the shape's middle.
+ *
+ * Empty when the shape is not mirrored, so the common case adds nothing to the
+ * attribute at all.
+ */
+function flipTransform(transform: Transform): string {
+  if (!transform.flipHorizontal && !transform.flipVertical) return ''
+
+  const x = transform.width / 2
+  const y = transform.height / 2
+  const sx = transform.flipHorizontal ? -1 : 1
+  const sy = transform.flipVertical ? -1 : 1
+
+  return `translate(${String(x)} ${String(y)}) scale(${String(sx)} ${String(sy)}) translate(${String(-x)} ${String(-y)})`
+}
+
 function ShapeOutline({ drawing }: { drawing: Drawing }) {
   const { shape, transform, look, context } = drawing
   const preset = shape.properties?.geometry?.preset ?? null
@@ -418,12 +457,12 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
   // of itself.
   const path =
     custom === null ? pathFor(preset, box) : custom.map((one) => toSvgPath(one, box)).join(' ')
-  const rotation =
-    transform.rotation === 0
-      ? undefined
-      : `rotate(${String(transform.rotation / 60000)} ${String(transform.width / 2)} ${String(
-          transform.height / 2,
-        )})`
+  /**
+   * Only the geometry is placed. The words in a shape stay the way round they
+   * were written — a mirrored sentence is not what anybody meant by "flip", and
+   * it is not what PowerPoint shows either.
+   */
+  const placed = placement(transform)
 
   return (
     <g transform={`translate(${String(transform.x)} ${String(transform.y)})`}>
@@ -432,7 +471,7 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
           <Gradient definition={fill.definition} />
         </defs>
       )}
-      <g transform={rotation}>
+      <g transform={placed}>
         <path
           d={path}
           fill={isLinePreset(preset) ? 'none' : fill.paint}

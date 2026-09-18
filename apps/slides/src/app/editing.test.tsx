@@ -780,3 +780,50 @@ describe('find and replace', () => {
     expect(screen.getByRole('button', { name: 'Replace all' })).toBeDisabled()
   })
 })
+
+describe('shadows', () => {
+  it('writes one into the effect list', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Shadow soft' }))
+
+    expect(partText()).toContain('<a:outerShdw')
+    expect(partText()).toContain('<a:effectLst>')
+  })
+
+  it('takes it away again, and the list with it', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Shadow medium' }))
+    await user.click(screen.getByRole('button', { name: 'Shadow none' }))
+
+    // An empty list says "no effects", which is a different answer from not
+    // saying anything.
+    expect(partText()).not.toContain('a:outerShdw')
+    expect(partText()).not.toContain('a:effectLst')
+  })
+
+  it('is drawn, not merely recorded', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Shadow hard' }))
+
+    // Before this, a deck where every box had a shadow was drawn flat.
+    expect(document.querySelector('feDropShadow')).not.toBeNull()
+  })
+})

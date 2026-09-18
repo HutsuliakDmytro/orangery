@@ -1,5 +1,12 @@
-import { writeFill, writeLine } from '@orangery/ooxml-presentation'
+import { writeFill, writeLine, writeShadow } from '@orangery/ooxml-presentation'
+
+/** Black at forty percent, which is what every program's default shadow is. */
+const shadowBlack = (): Color => ({
+  source: { kind: 'srgb', hex: '#000000' },
+  transforms: [{ kind: 'alpha', value: 0.4 }],
+})
 import { resolveColor } from '@orangery/ooxml-drawingml'
+import type { Color, Shadow } from '@orangery/ooxml-drawingml'
 import { colorContextFor, lookContext, shapeLook } from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { SlideProperties } from './slide-properties'
@@ -16,6 +23,21 @@ import { TextProperties } from './text-properties'
  * things a person wants; offering only the second, as this panel did, quietly
  * made every deck edited here stop following its own theme.
  */
+
+/**
+ * Three shadows and none, rather than a panel of numbers.
+ *
+ * Distance, angle and blur together are four decisions to make a box look
+ * slightly raised, and nobody wants to make four. The angle is 45° down and to
+ * the right in all of them, which is where light comes from in every deck
+ * anybody has ever made.
+ */
+const SHADOWS: readonly (readonly [string, Shadow | null])[] = [
+  ['None', null],
+  ['Soft', { distance: 38100, direction: 45 * 60000, blur: 76200, color: shadowBlack() }],
+  ['Medium', { distance: 76200, direction: 45 * 60000, blur: 114300, color: shadowBlack() }],
+  ['Hard', { distance: 114300, direction: 45 * 60000, blur: 0, color: shadowBlack() }],
+]
 
 const WIDTHS = [
   ['Hairline', 9525],
@@ -117,6 +139,30 @@ export function PropertiesPanel() {
       <BoxProperties shapes={shapes} />
 
       <TextProperties />
+
+      <section aria-label="Shadow" className="space-y-2">
+        <h2 className="uppercase tracking-wide text-muted">Shadow</h2>
+        <div className="flex flex-wrap gap-1">
+          {SHADOWS.map(([label, shadow]) => (
+            <button
+              key={label}
+              type="button"
+              aria-label={`Shadow ${label.toLowerCase()}`}
+              aria-pressed={
+                shadow === null
+                  ? first?.properties?.shadow == null
+                  : first?.properties?.shadow?.distance === shadow.distance
+              }
+              onClick={() => {
+                apply((shape) => writeShadow(shape, shadow))
+              }}
+              className="rounded border border-border px-1.5 py-0.5 text-muted"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section aria-label="Line" className="space-y-2">
         <h2 className="uppercase tracking-wide text-muted">Line</h2>

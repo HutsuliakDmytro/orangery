@@ -33,7 +33,9 @@ import {
   fontStackFor,
   toSvgPath,
   readChart,
+  resolveColor,
   resolveThemeFont,
+  shadowOffset,
   textBodyToDoc,
   textOfBody,
 } from '@orangery/ooxml-drawingml'
@@ -466,14 +468,46 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
    */
   const placed = placement(transform)
 
+  /**
+   * The drop shadow, as a filter.
+   *
+   * A shape with a shadow drawn flat sits on the page instead of above it, and
+   * on a deck where every box has one that is the whole design gone. The blur
+   * is halved on the way to `stdDeviation`: DrawingML states a radius and SVG
+   * a standard deviation, and two of the latter is about one of the former.
+   */
+  const shadow = shape.properties?.shadow ?? null
+  const shadowColor =
+    shadow?.color == null ? null : resolveColor(shadow.color, lookContext(context, look))
+  const offset = shadow === null ? null : shadowOffset(shadow)
+  const filterId = `shadow-${drawing.key}`
+
   return (
     <g transform={`translate(${String(transform.x)} ${String(transform.y)})`}>
-      {fill.definition && (
+      {(fill.definition || offset !== null) && (
         <defs>
-          <Gradient definition={fill.definition} />
+          {fill.definition && <Gradient definition={fill.definition} />}
+          {offset !== null && shadow !== null && (
+            <filter
+              id={filterId}
+              filterUnits="userSpaceOnUse"
+              x="-50%"
+              y="-50%"
+              width="200%"
+              height="200%"
+            >
+              <feDropShadow
+                dx={offset.x}
+                dy={offset.y}
+                stdDeviation={shadow.blur / 2}
+                floodColor={shadowColor?.hex ?? '#000000'}
+                floodOpacity={shadowColor?.alpha ?? 0.4}
+              />
+            </filter>
+          )}
         </defs>
       )}
-      <g transform={placed}>
+      <g transform={placed} filter={offset === null ? undefined : `url(#${filterId})`}>
         <path
           d={path}
           fill={isLinePreset(preset) ? 'none' : fill.paint}

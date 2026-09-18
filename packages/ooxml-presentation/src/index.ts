@@ -71,7 +71,7 @@ export {
 } from './arrange'
 export type { Alignment } from './arrange'
 export { groupShapes, ungroupShape } from './group'
-export { writeFill, writeLine } from './write-look'
+export { writeFill, writeLine, writeShadow } from './write-look'
 export type { LineChange } from './write-look'
 export { CLIPBOARD_KIND, copyShapes, parseClipboard, pasteShapes } from './clipboard'
 export type { ClipboardMedia, ClipboardShapes, PasteOptions } from './clipboard'

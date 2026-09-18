@@ -170,6 +170,12 @@ These are the ones that matter most. Take them seriously.
       it. The box grows a line at a time, and shrinks again when you delete.
 - [ ] Do the same inside a group. The box grows and nothing else in the group
       moves.
+- [ ] Open a deck with a scatter chart. The points sit where their numbers put
+      them, not at even steps.
+- [ ] Open one with columns and a line over them on a second axis. Both are
+      drawn, each numbered in its own units, and the gridlines are one set.
+- [ ] Open one with data labels. The numbers are there, and a chart without
+      them shows none.
 
 ## Getting a deck in
 

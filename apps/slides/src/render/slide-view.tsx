@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef } from 'react'
 import {
   absoluteTransform,
   autoplayShapes,
@@ -52,6 +52,7 @@ import { mediaUrl } from './media'
 import { TableView } from './table-view'
 import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
+import { scaleFor } from './autofit'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
 import { useMarquee } from './use-marquee'
@@ -602,6 +603,7 @@ function ShapeText({
   onCommitText,
   onFollowLink,
   onLeave,
+  onAutofit,
 }: {
   drawing: Drawing
   deck: Deck
@@ -613,9 +615,52 @@ function ShapeText({
   onCommitText?: (id: number, doc: PmNode) => void
   onFollowLink?: (link: Hyperlink) => void
   onLeave?: () => void
+  /** Told the scale this text needs, once it has been measured in the box. */
+  onAutofit?: (id: number, fontScale: number) => void
 }) {
   const { shape, transform, context } = drawing
   const empty = shape.text !== null && textOfBody(shape.text) === ''
+
+  /**
+   * The box the words are laid out in, measured after they have been.
+   *
+   * Measured rather than calculated: what a line of text comes to depends on
+   * the font the machine actually has, and the only thing that knows that is
+   * the thing that just drew it.
+   */
+  const laidOut = useRef<HTMLDivElement>(null)
+
+  /**
+   * What autofit has already done to this text.
+   *
+   * PowerPoint shrinks text that overflows its box and writes down what it
+   * shrank it to. Ignoring that draws the text at full size, overflowing the
+   * shape exactly as PowerPoint decided it should not, so the recorded scale is
+   * applied rather than guessed at.
+   */
+  const autofit = shape.text?.bodyProperties?.autofit
+  const scale = autofit?.kind === 'normal' ? (autofit.fontScale ?? 1) : 1
+  const lineReduction = autofit?.kind === 'normal' ? (autofit.lineSpaceReduction ?? 0) : 0
+
+  /**
+   * And what it has to do now that the words have changed.
+   *
+   * After the layout, because that is when there is something to measure, and
+   * only when the shape asked to be shrunk — a shape that did not is a shape
+   * whose text is meant to run past its box. Not while it is being edited
+   * either: shrinking on every keystroke would write a step into the undo
+   * history for each one.
+   */
+  useLayoutEffect(() => {
+    if (onAutofit === undefined || autofit?.kind !== 'normal' || editing === true) return
+
+    const node = laidOut.current
+    if (node === null || node.clientHeight === 0) return
+
+    const current = Math.round(scale * 100000)
+    const wanted = scaleFor(current, { content: node.scrollHeight, box: node.clientHeight })
+    if (wanted !== current) onAutofit(shape.id, wanted)
+  })
 
   /**
    * What an empty placeholder says before anyone types in it.
@@ -634,19 +679,6 @@ function ShapeText({
   const chain = listStyleChain(deck, slide, shape)
   const insets = shape.text.bodyProperties?.insets
   const anchor = shape.text.bodyProperties?.anchor ?? 't'
-
-  /**
-   * What autofit has already done to this text.
-   *
-   * PowerPoint shrinks text that overflows its box and writes down what it
-   * shrank it to. Ignoring that draws the text at full size, overflowing the
-   * shape exactly as PowerPoint decided it should not — so the recorded scale
-   * is applied rather than recomputed. Working out a *new* scale after an edit
-   * needs the text measured once laid out, which is a later task.
-   */
-  const autofit = shape.text.bodyProperties?.autofit
-  const scale = autofit?.kind === 'normal' ? (autofit.fontScale ?? 1) : 1
-  const lineReduction = autofit?.kind === 'normal' ? (autofit.lineSpaceReduction ?? 0) : 0
 
   /**
    * What the fields on this slide answer to.
@@ -668,6 +700,7 @@ function ShapeText({
       {/* React puts the XHTML namespace on children of a foreignObject itself,
           so the div needs nothing beyond being inside one. */}
       <div
+        ref={laidOut}
         style={{
           width: '100%',
           height: '100%',
@@ -830,6 +863,7 @@ export function SlideView({
   editing,
   onEdit,
   onCommitText,
+  onAutofit,
   playing = false,
   onFollowLink,
   className,
@@ -899,6 +933,8 @@ export function SlideView({
   onEdit?: (id: number | null) => void
   /** The edited document, handed over when the shape is left. */
   onCommitText?: (id: number, doc: PmNode) => void
+  /** Given a shape that asks to be shrunk and the scale its text now needs. */
+  onAutofit?: (id: number, fontScale: number) => void
   /**
    * Whether a film or a sound on the slide gets a player over its poster frame.
    *
@@ -1175,6 +1211,7 @@ export function SlideView({
               playing={playing}
               editing={editing === drawing.shape.id}
               onCommitText={onCommitText}
+              onAutofit={onAutofit}
               onFollowLink={onFollowLink}
               onLeave={() => {
                 onEdit?.(null)

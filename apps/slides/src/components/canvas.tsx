@@ -14,7 +14,7 @@ import {
   withAncestors,
   writeTransform,
 } from '@orangery/ooxml-presentation'
-import { writeTextBody } from '@orangery/ooxml-drawingml'
+import { writeAutofitScale, writeTextBody } from '@orangery/ooxml-drawingml'
 import type { Transform } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
 import { applyDrag, applyRotation } from '../render/use-drag'
@@ -110,6 +110,12 @@ export function Canvas() {
             edit((edited) => {
               const shape = edited.shapes.find((one) => one.id === id)
               return shape?.text == null ? false : writeTextBody(shape.text.node, doc)
+            })
+          }}
+          onAutofit={(id, fontScale) => {
+            edit((edited) => {
+              const shape = flatten(edited.shapes).find((one) => one.id === id)
+              return shape?.text == null ? false : writeAutofitScale(shape.text.node, fontScale)
             })
           }}
           cropping={cropping}

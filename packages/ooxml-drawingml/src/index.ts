@@ -78,7 +78,12 @@ export { readChart } from './chart'
 export type { Chart, ChartKind, ChartSeries } from './chart'
 export { docToParagraphs, textBodyToDoc, writeTextBody } from './text-prosemirror'
 export type { PmMark, PmNode } from './text-prosemirror'
-export { autofitKindOf, bodyPropertiesOf, writeBodyProperties } from './write-text-body'
+export {
+  autofitKindOf,
+  bodyPropertiesOf,
+  writeAutofitScale,
+  writeBodyProperties,
+} from './write-text-body'
 export type { Anchor, AutofitKind, BodyChange, Wrap } from './write-text-body'
 export {
   customGeometry,

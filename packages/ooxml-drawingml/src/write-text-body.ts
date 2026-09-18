@@ -1,4 +1,5 @@
 import {
+  attribute,
   element,
   ensureChild,
   findChild,
@@ -149,4 +150,30 @@ export function autofitKindOf(body: XmlNode): AutofitKind | null {
   if (findChild(properties, 'a:noAutofit') !== undefined) return 'none'
   if (findChild(properties, 'a:spAutoFit') !== undefined) return 'shape'
   return findChild(properties, 'a:normAutofit') === undefined ? null : 'shrink'
+}
+
+/**
+ * Records what the text has been shrunk to.
+ *
+ * Only on a body that already asks to be shrunk: writing a scale into a shape
+ * that never asked would shrink its text in PowerPoint on open, which is a
+ * change to the document made by having looked at it.
+ *
+ * The scale is thousandths of a percent, like every other ratio in DrawingML.
+ * A hundred percent is written as no attribute at all, because that is what an
+ * unshrunk shape says and a deck full of `fontScale="100000"` is a deck that
+ * differs from its file for no reason.
+ */
+export function writeAutofitScale(body: XmlNode, fontScale: number): boolean {
+  const properties = findChild(body, 'a:bodyPr')
+  const normal = properties === undefined ? undefined : findChild(properties, 'a:normAutofit')
+  if (normal === undefined) return false
+
+  const wanted = Math.round(Math.min(Math.max(fontScale, 1000), 100000))
+  const written = wanted >= 100000 ? null : String(wanted)
+  if ((attribute(normal, 'fontScale') ?? null) === written) return false
+
+  if (written === null) removeAttribute(normal, 'fontScale')
+  else setAttribute(normal, 'fontScale', written)
+  return true
 }

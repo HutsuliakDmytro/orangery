@@ -161,6 +161,11 @@ These are the ones that matter most. Take them seriously.
       PowerPoint does.
 - [ ] Stretch a rounded rectangle wide. The corners stay round rather than
       turning oval.
+- [ ] Type into a placeholder until the text is too long for it. It shrinks,
+      and stops shrinking — it does not flicker between two sizes.
+- [ ] Delete most of it again. The text grows back, once.
+- [ ] Save and open in PowerPoint. PowerPoint agrees about the size rather than
+      resizing it again on open.
 
 ## Getting a deck in
 

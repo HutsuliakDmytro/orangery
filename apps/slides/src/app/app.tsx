@@ -28,6 +28,7 @@ import { useCrashRecovery } from '../document/use-crash-recovery'
 import { resolveUnsaved, unsavedDeckName, useGuardStore } from '../document/unsaved'
 import { useCloseGuard } from './use-close-guard'
 import { useExternalOpen } from './use-external-open'
+import { baseName } from '@orangery/platform'
 import { useDeckStore } from '../store/deck-store'
 import type { OpenDeck } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -242,7 +243,7 @@ function Shell() {
  * beside it claiming unsaved changes to nothing.
  */
 function title(open: OpenDeck | null, path: string | null): string {
-  if (path !== null) return path.split(/[\\/]/u).pop() ?? path
+  if (path !== null) return baseName(path)
   return open === null ? 'Orangery Slides' : 'Untitled Presentation'
 }
 

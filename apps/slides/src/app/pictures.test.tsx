@@ -81,6 +81,17 @@ async function openWithPicture(size: number) {
 
 const offer = () => screen.queryByRole('alertdialog', { name: 'Large presentation' })
 
+/**
+ * Longer than the default, because the deck under test really is twenty-one
+ * megabytes and really is zipped.
+ *
+ * The suite runs thirty files at once, and a second is not enough for that
+ * under that load — which showed up as this file failing about one run in
+ * three. A flaky test is worse than a slow one: it teaches people that a red
+ * run means nothing.
+ */
+const SLOW = { timeout: 15_000 }
+
 beforeEach(() => {
   written.length = 0
   usePicturesStore.getState().set(null)
@@ -99,7 +110,7 @@ describe('saving a deck that is not heavy', () => {
 
     await waitFor(() => {
       expect(written).toEqual(['/decks/big.pptx'])
-    })
+    }, SLOW)
     expect(offer()).not.toBeInTheDocument()
   })
 })
@@ -115,7 +126,7 @@ describe('saving a deck heavy with pictures', () => {
 
     await waitFor(() => {
       expect(offer()).toBeInTheDocument()
-    })
+    }, SLOW)
     // Nothing is on disk while the question is open.
     expect(written).toEqual([])
     expect(screen.getByText(/carries 21\.0 MB of pictures/u)).toBeInTheDocument()
@@ -130,14 +141,14 @@ describe('saving a deck heavy with pictures', () => {
     })
     await waitFor(() => {
       expect(offer()).toBeInTheDocument()
-    })
+    }, SLOW)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Save as is' }))
 
     await waitFor(() => {
       expect(written).toEqual(['/decks/big.pptx'])
-    })
+    }, SLOW)
   })
 
   it('writes nothing at all when the answer is Cancel', async () => {
@@ -155,14 +166,14 @@ describe('saving a deck heavy with pictures', () => {
     })
     await waitFor(() => {
       expect(offer()).toBeInTheDocument()
-    })
+    }, SLOW)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => {
       expect(offer()).not.toBeInTheDocument()
-    })
+    }, SLOW)
     expect(written).toEqual([])
     // The deck is exactly as unsaved as it was, so closing still asks.
     expect(useDeckStore.getState().saved).toBe(false)
@@ -179,13 +190,13 @@ describe('saving a deck heavy with pictures', () => {
     })
     await waitFor(() => {
       expect(offer()).toBeInTheDocument()
-    })
+    }, SLOW)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Shrink and Save' }))
 
     await waitFor(() => {
       expect(written).toEqual(['/decks/big.pptx'])
-    })
+    }, SLOW)
   })
 })

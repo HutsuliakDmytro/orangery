@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { allCommands, isCommandEnabled, runCommand } from '@orangery/ui-kit'
-import { isMac } from '@orangery/platform'
+import { hasMod } from '@orangery/platform'
 
 /**
  * Keyboard shortcuts, read from the registry.
@@ -41,7 +41,7 @@ export function useShortcuts(): void {
       if (event.key !== 'Escape' && isTyping(event.target)) return
 
       const pressed = event.key.toLowerCase()
-      const mod = isMac ? event.metaKey : event.ctrlKey
+      const mod = hasMod(event)
 
       for (const command of allCommands()) {
         if (command.shortcut === undefined) continue

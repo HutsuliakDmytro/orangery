@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { appDataRoot } from './paths'
+import { appDataRoot, baseName } from './paths'
 import { isTauri } from './os'
 
 /**
@@ -14,12 +14,6 @@ import { isTauri } from './os'
  * to documents or to decks: it is paths and the order they were last opened in.
  */
 
-/** The name a path ends with, which is what a person recognises it by. */
-function nameOf(path: string): string {
-  const name = path.split(/[\\/]/u).pop()
-  return name === undefined || name === '' ? path : name
-}
-
 export const MAX_RECENT_FILES = 10
 export const RECENT_FILES_NAME = 'recent-files.json'
 
@@ -32,7 +26,7 @@ export interface RecentFile {
 export function addRecent(existing: readonly RecentFile[], path: string): RecentFile[] {
   const entry: RecentFile = {
     path,
-    name: nameOf(path),
+    name: baseName(path),
     openedAt: new Date().toISOString(),
   }
 
@@ -66,7 +60,7 @@ export function parseRecentFiles(contents: string): RecentFile[] {
 
     files.push({
       path,
-      name: typeof entry['name'] === 'string' ? entry['name'] : nameOf(path),
+      name: typeof entry['name'] === 'string' ? entry['name'] : baseName(path),
       openedAt: typeof entry['openedAt'] === 'string' ? entry['openedAt'] : '',
     })
   }

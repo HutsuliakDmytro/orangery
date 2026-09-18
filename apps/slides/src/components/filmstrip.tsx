@@ -9,6 +9,7 @@ import type { Section } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
+import { hasMod } from '@orangery/platform'
 
 /**
  * The slides down the left, under the sections they fall in.
@@ -65,7 +66,10 @@ export function Filmstrip() {
       return
     }
 
-    if (event.metaKey || event.ctrlKey) {
+    // The platform's own modifier, not either of them: on macOS a Ctrl-click is
+    // the secondary click, so accepting it here made one gesture open a context
+    // menu and change the selection at the same time.
+    if (hasMod(event)) {
       const without = picked.filter((one) => one !== index)
       selectSlides(without.length === picked.length ? [...picked, index] : without)
       return

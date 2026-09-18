@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { baseName } from '@orangery/platform'
 import { useDeckStore } from '../store/deck-store'
 import { clearSnapshot, documentKey } from './autosave'
 import { saveDeckFile } from './file-operations'
@@ -81,5 +82,5 @@ export async function resolveUnsaved(choice: UnsavedChoice): Promise<void> {
 /** What the prompt calls the deck it is asking about. */
 export function unsavedDeckName(): string {
   const path = useDeckStore.getState().open?.path ?? null
-  return path === null ? 'Untitled Presentation' : (path.split(/[\\/]/u).pop() ?? path)
+  return path === null ? 'Untitled Presentation' : baseName(path)
 }

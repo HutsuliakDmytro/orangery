@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
-import { isTauri } from '@orangery/platform'
+import { baseName, isTauri } from '@orangery/platform'
 
 /**
  * Getting a deck off the disk.
@@ -35,10 +35,8 @@ export async function readDeckFile(path: string): Promise<Uint8Array> {
   return new Uint8Array(loaded.bytes)
 }
 
-/** The file name, for the window title, without walking a path library. */
-export function nameOf(path: string): string {
-  return path.split(/[\\/]/u).pop() ?? path
-}
+/** The file name, for the window title. Re-exported so callers need one import. */
+export const nameOf = baseName
 
 /** Picks a picture to put on a slide. */
 export async function pickPicturePath(): Promise<string | null> {

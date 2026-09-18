@@ -141,6 +141,10 @@ These are the ones that matter most. Take them seriously.
 - [ ] Try to delete corners until there are two left. It stops at three.
 - [ ] Do the same to a shape with a curved side. The curve's handles cannot be
       deleted on their own, and deleting the corner takes the curve with it.
+- [ ] Find a word that appears on several slides. Replace, once. The view goes
+      to that slide first, one match changes, and the count drops by one.
+- [ ] Press Replace repeatedly. It walks forward through the deck without
+      skipping any.
 
 ## Getting a deck in
 

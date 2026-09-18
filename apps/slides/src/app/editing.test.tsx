@@ -810,6 +810,55 @@ describe('find and replace', () => {
 
     expect(screen.getByRole('button', { name: 'Replace all' })).toBeDisabled()
   })
+
+  it('replaces the one match it is standing on and leaves the rest', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+
+    // The first, which is on slide one; the eight became seven.
+    expect(partText()).toContain('Page 1')
+    expect(screen.getByText('1 of 7 on 7 slides')).toBeInTheDocument()
+  })
+
+  it('goes to the slide the match is on before changing it', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Next match' }))
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+
+    // A word changing on a slide you are not looking at is a word you did not
+    // see change.
+    expect(useDeckStore.getState().current).toBe(1)
+    expect(partText()).toContain('Page')
+  })
+
+  it('stays where it was, so the next match has taken the number', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+
+    // Two presses, two slides changed: standing still is what moves on.
+    expect(
+      useDeckStore.getState().open?.deck.slides[1]?.shapes[0]?.text?.paragraphs[0]?.runs[0]?.text,
+    ).toBe('Page 2')
+  })
 })
 
 describe('shadows', () => {

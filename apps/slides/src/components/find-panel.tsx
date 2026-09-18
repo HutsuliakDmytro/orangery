@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react'
-import { findInDeck, replaceInDeck } from '@orangery/ooxml-presentation'
+import { findInDeck, replaceInDeck, replaceMatch } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 
 /**
  * Finding and replacing across the deck.
  *
- * Matches are counted rather than stepped through for now: the useful question
- * when replacing across a hundred slides is how many there are, and jumping to
- * each one needs a selection inside text that the editor does not yet expose.
+ * Two ways to replace, because they answer different questions. "All" is for a
+ * word that changed everywhere — a product renamed. "Replace" is for a word
+ * that changed here and not there, which is most of them: nobody wants the
+ * client's name swapped inside a quotation.
+ *
+ * A match is named by its place in the list. That only means anything while the
+ * list is the one the deck currently gives, which is why replacing one re-reads
+ * and why the position is kept rather than advanced — the match that was there
+ * is gone, and the next one has taken its number.
  */
 export function FindPanel({ onClose }: { onClose: () => void }) {
   const open = useDeckStore((state) => state.open)
@@ -92,6 +98,24 @@ export function FindPanel({ onClose }: { onClose: () => void }) {
         />
         Match case
       </label>
+
+      <button
+        type="button"
+        disabled={matches.length === 0}
+        onClick={() => {
+          const match = matches[here]
+          if (match === undefined) return
+
+          // Where it is, before it is gone: the shape is what the panel points
+          // at, and after the replacement this match no longer exists.
+          select(match.slide - 1)
+          selectShapes([match.shapeId])
+          editDeck((deck) => replaceMatch(deck, query, replacement, here, { caseSensitive }))
+        }}
+        className="rounded border border-border px-2 py-1 text-text disabled:text-muted"
+      >
+        Replace
+      </button>
 
       <button
         type="button"

@@ -133,7 +133,7 @@ export { connectorEnds, moveConnectorEnd, nearestSite, sitePoint } from './conne
 export type { ConnectorEnd, EndMove } from './connect'
 export { facingSites, insertConnector, SITES } from './insert-connector'
 export type { NewConnector, Site } from './insert-connector'
-export { findInDeck, replaceInDeck, replaceInSlide } from './find-replace'
+export { findInDeck, replaceInDeck, replaceInSlide, replaceMatch } from './find-replace'
 export type { Match, SearchOptions } from './find-replace'
 export {
   addSlide,

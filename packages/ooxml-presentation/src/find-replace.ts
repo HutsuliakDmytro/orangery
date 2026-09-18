@@ -96,26 +96,41 @@ function bodiesOf(shape: Shape): XmlNode[] {
 
 const paragraphsOf = (body: XmlNode) => children(body).filter((child) => tagName(child) === 'a:p')
 
-export function findInDeck(deck: Deck, query: string, options: SearchOptions = {}): Match[] {
+/**
+ * Every paragraph in the deck, in one fixed order.
+ *
+ * Finding and replacing-one both walk this, which is the whole reason it is a
+ * function rather than two similar loops: a match is named by its place in the
+ * list, and that name only means anything while both agree on the order.
+ */
+function paragraphsInDeck(deck: Deck): { slide: number; shapeId: number; paragraph: XmlNode }[] {
   return deck.slides.flatMap((slide, index) =>
     flatten(slide.shapes).flatMap((shape) =>
       bodiesOf(shape).flatMap((body) =>
-        paragraphsOf(body).flatMap((paragraph) => {
-          const text = runsOf(paragraph)
-            .map((run) => run.text)
-            .join('')
-
-          return indicesOf(text, query, options).map((start) => ({
-            slide: index + 1,
-            shapeId: shape.id,
-            context: text,
-            start,
-            length: query.length,
-          }))
-        }),
+        paragraphsOf(body).map((paragraph) => ({
+          slide: index + 1,
+          shapeId: shape.id,
+          paragraph,
+        })),
       ),
     ),
   )
+}
+
+export function findInDeck(deck: Deck, query: string, options: SearchOptions = {}): Match[] {
+  return paragraphsInDeck(deck).flatMap(({ slide, shapeId, paragraph }) => {
+    const text = runsOf(paragraph)
+      .map((run) => run.text)
+      .join('')
+
+    return indicesOf(text, query, options).map((start) => ({
+      slide,
+      shapeId,
+      context: text,
+      start,
+      length: query.length,
+    }))
+  })
 }
 
 /** Puts a string into an `a:t`, which holds its text as a child node. */
@@ -136,12 +151,15 @@ function replaceInParagraph(
   query: string,
   replacement: string,
   options: SearchOptions,
+  only: number | null = null,
 ): number {
   const runs = runsOf(paragraph)
   if (runs.length === 0) return 0
 
   const text = runs.map((run) => run.text).join('')
-  const matches = indicesOf(text, query, options)
+  const found = indicesOf(text, query, options)
+  // One of them, named by its place in this paragraph, or all of them.
+  const matches = only === null ? found : found.slice(only, only + 1)
   if (matches.length === 0) return 0
 
   // Each run's span in the joined text, so a match can be mapped back onto the
@@ -210,4 +228,40 @@ export function replaceInDeck(
     (count, slide) => count + replaceInSlide(slide, query, replacement, options),
     0,
   )
+}
+
+/**
+ * Replaces the one match at `index` in the order `findInDeck` lists them.
+ *
+ * Named by position rather than by paragraph and offset, because a paragraph is
+ * not something a caller can hold on to and two identical paragraphs in one
+ * shape are indistinguishable by their text. The position is exact as long as
+ * nothing has changed since the list was made, which is exactly the case where
+ * replacing one means anything.
+ *
+ * Returns whether it found that match to replace.
+ */
+export function replaceMatch(
+  deck: Deck,
+  query: string,
+  replacement: string,
+  index: number,
+  options: SearchOptions = {},
+): boolean {
+  if (query === '' || index < 0) return false
+
+  let seen = 0
+  for (const { paragraph } of paragraphsInDeck(deck)) {
+    const text = runsOf(paragraph)
+      .map((run) => run.text)
+      .join('')
+    const here = indicesOf(text, query, options).length
+
+    if (index < seen + here) {
+      return replaceInParagraph(paragraph, query, replacement, options, index - seen) > 0
+    }
+    seen += here
+  }
+
+  return false
 }

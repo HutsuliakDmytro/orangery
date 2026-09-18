@@ -1,0 +1,154 @@
+import { useEffect } from 'react'
+import { leaveFullScreen } from '../commands/definitions'
+import { SlideView } from '../render/slide-view'
+import { useDeckStore } from '../store/deck-store'
+import { useShowStore } from '../store/show-store'
+
+/**
+ * The slide show, over everything else.
+ *
+ * Nothing about a slide changes here: the same renderer draws it, at the size
+ * of the screen instead of the size of the canvas. One way to draw a slide
+ * means what the room sees cannot disagree with what was edited.
+ *
+ * The keys are handled here rather than through the command registry. A show is
+ * a mode with its own keyboard — space advances, `B` blanks, a digit starts a
+ * number — and those are not commands the rest of the app has any business
+ * offering. Registry shortcuts would also collide: `b` is bold.
+ */
+
+/** Advancing is a click anywhere; going back needs a key or the right button. */
+export function Show() {
+  const open = useDeckStore((state) => state.open)
+  const at = useShowStore((state) => state.at)
+  const blank = useShowStore((state) => state.blank)
+  const typed = useShowStore((state) => state.typed)
+
+  // The window is given back when the show ends, wherever it ended from: a
+  // presentation that leaves the screen filled is one nobody can get out of.
+  useEffect(() => {
+    if (at !== null) return
+    void leaveFullScreen()
+  }, [at])
+
+  useEffect(() => {
+    if (at === null) return
+
+    function onKeyDown(event: KeyboardEvent) {
+      const show = useShowStore.getState()
+
+      // A number is typed one digit at a time and taken on Enter, which is how
+      // PowerPoint does it and the only way to reach slide 12 with ten keys.
+      if (/^\d$/u.test(event.key)) {
+        event.preventDefault()
+        event.stopPropagation()
+        show.type(event.key)
+        return
+      }
+
+      const handled = (): boolean => {
+        switch (event.key) {
+          case 'Enter':
+            // Enter after digits goes to that slide; a number naming no slide
+            // does nothing at all rather than quietly advancing, which would be
+            // the worst answer to a mistyped jump. Enter on its own advances.
+            if (show.typed === '') show.next()
+            else show.jump()
+            return true
+          case ' ':
+          case 'ArrowRight':
+          case 'ArrowDown':
+          case 'PageDown':
+            show.next()
+            return true
+          case 'ArrowLeft':
+          case 'ArrowUp':
+          case 'PageUp':
+          case 'Backspace':
+            show.previous()
+            return true
+          case 'Home':
+            show.go(0)
+            return true
+          case 'End':
+            show.go(show.count - 1)
+            return true
+          case 'b':
+          case 'B':
+            show.setBlank(show.blank === 'black' ? null : 'black')
+            return true
+          case 'w':
+          case 'W':
+            show.setBlank(show.blank === 'white' ? null : 'white')
+            return true
+          case 'Escape':
+            show.end()
+            return true
+          default:
+            return false
+        }
+      }
+
+      if (!handled()) return
+
+      // A show is a mode with its own keyboard, so a key it used does not go on
+      // to mean whatever it means in the editor underneath.
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [at])
+
+  if (open === null || at === null) return null
+
+  const slide = open.deck.slides[at]
+  if (slide === undefined) return null
+
+  return (
+    <div
+      role="presentation"
+      aria-label="Slide show"
+      data-testid="show"
+      onPointerDown={(event) => {
+        // The right button goes back, which is what a presenter remote sends.
+        if (event.button === 2) useShowStore.getState().previous()
+        else useShowStore.getState().next()
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black"
+    >
+      {blank === null ? (
+        <SlideView
+          deck={open.deck}
+          slide={slide}
+          themes={open.themes}
+          package={open.package}
+          // The slide keeps its shape, so one axis is filled and the other is
+          // letterboxed; stretching it would be showing a different slide.
+          className="max-h-full max-w-full"
+          style={{ width: '100vw', maxHeight: '100vh' }}
+        />
+      ) : (
+        <div
+          data-testid="blank"
+          className={`h-full w-full ${blank === 'white' ? 'bg-white' : 'bg-black'}`}
+        />
+      )}
+
+      {typed !== '' && (
+        <p
+          data-testid="typed"
+          className="absolute bottom-6 right-6 rounded bg-white/10 px-3 py-1 text-2xl text-white"
+        >
+          {typed}
+        </p>
+      )}
+    </div>
+  )
+}

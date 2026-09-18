@@ -37,6 +37,7 @@ import {
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { ICON_SIZE, ICONS } from '../document/icons'
 import { useDeckStore } from '../store/deck-store'
+import { useShowStore } from '../store/show-store'
 import { useEditorStore } from '../store/editor-store'
 import { useViewStore } from '../store/view-store'
 
@@ -641,6 +642,53 @@ export const slideEditCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * Showing the deck.
+ *
+ * Starting a show does not move the editor: leaving it puts a person back where
+ * they were rather than where the show ended, which is what they meant by
+ * "present from here" in the first place.
+ */
+export const showCommands: readonly Command[] = [
+  {
+    id: 'show.start',
+    label: 'Start Slide Show',
+    group: 'view',
+    shortcut: 'F5',
+    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      const { open } = useDeckStore.getState()
+      if (open === null) return
+
+      useShowStore.getState().start(0, open.deck.slides.length)
+      void enterFullScreen()
+    },
+  },
+  {
+    id: 'show.start-here',
+    label: 'Start Slide Show From This Slide',
+    group: 'view',
+    shortcut: 'Shift+F5',
+    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      const { open, current } = useDeckStore.getState()
+      if (open === null) return
+
+      useShowStore.getState().start(Math.max(current, 0), open.deck.slides.length)
+      void enterFullScreen()
+    },
+  },
+  {
+    id: 'show.end',
+    label: 'End Slide Show',
+    group: 'view',
+    isEnabled: () => useShowStore.getState().at !== null,
+    run: () => {
+      useShowStore.getState().end()
+    },
+  },
+]
+
 export const zoomCommands: readonly Command[] = [
   {
     id: 'view.master',
@@ -1054,6 +1102,7 @@ export function registerBuiltinCommands(): void {
   registerAll(paragraphCommands)
   registerAll(spacingCommands)
   registerAll(slideEditCommands)
+  registerAll(showCommands)
   registerAll(zoomCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
@@ -1079,4 +1128,34 @@ async function backgroundPictureFromDisk(): Promise<void> {
     if (changed) writePart(open.package, slide.path, slide.root)
     return changed
   })
+}
+
+/**
+ * Fills the screen for the show, where there is a window to ask.
+ *
+ * In a browser there is none, and the show is simply the size of the page;
+ * nothing else about it depends on the answer, so a failure here is not worth
+ * stopping a presentation over.
+ */
+async function enterFullScreen(): Promise<void> {
+  if (!isTauri()) return
+
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    await getCurrentWindow().setFullscreen(true)
+  } catch {
+    // A show at window size is a show.
+  }
+}
+
+/** Gives the window back when the show ends. */
+export async function leaveFullScreen(): Promise<void> {
+  if (!isTauri()) return
+
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    await getCurrentWindow().setFullscreen(false)
+  } catch {
+    // Nothing to give back.
+  }
 }

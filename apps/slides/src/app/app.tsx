@@ -8,6 +8,7 @@ import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
+import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { useDeckStore } from '../store/deck-store'
@@ -71,6 +72,8 @@ function Shell() {
           }}
         />
       )}
+
+      <Show />
 
       <WarningsBanner />
 

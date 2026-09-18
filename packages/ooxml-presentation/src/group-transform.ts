@@ -65,6 +65,32 @@ export function absoluteTransform(
   return mapped
 }
 
+/**
+ * How much of a child's own units one slide unit is worth.
+ *
+ * The way back from `absoluteTransform`, for deltas rather than positions. A
+ * drag is measured on the slide, but a shape inside a group is written in that
+ * group's coordinates — so dragging a child of a group that has been scaled to
+ * half its size and writing the drag straight in moves it twice as far as the
+ * pointer went.
+ *
+ * Only the scale, not the offset: a delta has no origin to map.
+ */
+export function intoGroupSpace(ancestors: readonly Shape[]): { x: number; y: number } {
+  let x = 1
+  let y = 1
+
+  for (const ancestor of ancestors) {
+    const group = ancestor.transform
+    const space = group?.child
+    if (group == null || space == null) continue
+    if (group.width !== 0) x *= space.width / group.width
+    if (group.height !== 0) y *= space.height / group.height
+  }
+
+  return { x, y }
+}
+
 /** Every shape in the tree with the groups it sits inside, outermost first. */
 export function withAncestors(
   shapes: readonly Shape[],

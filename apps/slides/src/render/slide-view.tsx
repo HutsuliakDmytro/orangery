@@ -45,6 +45,8 @@ import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, useDrag } from './use-drag'
+import { useMarquee } from './use-marquee'
+import { enclosedBy, groupToOpen, selectionTarget } from './selection'
 import { boundsOf, correct, correctionBetween, NO_CORRECTION, snapRect } from './snap'
 import type { Correction, Guide } from './snap'
 import { TextEditor } from './text-editor'
@@ -102,6 +104,8 @@ interface Drawing {
   look: ReturnType<typeof shapeLook>
   context: ColorContext
   key: string
+  /** The groups it sits inside, outermost first; empty at the top level. */
+  ancestors: Shape[]
 }
 
 function drawingsOf(
@@ -126,6 +130,7 @@ function drawingsOf(
     return [
       {
         shape,
+        ancestors,
         transform,
         look,
         context: lookContext(base, look),
@@ -169,6 +174,22 @@ function drawingsFor(deck: Deck, slide: Slide, theme: Theme | undefined, base: C
     ...inheritedDrawings(deck, slide, theme, base),
     ...drawingsOf(slide.shapes, '', (shape) => resolveTransform(deck, slide, shape), theme, base),
   ]
+}
+
+/**
+ * Where each group sits on the slide.
+ *
+ * Groups are not drawn — their members are — but they can be selected, and a
+ * frame has to go somewhere. Kept apart from the drawings rather than folded in
+ * as invisible ones, because everything that walks the drawings is asking a
+ * question about paint.
+ */
+function groupBoxesOf(slide: Slide): { shape: Shape; transform: Transform; ancestors: Shape[] }[] {
+  return withAncestors(slide.shapes).flatMap(({ shape, ancestors }) => {
+    if (shape.kind !== 'grpSp') return []
+    const transform = absoluteTransform(shape.transform, ancestors)
+    return transform === null ? [] : [{ shape, transform, ancestors }]
+  })
 }
 
 function Gradient({ definition }: { definition: GradientDefinition }) {
@@ -635,6 +656,9 @@ export function SlideView({
   selection,
   onSelect,
   onDrag,
+  openGroup = null,
+  onOpenGroup,
+  onMarquee,
   editing,
   onEdit,
   onCommitText,
@@ -654,6 +678,12 @@ export function SlideView({
   onSelect?: (id: number | null, extend: boolean) => void
   /** Called once when a drag ends, with how far it went in EMU. */
   onDrag?: (drag: DragState, correction: Correction) => void
+  /** The group the pointer is inside, which decides what a click picks out. */
+  openGroup?: number | null
+  /** Asked to step into a group, or back to the top with `null`. */
+  onOpenGroup?: (id: number | null) => void
+  /** Given the ids a rubber band enclosed, once it is let go. */
+  onMarquee?: (ids: number[]) => void
   /** The shape whose text is open for editing. */
   editing?: number | null
   /** Asked to enter a shape's text, or to leave it with `null`. */
@@ -676,8 +706,15 @@ export function SlideView({
   const master = [...deck.masters.values()][0]
   const theme = master?.theme == null ? undefined : themes.get(master.theme)
   const drawings = drawingsFor(deck, slide, theme, base)
+  const groupBoxes = groupBoxesOf(slide)
 
   const { width, height } = deck.slideSize
+
+  /** Every selected thing's box, groups included, for the frames and the snap. */
+  const selectedBoxes = [
+    ...drawings.filter((one) => selection?.includes(one.shape.id) === true),
+    ...groupBoxes.filter((one) => selection?.includes(one.shape.id) === true),
+  ]
 
   /**
    * What snapping would add to the drag as it stands, and the lines saying why.
@@ -689,8 +726,7 @@ export function SlideView({
   const snapFor = (state: DragState | null) => {
     if (state === null || selection === undefined) return { correction: NO_CORRECTION, guides: [] }
 
-    const selected = drawings.filter((one) => selection.includes(one.shape.id))
-    const bounds = boundsOf(selected.map((one) => one.transform))
+    const bounds = boundsOf(selectedBoxes.map((one) => one.transform))
     if (bounds === null) return { correction: NO_CORRECTION, guides: [] }
 
     const applied = applyDrag(bounds, state)
@@ -709,6 +745,30 @@ export function SlideView({
     return { correction: correctionBetween(applied, rect), guides }
   }
 
+  /**
+   * The rubber band, and what it caught.
+   *
+   * Top-level shapes and whole groups, or the members of the group being
+   * worked inside: a band means "these things", and which things depends on
+   * where you are, exactly as a click does.
+   */
+  const marquee = useMarquee({
+    slideWidth: width,
+    slideHeight: height,
+    onPick: (band) => {
+      // Whatever sits at the level the pointer is working at: the top of the
+      // slide, or the inside of the group that is open.
+      const here = ({ ancestors }: { ancestors: readonly Shape[] }) =>
+        openGroup === null ? ancestors.length === 0 : ancestors.at(-1)?.id === openGroup
+
+      const caught = [...drawings, ...groupBoxes].filter(here)
+
+      onMarquee?.(
+        caught.filter((one) => enclosedBy(one.transform, band)).map((one) => one.shape.id),
+      )
+    },
+  })
+
   const drag = useDrag({
     slideWidth: width,
     onCommit: (state) => {
@@ -719,10 +779,18 @@ export function SlideView({
   const snapped = snapFor(drag.state)
 
   /** While dragging, the selection is drawn where it is being taken. */
-  const shown = (drawing: Drawing): Transform => {
-    if (drag.state === null || selection?.includes(drawing.shape.id) !== true) {
-      return drawing.transform
-    }
+  const shown = (drawing: {
+    shape: Shape
+    transform: Transform
+    ancestors?: Shape[]
+  }): Transform => {
+    const moving =
+      selection?.some(
+        (id) => id === drawing.shape.id || (drawing.ancestors ?? []).some((one) => one.id === id),
+      ) === true
+
+    if (drag.state === null || !moving) return drawing.transform
+
     return {
       ...drawing.transform,
       ...correct(applyDrag(drawing.transform, drag.state), snapped.correction),
@@ -777,15 +845,32 @@ export function SlideView({
           // Catches a click that hit no shape, which is how a selection is
           // cleared. Behind everything, so a shape's own click wins.
           <rect
+            data-testid="slide-background"
             x={0}
             y={0}
             width={width}
             height={height}
             fill="transparent"
-            onPointerDown={() => {
+            onPointerDown={(event) => {
               onSelect(null, false)
               onEdit?.(null)
+              onOpenGroup?.(null)
+              if (onMarquee !== undefined) marquee.start(event)
             }}
+          />
+        )}
+        {marquee.box !== null && (
+          <rect
+            data-testid="marquee"
+            x={marquee.box.x}
+            y={marquee.box.y}
+            width={marquee.box.width}
+            height={marquee.box.height}
+            fill="var(--accent)"
+            fillOpacity={0.12}
+            stroke="var(--accent)"
+            strokeWidth={2 * (width / 960)}
+            pointerEvents="none"
           />
         )}
         {drawings.map((drawing) => (
@@ -850,12 +935,33 @@ export function SlideView({
                 role="button"
                 aria-label={drawing.shape.name === '' ? 'Shape' : drawing.shape.name}
                 onPointerDown={(event) => {
+                  // What a click selects is not always what it hit: a member of
+                  // a group selects the group, until the group has been opened.
+                  const target = selectionTarget(drawing, openGroup)
+
+                  // Clicking outside the open group is how you leave it.
+                  if (
+                    target.id !== drawing.shape.id &&
+                    !drawing.ancestors.some((one) => one.id === openGroup)
+                  ) {
+                    onOpenGroup?.(null)
+                  }
+
                   // Selecting first means a drag that starts on an unselected
                   // shape moves that shape, as it does everywhere else.
-                  onSelect(drawing.shape.id, event.shiftKey)
+                  onSelect(target.id, event.shiftKey)
                   drag.start(event, null)
                 }}
                 onDoubleClick={() => {
+                  const group = groupToOpen(drawing, openGroup)
+                  if (group !== null) {
+                    // Into the group rather than into the words: a double click
+                    // on something grouped means "let me at the parts".
+                    onOpenGroup?.(group)
+                    onSelect(selectionTarget(drawing, group).id, false)
+                    return
+                  }
+
                   // A shape with no text body can still be given one; a picture
                   // or a chart cannot hold text at all.
                   if (drawing.shape.kind === 'sp' || drawing.shape.kind === 'cxnSp') {
@@ -866,21 +972,19 @@ export function SlideView({
             )}
           </Fragment>
         ))}
-        {drawings
-          .filter((drawing) => selection?.includes(drawing.shape.id) === true)
-          .map((drawing) => (
-            <SelectionFrame
-              key={`selected-${drawing.key}`}
-              transform={shown(drawing)}
-              onHandle={
-                onDrag === undefined
-                  ? undefined
-                  : (event, handle) => {
-                      drag.start(event, handle)
-                    }
-              }
-            />
-          ))}
+        {selectedBoxes.map((drawing) => (
+          <SelectionFrame
+            key={`selected-${String(drawing.shape.id)}`}
+            transform={shown(drawing)}
+            onHandle={
+              onDrag === undefined
+                ? undefined
+                : (event, handle) => {
+                    drag.start(event, handle)
+                  }
+            }
+          />
+        ))}
       </svg>
     </div>
   )
@@ -930,7 +1034,7 @@ function SelectionFrame({
   ] as const
 
   return (
-    <g>
+    <g data-testid="selection-frame">
       <rect
         x={transform.x}
         y={transform.y}

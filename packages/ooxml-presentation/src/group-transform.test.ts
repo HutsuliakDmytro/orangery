@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readDeck } from './deck'
 import { readPptxPackage } from './parts'
-import { absoluteTransform, throughGroup, withAncestors } from './group-transform'
-import type { Transform } from './shape-tree'
+import { absoluteTransform, intoGroupSpace, throughGroup, withAncestors } from './group-transform'
+import type { Shape, Transform } from './shape-tree'
 
 const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synthetic')
 
@@ -144,5 +144,46 @@ describe('pictures and connectors', () => {
 
     expect(rectangle?.picture).toBeNull()
     expect(rectangle?.connection).toBeNull()
+  })
+})
+
+describe('mapping a delta back into a group', () => {
+  const group = (ext: number, chExt: number): Shape =>
+    ({
+      id: 1,
+      kind: 'grpSp',
+      transform: {
+        x: 0,
+        y: 0,
+        width: ext,
+        height: ext,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        child: { x: 0, y: 0, width: chExt, height: chExt },
+      },
+    }) as unknown as Shape
+
+  it('is one to one outside any group', () => {
+    expect(intoGroupSpace([])).toEqual({ x: 1, y: 1 })
+  })
+
+  it('is one to one for a group that is not scaled', () => {
+    expect(intoGroupSpace([group(100, 100)])).toEqual({ x: 1, y: 1 })
+  })
+
+  it('doubles inside a group drawn at half its child space', () => {
+    // The group is 50 wide and its children are written in 100: one slide unit
+    // is two of theirs, so a drag of ten must be written as twenty.
+    expect(intoGroupSpace([group(50, 100)])).toEqual({ x: 2, y: 2 })
+  })
+
+  it('multiplies through nested groups', () => {
+    expect(intoGroupSpace([group(50, 100), group(50, 100)])).toEqual({ x: 4, y: 4 })
+  })
+
+  it('ignores a group that states no child space', () => {
+    const plain = { id: 2, kind: 'grpSp', transform: null } as unknown as Shape
+    expect(intoGroupSpace([plain])).toEqual({ x: 1, y: 1 })
   })
 })

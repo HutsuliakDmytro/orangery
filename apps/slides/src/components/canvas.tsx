@@ -1,4 +1,4 @@
-import { writeTransform } from '@orangery/ooxml-presentation'
+import { intoGroupSpace, withAncestors, writeTransform } from '@orangery/ooxml-presentation'
 import { writeTextBody } from '@orangery/ooxml-drawingml'
 import type { Transform } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
@@ -21,6 +21,8 @@ export function Canvas() {
   const zoom = useViewStore((state) => state.zoom)
   const rulers = useViewStore((state) => state.rulers)
   const setEditing = useDeckStore((state) => state.setEditing)
+  const openGroup = useDeckStore((state) => state.openGroup)
+  const setOpenGroup = useDeckStore((state) => state.setOpenGroup)
 
   if (error !== null) {
     return (
@@ -55,6 +57,11 @@ export function Canvas() {
           onSelect={(id, extend) => {
             selectShapes(id === null ? [] : [id], extend && id !== null)
           }}
+          openGroup={openGroup}
+          onOpenGroup={setOpenGroup}
+          onMarquee={(ids) => {
+            selectShapes(ids)
+          }}
           editing={editing}
           onEdit={setEditing}
           onCommitText={(id, doc) => {
@@ -66,14 +73,26 @@ export function Canvas() {
           onDrag={(drag, correction) => {
             const selected = useDeckStore.getState().selection
             edit((edited) =>
-              edited.shapes
-                .flatMap((shape) => {
+              withAncestors(edited.shapes)
+                .flatMap(({ shape, ancestors }) => {
                   const transform: Transform | null = shape.transform
                   if (!selected.includes(shape.id) || transform === null) return []
 
+                  // A shape inside a group is written in that group's
+                  // coordinates, and the drag was measured on the slide. Writing
+                  // one as the other moves a shape in a scaled group by the
+                  // wrong amount, and the more the group was resized the wronger.
+                  const into = intoGroupSpace(ancestors)
+                  const scaled = { ...drag, dx: drag.dx * into.x, dy: drag.dy * into.y }
+
                   // The same correction the guides were drawn from: a shape that
                   // snapped on screen and not in the file is the worst of both.
-                  const moved = correct(applyDrag(transform, drag), correction)
+                  const moved = correct(applyDrag(transform, scaled), {
+                    dx: correction.dx * into.x,
+                    dy: correction.dy * into.y,
+                    dw: correction.dw * into.x,
+                    dh: correction.dh * into.y,
+                  })
                   return [writeTransform(shape, { ...transform, ...moved })]
                 })
                 // Reduced rather than `some`, so every shape moves before the

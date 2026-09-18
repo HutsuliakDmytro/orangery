@@ -33,6 +33,7 @@ import {
   reorderShapes,
   sectionOfSlide,
   ungroupShape,
+  withAncestors,
   writeBackgroundPicture,
   writePart,
 } from '@orangery/ooxml-presentation'
@@ -48,6 +49,7 @@ import {
   openInNewWindow,
   saveDeckFile,
 } from '../document/file-operations'
+import { groupAfterEscape } from '../render/selection'
 import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { closeShowWindows, openShowWindows } from '../document/show-windows'
@@ -191,6 +193,30 @@ function nudge(dx: number, dy: number): void {
   )
 }
 
+/** Whether the pointer is working inside a group on the current slide. */
+function insideGroup(): boolean {
+  return useDeckStore.getState().openGroup !== null
+}
+
+/**
+ * Steps out of the open group by one.
+ *
+ * Which chain to step out along comes from what is selected, because that is
+ * what is inside the group. Leaving selects the group just left, which is where
+ * a person expects to find themselves: back holding the thing they went into.
+ */
+function leaveGroup(): void {
+  const { openGroup, selection, setOpenGroup, selectShapes } = useDeckStore.getState()
+  const slide = currentSlide(useDeckStore.getState())
+  if (openGroup === null || slide === null) return
+
+  const held = withAncestors(slide.shapes).find(({ shape }) => selection.includes(shape.id))
+  const next = groupAfterEscape(openGroup, held?.ancestors ?? [])
+
+  setOpenGroup(next)
+  selectShapes([openGroup])
+}
+
 export const editCommands: readonly Command[] = [
   {
     id: 'edit.undo',
@@ -222,6 +248,20 @@ export const editCommands: readonly Command[] = [
     run: () => {
       const { finding, setFinding } = useViewStore.getState()
       setFinding(!finding)
+    },
+  },
+  {
+    id: 'edit.leave-group',
+    label: 'Leave Group',
+    group: 'edit',
+    shortcut: 'Escape',
+    // A second Escape, after the one that leaves a text box: they are separate
+    // commands because they are separate places to be, and one keystroke that
+    // did both would take two steps out of a group whose member was being typed
+    // in.
+    isEnabled: () => useDeckStore.getState().editing === null && onSlides() && insideGroup(),
+    run: () => {
+      leaveGroup()
     },
   },
   {

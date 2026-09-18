@@ -124,6 +124,15 @@ interface DeckState {
   slideSelection: number[]
   /** The shape whose text is being edited, or null. */
   editing: number | null
+  /**
+   * The group the pointer is considered to be inside, or null at the top.
+   *
+   * A group is one thing until you go into it: clicking a member selects the
+   * whole group, and a double click steps inside, where the next click picks a
+   * member out. Groups nest, so this is a position in a chain rather than a
+   * flag, and `Escape` walks back out one level at a time.
+   */
+  openGroup: number | null
   undoStack: Edit[]
   redoStack: Edit[]
   /** What went wrong opening the last file, for the banner. */
@@ -193,6 +202,8 @@ interface DeckState {
   selectShapes: (ids: readonly number[], add?: boolean) => void
   /** Enters a shape's text, or leaves whatever was being edited. */
   setEditing: (id: number | null) => void
+  /** Steps into a group, or back out to the top with null. */
+  setOpenGroup: (id: number | null) => void
   /**
    * Runs a change against the current slide and records it.
    *
@@ -298,6 +309,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   selection: [],
   slideSelection: [],
   editing: null,
+  openGroup: null,
   undoStack: [],
   redoStack: [],
   error: null,
@@ -369,6 +381,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         selection: [],
         slideSelection: deck.slides.length > 0 ? [0] : [],
         editing: null,
+        openGroup: null,
         undoStack: [],
         redoStack: [],
         error: null,
@@ -397,6 +410,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         selection: [],
         slideSelection: count === 0 ? [] : [Math.min(Math.max(index, 0), count - 1)],
         editing: null,
+        // The group belonged to the slide being left, and its id means
+        // something else on the slide arrived at.
+        openGroup: null,
       }
     })
   },
@@ -414,12 +430,13 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         selection: [],
         slideSelection: [...within].sort((first, second) => first - second),
         editing: null,
+        openGroup: null,
       }
     })
   },
 
   showMaster: (path) => {
-    set({ master: path, selection: [], editing: null })
+    set({ master: path, selection: [], editing: null, openGroup: null })
   },
 
   close: () => {
@@ -430,6 +447,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       selection: [],
       slideSelection: [],
       editing: null,
+      openGroup: null,
       undoStack: [],
       redoStack: [],
       error: null,
@@ -444,6 +462,10 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     set((state) => ({
       selection: add ? [...new Set([...state.selection, ...ids])] : [...ids],
     }))
+  },
+
+  setOpenGroup: (id) => {
+    set({ openGroup: id })
   },
 
   setEditing: (id) => {

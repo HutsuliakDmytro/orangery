@@ -29,12 +29,27 @@ interface ShowState {
   typed: string
   /** How many slides there are, so the show knows where the end is. */
   count: number
+  /**
+   * When the show began, for the presenter's timer.
+   *
+   * A timestamp rather than a running count: a timer that ticks in the store
+   * would re-render every window once a second to move one number.
+   */
+  startedAt: number | null
+  /**
+   * How large the notes are drawn in the presenter view, as a multiple.
+   *
+   * The presenter is the one person reading from further away than anybody, and
+   * the size that suits them has nothing to do with the deck.
+   */
+  notesScale: number
   start: (at: number, count: number) => void
   end: () => void
   go: (to: number) => void
   next: () => void
   previous: () => void
   setBlank: (blank: 'black' | 'white' | null) => void
+  scaleNotes: (by: number) => void
   type: (digit: string) => void
   /** Jumps to the number typed so far, if it names a slide. Returns whether it did. */
   jump: () => boolean
@@ -45,6 +60,8 @@ export const useShowStore = create<ShowState>((set, get) => ({
   blank: null,
   typed: '',
   count: 0,
+  startedAt: null,
+  notesScale: 1,
 
   start: (at, count) => {
     set({
@@ -52,11 +69,12 @@ export const useShowStore = create<ShowState>((set, get) => ({
       count,
       blank: null,
       typed: '',
+      startedAt: count === 0 ? null : Date.now(),
     })
   },
 
   end: () => {
-    set({ at: null, blank: null, typed: '' })
+    set({ at: null, blank: null, typed: '', startedAt: null })
   },
 
   go: (to) => {
@@ -80,6 +98,12 @@ export const useShowStore = create<ShowState>((set, get) => ({
 
   setBlank: (blank) => {
     set({ blank, typed: '' })
+  },
+
+  scaleNotes: (by) => {
+    // A quarter either way, between half and four times: below half the notes
+    // are unreadable and above four times a sentence is a screenful.
+    set((state) => ({ notesScale: Math.min(Math.max(state.notesScale + by, 0.5), 4) }))
   },
 
   type: (digit) => {

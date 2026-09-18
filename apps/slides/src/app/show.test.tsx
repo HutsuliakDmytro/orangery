@@ -26,9 +26,14 @@ const press = (key: string) => {
   fireEvent.keyDown(window, { key })
 }
 
-const start = (id = 'show.start') => {
-  act(() => {
+/**
+ * Starting a show is asynchronous now: it asks for a window of its own first,
+ * and only shows in this one when there is not going to be one.
+ */
+const start = async (id = 'show.start') => {
+  await act(async () => {
     runCommand(id, {})
+    await Promise.resolve()
   })
 }
 
@@ -56,7 +61,7 @@ describe('starting and ending', () => {
       useDeckStore.getState().select(4)
     })
 
-    start()
+    await start()
     expect(at()).toBe(0)
     expect(screen.getByTestId('show')).toBeInTheDocument()
   })
@@ -68,7 +73,7 @@ describe('starting and ending', () => {
       useDeckStore.getState().select(4)
     })
 
-    start('show.start-here')
+    await start('show.start-here')
     expect(at()).toBe(4)
   })
 
@@ -80,7 +85,7 @@ describe('starting and ending', () => {
       useDeckStore.getState().select(2)
     })
 
-    start('show.start-here')
+    await start('show.start-here')
     press('ArrowRight')
     press('Escape')
 
@@ -90,7 +95,7 @@ describe('starting and ending', () => {
   it('ends on Escape', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('Escape')
     expect(at()).toBeNull()
@@ -109,7 +114,7 @@ describe('moving through the deck', () => {
   it.each(forward)('goes on with %s', async (key) => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press(key)
     expect(at()).toBe(1)
@@ -118,7 +123,7 @@ describe('moving through the deck', () => {
   it.each(back)('goes back with %s', async (key) => {
     await openDeck('many-slides')
     render(<App />)
-    start('show.start-here')
+    await start('show.start-here')
     act(() => {
       useShowStore.getState().go(3)
     })
@@ -130,7 +135,7 @@ describe('moving through the deck', () => {
   it('goes to the ends', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('End')
     expect(at()).toBe(7)
@@ -142,7 +147,7 @@ describe('moving through the deck', () => {
   it('stops at the last slide rather than falling off it', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('End')
     press('ArrowRight')
@@ -152,7 +157,7 @@ describe('moving through the deck', () => {
   it('stops at the first one going back', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('ArrowLeft')
     expect(at()).toBe(0)
@@ -161,7 +166,7 @@ describe('moving through the deck', () => {
   it('advances on a click and goes back on the right button', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     fireEvent.pointerDown(screen.getByTestId('show'), { button: 0 })
     expect(at()).toBe(1)
@@ -175,7 +180,7 @@ describe('jumping to a number', () => {
   it('takes the digits and goes there on Enter', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('6')
     expect(screen.getByTestId('typed')).toHaveTextContent('6')
@@ -188,7 +193,7 @@ describe('jumping to a number', () => {
   it('takes more than one digit', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('0')
     press('8')
@@ -200,7 +205,7 @@ describe('jumping to a number', () => {
   it('advances on a bare Enter, with no number waiting', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('Enter')
     expect(at()).toBe(1)
@@ -209,7 +214,7 @@ describe('jumping to a number', () => {
   it('ignores a number that names no slide', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('9')
     press('9')
@@ -225,7 +230,7 @@ describe('taking the screen away', () => {
   it('blanks to black and back', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('b')
     expect(screen.getByTestId('blank')).toBeInTheDocument()
@@ -237,7 +242,7 @@ describe('taking the screen away', () => {
   it('blanks to white', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('w')
     expect(screen.getByTestId('blank')).toHaveClass('bg-white')
@@ -246,7 +251,7 @@ describe('taking the screen away', () => {
   it('keeps its place underneath', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
     act(() => {
       useShowStore.getState().go(3)
     })
@@ -261,7 +266,7 @@ describe('taking the screen away', () => {
     // about the wrong slide.
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     press('b')
     press('ArrowRight')
@@ -279,7 +284,7 @@ describe('what the room sees', () => {
       useDeckStore.getState().select(0)
     })
 
-    start()
+    await start()
     act(() => {
       useShowStore.getState().go(4)
     })
@@ -291,7 +296,7 @@ describe('what the room sees', () => {
   it('draws nothing of the editor over it', async () => {
     await openDeck('many-slides')
     render(<App />)
-    start()
+    await start()
 
     // The show is the last thing in the tree and covers the window.
     expect(screen.getByTestId('show').className).toContain('fixed inset-0')

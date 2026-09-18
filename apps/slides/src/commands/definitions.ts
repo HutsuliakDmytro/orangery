@@ -20,6 +20,7 @@ import {
   insertIcon,
   insertPicture,
   insertTable,
+  saveDeck,
   moveSlide,
   readSections,
   removeSection,
@@ -37,6 +38,7 @@ import {
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { ICON_SIZE, ICONS } from '../document/icons'
 import { useDeckStore } from '../store/deck-store'
+import { closeShowWindows, openShowWindows } from '../document/show-windows'
 import { useShowStore } from '../store/show-store'
 import { useEditorStore } from '../store/editor-store'
 import { useViewStore } from '../store/view-store'
@@ -657,11 +659,7 @@ export const showCommands: readonly Command[] = [
     shortcut: 'F5',
     isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
     run: () => {
-      const { open } = useDeckStore.getState()
-      if (open === null) return
-
-      useShowStore.getState().start(0, open.deck.slides.length)
-      void enterFullScreen()
+      void present(0)
     },
   },
   {
@@ -671,11 +669,7 @@ export const showCommands: readonly Command[] = [
     shortcut: 'Shift+F5',
     isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
     run: () => {
-      const { open, current } = useDeckStore.getState()
-      if (open === null) return
-
-      useShowStore.getState().start(Math.max(current, 0), open.deck.slides.length)
-      void enterFullScreen()
+      void present(Math.max(useDeckStore.getState().current, 0))
     },
   },
   {
@@ -685,6 +679,7 @@ export const showCommands: readonly Command[] = [
     isEnabled: () => useShowStore.getState().at !== null,
     run: () => {
       useShowStore.getState().end()
+      void closeShowWindows()
     },
   },
 ]
@@ -1128,6 +1123,36 @@ async function backgroundPictureFromDisk(): Promise<void> {
     if (changed) writePart(open.package, slide.path, slide.root)
     return changed
   })
+}
+
+/**
+ * Starts the show, on a screen of its own where there is one.
+ *
+ * A separate window is the right answer — the editor keeps its own place, and a
+ * second screen can hold the presenter view — but it is also the answer that
+ * can fail: no Tauri, no second window, a deck that will not write out. Every
+ * one of those falls back to showing it here, because a presentation that does
+ * not start is worse than one on the wrong screen.
+ */
+async function present(at: number): Promise<void> {
+  const { open } = useDeckStore.getState()
+  if (open === null) return
+
+  if (isTauri()) {
+    try {
+      // Whether a presenter view came with it or not, the show is on its own
+      // screen and this window has nothing to add.
+      await openShowWindows(await saveDeck(open.package), at)
+      return
+    } catch {
+      // Fall through to the show in this window.
+    }
+  }
+
+  // In a browser there is one window, and writing the deck out to hand it to
+  // nobody would be a copy made for nothing.
+  useShowStore.getState().start(at, open.deck.slides.length)
+  await enterFullScreen()
 }
 
 /**

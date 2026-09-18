@@ -4,6 +4,8 @@
 //! menu builder, diagnostics — comes from `orangery-tauri-shared`. What is here
 //! is this app's own wiring.
 
+mod show;
+
 use orangery_tauri_shared::{diagnostics, document, menu};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,7 +27,11 @@ pub fn run() {
             diagnostics::write_diagnostic,
             diagnostics::read_diagnostics,
             diagnostics::clear_diagnostics,
+            show::start_show,
+            show::show_source,
+            show::end_show,
         ])
+        .manage(show::ShowState::default())
         .setup(|app| {
             // A placeholder menu so the window never appears bare; the frontend
             // replaces it with the registry-driven one as soon as it mounts.

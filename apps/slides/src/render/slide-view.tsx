@@ -5,7 +5,10 @@ import {
   colorContextFor,
   flatten,
   listStyleChain,
+  layoutOf,
   lookContext,
+  masterOf,
+  masterShapesShown,
   resolveParagraphProperties,
   resolveRunProperties,
   resolveTransform,
@@ -13,7 +16,7 @@ import {
   relationshipTarget,
   withAncestors,
 } from '@orangery/ooxml-presentation'
-import type { Deck, Shape, Slide, Transform } from '@orangery/ooxml-presentation'
+import type { Deck, Shape, Slide, SlidePart, Transform } from '@orangery/ooxml-presentation'
 import { getPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
@@ -56,13 +59,18 @@ interface Drawing {
   key: string
 }
 
-function drawingsFor(deck: Deck, slide: Slide, theme: Theme | undefined, base: ColorContext) {
-  return withAncestors(slide.shapes).flatMap(({ shape, ancestors }, index): Drawing[] => {
+function drawingsOf(
+  shapes: readonly Shape[],
+  prefix: string,
+  resolve: (shape: Shape) => Transform | null,
+  theme: Theme | undefined,
+  base: ColorContext,
+) {
+  return withAncestors(shapes).flatMap(({ shape, ancestors }, index): Drawing[] => {
     // A group is a coordinate space, not something drawn; its children are.
     if (shape.kind === 'grpSp') return []
 
-    const stated = shape.transform ?? resolveTransform(deck, slide, shape)
-    const transform = absoluteTransform(stated, ancestors)
+    const transform = absoluteTransform(shape.transform ?? resolve(shape), ancestors)
     if (transform === null) return []
 
     const look = shapeLook(shape, theme)
@@ -72,10 +80,46 @@ function drawingsFor(deck: Deck, slide: Slide, theme: Theme | undefined, base: C
         transform,
         look,
         context: lookContext(base, look),
-        key: `${String(shape.id)}-${String(index)}`,
+        key: `${prefix}${String(shape.id)}-${String(index)}`,
       },
     ]
   })
+}
+
+/**
+ * The shapes the layout and the master draw behind the slide.
+ *
+ * Placeholders are left out: they are the templates a slide's own shapes
+ * inherit from, and drawing them as well would show every slide its layout's
+ * "Click to add title". What is left is the furniture — the rules, the logo,
+ * the block of colour — which is what "background graphics" names.
+ *
+ * `showMasterSp` switches it off, and it applies at each rung: a slide can hide
+ * everything inherited, and a layout can hide the master's while keeping its
+ * own. Neither is drawn for a part that resolves to nothing.
+ */
+function inheritedDrawings(deck: Deck, slide: Slide, theme: Theme | undefined, base: ColorContext) {
+  if (!masterShapesShown(slide)) return []
+
+  const layout = layoutOf(deck, slide)
+  const master = layout === null ? null : masterOf(deck, layout)
+
+  const furniture = (part: SlidePart | null) =>
+    part === null ? [] : part.shapes.filter((shape) => shape.placeholder === null)
+
+  const fromMaster = layout !== null && !masterShapesShown(layout) ? [] : furniture(master)
+
+  return [
+    ...drawingsOf(fromMaster, 'master-', () => null, theme, base),
+    ...drawingsOf(furniture(layout), 'layout-', () => null, theme, base),
+  ]
+}
+
+function drawingsFor(deck: Deck, slide: Slide, theme: Theme | undefined, base: ColorContext) {
+  return [
+    ...inheritedDrawings(deck, slide, theme, base),
+    ...drawingsOf(slide.shapes, '', (shape) => resolveTransform(deck, slide, shape), theme, base),
+  ]
 }
 
 function Gradient({ definition }: { definition: GradientDefinition }) {

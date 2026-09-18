@@ -30,6 +30,8 @@ import {
   reorderShapes,
   sectionOfSlide,
   ungroupShape,
+  writeBackgroundPicture,
+  writePart,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
@@ -310,6 +312,15 @@ const PRESETS = [
 ] as const
 
 export const pictureCommands: readonly Command[] = [
+  {
+    id: 'slide.background-picture',
+    label: 'Background Picture…',
+    group: 'format',
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void backgroundPictureFromDisk()
+    },
+  },
   {
     id: 'insert.picture',
     label: 'Picture…',
@@ -933,4 +944,22 @@ export function registerBuiltinCommands(): void {
   registerAll(slideCommands)
   registerAll(viewCommands)
   registerAll(appearanceCommands)
+}
+
+/** Puts a picture behind the slide, bytes and all. */
+async function backgroundPictureFromDisk(): Promise<void> {
+  const path = await pickPicturePath()
+  if (path === null) return
+
+  const bytes = await readFileBytes(path)
+  const { editPackage } = useDeckStore.getState()
+
+  editPackage((open) => {
+    const slide = open.deck.slides[useDeckStore.getState().current]
+    if (slide === undefined) return false
+
+    const changed = writeBackgroundPicture(open.package, slide, { fileName: nameOf(path), bytes })
+    if (changed) writePart(open.package, slide.path, slide.root)
+    return changed
+  })
 }

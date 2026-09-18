@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { readDeck, readPptxPackage, readThemes } from '@orangery/ooxml-presentation'
 import { readBodyProperties } from '@orangery/ooxml-drawingml'
-import { parseXml } from '@orangery/ooxml-core'
+import { getPartText, parseXml, setPartText } from '@orangery/ooxml-core'
 import { SlideView } from './slide-view'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
@@ -277,5 +277,64 @@ describe('charts', () => {
     // No package, no chart part; the slide still renders.
     const { container } = await draw('charts')
     expect(container.querySelectorAll('svg')).toHaveLength(1)
+  })
+})
+
+describe('what the layout and the master draw behind the slide', () => {
+  /** Puts a shape with no placeholder on the master, the way a logo sits there. */
+  async function withFurniture(hidden = false) {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'empty.pptx')))
+
+    const masterPath = [...pkg.parts.keys()].find((path) =>
+      path.startsWith('ppt/slideMasters/slideMaster'),
+    )
+    if (masterPath === undefined) throw new Error('fixture has no master')
+
+    const furniture =
+      '<p:sp><p:nvSpPr><p:cNvPr id="99" name="Logo"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>' +
+      '<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>' +
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:sp>'
+
+    const master = getPartText(pkg, masterPath) ?? ''
+    setPartText(pkg, masterPath, master.replace('</p:spTree>', `${furniture}</p:spTree>`))
+
+    if (hidden) {
+      const slide = getPartText(pkg, 'ppt/slides/slide1.xml') ?? ''
+      setPartText(
+        pkg,
+        'ppt/slides/slide1.xml',
+        slide.replace('<p:sld ', '<p:sld showMasterSp="0" '),
+      )
+    }
+
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('lost the slide')
+
+    return render(<SlideView deck={deck} slide={slide} themes={readThemes(pkg, deck)} />)
+  }
+
+  it('draws the furniture the master carries', async () => {
+    const plain = await draw('empty')
+    const before = paths(plain.container).length
+    cleanup()
+
+    const { container } = await withFurniture()
+    expect(paths(container).length).toBe(before + 1)
+  })
+
+  it('draws none of it when the slide hides background graphics', async () => {
+    const shown = await withFurniture()
+    const drawn = paths(shown.container).length
+    cleanup()
+
+    const { container } = await withFurniture(true)
+    expect(paths(container).length).toBeLessThan(drawn)
+  })
+
+  it("leaves the layout's placeholders out, which are templates and not content", async () => {
+    // Drawing them would show every slide its layout's "Click to add title".
+    const { container } = await withFurniture()
+    expect(container.textContent).not.toContain('Click to add')
   })
 })

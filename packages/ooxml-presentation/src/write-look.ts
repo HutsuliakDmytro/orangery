@@ -87,17 +87,51 @@ function colorElement(color: Color): XmlNode {
   }
 }
 
-/** The element for a fill we can write. Gradients and pictures are not edited yet. */
+/**
+ * Builds `a:gradFill`.
+ *
+ * Positions are thousandths of a percent and the angle is 60000ths of a degree,
+ * like every other ratio and angle in DrawingML. A radial gradient says so with
+ * `a:path` instead of `a:lin`, and the rectangle it grows from is the middle of
+ * the shape — the four edges given as percentages inward.
+ */
+function gradientElement(fill: Extract<Fill, { kind: 'gradient' }>): XmlNode | null {
+  const stops = fill.stops.flatMap((stop) =>
+    stop.color === null
+      ? []
+      : [
+          element('a:gs', { pos: String(Math.round(stop.position * 100000)) }, [
+            colorElement(stop.color),
+          ]),
+        ],
+  )
+  if (stops.length < 2) return null
+
+  const direction = fill.radial
+    ? element('a:path', { path: 'circle' }, [
+        element('a:fillToRect', { l: '50000', t: '50000', r: '50000', b: '50000' }),
+      ])
+    : element('a:lin', { ang: String(Math.round(fill.angle ?? 0)), scaled: '0' })
+
+  return element('a:gradFill', { rotWithShape: '1' }, [element('a:gsLst', {}, stops), direction])
+}
+
+/** The element for a fill we can write. Pictures are inserted, not written here. */
 function fillElement(fill: Fill): XmlNode | null {
-  if (fill.kind === 'none') return element('a:noFill')
-  if (fill.kind === 'solid') {
-    return fill.color === null ? null : element('a:solidFill', {}, [colorElement(fill.color)])
+  switch (fill.kind) {
+    case 'none':
+      return element('a:noFill')
+    case 'solid':
+      return fill.color === null ? null : element('a:solidFill', {}, [colorElement(fill.color)])
+    case 'gradient':
+      return gradientElement(fill)
+    default:
+      return null
   }
-  return null
 }
 
 /** Replaces whatever fill a container states. */
-function setFill(container: XmlNode, fill: Fill, order: readonly string[]): boolean {
+export function setFill(container: XmlNode, fill: Fill, order: readonly string[]): boolean {
   const written = fillElement(fill)
   if (written === null) return false
 

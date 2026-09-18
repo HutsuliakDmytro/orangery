@@ -101,3 +101,9 @@ export {
   writeSections,
 } from './sections'
 export type { Section } from './sections'
+export {
+  masterShapesShown,
+  showMasterShapes,
+  writeBackground,
+  writeBackgroundPicture,
+} from './write-background'

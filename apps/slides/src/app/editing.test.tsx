@@ -505,7 +505,10 @@ describe('the properties panel', () => {
   it('says what is selected', async () => {
     await openDeck('shapes')
     render(<App />)
-    expect(screen.getByText('Nothing selected')).toBeInTheDocument()
+
+    // With no shape picked the panel is about the slide itself.
+    expect(screen.getByLabelText('Layout')).toBeInTheDocument()
+    expect(screen.getByLabelText('Background')).toBeInTheDocument()
 
     act(() => {
       useDeckStore.getState().selectShapes([firstShapeId()])

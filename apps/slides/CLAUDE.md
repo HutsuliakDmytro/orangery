@@ -71,14 +71,14 @@ Icons: `lucide-react`. Focus ring: orange. Keyboard-complete.
 - Transform handles: move, 8 resize handles, rotate; `Shift` constrains, `Alt` from center, arrows nudge 1 px / `Shift` 10 px.
 - Smart guides: snap to slide center, edges, other shapes' edges/centers, equal spacing. Guides drawn in orange.
 - Undo/redo is per deck, transaction-based, survives autosave.
-- 300-slide deck with images must scroll the filmstrip at 60 fps: thumbnails are rendered lazily to bitmaps and cached, invalidated per slide.
+- 300-slide deck with images must scroll the filmstrip at 60 fps. Measured: only the thumbnails near the window are drawn at all, which beat caching them as bitmaps — a cache makes the second drawing cheap, and not drawing makes the first one cheap too.
 
 ## Slideshow rules
 
 - Separate Tauri window, fullscreen on chosen display; presenter view in another window: current, next, notes, timer, slide grid.
 - Navigation: click/space/arrows/PgUp/PgDn, `B`/`W` black/white, number+Enter goes to slide, `Esc` exits.
 - Transitions in MVP: none, fade, push, wipe. Everything else plays as fade and is preserved in the file.
-- Animations: MVP does not play them (all objects shown in final state); `p:timing` preserved verbatim. Playback is a post-MVP phase.
+- Animations play: the main sequence is read from `p:timing` and each click step is one press. Effects this app does not model play as a fade, the same rule transitions follow. Motion paths are not played — the shape sits where it ends. Nothing is written back: `p:timing` is preserved verbatim, so editing animations is still a later phase.
 - Laser pointer / pen: post-MVP.
 
 ## File rules
@@ -109,7 +109,7 @@ pnpm --filter slides tauri build
 
 ## Out of scope for MVP
 
-Animation playback and editing, chart editing, SmartArt editing (render via passthrough preview or bounding box), collaboration, cloud, recording narration, embedded fonts, Keynote import, mobile.
+Animation editing, chart editing, SmartArt editing (render via passthrough preview or bounding box), collaboration, cloud, recording narration, Keynote import, mobile.
 
 ## Known hard problems
 

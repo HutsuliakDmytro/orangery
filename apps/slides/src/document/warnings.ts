@@ -1,6 +1,5 @@
-import { findChild } from '@orangery/ooxml-core'
 import { flatten } from '@orangery/ooxml-presentation'
-import type { Deck, Shape, Slide } from '@orangery/ooxml-presentation'
+import type { Deck, Shape } from '@orangery/ooxml-presentation'
 import { isKnownPreset } from '../render/geometry'
 
 /**
@@ -69,12 +68,6 @@ function findingsFor(shape: Shape, slide: number): Finding[] {
   return found
 }
 
-/** True when the slide carries animation timing, which MVP preserves but does not play. */
-function hasAnimations(slide: Slide): boolean {
-  const timing = findChild(slide.root, 'p:timing')
-  return timing !== undefined
-}
-
 export function inspect(deck: Deck): Warning[] {
   const findings = deck.slides.flatMap((slide, index) => {
     const number = index + 1
@@ -86,15 +79,6 @@ export function inspect(deck: Deck): Warning[] {
 
     return [
       ...shapes,
-      ...(hasAnimations(slide)
-        ? [
-            {
-              kind: 'animation',
-              message: 'Animations are kept in the file but do not play here',
-              slide: number,
-            },
-          ]
-        : []),
       ...(commented
         ? [
             {

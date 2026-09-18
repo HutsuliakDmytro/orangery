@@ -107,3 +107,171 @@ body {
     break-inside: avoid;
   }
 }
+
+/*
+ * The animations a slide show plays.
+ *
+ * Kept as keyframes rather than as transitions because an effect runs once,
+ * from a state the shape is not in: a fade-in starts invisible whatever the
+ * shape was doing before. `both` in the shorthand is what holds the end state.
+ *
+ * Every effect this app does not model plays as a fade — the same rule the
+ * transitions follow. A shape that appeared when it should have flown in makes
+ * a slide that reads correctly; a shape that did not appear does not.
+ */
+
+@keyframes orangery-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes orangery-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes orangery-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes orangery-zoom-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes orangery-wipe-in {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes orangery-wipe-out {
+  from {
+    clip-path: inset(0 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+@keyframes orangery-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes orangery-fly-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-60%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes orangery-fly-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(60%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes orangery-fly-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-60%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes orangery-fly-from-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes orangery-fly-from-top-left {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes orangery-fly-from-top-right {
+  from {
+    opacity: 0;
+    transform: translate(50%, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes orangery-fly-from-bottom-left {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes orangery-fly-from-bottom-right {
+  from {
+    opacity: 0;
+    transform: translate(50%, 50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}

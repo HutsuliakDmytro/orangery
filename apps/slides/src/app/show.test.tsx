@@ -389,15 +389,29 @@ describe('the transition between slides', () => {
 })
 
 describe('a deck with animations', () => {
-  it('shows every object in its final state, animation or not', async () => {
-    // Nothing plays, so nothing may be waiting to appear: a shape that fades in
-    // is simply there.
+  it('holds back a shape until the press that brings it in', async () => {
     await openDeck('animations')
     render(<App />)
     await start()
 
-    const shown = screen.getByTestId('show')
-    expect(shown.textContent).toContain('Fades in')
+    // The room has not been shown it yet; putting it there from the start is
+    // giving away the point of the build.
+    expect(screen.getByTestId('show').textContent).not.toContain('Fades in')
+
+    press('ArrowRight')
+    expect(screen.getByTestId('show').textContent).toContain('Fades in')
+  })
+
+  it('plays the effect rather than snapping the shape on', async () => {
+    await openDeck('animations')
+    render(<App />)
+    await start()
+    press('ArrowRight')
+
+    const animated = [...screen.getByTestId('show').querySelectorAll('g')].filter((group) =>
+      group.getAttribute('style')?.includes('animation-name'),
+    )
+    expect(animated).not.toHaveLength(0)
   })
 
   it('draws nothing the file hides', async () => {
@@ -413,20 +427,44 @@ describe('a deck with animations', () => {
     expect(shown.textContent).not.toContain('Not shown')
   })
 
-  it('advances a whole slide at a time, since there are no builds to step', async () => {
+  it('plays the slide’s builds before moving on from it', async () => {
     await openDeck('animations')
     render(<App />)
     await start()
+
+    // The first press is the build; the slide is what comes after the last one.
+    press('ArrowRight')
+    expect(useShowStore.getState().at).toBe(0)
 
     press('ArrowRight')
     expect(useShowStore.getState().at).toBe(1)
   })
 
-  it('says so in the editor rather than letting it be discovered on stage', async () => {
+  it('takes a build back before it takes the slide back', async () => {
     await openDeck('animations')
     render(<App />)
+    await start()
+    press('ArrowRight')
 
-    expect(screen.getByText(/Animations are kept in the file but do not play/u)).toBeInTheDocument()
+    press('ArrowLeft')
+    expect(useShowStore.getState().at).toBe(0)
+    expect(screen.getByTestId('show').textContent).not.toContain('Fades in')
+  })
+
+  it('lands on a slide’s last build when it is reached backwards', async () => {
+    await openDeck('animations')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    press('ArrowLeft')
+
+    // The room has already seen all of it; replaying the build would be a lie
+    // about what was said.
+    expect(useShowStore.getState().at).toBe(0)
+    expect(screen.getByTestId('show').textContent).toContain('Fades in')
   })
 })
 

@@ -191,6 +191,12 @@ These are the ones that matter most. Take them seriously.
 - [ ] If it cannot, the banner says which typeface, and the deck still opens.
 - [ ] Close that deck and open another using the same typeface name without
       embedding it. It is drawn in the substitute, not in the first deck's font.
+- [ ] Present a deck with builds on it. Each press plays the next one; the
+      slide only moves on after the last. Go back: the build goes back first.
+- [ ] Reach an animated slide backwards. It is at its end, not its start.
+- [ ] Compare a deck of varied effects beside PowerPoint. Note which read wrong
+      rather than merely differ — everything we do not model fades, which is
+      the intent, and a motion path stays put.
 
 ## Getting a deck in
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { readTransition } from '@orangery/ooxml-presentation'
+import { readAnimations, readTransition } from '@orangery/ooxml-presentation'
 import type { Hyperlink, Transition } from '@orangery/ooxml-presentation'
 import { leaveFullScreen } from '../commands/definitions'
+import { animationAt } from '../render/animation'
 import { transitionStyles } from '../render/transition-style'
 import { SlideView } from '../render/slide-view'
 import { useDeckStore } from '../store/deck-store'
@@ -26,6 +27,7 @@ export function Show() {
   const at = useShowStore((state) => state.at)
   const blank = useShowStore((state) => state.blank)
   const typed = useShowStore((state) => state.typed)
+  const shown = useShowStore((state) => state.shown)
 
   // The window is given back when the show ends, wherever it ended from: a
   // presentation that leaves the screen filled is one nobody can get out of.
@@ -180,6 +182,10 @@ export function Show() {
   const previous = leaving === null ? undefined : open.deck.slides[leaving.index]
   const styles = leaving === null ? null : transitionStyles(leaving.transition)
 
+  // Read here rather than held in the store: the store counts the presses, and
+  // what a press means is a question about the slide.
+  const animation = animationAt(readAnimations(slide), shown)
+
   return (
     <div
       role="presentation"
@@ -228,6 +234,7 @@ export function Show() {
               themes={open.themes}
               package={open.package}
               playing
+              animation={animation}
               onFollowLink={follow}
               // The slide keeps its shape, so one axis is filled and the other
               // is letterboxed; stretching it would be showing a different one.

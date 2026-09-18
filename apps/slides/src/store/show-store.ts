@@ -30,6 +30,22 @@ interface ShowState {
   /** How many slides there are, so the show knows where the end is. */
   count: number
   /**
+   * How many animation steps each slide plays.
+   *
+   * Here rather than read from the deck on each press: what a press does
+   * depends on it, and a store that had to open a slide to answer "what does
+   * space do" would be a store that knows less than it needs to.
+   */
+  steps: number[]
+  /**
+   * How many of the current slide's steps have been played.
+   *
+   * Zero is the slide as the room first sees it. Advancing plays the next step
+   * and only moves on when there are none left, which is what a press means in
+   * every program that has this.
+   */
+  shown: number
+  /**
    * When the show began, for the presenter's timer.
    *
    * A timestamp rather than a running count: a timer that ticks in the store
@@ -43,7 +59,7 @@ interface ShowState {
    * the size that suits them has nothing to do with the deck.
    */
   notesScale: number
-  start: (at: number, count: number) => void
+  start: (at: number, count: number, steps?: readonly number[]) => void
   end: () => void
   go: (to: number) => void
   next: () => void
@@ -60,13 +76,17 @@ export const useShowStore = create<ShowState>((set, get) => ({
   blank: null,
   typed: '',
   count: 0,
+  steps: [],
+  shown: 0,
   startedAt: null,
   notesScale: 1,
 
-  start: (at, count) => {
+  start: (at, count, steps = []) => {
     set({
       at: count === 0 ? null : Math.min(Math.max(at, 0), count - 1),
       count,
+      steps: [...steps],
+      shown: 0,
       blank: null,
       typed: '',
       startedAt: count === 0 ? null : Date.now(),
@@ -74,7 +94,7 @@ export const useShowStore = create<ShowState>((set, get) => ({
   },
 
   end: () => {
-    set({ at: null, blank: null, typed: '', startedAt: null })
+    set({ at: null, blank: null, typed: '', startedAt: null, shown: 0 })
   },
 
   go: (to) => {
@@ -82,18 +102,45 @@ export const useShowStore = create<ShowState>((set, get) => ({
       if (state.at === null || state.count === 0) return {}
       // Any move puts the screen back: a blanked show that then advanced
       // invisibly would leave the presenter talking about the wrong slide.
-      return { at: Math.min(Math.max(to, 0), state.count - 1), blank: null, typed: '' }
+      return {
+        at: Math.min(Math.max(to, 0), state.count - 1),
+        blank: null,
+        typed: '',
+        // A slide arrived at is a slide not yet animated, whichever way it was
+        // arrived at. Going backwards is the exception, and `previous` says so.
+        shown: 0,
+      }
     })
   },
 
   next: () => {
-    const { at, go } = get()
-    if (at !== null) go(at + 1)
+    const { at, shown, steps, go } = get()
+    if (at === null) return
+
+    // A press plays the next thing on this slide if there is one; the slide is
+    // what comes after the last of them.
+    if (shown < (steps[at] ?? 0)) {
+      set({ shown: shown + 1, blank: null, typed: '' })
+      return
+    }
+
+    go(at + 1)
   },
 
   previous: () => {
-    const { at, go } = get()
-    if (at !== null) go(at - 1)
+    const { at, shown, go } = get()
+    if (at === null) return
+
+    if (shown > 0) {
+      set({ shown: shown - 1, blank: null, typed: '' })
+      return
+    }
+
+    // Backwards onto a slide that animates lands at its end, not at its start:
+    // the room has already seen all of it, and replaying it would be a lie
+    // about what was said.
+    go(at - 1)
+    set((state) => ({ shown: state.at === null ? 0 : (state.steps[state.at] ?? 0) }))
   },
 
   setBlank: (blank) => {

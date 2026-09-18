@@ -59,6 +59,7 @@ import {
   openInNewWindow,
   saveDeckFile,
 } from '../document/file-operations'
+import { stepsPerSlide } from '../render/animation'
 import { groupAfterEscape } from '../render/selection'
 import { insertPictureOnSlide } from '../document/insert-picture'
 import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
@@ -1735,7 +1736,7 @@ async function present(at: number): Promise<void> {
 
   // In a browser there is one window, and writing the deck out to hand it to
   // nobody would be a copy made for nothing.
-  useShowStore.getState().start(at, open.deck.slides.length)
+  useShowStore.getState().start(at, open.deck.slides.length, stepsPerSlide(open.deck))
   await enterFullScreen()
 }
 

@@ -52,6 +52,8 @@ import { mediaUrl } from './media'
 import { TableView } from './table-view'
 import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
+import { effectStyle, STILL } from './animation'
+import type { SlideAnimation } from './animation'
 import { scaleFor } from './autofit'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
@@ -904,6 +906,7 @@ export function SlideView({
   onAutofit,
   onAutofitHeight,
   playing = false,
+  animation = STILL,
   onFollowLink,
   className,
   style,
@@ -976,6 +979,14 @@ export function SlideView({
   onAutofit?: (id: number, fontScale: number) => void
   /** Given a shape that grows to its text, and the height it now needs. */
   onAutofitHeight?: (id: number, height: number) => void
+  /**
+   * How far through its animations the slide is.
+   *
+   * Only the show sets this. A slide part-way through is not a different slide
+   * — it is the same shapes with some of them not on yet, which is why this is
+   * one more thing the renderer is told rather than a renderer of its own.
+   */
+  animation?: SlideAnimation
   /**
    * Whether a film or a sound on the slide gets a player over its poster frame.
    *
@@ -1194,129 +1205,144 @@ export function SlideView({
             pointerEvents="none"
           />
         )}
-        {drawings.map((drawing) => (
-          <Fragment key={drawing.key}>
-            {playing && pkg !== undefined && (
-              <ShapeLink
-                drawing={drawing}
-                pkg={pkg}
-                deck={deck}
-                part={slide.path}
-                onFollow={onFollowLink}
-              />
-            )}
-            {drawing.shape.kind === 'pic' && pkg !== undefined ? (
-              <>
-                <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
-                {playing && drawing.shape.media !== null && (
-                  <MediaPlayer
+        {drawings.map((drawing) => {
+          // Not on the slide yet, or no longer on it. Left out rather than
+          // drawn transparent: an invisible shape still catches a click.
+          if (animation.hidden.has(drawing.shape.id)) return null
+
+          const effect = animation.playing.get(drawing.shape.id)
+
+          return (
+            <Fragment key={drawing.key}>
+              {/* The element is new when the step is, which is what makes the
+                animation run once and not again on every re-render. */}
+              <g
+                key={`${drawing.key}-${String(effect === undefined ? 'still' : animation.step)}`}
+                style={effect === undefined ? undefined : effectStyle(effect)}
+              >
+                {playing && pkg !== undefined && (
+                  <ShapeLink
                     drawing={drawing}
                     pkg={pkg}
+                    deck={deck}
                     part={slide.path}
-                    autoplay={autoplay.has(drawing.shape.id)}
+                    onFollow={onFollowLink}
                   />
                 )}
-              </>
-            ) : drawing.shape.graphic !== null &&
-              drawing.shape.graphic.kind !== 'table' &&
-              drawing.shape.graphic.kind !== 'chart' ? (
-              <UnknownGraphic drawing={drawing} />
-            ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
-              <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
-            ) : drawing.shape.graphic?.table != null ? (
-              <TableView
-                table={drawing.shape.graphic.table}
-                x={drawing.transform.x}
-                y={drawing.transform.y}
-                context={drawing.context}
-                style={styleFor(tableStyles, drawing.shape.graphic.table.properties.styleId)}
-                selection={cells?.table === drawing.shape.id ? cells : null}
-                onPickCell={
-                  onPickCell === undefined
-                    ? undefined
-                    : (at, extend) => {
-                        onSelect?.(drawing.shape.id, false)
-                        onPickCell(drawing.shape.id, at, extend)
-                      }
-                }
-              />
-            ) : (
-              <ShapeOutline drawing={drawing} />
-            )}
-            <ShapeText
-              drawing={drawing}
-              deck={deck}
-              slide={slide}
-              theme={theme}
-              pkg={pkg}
-              playing={playing}
-              editing={editing === drawing.shape.id}
-              onCommitText={onCommitText}
-              onAutofit={onAutofit}
-              onAutofitHeight={onAutofitHeight}
-              onFollowLink={onFollowLink}
-              onLeave={() => {
-                onEdit?.(null)
-              }}
-            />
-            {onSelect !== undefined && editing !== drawing.shape.id && (
-              <rect
-                // Over the shape and under the next one: an invisible target so
-                // a shape with no fill is still clickable, which is how
-                // PowerPoint behaves too.
-                x={drawing.transform.x}
-                y={drawing.transform.y}
-                width={drawing.transform.width}
-                height={drawing.transform.height}
-                fill="transparent"
-                role="button"
-                aria-label={drawing.shape.name === '' ? 'Shape' : drawing.shape.name}
-                onPointerDown={(event) => {
-                  // What a click selects is not always what it hit: a member of
-                  // a group selects the group, until the group has been opened.
-                  const target = selectionTarget(drawing, openGroup)
-
-                  // Clicking outside the open group is how you leave it.
-                  if (
-                    target.id !== drawing.shape.id &&
-                    !drawing.ancestors.some((one) => one.id === openGroup)
-                  ) {
-                    onOpenGroup?.(null)
-                  }
-
-                  // Selecting first means a drag that starts on an unselected
-                  // shape moves that shape, as it does everywhere else.
-                  onSelect(target.id, event.shiftKey)
-                  drag.start(event, null)
-                }}
-                onDoubleClick={() => {
-                  const group = groupToOpen(drawing, openGroup)
-                  if (group !== null) {
-                    // Into the group rather than into the words: a double click
-                    // on something grouped means "let me at the parts".
-                    onOpenGroup?.(group)
-                    onSelect(selectionTarget(drawing, group).id, false)
-                    return
-                  }
-
-                  // A picture holds no text, so the obvious thing to do to one
-                  // on a second click is to crop it — which is what PowerPoint
-                  // does too.
-                  if (drawing.shape.picture !== null) {
-                    onCrop?.(drawing.shape.id)
-                    return
-                  }
-
-                  // A shape with no text body can still be given one; a chart
-                  // cannot hold text at all.
-                  if (drawing.shape.kind === 'sp' || drawing.shape.kind === 'cxnSp') {
-                    onEdit?.(drawing.shape.id)
-                  }
+                {drawing.shape.kind === 'pic' && pkg !== undefined ? (
+                  <>
+                    <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
+                    {playing && drawing.shape.media !== null && (
+                      <MediaPlayer
+                        drawing={drawing}
+                        pkg={pkg}
+                        part={slide.path}
+                        autoplay={autoplay.has(drawing.shape.id)}
+                      />
+                    )}
+                  </>
+                ) : drawing.shape.graphic !== null &&
+                  drawing.shape.graphic.kind !== 'table' &&
+                  drawing.shape.graphic.kind !== 'chart' ? (
+                  <UnknownGraphic drawing={drawing} />
+                ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
+                  <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
+                ) : drawing.shape.graphic?.table != null ? (
+                  <TableView
+                    table={drawing.shape.graphic.table}
+                    x={drawing.transform.x}
+                    y={drawing.transform.y}
+                    context={drawing.context}
+                    style={styleFor(tableStyles, drawing.shape.graphic.table.properties.styleId)}
+                    selection={cells?.table === drawing.shape.id ? cells : null}
+                    onPickCell={
+                      onPickCell === undefined
+                        ? undefined
+                        : (at, extend) => {
+                            onSelect?.(drawing.shape.id, false)
+                            onPickCell(drawing.shape.id, at, extend)
+                          }
+                    }
+                  />
+                ) : (
+                  <ShapeOutline drawing={drawing} />
+                )}
+              </g>
+              <ShapeText
+                drawing={drawing}
+                deck={deck}
+                slide={slide}
+                theme={theme}
+                pkg={pkg}
+                playing={playing}
+                editing={editing === drawing.shape.id}
+                onCommitText={onCommitText}
+                onAutofit={onAutofit}
+                onAutofitHeight={onAutofitHeight}
+                onFollowLink={onFollowLink}
+                onLeave={() => {
+                  onEdit?.(null)
                 }}
               />
-            )}
-          </Fragment>
-        ))}
+              {onSelect !== undefined && editing !== drawing.shape.id && (
+                <rect
+                  // Over the shape and under the next one: an invisible target so
+                  // a shape with no fill is still clickable, which is how
+                  // PowerPoint behaves too.
+                  x={drawing.transform.x}
+                  y={drawing.transform.y}
+                  width={drawing.transform.width}
+                  height={drawing.transform.height}
+                  fill="transparent"
+                  role="button"
+                  aria-label={drawing.shape.name === '' ? 'Shape' : drawing.shape.name}
+                  onPointerDown={(event) => {
+                    // What a click selects is not always what it hit: a member of
+                    // a group selects the group, until the group has been opened.
+                    const target = selectionTarget(drawing, openGroup)
+
+                    // Clicking outside the open group is how you leave it.
+                    if (
+                      target.id !== drawing.shape.id &&
+                      !drawing.ancestors.some((one) => one.id === openGroup)
+                    ) {
+                      onOpenGroup?.(null)
+                    }
+
+                    // Selecting first means a drag that starts on an unselected
+                    // shape moves that shape, as it does everywhere else.
+                    onSelect(target.id, event.shiftKey)
+                    drag.start(event, null)
+                  }}
+                  onDoubleClick={() => {
+                    const group = groupToOpen(drawing, openGroup)
+                    if (group !== null) {
+                      // Into the group rather than into the words: a double click
+                      // on something grouped means "let me at the parts".
+                      onOpenGroup?.(group)
+                      onSelect(selectionTarget(drawing, group).id, false)
+                      return
+                    }
+
+                    // A picture holds no text, so the obvious thing to do to one
+                    // on a second click is to crop it — which is what PowerPoint
+                    // does too.
+                    if (drawing.shape.picture !== null) {
+                      onCrop?.(drawing.shape.id)
+                      return
+                    }
+
+                    // A shape with no text body can still be given one; a chart
+                    // cannot hold text at all.
+                    if (drawing.shape.kind === 'sp' || drawing.shape.kind === 'cxnSp') {
+                      onEdit?.(drawing.shape.id)
+                    }
+                  }}
+                />
+              )}
+            </Fragment>
+          )
+        })}
         {editingPoints !== null &&
           selectedBoxes
             .filter((drawing) => drawing.shape.id === editingPoints)

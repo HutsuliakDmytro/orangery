@@ -160,6 +160,7 @@ export function textBodyToDoc(body: TextBody): PmNode {
           level: Number.isFinite(level) ? level : 0,
           align: (properties === undefined ? undefined : attribute(properties, 'algn')) ?? null,
           bullet: properties === undefined ? null : bulletKindOf(properties),
+          lineSpacing: properties === undefined ? null : lineSpacingOf(properties),
           pPrOriginal: properties === undefined ? null : serializeNode(properties),
           // An empty paragraph carries its formatting here and nowhere else.
           endParaRPr: end === undefined ? null : serializeNode(end),
@@ -211,6 +212,44 @@ function bulletKindOf(properties: XmlNode): string | null {
     }
   }
   return null
+}
+
+/** The line spacing as a multiple, or null for anything but a percentage. */
+function lineSpacingOf(properties: XmlNode): number | null {
+  const spacing = children(properties).find((child) => tagName(child) === 'a:lnSpc')
+  if (spacing === undefined) return null
+
+  const percent = children(spacing).find((child) => tagName(child) === 'a:spcPct')
+  if (percent === undefined) return null
+
+  const value = Number(attribute(percent, 'val'))
+  return Number.isFinite(value) ? value / 100000 : null
+}
+
+/**
+ * Writes the line spacing a paragraph was given.
+ *
+ * Only a multiple. An absolute spacing in points reads as null here — turning
+ * it into a multiple would need the font size, which comes from a chain of six
+ * places — so clearing the spacing removes the element only when it was a
+ * percentage to begin with. Otherwise a paragraph spaced at exactly 18pt would
+ * lose that the first time anything else about it was edited.
+ */
+function setLineSpacing(properties: XmlNode, multiple: unknown): void {
+  const current = lineSpacingOf(properties)
+  if (current === multiple) return
+
+  if (typeof multiple !== 'number') {
+    if (current !== null) removeChild(properties, 'a:lnSpc')
+    return
+  }
+
+  removeChild(properties, 'a:lnSpc')
+  upsertChild(
+    properties,
+    element('a:lnSpc', {}, [element('a:spcPct', { val: String(Math.round(multiple * 100000)) })]),
+    PARAGRAPH_PROPERTIES,
+  )
 }
 
 /**
@@ -303,7 +342,10 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
     const bullet = paragraph.attrs?.['bullet']
     const patched =
       properties ??
-      (level > 0 || typeof align === 'string' || typeof bullet === 'string'
+      (level > 0 ||
+      typeof align === 'string' ||
+      typeof bullet === 'string' ||
+      typeof paragraph.attrs?.['lineSpacing'] === 'number'
         ? element('a:pPr')
         : null)
 
@@ -315,6 +357,7 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
       else removeAttribute(patched, 'algn')
 
       setBullet(patched, paragraph.attrs?.['bullet'])
+      setLineSpacing(patched, paragraph.attrs?.['lineSpacing'])
     }
 
     const runs = (paragraph.content ?? []).flatMap((node): XmlNode[] => {

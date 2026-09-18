@@ -3,7 +3,13 @@ import StarterKit from '@tiptap/starter-kit'
 import TextStyle from '@tiptap/extension-text-style'
 import Underline from '@tiptap/extension-underline'
 import { useEffect } from 'react'
-import { FontSize, OoxmlParagraph, PreservedRunProperties } from '@orangery/editor-text'
+import {
+  FontSize,
+  OoxmlParagraph,
+  PastePlainText,
+  PreservedRunProperties,
+  SmartTyping,
+} from '@orangery/editor-text'
 import type { PmNode } from '@orangery/ooxml-drawingml'
 import { useEditorStore } from '../store/editor-store'
 
@@ -47,6 +53,20 @@ export function TextEditor({
       FontSize,
       OoxmlParagraph,
       PreservedRunProperties,
+      /**
+       * The same substitutions Docs makes, from the same extension.
+       *
+       * The language is taken from the text around the cursor rather than from
+       * the interface: a deck written in Ukrainian by someone running an
+       * English build still wants «» rather than "".
+       */
+      SmartTyping.configure({
+        enabled: () => true,
+        fallbackLanguage: () => 'en',
+      }),
+      // Pasting a styled paragraph from a browser should not bring its CSS onto
+      // the slide; the deck's own styling is what makes it look like the deck.
+      PastePlainText,
     ],
     content: doc as never,
     autofocus: 'end',

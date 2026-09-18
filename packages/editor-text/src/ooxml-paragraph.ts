@@ -49,6 +49,18 @@ export const OoxmlParagraph = Extension.create({
             renderHTML: (attributes) =>
               attributes['bullet'] == null ? {} : { 'data-bullet': String(attributes['bullet']) },
           },
+          /** Line spacing as a multiple of the line, or null to inherit it. */
+          lineSpacing: {
+            default: null,
+            parseHTML: (element) => {
+              const value = Number(element.dataset['lineSpacing'])
+              return Number.isFinite(value) ? value : null
+            },
+            renderHTML: (attributes) =>
+              typeof attributes['lineSpacing'] === 'number'
+                ? { 'data-line-spacing': String(attributes['lineSpacing']) }
+                : {},
+          },
           /** The original properties element, serialised. Never rendered. */
           pPrOriginal: { default: null, renderHTML: () => ({}) },
           /** What an empty paragraph would type in. Never rendered. */

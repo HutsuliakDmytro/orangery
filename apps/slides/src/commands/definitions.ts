@@ -416,6 +416,27 @@ export const paragraphCommands: readonly Command[] = [
   })),
 ]
 
+export const spacingCommands: readonly Command[] = (
+  [
+    ['single', 'Single Spacing', 1],
+    ['one-and-a-half', 'One and a Half Spacing', 1.5],
+    ['double', 'Double Spacing', 2],
+  ] as const
+).map(([id, label, multiple]) => ({
+  id: `format.spacing-${id}`,
+  label,
+  group: 'format' as const,
+  isActive: () => paragraphAttribute('lineSpacing') === multiple,
+  isEnabled: () => useEditorStore.getState().editor !== null,
+  run: () => {
+    // Choosing the spacing a paragraph already has clears it, which puts the
+    // inherited one back — the same as alignment and for the same reason.
+    setParagraph({
+      lineSpacing: paragraphAttribute('lineSpacing') === multiple ? null : multiple,
+    })
+  },
+}))
+
 export const connectorCommands: readonly Command[] = [
   {
     id: 'insert.connector',
@@ -682,6 +703,7 @@ export function registerBuiltinCommands(): void {
   registerAll(connectorCommands)
   registerAll(textCommands)
   registerAll(paragraphCommands)
+  registerAll(spacingCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

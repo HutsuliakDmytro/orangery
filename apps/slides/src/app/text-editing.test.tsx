@@ -365,3 +365,76 @@ describe('paragraph formatting', () => {
     expect(getCommand('format.bullet')?.isActive?.({})).toBe(true)
   })
 })
+
+describe('typing', () => {
+  it('makes the substitutions Docs makes', async () => {
+    // Same extension, same rules: an em dash where two hyphens were typed.
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(() => {
+      const editor = useEditorStore.getState().editor
+      editor?.commands.selectAll()
+      editor?.commands.deleteSelection()
+    })
+
+    const editor = useEditorStore.getState().editor
+    for (const character of 'a--b') {
+      const { from, to } = editor?.state.selection ?? { from: 0, to: 0 }
+      const handled = editor?.view.someProp(
+        'handleTextInput',
+        (handle) => handle(editor.view, from, to, character, () => editor.state.tr) === true,
+      )
+      if (handled !== true) editor?.commands.insertContent(character)
+    }
+
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    expect(partText()).toContain('a—b')
+  })
+})
+
+describe('line spacing', () => {
+  it('sets one and the file keeps it', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(() => {
+      runCommand('format.spacing-double', {})
+    })
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    expect(partText()).toContain('val="200000"')
+  })
+
+  it('clears it when the same one is chosen again', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(() => {
+      runCommand('format.spacing-double', {})
+      runCommand('format.spacing-double', {})
+    })
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    expect(partText()).not.toContain('a:lnSpc')
+  })
+})

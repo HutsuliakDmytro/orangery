@@ -272,3 +272,54 @@ describe('bullets', () => {
     expect(after).toBe(before)
   })
 })
+
+describe('line spacing', () => {
+  const withSpacing = (inner: string, lineSpacing: unknown) => {
+    const element = body(`<a:bodyPr/><a:lstStyle/>${inner}`)
+    const doc = textBodyToDoc(readTextBody(element))
+    const paragraph = doc.content?.[0]
+    if (paragraph !== undefined) paragraph.attrs = { ...paragraph.attrs, lineSpacing }
+
+    writeTextBody(element, doc)
+    return serializeNode(element)
+  }
+
+  it('reads a percentage as a multiple', () => {
+    const doc = docOf('<a:p><a:pPr><a:lnSpc><a:spcPct val="150000"/></a:lnSpc></a:pPr></a:p>')
+    expect(doc.content?.[0]?.attrs?.['lineSpacing']).toBe(1.5)
+  })
+
+  it('writes one that was set', () => {
+    expect(withSpacing('<a:p><a:r><a:t>x</a:t></a:r></a:p>', 2)).toContain('val="200000"')
+  })
+
+  it('removes one that was cleared', () => {
+    const after = withSpacing(
+      '<a:p><a:pPr><a:lnSpc><a:spcPct val="150000"/></a:lnSpc></a:pPr></a:p>',
+      null,
+    )
+    expect(after).not.toContain('a:lnSpc')
+  })
+
+  it('leaves an absolute spacing alone, since it cannot be read as a multiple', () => {
+    // Removing it would lose an exact 18pt the first time anything else about
+    // the paragraph was edited.
+    const after = withSpacing(
+      '<a:p><a:pPr><a:lnSpc><a:spcPts val="1800"/></a:lnSpc></a:pPr><a:r><a:t>x</a:t></a:r></a:p>',
+      null,
+    )
+
+    expect(after).toContain('a:spcPts')
+    expect(after).toContain('val="1800"')
+  })
+
+  it('changes nothing on a paragraph nobody touched', () => {
+    const element = body(
+      '<a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:lnSpc><a:spcPct val="90000"/></a:lnSpc></a:pPr></a:p>',
+    )
+    const before = serializeNode(element)
+    writeTextBody(element, textBodyToDoc(readTextBody(element)))
+
+    expect(serializeNode(element)).toBe(before)
+  })
+})

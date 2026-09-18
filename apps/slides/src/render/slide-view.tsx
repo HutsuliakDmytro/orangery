@@ -55,6 +55,7 @@ import type { GradientDefinition } from './paint'
 import { effectStyle, STILL } from './animation'
 import type { SlideAnimation } from './animation'
 import { scaleFor } from './autofit'
+import { MorphGroup } from './morph-group'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
 import { useMarquee } from './use-marquee'
@@ -907,6 +908,7 @@ export function SlideView({
   onAutofitHeight,
   playing = false,
   animation = STILL,
+  morph,
   onFollowLink,
   className,
   style,
@@ -987,6 +989,13 @@ export function SlideView({
    * one more thing the renderer is told rather than a renderer of its own.
    */
   animation?: SlideAnimation
+  /**
+   * Where each shape was on the slide being left, for a morph.
+   *
+   * Only the ones that moved: a shape in the same place at the same size is a
+   * shape the morph has nothing to say about.
+   */
+  morph?: { origins: ReadonlyMap<number, Transform>; duration: number }
   /**
    * Whether a film or a sound on the slide gets a player over its poster frame.
    *
@@ -1211,6 +1220,59 @@ export function SlideView({
           if (animation.hidden.has(drawing.shape.id)) return null
 
           const effect = animation.playing.get(drawing.shape.id)
+          const came = morph?.origins.get(drawing.shape.id)
+
+          const painted = (
+            <>
+              {playing && pkg !== undefined && (
+                <ShapeLink
+                  drawing={drawing}
+                  pkg={pkg}
+                  deck={deck}
+                  part={slide.path}
+                  onFollow={onFollowLink}
+                />
+              )}
+              {drawing.shape.kind === 'pic' && pkg !== undefined ? (
+                <>
+                  <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
+                  {playing && drawing.shape.media !== null && (
+                    <MediaPlayer
+                      drawing={drawing}
+                      pkg={pkg}
+                      part={slide.path}
+                      autoplay={autoplay.has(drawing.shape.id)}
+                    />
+                  )}
+                </>
+              ) : drawing.shape.graphic !== null &&
+                drawing.shape.graphic.kind !== 'table' &&
+                drawing.shape.graphic.kind !== 'chart' ? (
+                <UnknownGraphic drawing={drawing} />
+              ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
+                <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
+              ) : drawing.shape.graphic?.table != null ? (
+                <TableView
+                  table={drawing.shape.graphic.table}
+                  x={drawing.transform.x}
+                  y={drawing.transform.y}
+                  context={drawing.context}
+                  style={styleFor(tableStyles, drawing.shape.graphic.table.properties.styleId)}
+                  selection={cells?.table === drawing.shape.id ? cells : null}
+                  onPickCell={
+                    onPickCell === undefined
+                      ? undefined
+                      : (at, extend) => {
+                          onSelect?.(drawing.shape.id, false)
+                          onPickCell(drawing.shape.id, at, extend)
+                        }
+                  }
+                />
+              ) : (
+                <ShapeOutline drawing={drawing} />
+              )}
+            </>
+          )
 
           return (
             <Fragment key={drawing.key}>
@@ -1220,52 +1282,12 @@ export function SlideView({
                 key={`${drawing.key}-${String(effect === undefined ? 'still' : animation.step)}`}
                 style={effect === undefined ? undefined : effectStyle(effect)}
               >
-                {playing && pkg !== undefined && (
-                  <ShapeLink
-                    drawing={drawing}
-                    pkg={pkg}
-                    deck={deck}
-                    part={slide.path}
-                    onFollow={onFollowLink}
-                  />
-                )}
-                {drawing.shape.kind === 'pic' && pkg !== undefined ? (
-                  <>
-                    <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
-                    {playing && drawing.shape.media !== null && (
-                      <MediaPlayer
-                        drawing={drawing}
-                        pkg={pkg}
-                        part={slide.path}
-                        autoplay={autoplay.has(drawing.shape.id)}
-                      />
-                    )}
-                  </>
-                ) : drawing.shape.graphic !== null &&
-                  drawing.shape.graphic.kind !== 'table' &&
-                  drawing.shape.graphic.kind !== 'chart' ? (
-                  <UnknownGraphic drawing={drawing} />
-                ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
-                  <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
-                ) : drawing.shape.graphic?.table != null ? (
-                  <TableView
-                    table={drawing.shape.graphic.table}
-                    x={drawing.transform.x}
-                    y={drawing.transform.y}
-                    context={drawing.context}
-                    style={styleFor(tableStyles, drawing.shape.graphic.table.properties.styleId)}
-                    selection={cells?.table === drawing.shape.id ? cells : null}
-                    onPickCell={
-                      onPickCell === undefined
-                        ? undefined
-                        : (at, extend) => {
-                            onSelect?.(drawing.shape.id, false)
-                            onPickCell(drawing.shape.id, at, extend)
-                          }
-                    }
-                  />
+                {came === undefined || morph === undefined ? (
+                  painted
                 ) : (
-                  <ShapeOutline drawing={drawing} />
+                  <MorphGroup from={came} to={drawing.transform} duration={morph.duration}>
+                    {painted}
+                  </MorphGroup>
                 )}
               </g>
               <ShapeText

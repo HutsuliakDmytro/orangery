@@ -17,7 +17,7 @@ import type { SlidePart } from './deck'
  * the milliseconds win where they exist.
  */
 
-export type TransitionKind = 'none' | 'fade' | 'push' | 'wipe'
+export type TransitionKind = 'none' | 'fade' | 'push' | 'wipe' | 'morph'
 
 /** `l`, `r`, `u`, `d` — which way a push or a wipe travels. */
 export type TransitionDirection = 'l' | 'r' | 'u' | 'd'
@@ -43,6 +43,9 @@ const DRAWN: Record<string, TransitionKind> = {
   'p:wipe': 'wipe',
   'p:cut': 'none',
 }
+
+/** The local name, for the effects whose prefix is not `p`. */
+const localName = (tag: string): string => tag.replace(/^[^:]*:/u, '')
 
 const DIRECTIONS = new Set(['l', 'r', 'u', 'd'])
 
@@ -73,8 +76,14 @@ export function readTransition(part: SlidePart): Transition | null {
   const node = transitionNode(part)
   if (node === undefined) return null
 
-  const effect = children(node).find((child) => (tagName(child) ?? '').startsWith('p:'))
-  const stated = effect === undefined ? '' : (tagName(effect) ?? '').replace(/^p:/u, '')
+  // Morph arrived after the original schema and carries whichever prefix the
+  // version that wrote it used, so it is found by its local name; everything
+  // older is `p:` and is left matched the way it always was.
+  const effect = children(node).find((child) => {
+    const tag = tagName(child) ?? ''
+    return tag.startsWith('p:') || localName(tag) === 'morph'
+  })
+  const stated = effect === undefined ? '' : localName(tagName(effect) ?? '')
 
   const milliseconds = Number(attribute(node, 'p14:dur'))
   const duration = Number.isFinite(milliseconds)
@@ -84,7 +93,10 @@ export function readTransition(part: SlidePart): Transition | null {
   if (effect === undefined) return { kind: 'fade', duration, direction: null, stated }
 
   // Anything we cannot draw is a fade: something was meant to happen here.
-  const kind = DRAWN[tagName(effect) ?? ''] ?? 'fade'
+  const kind =
+    localName(tagName(effect) ?? '') === 'morph'
+      ? 'morph'
+      : (DRAWN[tagName(effect) ?? ''] ?? 'fade')
   const direction = attribute(effect, 'dir') ?? ''
 
   return {

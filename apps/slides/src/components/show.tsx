@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { readAnimations, readTransition } from '@orangery/ooxml-presentation'
+import { morphOrigins, readAnimations, readTransition } from '@orangery/ooxml-presentation'
 import type { Hyperlink, Transition } from '@orangery/ooxml-presentation'
 import { leaveFullScreen } from '../commands/definitions'
 import { animationAt } from '../render/animation'
@@ -186,6 +186,19 @@ export function Show() {
   // what a press means is a question about the slide.
   const animation = animationAt(readAnimations(slide), shown)
 
+  /**
+   * A morph, which is the one transition that is not about the slide.
+   *
+   * It is about the shapes on it, each going from where it was to where it is
+   * while the rest of the slide stands still — so the slide being left is not
+   * drawn underneath at all. Drawing both would be the shapes moving over a
+   * copy of themselves.
+   */
+  const morph =
+    leaving?.transition.kind === 'morph' && previous !== undefined
+      ? { origins: morphOrigins(previous, slide), duration: leaving.transition.duration }
+      : undefined
+
   return (
     <div
       role="presentation"
@@ -204,7 +217,7 @@ export function Show() {
       {blank === null ? (
         <>
           {/* The slide being left, underneath, for as long as it takes to go. */}
-          {previous !== undefined && styles !== null && (
+          {previous !== undefined && styles !== null && morph === undefined && (
             <div
               key={`leaving-${String(leaving?.index ?? 0)}`}
               data-testid="leaving"
@@ -225,7 +238,9 @@ export function Show() {
           <div
             key={`arriving-${String(at)}`}
             data-testid="arriving"
-            style={styles?.arriving}
+            // A morph moves the shapes, not the slide: fading the whole thing
+            // in over itself would undo the one thing it is for.
+            style={morph === undefined ? styles?.arriving : undefined}
             className="absolute inset-0 flex items-center justify-center"
           >
             <SlideView
@@ -235,6 +250,7 @@ export function Show() {
               package={open.package}
               playing
               animation={animation}
+              morph={morph}
               onFollowLink={follow}
               // The slide keeps its shape, so one axis is filled and the other
               // is letterboxed; stretching it would be showing a different one.

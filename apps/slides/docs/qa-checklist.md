@@ -204,6 +204,10 @@ These are the ones that matter most. Take them seriously.
       ones are still there and still play.
 - [ ] Remove the last effect of a step. The press that played it is gone too —
       no press that does nothing.
+- [ ] Make two slides in PowerPoint with Morph between them and present here.
+      The shapes travel; the slide does not fade.
+- [ ] Do it on slides where two shapes share a name. Those two stay put rather
+      than swapping places — refusing to guess is the intended behaviour.
 
 ## Getting a deck in
 

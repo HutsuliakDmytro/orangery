@@ -6,6 +6,8 @@ import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { App } from './app'
+import { children, parseXml } from '@orangery/ooxml-core'
+import { writeTransform } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 import { useShowStore } from '../store/show-store'
 import { useViewStore } from '../store/view-store'
@@ -592,5 +594,65 @@ describe('links in a show', () => {
 
     // It went where the link pointed, not one slide on.
     expect(useShowStore.getState().at).not.toBe(1)
+  })
+})
+
+describe('a morph', () => {
+  /** Two slides holding the same shape in two places, with a morph between. */
+  async function withMorph() {
+    await openDeck('shapes')
+    const { open } = useDeckStore.getState()
+    const slide = open?.deck.slides[0]
+    if (open == null || slide === undefined) throw new Error('nothing opened')
+
+    act(() => {
+      runCommand('slide.duplicate', {})
+    })
+    act(() => {
+      useDeckStore.getState().select(1)
+      useDeckStore
+        .getState()
+        .selectShapes([useDeckStore.getState().open?.deck.slides[1]?.shapes[0]?.id ?? -1])
+      useDeckStore.getState().edit((part) => {
+        const shape = part.shapes[0]
+        return shape?.transform == null
+          ? false
+          : writeTransform(shape, { ...shape.transform, x: shape.transform.x + 2_000_000 })
+      })
+    })
+
+    // The transition goes on the slide being moved to, as PowerPoint puts it.
+    act(() => {
+      useDeckStore.getState().edit((part) => {
+        children(part.root).push(
+          ...parseXml(
+            '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">' +
+              '<mc:Choice Requires="p159"><p:transition xmlns:p14="p14" p14:dur="700">' +
+              '<p159:morph xmlns:p159="p159" option="byObject"/></p:transition></mc:Choice>' +
+              '</mc:AlternateContent>',
+          ),
+        )
+        return true
+      })
+    })
+  }
+
+  it('moves the shapes instead of fading one slide over another', async () => {
+    await withMorph()
+    render(<App />)
+    await start()
+
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    // No slide underneath: a morph is about the shapes, and drawing both would
+    // be the shapes moving over a copy of themselves.
+    expect(screen.queryByTestId('leaving')).not.toBeInTheDocument()
+
+    const moved = [...screen.getByTestId('show').querySelectorAll('g')].filter((group) =>
+      group.getAttribute('style')?.includes('transition: transform'),
+    )
+    expect(moved).not.toHaveLength(0)
   })
 })

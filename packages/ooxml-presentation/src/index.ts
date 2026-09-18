@@ -43,6 +43,8 @@ export { colorContextFor, readColorMap, readThemes, themeFor } from './theme-con
 export { buildThemeFile } from './theme-file'
 export { hiddenUntilAnimated, readAnimations } from './animations'
 export { addEffect, moveStep, removeEffect, setEffectTiming } from './write-animations'
+export { creationIdOf, matchShapes, morphOrigins } from './morph'
+export type { MorphPair } from './morph'
 export type { EffectChange, EffectName, NewEffect } from './write-animations'
 export type { AnimationStep, Effect, EffectKind, Trigger } from './animations'
 export { readEmbeddedFonts } from './embedded-fonts'

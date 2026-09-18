@@ -167,6 +167,14 @@ interface DeckState {
   /** Records that the deck now matches a file, and where that file is. */
   markSaved: (path: string) => void
   /**
+   * Says the deck differs from any file, without any part having changed.
+   *
+   * For a recovered deck that never had a file: `load` leaves it looking saved,
+   * because loading is what opening a file does, and a deck that claims to be
+   * in a file it is not in is one the window will let go of without a word.
+   */
+  markUnsaved: () => void
+  /**
    * Puts recovered parts back onto a freshly opened deck.
    *
    * Called after `load` has reopened the original file: a snapshot is a patch
@@ -251,6 +259,10 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       // the next snapshot starts from nothing.
       dirtyParts: new Set<string>(),
     }))
+  },
+
+  markUnsaved: () => {
+    set((state) => ({ saved: false, revision: state.revision + 1 }))
   },
 
   restore: (parts) => {

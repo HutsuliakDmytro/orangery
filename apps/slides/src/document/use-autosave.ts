@@ -36,23 +36,16 @@ export function useAutosave(): void {
       return
     }
 
-    // A deck with no path cannot be snapshotted: what is written is the
-    // difference from a file, and there is no file. Nothing can reach this yet
-    // — a deck exists only by being opened — and when New Presentation lands it
-    // is the first thing that has to change.
-    if (open.path === null) return
-
     timer.current = setTimeout(() => {
       void (async () => {
         // Read again rather than close over what the effect saw: five seconds
         // is long enough for the deck to have been closed underneath.
         const state = useDeckStore.getState()
-        const path = state.open?.path
-        if (state.open === null || path === undefined || path === null) return
+        if (state.open === null) return
 
         await writeSnapshot(
           await documentKey(state.sessionId),
-          buildSnapshot(path, state.open.package, state.dirtyParts),
+          buildSnapshot(state.open.path, state.open.package, state.dirtyParts),
         )
       })()
     }, AUTOSAVE_INTERVAL_MS)

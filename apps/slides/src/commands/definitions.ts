@@ -18,6 +18,7 @@ import {
   addSlide,
   alignmentBounds,
   alignShapes,
+  createDeck,
   createShape,
   deleteShapes,
   duplicateSlides,
@@ -57,23 +58,11 @@ import { useViewStore } from '../store/view-store'
  * native menu and the command palette without either being told separately
  * (`apps/docs/docs/adr/0002-command-registry.md`).
  *
- * A command that is not implemented yet is registered disabled rather than left
- * out. The menu is the shape of the application: a File menu with nothing in it
- * says the app cannot open a deck at all, while a greyed-out Save says it
- * cannot do so yet.
+ * A command the build cannot run is registered disabled rather than left out.
+ * The menu is the shape of the application: a File menu with nothing in it says
+ * the app cannot open a deck at all, while a greyed-out Open says only that
+ * there is no file dialog outside the shell.
  */
-
-const notYet = (id: string, label: string, shortcut?: string): Command => ({
-  id,
-  label,
-  group: 'file',
-  ...(shortcut === undefined ? {} : { shortcut }),
-  isEnabled: () => false,
-  run: () => {
-    // Deliberately nothing: `isEnabled` keeps this unreachable from every
-    // surface, and a stub that half-worked would be worse than one that does not.
-  },
-})
 
 export const fileCommands: readonly Command[] = [
   {
@@ -118,7 +107,18 @@ export const fileCommands: readonly Command[] = [
       void saveDeckFile(true)
     },
   },
-  notYet('file.new', 'New Presentation', 'Mod+n'),
+  {
+    id: 'file.new',
+    label: 'New Presentation',
+    group: 'file',
+    shortcut: 'Mod+n',
+    // No shell needed: a new deck is built in memory and is a real package from
+    // the first keystroke, so the browser build can make one it cannot save.
+    isEnabled: () => true,
+    run: () => {
+      void newDeck()
+    },
+  },
 ]
 
 /**
@@ -142,6 +142,19 @@ async function saveDeckFile(askWhere: boolean): Promise<void> {
   // understood is still in it (`docs/adr/0002-pptx-roundtrip.md`).
   await writeDeckFile(path, await saveDeck(open.package))
   markSaved(path)
+}
+
+/**
+ * Starting from nothing.
+ *
+ * The deck is a real `.pptx` before it reaches the editor — it is built,
+ * zipped, and opened by the same path a file off disk takes. Keeping a new deck
+ * in some lighter in-memory shape would mean the first save was a conversion,
+ * and a conversion is where things are lost.
+ */
+async function newDeck(): Promise<void> {
+  await useDeckStore.getState().load(await createDeck(), null)
+  document.title = 'Untitled Presentation — Orangery Slides'
 }
 
 async function openDeck(): Promise<void> {

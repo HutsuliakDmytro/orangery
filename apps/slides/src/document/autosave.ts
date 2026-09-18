@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
 import { autosaveDir, isTauri } from '@orangery/platform'
+import { writePackage } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { decodeBase64, encodeBase64 } from './base64'
 import type { RestoredPart } from '../store/deck-store'
@@ -8,11 +9,17 @@ import type { RestoredPart } from '../store/deck-store'
 /**
  * Crash recovery.
  *
- * A snapshot is a patch on the file the deck came from, not a deck: the parts
- * that differ from what is on disk. Writing the whole `.pptx` every few seconds would be simpler and is what a
- * smaller app could afford — but the target is a 300-slide deck with images
- * (CLAUDE.md), and re-zipping tens of megabytes on every pause in typing is a
- * stutter the person feels while the machinery meant to protect their work runs.
+ * A snapshot of a deck that has a file is a patch on that file: the parts that
+ * differ from what is on disk. Writing the whole `.pptx` every few seconds
+ * would be simpler and is what a smaller app could afford — but the target is a
+ * 300-slide deck with images (CLAUDE.md), and re-zipping tens of megabytes on
+ * every pause in typing is a stutter the person feels while the machinery meant
+ * to protect their work runs.
+ *
+ * A deck that has never been saved has no file to be a patch on, so its
+ * snapshot carries the whole package. That is the expensive shape, and it is
+ * the right one exactly where it applies: a new deck is the one deck with
+ * nothing on disk to fall back on, and it is also the smallest.
  *
  * The snapshot is an internal cache, never a user-facing format and never
  * offered in a Save dialog.
@@ -32,25 +39,27 @@ export interface Snapshot {
   /** Schema version, so an old snapshot from a previous build is not misread. */
   version: 1
   /**
-   * The file the deck came from.
+   * The file the deck came from, or null for one that was never saved.
    *
-   * Never null, unlike Docs: a deck exists only by being opened, so there is
-   * always a file to replay onto. The day New Presentation lands, a snapshot
-   * with no path has to carry the whole package instead.
+   * Which it is decides what `parts` means: a path makes them the difference
+   * from that file, and no path makes them the deck entire.
    */
-  path: string
+  path: string | null
   savedAt: string
   parts: SnapshotPart[]
 }
 
 export function buildSnapshot(
-  path: string,
+  path: string | null,
   pkg: OoxmlPackage,
   dirty: ReadonlySet<string>,
 ): Snapshot {
   const parts: SnapshotPart[] = []
 
-  for (const partPath of dirty) {
+  // With no file to be a difference from, every part is the difference.
+  const wanted = path === null ? pkg.parts.keys() : dirty
+
+  for (const partPath of wanted) {
     const part = pkg.parts.get(partPath)
     if (part === undefined) continue
 
@@ -107,8 +116,10 @@ export function parseSnapshot(contents: string): Snapshot | null {
 
   if (candidate['version'] !== 1) return null
 
+  // Null is a real answer here — a deck that was never saved — so it is told
+  // apart from a path that is missing or empty, which is a broken snapshot.
   const path = candidate['path']
-  if (typeof path !== 'string' || path === '') return null
+  if (path !== null && (typeof path !== 'string' || path === '')) return null
 
   const savedAt = candidate['savedAt']
   if (typeof savedAt !== 'string') return null
@@ -161,6 +172,31 @@ export async function readSnapshot(key: string): Promise<Snapshot | null> {
 export async function clearSnapshot(key: string): Promise<void> {
   if (!isTauri()) return
   await invoke('clear_autosave', { directory: await directoryFor(key) })
+}
+
+/**
+ * A whole deck rebuilt from a snapshot that carried one.
+ *
+ * Only for a snapshot with no path: it is the deck, so it can be zipped and
+ * opened exactly like a file, which keeps recovery on the one path every other
+ * deck takes into the editor.
+ */
+export function packageFrom(snapshot: Snapshot): Promise<Uint8Array> {
+  const pkg: OoxmlPackage = { parts: new Map() }
+  const encoder = new TextEncoder()
+
+  for (const part of snapshot.parts) {
+    const bytes =
+      part.text === undefined ? decodeBase64(part.data ?? '') : encoder.encode(part.text)
+    pkg.parts.set(part.path, {
+      path: part.path,
+      ...(part.text === undefined ? {} : { text: part.text }),
+      bytes,
+      date: new Date(),
+    })
+  }
+
+  return writePackage(pkg)
 }
 
 /**

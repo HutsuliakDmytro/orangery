@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { moveShape } from '@orangery/ooxml-presentation'
+import { createDeck, moveShape } from '@orangery/ooxml-presentation'
 import { getPartText } from '@orangery/ooxml-core'
 import { App } from './app'
 import { AUTOSAVE_INTERVAL_MS, buildSnapshot, parseSnapshot } from '../document/autosave'
@@ -270,6 +270,57 @@ describe('when the app comes back', () => {
       expect(autosaves.size).toBe(0)
     })
     expect(useDeckStore.getState().open).toBeNull()
+  })
+
+  it('brings back a deck that never had a file at all', async () => {
+    // A new presentation, edited and never saved: there is no file to reopen,
+    // so the snapshot has to be the whole deck or the work is gone.
+    await act(async () => {
+      await useDeckStore.getState().load(await createDeck(), null)
+    })
+    moveSomething()
+
+    const snapshot = buildSnapshot(null, deck().package, useDeckStore.getState().dirtyParts)
+    const slide = deck().deck.slides[0]?.path
+    const edited = getPartText(deck().package, slide ?? '')
+    autosaves.set('/app-data/autosave/key-dead-session', JSON.stringify(snapshot))
+
+    act(() => {
+      useDeckStore.getState().close()
+    })
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Recover' }))
+
+    await waitFor(() => {
+      expect(useDeckStore.getState().open).not.toBeNull()
+    })
+
+    expect(getPartText(deck().package, slide ?? '')).toBe(edited)
+    // Still belonging to no file, and still unsaved: recovering is not saving.
+    expect(deck().path).toBeNull()
+    expect(useDeckStore.getState().saved).toBe(false)
+  })
+
+  it('calls a deck that never had a file by the name the window gave it', async () => {
+    await act(async () => {
+      await useDeckStore.getState().load(await createDeck(), null)
+    })
+    moveSomething()
+    autosaves.set(
+      '/app-data/autosave/key-dead-session',
+      JSON.stringify(buildSnapshot(null, deck().package, useDeckStore.getState().dirtyParts)),
+    )
+    act(() => {
+      useDeckStore.getState().close()
+    })
+
+    render(<App />)
+
+    // The name sits next to the time it was snapshotted in the same line, so the
+    // match is on the name rather than on the whole of it.
+    expect(await screen.findByText(/Untitled Presentation/u)).toBeInTheDocument()
   })
 
   it('says so when the file the work belongs to has moved', async () => {

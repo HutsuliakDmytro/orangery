@@ -16,6 +16,7 @@ import { registerBuiltinCommands } from '../commands/definitions'
 import { useAutosave } from '../document/use-autosave'
 import { useCrashRecovery } from '../document/use-crash-recovery'
 import { useDeckStore } from '../store/deck-store'
+import type { OpenDeck } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { useCommandSource } from './command-source'
 import { useShortcuts } from './use-shortcuts'
@@ -59,7 +60,7 @@ function Shell() {
     <div className="orangery-print-root flex h-full flex-col bg-bg text-text">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
         <span className="font-medium">
-          {title(open?.path ?? null)}
+          {title(open, open?.path ?? null)}
           {/* The dot every editor uses, rather than the word: it says the same
               thing in the space a title bar has. */}
           {open !== null && !saved && <span aria-label="Unsaved changes"> •</span>}
@@ -175,9 +176,16 @@ function Shell() {
   )
 }
 
-/** What the window is called: the file, or the app when there is none. */
-function title(path: string | null): string {
-  return path === null ? 'Orangery Slides' : (path.split(/[\\/]/u).pop() ?? path)
+/**
+ * What the window is called: the file, or what there is instead of one.
+ *
+ * A deck with no path is not the same as no deck. Saying "Orangery Slides" for
+ * both would leave a new presentation looking like an empty window, and the dot
+ * beside it claiming unsaved changes to nothing.
+ */
+function title(open: OpenDeck | null, path: string | null): string {
+  if (path !== null) return path.split(/[\\/]/u).pop() ?? path
+  return open === null ? 'Orangery Slides' : 'Untitled Presentation'
 }
 
 export function App() {

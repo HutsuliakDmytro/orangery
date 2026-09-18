@@ -23,6 +23,7 @@ export {
   VIEW_PROPS_PART,
 } from './parts'
 
+export { createDeck } from './create-deck'
 export { readPresentation, referencedParts, relationshipTarget } from './presentation'
 export { layoutOf, masterOf, readDeck, readSlidePart, slideName } from './deck'
 export type { Deck, Master, Slide, SlidePart } from './deck'

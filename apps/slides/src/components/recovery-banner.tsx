@@ -45,7 +45,9 @@ export function RecoveryBanner({
         {candidates.map((entry) => (
           <li key={entry.key} className="flex items-center gap-2 text-xs">
             <span className="text-muted">
-              {nameOf(entry.snapshot.path)}
+              {/* A deck that was never saved has no name to give; what it has
+                  is what the window called it while it was open. */}
+              {entry.snapshot.path === null ? 'Untitled Presentation' : nameOf(entry.snapshot.path)}
               {entry.snapshot.savedAt !== '' &&
                 ` — ${new Date(entry.snapshot.savedAt).toLocaleString()}`}
             </span>

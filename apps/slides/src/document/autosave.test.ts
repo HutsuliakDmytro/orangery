@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { moveShape, removeSlides } from '@orangery/ooxml-presentation'
+import { moveShape, readDeck, readPptxPackage, removeSlides } from '@orangery/ooxml-presentation'
 import { getPartText, readPackage } from '@orangery/ooxml-core'
-import { buildSnapshot, parseSnapshot, partsOf } from './autosave'
+import { buildSnapshot, packageFrom, parseSnapshot, partsOf } from './autosave'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -152,6 +152,40 @@ describe('the snapshot itself', () => {
   })
 })
 
+describe('a deck that has no file behind it', () => {
+  it('is carried whole, since there is nothing to be a difference from', async () => {
+    await open('shapes')
+    const snapshot = buildSnapshot(null, deck().package, new Set())
+
+    // Nothing is dirty and everything is in it: the empty set is not the answer
+    // when the answer to "what is on disk" is nothing.
+    expect(snapshot.parts.length).toBe(deck().package.parts.size)
+  })
+
+  it('comes back as a deck that can be read again', async () => {
+    await open('shapes')
+    const slide = firstSlide()
+    moveSomething()
+    const snapshot = buildSnapshot(null, deck().package, new Set())
+
+    const rebuilt = await readPptxPackage(await packageFrom(snapshot))
+
+    expect(getPartText(rebuilt, slide)).toBe(getPartText(deck().package, slide))
+    expect(readDeck(rebuilt).slides).toHaveLength(deck().deck.slides.length)
+  })
+
+  it('brings its pictures with it', async () => {
+    await open('picture')
+    const snapshot = buildSnapshot(null, deck().package, new Set())
+    const media = [...deck().package.parts.keys()].find((path) => path.startsWith('ppt/media/'))
+    if (media === undefined) throw new Error('fixture has no picture')
+
+    const rebuilt = await readPptxPackage(await packageFrom(snapshot))
+
+    expect(rebuilt.parts.get(media)?.bytes).toEqual(deck().package.parts.get(media)?.bytes)
+  })
+})
+
 describe('reading a snapshot back', () => {
   const valid = {
     version: 1,
@@ -168,8 +202,13 @@ describe('reading a snapshot back', () => {
     expect(parseSnapshot(JSON.stringify({ ...valid, version: 2 }))).toBeNull()
   })
 
-  it('refuses one with no file to replay onto', () => {
-    expect(parseSnapshot(JSON.stringify({ ...valid, path: null }))).toBeNull()
+  it('accepts one from a deck that was never saved', () => {
+    expect(parseSnapshot(JSON.stringify({ ...valid, path: null }))?.path).toBeNull()
+  })
+
+  it('refuses one whose path is missing rather than absent', () => {
+    // An empty string is not "no file" — it is a snapshot that lost its path.
+    expect(parseSnapshot(JSON.stringify({ ...valid, path: '' }))).toBeNull()
   })
 
   it('refuses one truncated mid-write rather than recovering part of it', () => {

@@ -5,8 +5,8 @@ import { useCommand } from '@orangery/ui-kit'
  * What the window shows before there is a deck.
  *
  * The two buttons are the registry's own commands, so they grey out exactly
- * when the menu items do — which today is always, because opening a file is
- * phase 1. Wiring them now means there is one place to make them work.
+ * when the menu items do — New never, since a deck is built in memory, and Open
+ * only outside the shell, where there is no file dialog to open one with.
  */
 export function WelcomeScreen() {
   const create = useCommand('file.new')
@@ -36,10 +36,6 @@ export function WelcomeScreen() {
           </button>
         ))}
       </div>
-
-      <p className="text-xs text-muted">
-        Reading and writing <code>.pptx</code> lands next; this build is the shell.
-      </p>
     </div>
   )
 }

@@ -73,11 +73,12 @@ describe('the theme', () => {
   })
 })
 
-describe('what is not built yet', () => {
-  it('registers the file commands disabled rather than leaving them out', () => {
+describe('what this build cannot do', () => {
+  it('registers a command it cannot run disabled rather than leaving it out', () => {
     // The menu is the shape of the app: a File menu with nothing in it says the
-    // app cannot open a deck, a greyed-out Open says it cannot do so yet.
-    for (const id of ['file.new', 'file.open', 'file.save']) {
+    // app cannot open a deck, a greyed-out Open says only that there is no file
+    // dialog here to open one with.
+    for (const id of ['file.open', 'file.save']) {
       const command = getCommand(id)
       expect(command, id).toBeDefined()
       expect(command?.isEnabled?.({}), id).toBe(false)
@@ -87,7 +88,8 @@ describe('what is not built yet', () => {
   it('greys out the welcome buttons through those same commands', () => {
     render(<App />)
 
-    expect(screen.getByRole('button', { name: 'New Presentation' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Open…' })).toBeDisabled()
+    // New needs nothing from the shell: the deck is built in memory.
+    expect(screen.getByRole('button', { name: 'New Presentation' })).toBeEnabled()
   })
 })

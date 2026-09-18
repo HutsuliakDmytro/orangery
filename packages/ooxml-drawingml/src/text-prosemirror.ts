@@ -164,6 +164,17 @@ function textOf(node: XmlNode): string {
     .join('')
 }
 
+export interface DocOptions {
+  /**
+   * What a field says right now, given its type and the text the file cached.
+   *
+   * Asked for rather than worked out here: a slide number is the slide's place
+   * in a deck, and a text body has no idea which deck it is in. Without it the
+   * cached answer stands, which is what a notes page or a test wants.
+   */
+  field?: (type: string | null, cached: string) => string
+}
+
 /**
  * Reads a text body into a ProseMirror document.
  *
@@ -171,7 +182,7 @@ function textOf(node: XmlNode): string {
  * beside it in the tree, and finding them any other way — by matching the text,
  * say — would hand two runs that read the same the same formatting.
  */
-export function textBodyToDoc(body: TextBody): PmNode {
+export function textBodyToDoc(body: TextBody, options: DocOptions = {}): PmNode {
   const paragraphs = children(body.node)
     .filter((child) => tagName(child) === 'a:p')
     .map((paragraph): PmNode => {
@@ -186,6 +197,23 @@ export function textBodyToDoc(body: TextBody): PmNode {
 
         const value = children(child).find((one) => tagName(one) === 'a:t')
         const text = value === undefined ? '' : textOf(value)
+
+        // A field is one thing, not the characters it happens to show: typing
+        // over those characters is how a slide number stops being one.
+        if (tag === 'a:fld') {
+          const type = attribute(child, 'type') ?? null
+          return [
+            {
+              type: 'ooxmlField',
+              attrs: {
+                xml: serializeNode(child),
+                fieldType: type,
+                text: options.field === undefined ? text : options.field(type, text),
+              },
+            },
+          ]
+        }
+
         if (text === '') return []
 
         return [
@@ -482,6 +510,16 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
 
     const runs = (paragraph.content ?? []).flatMap((node): XmlNode[] => {
       if (node.type === 'hardBreak') return [element('a:br')]
+
+      // Back exactly as it came, cached answer and all. What it shows is worked
+      // out afresh every time it is drawn, so the cache is only what another
+      // program reads before it does its own working out.
+      if (node.type === 'ooxmlField') {
+        const xml = node.attrs?.['xml']
+        const original = typeof xml === 'string' && xml !== '' ? deserializeNode(xml) : null
+        return original === null ? [] : [original]
+      }
+
       if (node.type !== 'text' || node.text === undefined) return []
 
       const rPr = propertiesFor(node.marks ?? [])

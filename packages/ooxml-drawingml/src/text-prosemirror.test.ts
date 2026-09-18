@@ -397,3 +397,77 @@ describe('paragraph indents', () => {
     expect(written).toContain('buChar')
   })
 })
+
+describe('a field in the text', () => {
+  const FIELD =
+    '<a:p><a:r><a:t>Page </a:t></a:r>' +
+    '<a:fld id="{7C1F}" type="slidenum"><a:rPr lang="en-US"/><a:t>3</a:t></a:fld></a:p>'
+
+  it('is one thing rather than the characters it shows', () => {
+    const doc = docOf(FIELD)
+    const field = doc.content?.[0]?.content?.[1]
+
+    // Read as text, a keystroke beside it would merge into it and the slide
+    // number would quietly become the digit it happened to say.
+    expect(field?.type).toBe('ooxmlField')
+    expect(field?.attrs?.['fieldType']).toBe('slidenum')
+  })
+
+  it('shows what it stands for now, when somebody can say', () => {
+    const doc = textBodyToDoc(readTextBody(body(FIELD)), {
+      field: (type, cached) => (type === 'slidenum' ? '12' : cached),
+    })
+
+    expect(doc.content?.[0]?.content?.[1]?.attrs?.['text']).toBe('12')
+  })
+
+  it('falls back to what the file cached when nobody can', () => {
+    expect(docOf(FIELD).content?.[0]?.content?.[1]?.attrs?.['text']).toBe('3')
+  })
+
+  it('goes back into the file exactly as it came', () => {
+    const original = body(FIELD)
+    const read = readTextBody(original)
+    writeTextBody(read.node, textBodyToDoc(read, { field: () => '12' }))
+
+    const written = serializeNode(original)
+    expect(written).toContain('<a:fld id="{7C1F}" type="slidenum">')
+    // The live value is never written down: it is worked out afresh every time
+    // it is drawn, and writing it would turn the field into the answer.
+    expect(written).not.toContain('12')
+  })
+
+  it('survives the text around it being edited', () => {
+    const original = body(FIELD)
+    const read = readTextBody(original)
+    const doc = textBodyToDoc(read)
+
+    const paragraph = doc.content?.[0]
+    const field = paragraph?.content?.[1]
+    if (paragraph === undefined || field === undefined) throw new Error('bad doc')
+
+    writeTextBody(read.node, {
+      ...doc,
+      content: [{ ...paragraph, content: [{ type: 'text', text: 'Slide ' }, field] }],
+    })
+
+    const written = serializeNode(original)
+    expect(written).toContain('Slide ')
+    expect(written).toContain('type="slidenum"')
+  })
+
+  it('is gone from the file when it is deleted in the editor', () => {
+    const original = body(FIELD)
+    const read = readTextBody(original)
+    const doc = textBodyToDoc(read)
+    const paragraph = doc.content?.[0]
+    if (paragraph === undefined) throw new Error('bad doc')
+
+    writeTextBody(read.node, {
+      ...doc,
+      content: [{ ...paragraph, content: [{ type: 'text', text: 'Page ' }] }],
+    })
+
+    expect(serializeNode(original)).not.toContain('a:fld')
+  })
+})

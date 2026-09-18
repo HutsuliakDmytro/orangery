@@ -486,3 +486,62 @@ describe('indenting a paragraph', () => {
     expect(partText()).not.toContain('marL="-')
   })
 })
+
+describe('a field inside the text', () => {
+  /** Puts a slide number on the slides, then enters the shape holding it. */
+  async function enterTheNumber() {
+    await openDeck('many-slides')
+    const { rerender } = render(<App />)
+
+    act(() => {
+      runCommand('insert.header-footer', {})
+    })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    const number = useDeckStore
+      .getState()
+      .open?.deck.slides[0]?.shapes.find((shape) => shape.placeholder?.type === 'sldNum')
+    if (number === undefined) throw new Error('the dialog added nothing')
+
+    act(() => {
+      useDeckStore.getState().setEditing(number.id)
+    })
+    return { rerender }
+  }
+
+  it('is still a field after the shape has been entered and left', async () => {
+    const { rerender } = await enterTheNumber()
+
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    // Read as plain text it would come back as the digit it happened to show,
+    // and the number would stop following the slide from then on.
+    expect(partText()).toContain('type="slidenum"')
+  })
+
+  it('survives words being typed beside it', async () => {
+    const { rerender } = await enterTheNumber()
+
+    // Through the editor rather than through a click: jsdom has no
+    // `elementFromPoint`, so a press inside a ProseMirror view throws before it
+    // ever becomes a caret.
+    act(() => {
+      const editor = useEditorStore.getState().editor
+      editor?.commands.setTextSelection(1)
+      editor?.commands.insertContent('Page ')
+    })
+
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+
+    expect(partText()).toContain('Page ')
+    expect(partText()).toContain('type="slidenum"')
+  })
+})

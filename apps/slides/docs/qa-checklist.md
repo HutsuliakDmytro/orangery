@@ -114,6 +114,9 @@ These are the ones that matter most. Take them seriously.
       shows tomorrow's date, not today's.
 - [ ] Tick “Don't show on title slide” and Apply to All. The title slides have
       nothing; the rest do.
+- [ ] Double-click into the footer and type beside the slide number. The number
+      is one thing the caret steps over, not digits you can edit — and after
+      leaving the shape it still follows the slide.
 
 ## Getting a deck in
 

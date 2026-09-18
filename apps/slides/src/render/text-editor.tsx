@@ -8,6 +8,7 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect } from 'react'
 import {
   FontSize,
+  OoxmlField,
   RunStyle,
   OoxmlParagraph,
   PastePlainText,
@@ -67,6 +68,9 @@ export function TextEditor({
       Superscript,
       Subscript,
       OoxmlParagraph,
+      // A slide number or a date: one thing that shows text rather than text.
+      // Without it in the schema the bridge's document would not even load.
+      OoxmlField,
       PreservedRunProperties,
       /**
        * The same substitutions Docs makes, from the same extension.

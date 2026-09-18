@@ -632,7 +632,9 @@ function ShapeText({
           <p style={{ margin: 0, opacity: 0.45 }}>{prompt}</p>
         ) : editing === true ? (
           <TextEditor
-            doc={textBodyToDoc(shape.text)}
+            doc={textBodyToDoc(shape.text, {
+              field: (type, cached) => fieldValue(type, cached, fields),
+            })}
             onCommit={(edited) => {
               onCommitText?.(shape.id, edited)
             }}

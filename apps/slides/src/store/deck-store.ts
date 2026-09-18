@@ -142,6 +142,14 @@ interface DeckState {
    * handle means "make the frame bigger" the moment it is not.
    */
   cropping: number | null
+  /**
+   * The block of cells picked out in a table, or null.
+   *
+   * Carries the table's id as well as the coordinates: a cell is only a cell of
+   * something, and the same row and column mean a different square in the next
+   * table along.
+   */
+  cells: { table: number; row: number; column: number; toRow: number; toColumn: number } | null
   undoStack: Edit[]
   redoStack: Edit[]
   /** What went wrong opening the last file, for the banner. */
@@ -215,6 +223,8 @@ interface DeckState {
   setOpenGroup: (id: number | null) => void
   /** Enters crop on a picture, or leaves it with null. */
   setCropping: (id: number | null) => void
+  /** Picks a cell out of a table; `extend` grows the block from where it was. */
+  pickCell: (table: number, at: { row: number; column: number }, extend: boolean) => void
   /**
    * Runs a change against the current slide and records it.
    *
@@ -322,6 +332,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   editing: null,
   openGroup: null,
   cropping: null,
+  cells: null,
   undoStack: [],
   redoStack: [],
   error: null,
@@ -395,6 +406,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         editing: null,
         openGroup: null,
         cropping: null,
+        cells: null,
         undoStack: [],
         redoStack: [],
         error: null,
@@ -427,6 +439,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         // something else on the slide arrived at.
         openGroup: null,
         cropping: null,
+        cells: null,
       }
     })
   },
@@ -446,6 +459,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         editing: null,
         openGroup: null,
         cropping: null,
+        cells: null,
       }
     })
   },
@@ -464,6 +478,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       editing: null,
       openGroup: null,
       cropping: null,
+      cells: null,
       undoStack: [],
       redoStack: [],
       error: null,
@@ -486,6 +501,20 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
   setCropping: (id) => {
     set({ cropping: id, ...(id === null ? {} : { selection: [id], editing: null }) })
+  },
+
+  pickCell: (table, at, extend) => {
+    set((state) => {
+      const held = state.cells
+      // Extending from somewhere else is not extending; it is starting again
+      // where the pointer is.
+      if (!extend || held === null || held.table !== table) {
+        return {
+          cells: { table, row: at.row, column: at.column, toRow: at.row, toColumn: at.column },
+        }
+      }
+      return { cells: { ...held, toRow: at.row, toColumn: at.column } }
+    })
   },
 
   setEditing: (id) => {

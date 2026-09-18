@@ -80,6 +80,17 @@ export type { NewShape } from './create-shape'
 export { insertPicture, relsPartFor, UnsupportedPictureError } from './insert-picture'
 export type { NewPicture } from './insert-picture'
 export { defaultTableStyle, insertTable } from './insert-table'
+export {
+  columnCount,
+  insertColumn,
+  insertRow,
+  mergeCells,
+  removeColumn,
+  removeRow,
+  rowCount,
+  splitCell,
+} from './table-edit'
+export type { CellRange } from './table-edit'
 export type { NewTable } from './insert-table'
 export { connectorEnds, moveConnectorEnd, nearestSite, sitePoint } from './connect'
 export type { ConnectorEnd, EndMove } from './connect'

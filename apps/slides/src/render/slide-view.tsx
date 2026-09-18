@@ -701,6 +701,8 @@ export function SlideView({
   onOpenGroup,
   cropping = null,
   onCrop,
+  cells = null,
+  onPickCell,
   onMarquee,
   drawing = null,
   onDraw,
@@ -727,6 +729,10 @@ export function SlideView({
   openGroup?: number | null
   /** The picture being cropped, whose handles then take away rather than resize. */
   cropping?: number | null
+  /** The block of cells picked out in a table, and which table it is in. */
+  cells?: { table: number; row: number; column: number; toRow: number; toColumn: number } | null
+  /** Given the table, the cell clicked, and whether the click extends a block. */
+  onPickCell?: (table: number, at: { row: number; column: number }, extend: boolean) => void
   /** Asked to enter crop on a picture, or to leave it with `null`. */
   onCrop?: (id: number | null) => void
   /** Asked to step into a group, or back to the top with `null`. */
@@ -982,6 +988,15 @@ export function SlideView({
                 x={drawing.transform.x}
                 y={drawing.transform.y}
                 context={drawing.context}
+                selection={cells?.table === drawing.shape.id ? cells : null}
+                onPickCell={
+                  onPickCell === undefined
+                    ? undefined
+                    : (at, extend) => {
+                        onSelect?.(drawing.shape.id, false)
+                        onPickCell(drawing.shape.id, at, extend)
+                      }
+                }
               />
             ) : (
               <ShapeOutline drawing={drawing} />

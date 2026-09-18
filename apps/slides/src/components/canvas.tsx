@@ -33,6 +33,8 @@ export function Canvas() {
   const setEditing = useDeckStore((state) => state.setEditing)
   const drawing = useViewStore((state) => state.drawing)
   const setDrawing = useViewStore((state) => state.setDrawing)
+  const cells = useDeckStore((state) => state.cells)
+  const pickCell = useDeckStore((state) => state.pickCell)
   const cropping = useDeckStore((state) => state.cropping)
   const setCropping = useDeckStore((state) => state.setCropping)
   const openGroup = useDeckStore((state) => state.openGroup)
@@ -100,6 +102,8 @@ export function Canvas() {
           }}
           cropping={cropping}
           onCrop={setCropping}
+          cells={cells}
+          onPickCell={pickCell}
           onDrag={(drag, correction) => {
             const selected = useDeckStore.getState().selection
 

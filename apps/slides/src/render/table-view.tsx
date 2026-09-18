@@ -17,6 +17,9 @@ import { fillPaint, linePaint } from './paint'
  */
 
 interface Placed {
+  /** Where in the grid it is, which is what a click on it means. */
+  row: number
+  column: number
   cell: TableCell
   x: number
   y: number
@@ -58,6 +61,8 @@ function place(table: Table): Placed[] {
           width: right - left,
           height: bottom - top,
           key: `${String(rowIndex)}-${String(at)}`,
+          row: rowIndex,
+          column: at,
         },
       ]
     })
@@ -69,12 +74,30 @@ export function TableView({
   x,
   y,
   context,
+  selection,
+  onPickCell,
 }: {
   table: Table
   x: number
   y: number
   context: ColorContext
+  /** The block of cells picked out, in grid coordinates. */
+  selection?: { row: number; column: number; toRow: number; toColumn: number } | null
+  /** Given the cell clicked and whether the click was extending a block. */
+  onPickCell?: (at: { row: number; column: number }, extend: boolean) => void
 }) {
+  const within = (placed: { row: number; column: number }) => {
+    if (selection == null) return false
+    const rows = [selection.row, selection.toRow].sort((a, b) => a - b)
+    const columns = [selection.column, selection.toColumn].sort((a, b) => a - b)
+    return (
+      placed.row >= (rows[0] ?? 0) &&
+      placed.row <= (rows[1] ?? 0) &&
+      placed.column >= (columns[0] ?? 0) &&
+      placed.column <= (columns[1] ?? 0)
+    )
+  }
+
   return (
     <g transform={`translate(${String(x)} ${String(y)})`}>
       {place(table).map((placed) => {
@@ -117,6 +140,22 @@ export function TableView({
                 {placed.cell.text === null ? '' : textOfBody(placed.cell.text)}
               </div>
             </foreignObject>
+            {onPickCell !== undefined && (
+              <rect
+                x={placed.x}
+                y={placed.y}
+                width={placed.width}
+                height={placed.height}
+                fill={within(placed) ? 'var(--accent)' : 'transparent'}
+                fillOpacity={within(placed) ? 0.2 : 1}
+                role="button"
+                aria-label={`Cell ${String(placed.row + 1)}, ${String(placed.column + 1)}`}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  onPickCell({ row: placed.row, column: placed.column }, event.shiftKey)
+                }}
+              />
+            )}
           </g>
         )
       })}

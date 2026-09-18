@@ -20,7 +20,14 @@ import {
   insertConnector,
   insertIcon,
   insertPicture,
+  flatten,
+  insertColumn,
+  insertRow,
   insertTable,
+  mergeCells,
+  removeColumn,
+  removeRow,
+  splitCell,
   saveDeck,
   moveSlide,
   readSections,
@@ -39,6 +46,8 @@ import {
   writePart,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
+import { findDescendant } from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import { pictureName, rasterise, slideSvg } from '../document/export-image'
 import type { RasterType } from '../document/export-image'
 import { ICON_SIZE, ICONS } from '../document/icons'
@@ -406,6 +415,121 @@ function selected(slide: Slide): Shape[] {
   const { selection } = useDeckStore.getState()
   return slide.shapes.filter((shape) => selection.includes(shape.id))
 }
+
+/**
+ * The table the picked cells are in, and the `a:tbl` under it.
+ *
+ * Both, because every command here changes the XML and then has to write the
+ * part the XML came from; one without the other is a change nothing saves.
+ */
+function pickedTable(): {
+  table: XmlNode
+  cells: NonNullable<ReturnType<typeof cellsPicked>>
+} | null {
+  const cells = cellsPicked()
+  const slide = currentSlide(useDeckStore.getState())
+  if (cells === null || slide === null) return null
+
+  const frame = flatten(slide.shapes).find((shape) => shape.id === cells.table)
+  const table = frame === undefined ? undefined : findDescendant(frame.node, 'a:tbl')
+  return table === undefined ? null : { table, cells }
+}
+
+const cellsPicked = () => useDeckStore.getState().cells
+
+/** Runs a change against the picked table, as one undo step. */
+function editTable(change: (table: XmlNode) => boolean): void {
+  useDeckStore.getState().edit(() => {
+    const found = pickedTable()
+    return found === null ? false : change(found.table)
+  })
+}
+
+export const tableEditCommands: readonly Command[] = [
+  {
+    id: 'table.row-above',
+    label: 'Insert Row Above',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertRow(table, cellsPicked()?.row ?? 0, false))
+    },
+  },
+  {
+    id: 'table.row-below',
+    label: 'Insert Row Below',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertRow(table, cellsPicked()?.toRow ?? 0, true))
+    },
+  },
+  {
+    id: 'table.column-left',
+    label: 'Insert Column Left',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertColumn(table, cellsPicked()?.column ?? 0, false))
+    },
+  },
+  {
+    id: 'table.column-right',
+    label: 'Insert Column Right',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertColumn(table, cellsPicked()?.toColumn ?? 0, true))
+    },
+  },
+  {
+    id: 'table.delete-row',
+    label: 'Delete Row',
+    group: 'edit',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => removeRow(table, cellsPicked()?.row ?? 0))
+    },
+  },
+  {
+    id: 'table.delete-column',
+    label: 'Delete Column',
+    group: 'edit',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => removeColumn(table, cellsPicked()?.column ?? 0))
+    },
+  },
+  {
+    id: 'table.merge',
+    label: 'Merge Cells',
+    group: 'format',
+    // One cell is not a merge, and greying it out says which gesture is missing
+    // rather than doing nothing when it is used.
+    isEnabled: () => {
+      const cells = cellsPicked()
+      return cells !== null && (cells.row !== cells.toRow || cells.column !== cells.toColumn)
+    },
+    run: () => {
+      editTable((table) => {
+        const cells = cellsPicked()
+        return cells === null ? false : mergeCells(table, cells)
+      })
+    },
+  },
+  {
+    id: 'table.split',
+    label: 'Split Cell',
+    group: 'format',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => {
+        const cells = cellsPicked()
+        return cells === null ? false : splitCell(table, cells.row, cells.column)
+      })
+    },
+  },
+]
 
 export const alignCommands: readonly Command[] = (
   [
@@ -1419,6 +1543,7 @@ export function registerBuiltinCommands(): void {
   registerAll(zoomCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
+  registerAll(tableEditCommands)
   registerAll(flipCommands)
   registerAll(distributeCommands)
   registerAll(slideCommands)

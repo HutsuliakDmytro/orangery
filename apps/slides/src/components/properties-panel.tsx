@@ -3,6 +3,7 @@ import { resolveColor } from '@orangery/ooxml-drawingml'
 import { colorContextFor, lookContext, shapeLook } from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { SlideProperties } from './slide-properties'
+import { TextProperties } from './text-properties'
 
 /**
  * What the selection looks like, and how to change it.
@@ -106,6 +107,8 @@ export function PropertiesPanel() {
           </button>
         </div>
       </section>
+
+      <TextProperties />
 
       <section aria-label="Line" className="space-y-2">
         <h2 className="uppercase tracking-wide text-muted">Line</h2>

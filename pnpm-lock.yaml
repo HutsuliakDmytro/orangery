@@ -252,6 +252,9 @@ importers:
       '@tiptap/core':
         specifier: ^2.27.3
         version: 2.27.3(@tiptap/pm@2.27.3)
+      '@tiptap/extension-font-family':
+        specifier: ^2.27.3
+        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/extension-text-style@2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3)))
       '@tiptap/extension-text-style':
         specifier: ^2.27.3
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))

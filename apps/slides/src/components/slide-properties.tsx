@@ -9,7 +9,12 @@ import {
   writeBackground,
 } from '@orangery/ooxml-presentation'
 import type { Fill } from '@orangery/ooxml-drawingml'
-import { setSlideSize, SLIDE_SIZE_PRESETS } from '@orangery/ooxml-presentation'
+import {
+  applyTheme,
+  setSlideSize,
+  SLIDE_SIZE_PRESETS,
+  THEME_GALLERY,
+} from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 
@@ -65,6 +70,7 @@ export function SlideProperties() {
   const slide = useDeckStore(currentSlide)
   const edit = useDeckStore((state) => state.edit)
   const editPackage = useDeckStore((state) => state.editPackage)
+  const inMaster = useDeckStore((state) => state.master)
   const contentFit = useViewStore((state) => state.contentFit)
   const setContentFit = useViewStore((state) => state.setContentFit)
 
@@ -81,6 +87,9 @@ export function SlideProperties() {
   const fill = own?.fill ?? null
   const kind: Kind = fill === null ? 'inherit' : fill.kind === 'group' ? 'inherit' : fill.kind
   const shown = masterShapesShown(slide)
+
+  // The name of the theme in use, for showing which swatch is the current one.
+  const themeName = [...open.themes.values()][0]?.name ?? ''
 
   const size = open.deck.slideSize
   const custom = !SLIDE_SIZE_PRESETS.some(
@@ -109,31 +118,62 @@ export function SlideProperties() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <label htmlFor="slide-layout" className="mb-1 block text-xs text-muted">
-          Layout
-        </label>
-        <select
-          id="slide-layout"
-          value={current?.path ?? ''}
-          disabled={layouts.length === 0}
-          onChange={(event) => {
-            const chosen = open.deck.layouts.get(event.target.value)
-            if (chosen === undefined) return
+      {/* A layout has no layout, and a master has none either: the picker only
+          means something under a slide. */}
+      {inMaster === null && (
+        <div>
+          <label htmlFor="slide-layout" className="mb-1 block text-xs text-muted">
+            Layout
+          </label>
+          <select
+            id="slide-layout"
+            value={current?.path ?? ''}
+            disabled={layouts.length === 0}
+            onChange={(event) => {
+              const chosen = open.deck.layouts.get(event.target.value)
+              if (chosen === undefined) return
 
-            editPackage((deck) => {
-              const here = deck.deck.slides[useDeckStore.getState().current]
-              return here !== undefined && setSlideLayout(deck.package, here, chosen)
-            })
-          }}
-          className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text"
-        >
-          {layouts.map((layout) => (
-            <option key={layout.path} value={layout.path}>
-              {slideName(layout)}
-            </option>
+              editPackage((deck) => {
+                const here = deck.deck.slides[useDeckStore.getState().current]
+                return here !== undefined && setSlideLayout(deck.package, here, chosen)
+              })
+            }}
+            className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text"
+          >
+            {layouts.map((layout) => (
+              <option key={layout.path} value={layout.path}>
+                {slideName(layout)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <span className="block text-xs text-muted">Theme</span>
+        <div className="flex flex-wrap gap-1">
+          {THEME_GALLERY.map((theme) => (
+            <button
+              key={theme.name}
+              type="button"
+              aria-label={`Theme ${theme.name}`}
+              aria-pressed={theme.name === themeName}
+              title={theme.name}
+              onClick={() => {
+                editPackage((deck) => applyTheme(deck.package, deck.deck, theme))
+              }}
+              className={`flex h-6 w-10 overflow-hidden rounded border ${
+                theme.name === themeName ? 'border-accent' : 'border-border'
+              }`}
+            >
+              {/* The dark, the light and the first accent: enough of a scheme to
+                  tell two of them apart at this size. */}
+              {[theme.colors.dk1, theme.colors.lt1, theme.colors.accent1].map((hex) => (
+                <span key={hex} style={{ background: hex }} className="flex-1" />
+              ))}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       <div className="space-y-2">

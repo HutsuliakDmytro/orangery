@@ -1,6 +1,7 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TextStyle from '@tiptap/extension-text-style'
+import FontFamily from '@tiptap/extension-font-family'
 import Underline from '@tiptap/extension-underline'
 import { useEffect } from 'react'
 import {
@@ -51,6 +52,10 @@ export function TextEditor({
       Underline,
       TextStyle,
       FontSize,
+      // `a:latin typeface` is a run property like the size beside it; without
+      // this the attribute the bridge reads out has nowhere to live and a font
+      // chosen in the panel would be dropped on the way in.
+      FontFamily,
       OoxmlParagraph,
       PreservedRunProperties,
       /**

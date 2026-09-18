@@ -109,3 +109,7 @@ export {
 } from './write-background'
 export { setSlideSize, SLIDE_SIZE_PRESETS } from './slide-size'
 export type { ContentFit } from './slide-size'
+export { setThemeColors, setThemeFonts, setThemeName } from './write-theme'
+export type { ColorSlot, ThemeFontChange } from './write-theme'
+export { applyTheme, THEME_GALLERY, themePathsOf } from './theme-gallery'
+export type { GalleryTheme } from './theme-gallery'

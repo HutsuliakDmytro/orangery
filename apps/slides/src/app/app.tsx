@@ -3,6 +3,7 @@ import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/
 import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
 import { Outline } from '../components/outline'
+import { MasterList } from '../components/master-list'
 import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
@@ -40,6 +41,9 @@ function Shell() {
   const panels = useViewStore((state) => state.panels)
   const sizes = useViewStore((state) => state.sizes)
   const leftPane = useViewStore((state) => state.leftPane)
+  const master = useDeckStore((state) => state.master)
+
+  const paneLabel = master !== null ? 'Masters' : leftPane === 'outline' ? 'Outline' : 'Slides'
   const resize = useViewStore((state) => state.resize)
   const middle = useRef<HTMLDivElement>(null)
 
@@ -49,7 +53,13 @@ function Shell() {
         <span className="font-medium">{title(open?.path ?? null)}</span>
         {open !== null && (
           <span className="text-xs text-muted">
-            Slide {current + 1} of {open.deck.slides.length}
+            {master === null ? (
+              <>
+                Slide {current + 1} of {open.deck.slides.length}
+              </>
+            ) : (
+              'Slide Master'
+            )}
           </span>
         )}
       </header>
@@ -68,11 +78,17 @@ function Shell() {
         {panels.filmstrip && (
           <>
             <aside
-              aria-label={leftPane === 'outline' ? 'Outline' : 'Slides'}
+              aria-label={paneLabel}
               style={{ width: sizes.filmstrip }}
               className="shrink-0 overflow-y-auto bg-surface"
             >
-              {leftPane === 'outline' ? <Outline /> : <Filmstrip />}
+              {master !== null ? (
+                <MasterList />
+              ) : leftPane === 'outline' ? (
+                <Outline />
+              ) : (
+                <Filmstrip />
+              )}
             </aside>
             <ResizeHandle
               orientation="vertical"

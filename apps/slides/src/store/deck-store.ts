@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { readDeck, readPptxPackage, readThemes, writeSlidePart } from '@orangery/ooxml-presentation'
-import type { Deck, Slide } from '@orangery/ooxml-presentation'
+import type { Deck, Slide, SlidePart } from '@orangery/ooxml-presentation'
 import { getPartText, setPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import type { Theme } from '@orangery/ooxml-drawingml'
@@ -45,6 +45,16 @@ interface DeckState {
   open: OpenDeck | null
   /** Index into `deck.slides`, or -1 when there is nothing to show. */
   current: number
+  /**
+   * The layout or master being edited, by part path, or null in the ordinary
+   * view.
+   *
+   * A layout and a master are the same thing as a slide structurally — a part
+   * holding a shape tree — so editing one is the same operation on a different
+   * part rather than a second editor. What changes is only which part the
+   * canvas is pointed at.
+   */
+  master: string | null
   /** Shape ids selected on the current slide. */
   selection: number[]
   /**
@@ -66,6 +76,8 @@ interface DeckState {
   select: (index: number) => void
   /** Picks out slides in the filmstrip; the last one given becomes current. */
   selectSlides: (indexes: readonly number[]) => void
+  /** Shows a layout or master for editing; null goes back to the slides. */
+  showMaster: (path: string | null) => void
   close: () => void
   /** Selects shapes on the current slide; `add` extends rather than replaces. */
   selectShapes: (ids: readonly number[], add?: boolean) => void
@@ -118,6 +130,7 @@ function withinDeck(open: OpenDeck, current: number, picked: readonly number[]) 
 export const useDeckStore = create<DeckState>((set, get) => ({
   open: null,
   current: -1,
+  master: null,
   selection: [],
   slideSelection: [],
   editing: null,
@@ -133,6 +146,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       set({
         open: { package: pkg, deck, themes: readThemes(pkg, deck), path },
         current: deck.slides.length > 0 ? 0 : -1,
+        master: null,
         selection: [],
         slideSelection: deck.slides.length > 0 ? [0] : [],
         editing: null,
@@ -152,6 +166,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       const count = state.open?.deck.slides.length ?? 0
       return {
         current: count === 0 ? -1 : Math.min(Math.max(index, 0), count - 1),
+        // Picking a slide is how you leave the master view; there is no second
+        // way out to forget about.
+        master: null,
         // Selection belongs to a slide, so moving away drops it rather than
         // carrying ids that mean something else on the slide arrived at.
         selection: [],
@@ -170,6 +187,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
       return {
         current: last,
+        master: null,
         selection: [],
         slideSelection: [...within].sort((first, second) => first - second),
         editing: null,
@@ -177,10 +195,15 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     })
   },
 
+  showMaster: (path) => {
+    set({ master: path, selection: [], editing: null })
+  },
+
   close: () => {
     set({
       open: null,
       current: -1,
+      master: null,
       selection: [],
       slideSelection: [],
       editing: null,
@@ -201,13 +224,13 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   },
 
   edit: (change) => {
-    const { open, current, editDeck } = get()
-    const slide = open?.deck.slides[current]
-    if (slide === undefined) return
+    const { editDeck } = get()
+    const part = currentSlide(get())
+    if (part === null) return
 
     editDeck((deck) => {
-      const current = deck.slides.find((one) => one.path === slide.path)
-      return current === undefined ? false : change(current)
+      const here = shapeParts(deck).find((one) => one.path === part.path)
+      return here === undefined ? false : change(asSlide(here))
     })
   },
 
@@ -215,19 +238,23 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     const { open } = get()
     if (open === null) return
 
+    // Layouts and masters as well as slides: they hold a shape tree too, and a
+    // change that reached one of them and was not written back would be a
+    // change the file never saw.
+    const touched = shapeParts(open.deck)
     const before = new Map(
-      open.deck.slides.map((slide) => [slide.path, getPartText(open.package, slide.path) ?? '']),
+      touched.map((part) => [part.path, getPartText(open.package, part.path) ?? '']),
     )
     if (!change(open.deck)) return
 
-    for (const slide of open.deck.slides) writeSlidePart(open.package, slide)
+    for (const part of touched) writeSlidePart(open.package, part)
 
-    // Only the parts that actually differ are recorded: writing every slide
-    // back is how the change is applied, not a claim that all of them changed.
-    const parts = open.deck.slides.flatMap((slide) => {
-      const after = getPartText(open.package, slide.path) ?? ''
-      const original = before.get(slide.path) ?? ''
-      return after === original ? [] : [{ path: slide.path, before: original, after }]
+    // Only the parts that actually differ are recorded: writing every part back
+    // is how the change is applied, not a claim that all of them changed.
+    const parts = touched.flatMap((part) => {
+      const after = getPartText(open.package, part.path) ?? ''
+      const original = before.get(part.path) ?? ''
+      return after === original ? [] : [{ path: part.path, before: original, after }]
     })
     if (parts.length === 0) return
 
@@ -303,7 +330,51 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 }))
 
 /** The slide being shown, or null when no deck is open. */
-export function currentSlide(state: DeckState) {
-  const slides = state.open?.deck.slides ?? []
-  return state.current < 0 ? null : (slides[state.current] ?? null)
+/**
+ * A layout or master seen as a slide, the same object every time.
+ *
+ * This is a selector's return value, so a fresh object each call would be a
+ * fresh reference each render and the component would never stop rendering.
+ * The parts themselves are replaced whenever the deck is re-read, which is
+ * exactly when the widened view should be replaced too — so they are the key.
+ */
+const widened = new WeakMap<SlidePart, Slide>()
+
+function asSlide(part: SlidePart): Slide {
+  // A slide is already one; widening it would blank the layout it points at.
+  if ('notes' in part) return part as Slide
+
+  const existing = widened.get(part)
+  if (existing !== undefined) return existing
+
+  // A layout has no layout of its own and no notes; that is the whole of the
+  // difference, and everything that draws or edits a shape tree ignores it.
+  const made: Slide = { ...part, layout: null, notes: null }
+  widened.set(part, made)
+  return made
+}
+
+/** Every part of a deck that holds a shape tree, in the order they are edited. */
+function shapeParts(deck: Deck): SlidePart[] {
+  return [...deck.slides, ...deck.layouts.values(), ...deck.masters.values()]
+}
+
+/**
+ * The part on the canvas: a slide, or the layout or master being edited.
+ *
+ * A layout has no layout of its own and no notes, which is the only way it
+ * differs from a slide here; everything that draws or edits a shape tree works
+ * on it unchanged, which is the whole reason master editing is not a second
+ * editor.
+ */
+export function currentSlide(state: DeckState): Slide | null {
+  const deck = state.open?.deck
+  if (deck === undefined) return null
+
+  if (state.master !== null) {
+    const part = deck.layouts.get(state.master) ?? deck.masters.get(state.master) ?? null
+    return part === null ? null : asSlide(part)
+  }
+
+  return state.current < 0 ? null : (deck.slides[state.current] ?? null)
 }

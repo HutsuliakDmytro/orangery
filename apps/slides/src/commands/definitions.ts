@@ -453,6 +453,18 @@ export const paragraphCommands: readonly Command[] = [
  * go through `editPackage`, which compares the whole package — the only way to
  * notice a part appearing.
  */
+/**
+ * Whether the canvas is showing a slide rather than a layout or a master.
+ *
+ * The commands about slides — adding one, deleting one, sections — say nothing
+ * about a layout, and offering them there would ask which slide was meant when
+ * none is on screen.
+ */
+function onSlides(): boolean {
+  const { open, master } = useDeckStore.getState()
+  return open !== null && master === null
+}
+
 /** The section the slide being shown falls in, or null when there are none. */
 function sectionHere() {
   const { open, current } = useDeckStore.getState()
@@ -468,7 +480,7 @@ export const slideEditCommands: readonly Command[] = [
     label: 'New Slide',
     group: 'insert',
     shortcut: 'Mod+m',
-    isEnabled: () => useDeckStore.getState().open !== null,
+    isEnabled: () => onSlides(),
     run: () => {
       const { open, current, editPackage, select } = useDeckStore.getState()
       if (open === null) return
@@ -497,7 +509,7 @@ export const slideEditCommands: readonly Command[] = [
     label: 'Duplicate Slide',
     group: 'edit',
     shortcut: 'Mod+Shift+d',
-    isEnabled: () => useDeckStore.getState().open !== null,
+    isEnabled: () => onSlides(),
     run: () => {
       const { slideSelection, editPackage, selectSlides } = useDeckStore.getState()
 
@@ -524,7 +536,7 @@ export const slideEditCommands: readonly Command[] = [
       const count = open?.deck.slides.length ?? 0
       // A deck with no slides is one PowerPoint will not open, so deleting all
       // of them is not offered rather than silently doing part of it.
-      return count > 0 && slideSelection.length < count
+      return onSlides() && count > 0 && slideSelection.length < count
     },
     run: () => {
       const { slideSelection, editPackage, select } = useDeckStore.getState()
@@ -538,7 +550,7 @@ export const slideEditCommands: readonly Command[] = [
     id: 'slide.layout',
     label: 'Change Layout…',
     group: 'edit',
-    isEnabled: () => useDeckStore.getState().open !== null,
+    isEnabled: () => onSlides(),
     // Which of a master's dozen layouts was meant is not something a command can
     // guess, so this shows the picker rather than changing anything itself.
     run: () => {
@@ -551,7 +563,7 @@ export const slideEditCommands: readonly Command[] = [
     id: 'section.add',
     label: 'Add Section',
     group: 'insert',
-    isEnabled: () => useDeckStore.getState().open !== null,
+    isEnabled: () => onSlides(),
     run: () => {
       const { open, current, editPackage } = useDeckStore.getState()
       if (open === null) return
@@ -573,7 +585,7 @@ export const slideEditCommands: readonly Command[] = [
     id: 'section.rename',
     label: 'Rename Section',
     group: 'edit',
-    isEnabled: () => sectionHere() !== null,
+    isEnabled: () => onSlides() && sectionHere() !== null,
     run: () => {
       const section = sectionHere()
       if (section !== null) useViewStore.getState().setRenamingSection(section.id)
@@ -583,7 +595,7 @@ export const slideEditCommands: readonly Command[] = [
     id: 'section.remove',
     label: 'Remove Section',
     group: 'edit',
-    isEnabled: () => sectionHere() !== null,
+    isEnabled: () => onSlides() && sectionHere() !== null,
     run: () => {
       const section = sectionHere()
       if (section === null) return
@@ -596,7 +608,7 @@ export const slideEditCommands: readonly Command[] = [
     id: 'slide.move-up',
     label: 'Move Slide Up',
     group: 'edit',
-    isEnabled: () => useDeckStore.getState().current > 0,
+    isEnabled: () => onSlides() && useDeckStore.getState().current > 0,
     run: () => {
       const { current, editPackage, select } = useDeckStore.getState()
       editPackage((open) => moveSlide(open.package, current, current - 1))
@@ -609,7 +621,7 @@ export const slideEditCommands: readonly Command[] = [
     group: 'edit',
     isEnabled: () => {
       const { open, current } = useDeckStore.getState()
-      return current >= 0 && current < (open?.deck.slides.length ?? 0) - 1
+      return onSlides() && current >= 0 && current < (open?.deck.slides.length ?? 0) - 1
     },
     run: () => {
       const { current, editPackage, select } = useDeckStore.getState()
@@ -620,6 +632,28 @@ export const slideEditCommands: readonly Command[] = [
 ]
 
 export const zoomCommands: readonly Command[] = [
+  {
+    id: 'view.master',
+    label: 'Slide Master',
+    group: 'view',
+    isActive: () => useDeckStore.getState().master !== null,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { open, current, master, showMaster, select } = useDeckStore.getState()
+      if (master !== null) {
+        // Back to the slide that was on screen, not to the first one.
+        select(current)
+        return
+      }
+
+      // Into the layout the slide being shown is built on, which is the one a
+      // person opening this view almost always meant.
+      const here = open?.deck.slides[current]
+      const first = [...(open?.deck.masters.keys() ?? [])][0]
+      const start = here?.layout ?? first ?? null
+      if (start !== null) showMaster(start)
+    },
+  },
   {
     id: 'view.outline',
     label: 'Outline View',

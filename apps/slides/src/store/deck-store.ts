@@ -48,6 +48,54 @@ interface Edit {
 /** What a hundred steps of history costs before the oldest is dropped. */
 const HISTORY_LIMIT = 200
 
+/** A part as a crash snapshot carries it: XML as text, media as bytes. */
+export interface RestoredPart {
+  path: string
+  text?: string
+  bytes?: Uint8Array
+}
+
+function newSessionId(): string {
+  return `session-${Math.random().toString(36).slice(2, 10)}`
+}
+
+/**
+ * Every part's text, by reference.
+ *
+ * Costs nothing to take — the strings are not copied — and comparing the result
+ * afterwards is how we find out what a change actually touched. Binary parts
+ * map to undefined, so a part that appears is told apart by its key being
+ * absent rather than by its value.
+ */
+function partTexts(pkg: OoxmlPackage): Map<string, string | undefined> {
+  return new Map([...pkg.parts].map(([path, part]) => [path, part.text]))
+}
+
+/** Paths that differ from a map taken before a change, additions included. */
+function changedSince(before: Map<string, string | undefined>, pkg: OoxmlPackage): string[] {
+  const changed: string[] = []
+  for (const [path, part] of pkg.parts) {
+    if (!before.has(path) || before.get(path) !== part.text) changed.push(path)
+  }
+  return changed
+}
+
+/**
+ * Folds what a change touched into what was already dirty.
+ *
+ * Only additions, never removals: nothing takes a part out of the package.
+ * Deleting a slide drops its entry from `presentation.xml` and leaves the part
+ * itself orphaned, which is what saving already writes, so the change to the
+ * presentation part describes the deletion in full. Should a part ever start
+ * being deleted outright, a snapshot would have to carry that as its own fact —
+ * recovery replays onto the original file, which still has it.
+ */
+function withChanges(state: Pick<DeckState, 'dirtyParts'>, changed: readonly string[]) {
+  const dirty = new Set(state.dirtyParts)
+  for (const path of changed) dirty.add(path)
+  return { dirtyParts: dirty }
+}
+
 interface DeckState {
   open: OpenDeck | null
   /** Index into `deck.slides`, or -1 when there is nothing to show. */
@@ -80,6 +128,35 @@ interface DeckState {
   /** What went wrong opening the last file, for the banner. */
   error: string | null
   /**
+   * This editing session, for the autosave directory.
+   *
+   * Keyed by the session and never by the path: Save As would otherwise write
+   * the snapshot under the old key and clear it under the new one, leaving the
+   * old one on disk to be offered as recoverable at every launch.
+   */
+  sessionId: string
+  /**
+   * Parts of the package that differ from the file on disk.
+   *
+   * What the crash snapshot is made of. Tracked here rather than worked out
+   * later because it cannot be: the package is mutated in place, so by the time
+   * anyone asks, the version that was on disk is gone.
+   *
+   * Not the same as the undo history. Inserting a picture adds a media part and
+   * rewrites a relationship file, neither of which is a step anyone takes back,
+   * and both of which a recovered deck needs — without them the slide points at
+   * an image that is not there.
+   */
+  dirtyParts: ReadonlySet<string>
+  /**
+   * Bumped by every recorded change.
+   *
+   * The autosave timer restarts on it. `dirtyParts` cannot serve: editing the
+   * same slide twice changes nothing about which parts are dirty, and the
+   * second edit would never be snapshotted.
+   */
+  revision: number
+  /**
    * Whether what is on screen is what is in the file.
    *
    * Set by every change and cleared by a save. Undo clears it too: a deck
@@ -89,6 +166,13 @@ interface DeckState {
   saved: boolean
   /** Records that the deck now matches a file, and where that file is. */
   markSaved: (path: string) => void
+  /**
+   * Puts recovered parts back onto a freshly opened deck.
+   *
+   * Called after `load` has reopened the original file: a snapshot is a patch
+   * on that file, not a deck of its own, so it can only be applied to one.
+   */
+  restore: (parts: readonly RestoredPart[]) => void
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
   select: (index: number) => void
   /** Picks out slides in the filmstrip; the last one given becomes current. */
@@ -154,13 +238,56 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   undoStack: [],
   redoStack: [],
   error: null,
+  sessionId: newSessionId(),
+  dirtyParts: new Set<string>(),
+  revision: 0,
   saved: true,
 
   markSaved: (path) => {
     set((state) => ({
       open: state.open === null ? null : { ...state.open, path },
       saved: true,
+      // The file on disk is the deck again, so nothing is left to recover and
+      // the next snapshot starts from nothing.
+      dirtyParts: new Set<string>(),
     }))
+  },
+
+  restore: (parts) => {
+    const { open } = get()
+    if (open === null) return
+
+    for (const part of parts) {
+      if (part.text !== undefined) {
+        setPartText(open.package, part.path, part.text)
+      } else if (part.bytes !== undefined) {
+        // Media, which has no text to set: kept byte for byte, and given a
+        // fresh date because the one it had belonged to a zip entry that was
+        // never written.
+        open.package.parts.set(part.path, {
+          path: part.path,
+          bytes: part.bytes,
+          date: new Date(),
+        })
+      }
+    }
+
+    set((state) => {
+      const reopened = reread(open)
+      return {
+        open: reopened,
+        ...withinDeck(reopened, state.current, state.slideSelection),
+        // Recovered work is by definition not in any file yet, and the parts it
+        // touched are exactly the ones the next snapshot has to carry.
+        saved: false,
+        dirtyParts: new Set(parts.map((part) => part.path)),
+        revision: state.revision + 1,
+        // History belonged to the session that died; what is here now is a
+        // starting point, not a step.
+        undoStack: [],
+        redoStack: [],
+      }
+    })
   },
 
   load: async (bytes, path) => {
@@ -178,6 +305,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         undoStack: [],
         redoStack: [],
         error: null,
+        sessionId: newSessionId(),
+        dirtyParts: new Set<string>(),
+        revision: 0,
         saved: true,
       })
     } catch (cause) {
@@ -236,6 +366,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       undoStack: [],
       redoStack: [],
       error: null,
+      sessionId: newSessionId(),
+      dirtyParts: new Set<string>(),
+      revision: 0,
       saved: true,
     })
   },
@@ -283,6 +416,11 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     const before = new Map(
       touched.map((part) => [part.path, getPartText(open.package, part.path) ?? '']),
     )
+    // The whole package as well as the shape parts: a change can reach further
+    // than the tree it was aimed at — inserting a picture also writes a
+    // relationship file and a media part — and a snapshot that missed those
+    // would recover a slide pointing at an image that is not there.
+    const texts = partTexts(open.package)
     if (!change(open.deck)) return
 
     for (const part of touched) writeSlidePart(open.package, part)
@@ -294,14 +432,24 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       const original = before.get(part.path) ?? ''
       return after === original ? [] : [{ path: part.path, before: original, after }]
     })
-    if (parts.length === 0) return
+
+    const changed = changedSince(texts, open.package)
+    if (parts.length === 0 && changed.length === 0) return
 
     set((state) => ({
       open: reread(open),
-      undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
+      // An undoable step only when something undoable happened. Media arriving
+      // beside a shape is not a step of its own, and pushing an empty one would
+      // make Undo do nothing once for every picture.
+      undoStack:
+        parts.length === 0
+          ? state.undoStack
+          : [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
       // A new change is a new branch; what was undone is no longer reachable.
-      redoStack: [],
+      redoStack: parts.length === 0 ? state.redoStack : [],
       saved: false,
+      ...withChanges(state, changed),
+      revision: state.revision + 1,
     }))
   },
 
@@ -310,6 +458,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     if (open === null) return
 
     const before = new Map([...open.package.parts].map(([path, part]) => [path, part.text ?? '']))
+    const texts = partTexts(open.package)
     if (!change(open)) return
 
     const parts = [...open.package.parts].flatMap(([path, part]) => {
@@ -320,16 +469,23 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       // the slide list, and a part nothing points at is not a slide.
       return after === original ? [] : [{ path, before: original ?? '', after }]
     })
-    if (parts.length === 0) return
+
+    const changed = changedSince(texts, open.package)
+    if (parts.length === 0 && changed.length === 0) return
 
     set((state) => {
       const reopened = reread(open)
       return {
         open: reopened,
         ...withinDeck(reopened, state.current, state.slideSelection),
-        undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
-        redoStack: [],
+        undoStack:
+          parts.length === 0
+            ? state.undoStack
+            : [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
+        redoStack: parts.length === 0 ? state.redoStack : [],
         saved: false,
+        ...withChanges(state, changed),
+        revision: state.revision + 1,
       }
     })
   },
@@ -339,6 +495,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     const step = undoStack[undoStack.length - 1]
     if (open === null || step === undefined) return
 
+    const texts = partTexts(open.package)
     for (const part of step.parts) setPartText(open.package, part.path, part.before)
     set((state) => {
       const reopened = reread(open)
@@ -348,6 +505,10 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         undoStack: state.undoStack.slice(0, -1),
         redoStack: [...state.redoStack, step],
         saved: false,
+        // Undoing is a change like any other as far as the file is concerned:
+        // a deck saved and then undone differs from its file again.
+        ...withChanges(state, changedSince(texts, open.package)),
+        revision: state.revision + 1,
       }
     })
   },
@@ -357,6 +518,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     const step = redoStack[redoStack.length - 1]
     if (open === null || step === undefined) return
 
+    const texts = partTexts(open.package)
     for (const part of step.parts) setPartText(open.package, part.path, part.after)
     set((state) => {
       const reopened = reread(open)
@@ -366,6 +528,8 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         undoStack: [...state.undoStack, step],
         redoStack: state.redoStack.slice(0, -1),
         saved: false,
+        ...withChanges(state, changedSince(texts, open.package)),
+        revision: state.revision + 1,
       }
     })
   },

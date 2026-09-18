@@ -2,6 +2,7 @@ import { relationshipTarget } from '@orangery/ooxml-presentation'
 import { contentTypeFor } from '@orangery/ooxml-drawingml'
 import { contentTypeOf } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
+import { encodeBase64 } from '../document/base64'
 
 /**
  * Media as something an `<image>` can show.
@@ -13,16 +14,6 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
  */
 
 const cache = new WeakMap<OoxmlPackage, Map<string, string | null>>()
-
-function encode(bytes: Uint8Array): string {
-  let binary = ''
-  // Chunked: spreading a megabyte of bytes into String.fromCharCode overflows
-  // the argument limit.
-  for (let index = 0; index < bytes.length; index += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 8192))
-  }
-  return btoa(binary)
-}
 
 /** The image a relationship on a part points at, or null when there is none. */
 export function mediaUrl(
@@ -46,7 +37,8 @@ export function mediaUrl(
   // written to a `.vid` file is exactly the case where guessing is wrong.
   const type = target === null ? null : (contentTypeOf(pkg, target) ?? contentTypeFor(target))
 
-  const url = bytes === undefined || type === null ? null : `data:${type};base64,${encode(bytes)}`
+  const url =
+    bytes === undefined || type === null ? null : `data:${type};base64,${encodeBase64(bytes)}`
   byPart.set(key, url)
   return url
 }

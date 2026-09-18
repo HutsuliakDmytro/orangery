@@ -9,9 +9,12 @@ import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
+import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
+import { useAutosave } from '../document/use-autosave'
+import { useCrashRecovery } from '../document/use-crash-recovery'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { useCommandSource } from './command-source'
@@ -35,6 +38,8 @@ function Shell() {
   useTheme()
   useNativeMenu()
   useShortcuts()
+  useAutosave()
+  const recovery = useCrashRecovery()
 
   const open = useDeckStore((state) => state.open)
   const current = useDeckStore((state) => state.current)
@@ -79,6 +84,13 @@ function Shell() {
           }}
         />
       )}
+
+      <RecoveryBanner
+        candidates={recovery.candidates}
+        onRecover={recovery.recover}
+        onDiscard={recovery.discard}
+        onDiscardAll={recovery.discardAll}
+      />
 
       <PrintView />
 

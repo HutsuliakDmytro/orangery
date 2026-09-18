@@ -9,6 +9,7 @@ import {
   readFileBytes,
 } from '../document/file'
 import {
+  addSlide,
   alignmentBounds,
   alignShapes,
   createShape,
@@ -16,6 +17,8 @@ import {
   insertConnector,
   insertPicture,
   insertTable,
+  moveSlide,
+  removeSlide,
   distributeShapes,
   duplicateShape,
   groupShapes,
@@ -416,6 +419,81 @@ export const paragraphCommands: readonly Command[] = [
   })),
 ]
 
+/**
+ * Slides themselves: adding, copying, removing, reordering.
+ *
+ * A slide is a part of the package rather than a node in a document, so these
+ * go through `editPackage`, which compares the whole package — the only way to
+ * notice a part appearing.
+ */
+export const slideEditCommands: readonly Command[] = [
+  {
+    id: 'slide.new',
+    label: 'New Slide',
+    group: 'insert',
+    shortcut: 'Mod+m',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { open, current, editPackage, select } = useDeckStore.getState()
+      if (open === null) return
+
+      // Built on the layout of the slide being shown, which is what PowerPoint
+      // does: a new slide after a section header looks like its neighbours.
+      const here = open.deck.slides[current]
+      const layout =
+        (here?.layout == null ? undefined : open.deck.layouts.get(here.layout)) ??
+        [...open.deck.layouts.values()][1] ??
+        [...open.deck.layouts.values()][0]
+      if (layout === undefined) return
+
+      const added: { index: number | null } = { index: null }
+      editPackage((deck) => {
+        const result = addSlide(deck.package, deck.deck, layout, current)
+        added.index = result?.index ?? null
+        return result !== null
+      })
+
+      if (added.index !== null) select(added.index)
+    },
+  },
+  {
+    id: 'slide.delete',
+    label: 'Delete Slide',
+    group: 'edit',
+    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 1,
+    run: () => {
+      const { current, editPackage, select } = useDeckStore.getState()
+      editPackage((open) => removeSlide(open.package, current))
+      select(Math.max(current - 1, 0))
+    },
+  },
+  {
+    id: 'slide.move-up',
+    label: 'Move Slide Up',
+    group: 'edit',
+    isEnabled: () => useDeckStore.getState().current > 0,
+    run: () => {
+      const { current, editPackage, select } = useDeckStore.getState()
+      editPackage((open) => moveSlide(open.package, current, current - 1))
+      select(current - 1)
+    },
+  },
+  {
+    id: 'slide.move-down',
+    label: 'Move Slide Down',
+    group: 'edit',
+    isEnabled: () => {
+      const { open, current } = useDeckStore.getState()
+      return current >= 0 && current < (open?.deck.slides.length ?? 0) - 1
+    },
+    run: () => {
+      const { current, editPackage, select } = useDeckStore.getState()
+      editPackage((open) => moveSlide(open.package, current, current + 1))
+      select(current + 1)
+    },
+  },
+]
+
 export const spacingCommands: readonly Command[] = (
   [
     ['single', 'Single Spacing', 1],
@@ -704,6 +782,7 @@ export function registerBuiltinCommands(): void {
   registerAll(textCommands)
   registerAll(paragraphCommands)
   registerAll(spacingCommands)
+  registerAll(slideEditCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

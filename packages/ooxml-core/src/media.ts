@@ -107,3 +107,29 @@ function relativeTo(from: string, to: string): string {
   const up = Array.from({ length: fromParts.length - shared }, () => '..')
   return [...up, ...toParts.slice(shared)].join('/')
 }
+
+/**
+ * Declares a part in `[Content_Types].xml` by name.
+ *
+ * A `Default` covers every file with an extension; an `Override` names one
+ * part. A new slide needs an override, because `.xml` already has a default
+ * that says something else entirely.
+ */
+export function ensureOverride(pkg: OoxmlPackage, path: string, contentType: string): void {
+  const text = getPartText(pkg, CONTENT_TYPES_PART)
+  if (text === undefined) return
+
+  const roots = parseXml(text)
+  const types = roots.find((node) => tagName(node) === 'Types')
+  if (types === undefined) return
+
+  const name = `/${path}`
+  const already = children(types).some(
+    (node: XmlNode) => tagName(node) === 'Override' && attribute(node, 'PartName') === name,
+  )
+  if (already) return
+
+  // Overrides come after the defaults, which is where appending puts it.
+  children(types).push(element('Override', { PartName: name, ContentType: contentType }))
+  setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
+}

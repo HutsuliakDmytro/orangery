@@ -71,6 +71,15 @@ interface DeckState {
   edit: (change: (slide: Slide) => boolean) => void
   /** The same, for a change that may touch any number of slides. */
   editDeck: (change: (deck: Deck) => boolean) => void
+  /**
+   * A change to the deck itself — a slide added, moved or removed.
+   *
+   * Recorded differently because the presentation part and the new slide part
+   * are not slides the writer walks: the whole package before and after is
+   * compared instead, which is heavier and is the only thing that catches a
+   * part appearing.
+   */
+  editPackage: (change: (open: OpenDeck) => boolean) => void
   undo: () => void
   redo: () => void
 }
@@ -181,6 +190,30 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       open: reread(open),
       undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
       // A new change is a new branch; what was undone is no longer reachable.
+      redoStack: [],
+    }))
+  },
+
+  editPackage: (change) => {
+    const { open } = get()
+    if (open === null) return
+
+    const before = new Map([...open.package.parts].map(([path, part]) => [path, part.text ?? '']))
+    if (!change(open)) return
+
+    const parts = [...open.package.parts].flatMap(([path, part]) => {
+      const after = part.text ?? ''
+      const original = before.get(path)
+      // A part that did not exist before has no `before` to restore to, so an
+      // empty string stands for "it was not there" — reopening the deck reads
+      // the slide list, and a part nothing points at is not a slide.
+      return after === original ? [] : [{ path, before: original ?? '', after }]
+    })
+    if (parts.length === 0) return
+
+    set((state) => ({
+      open: reread(open),
+      undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
       redoStack: [],
     }))
   },

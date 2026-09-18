@@ -17,7 +17,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * across the slide is one undo step rather than a hundred.
  */
 
-export type Handle = 'nw' | 'ne' | 'sw' | 'se'
+/**
+ * The eight sizing handles and the one that turns the shape.
+ *
+ * Named by compass point, so which edges a handle moves is read off the name:
+ * `nw` moves the top and the left, `n` moves only the top. `rotate` is not a
+ * size at all and is kept out of that reading everywhere it would be wrong.
+ */
+export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate'
+
+export const SIZING_HANDLES: readonly Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
 export interface DragState {
   /** How far the pointer has moved, in EMU. */
@@ -36,11 +45,23 @@ export interface DragState {
    * a slide zoomed to a quarter would otherwise snap from four times as far.
    */
   scale: number
+  /**
+   * Where the drag began and where it is now, in the slide's own coordinates.
+   *
+   * A move only needs the difference, which is why this was not here before.
+   * Turning a shape needs the two positions themselves: the angle is measured
+   * from the shape's centre to the pointer, and a difference has no centre.
+   */
+  from: { x: number; y: number }
+  to: { x: number; y: number }
 }
 
 interface Origin {
   x: number
   y: number
+  /** The SVG's rectangle on screen, to place the pointer on the slide. */
+  left: number
+  top: number
   scale: number
   handle: Handle | null
 }
@@ -68,6 +89,11 @@ export function useDrag({
 
   useEffect(() => {
     function stateFrom(event: PointerEvent, from: Origin): DragState {
+      const on = (clientX: number, clientY: number) => ({
+        x: (clientX - from.left) * from.scale,
+        y: (clientY - from.top) * from.scale,
+      })
+
       return {
         dx: (event.clientX - from.x) * from.scale,
         dy: (event.clientY - from.y) * from.scale,
@@ -75,6 +101,8 @@ export function useDrag({
         shift: event.shiftKey,
         alt: event.altKey,
         scale: from.scale,
+        from: on(from.x, from.y),
+        to: on(event.clientX, event.clientY),
       }
     }
 
@@ -115,10 +143,18 @@ export function useDrag({
       if (box === undefined || box.width === 0) return
 
       event.stopPropagation()
+      const scale = slideWidth / box.width
+      const at = {
+        x: (event.clientX - box.left) * scale,
+        y: (event.clientY - box.top) * scale,
+      }
+
       origin.current = {
         x: event.clientX,
         y: event.clientY,
-        scale: slideWidth / box.width,
+        left: box.left,
+        top: box.top,
+        scale,
         handle,
       }
       setState({
@@ -127,7 +163,9 @@ export function useDrag({
         handle,
         shift: event.shiftKey,
         alt: event.altKey,
-        scale: slideWidth / box.width,
+        scale,
+        from: at,
+        to: at,
       })
     },
     [slideWidth],
@@ -153,16 +191,30 @@ export function applyDrag(
     }
   }
 
-  const west = drag.handle === 'nw' || drag.handle === 'sw'
-  const north = drag.handle === 'nw' || drag.handle === 'ne'
+  // Turning is not sizing; it is applied to the angle, not to the rectangle.
+  if (drag.handle === 'rotate') return transform
+
+  const west = drag.handle.includes('w')
+  const east = drag.handle.includes('e')
+  const north = drag.handle.includes('n')
+  const south = drag.handle.includes('s')
+
+  // An edge handle moves one edge. Dragging the top of a box sideways must do
+  // nothing at all, which is the whole difference between an edge and a corner.
+  const horizontal = west || east
+  const vertical = north || south
 
   // Alt resizes about the centre, so the opposite edge moves the other way.
   const factor = drag.alt ? 2 : 1
-  let width = transform.width + (west ? -drag.dx : drag.dx) * factor
-  let height = transform.height + (north ? -drag.dy : drag.dy) * factor
+  let width = horizontal ? transform.width + (west ? -drag.dx : drag.dx) * factor : transform.width
+  let height = vertical
+    ? transform.height + (north ? -drag.dy : drag.dy) * factor
+    : transform.height
 
-  if (drag.shift && transform.width !== 0 && transform.height !== 0) {
+  if (drag.shift && horizontal && vertical && transform.width !== 0 && transform.height !== 0) {
     // Keeps the aspect ratio, following whichever axis was dragged further.
+    // Corners only: an edge has one axis, and "keep the proportions" while
+    // dragging one edge would move the other, which is not what was grabbed.
     const ratio = transform.height / transform.width
     if (Math.abs(width - transform.width) > Math.abs(height - transform.height)) {
       height = width * ratio
@@ -184,4 +236,41 @@ export function applyDrag(
     width,
     height,
   }
+}
+
+/** A whole turn, in the sixty-thousandths of a degree OOXML counts in. */
+export const FULL_TURN = 360 * 60000
+
+/** What Shift snaps a turn to: fifteen degrees, as PowerPoint does. */
+const SNAP_TO = 15 * 60000
+
+/**
+ * The angle a rotate drag ends at, given where the shape started.
+ *
+ * Measured from the shape's centre to the pointer, before and after, and the
+ * difference added to whatever the shape was already turned by. A difference
+ * rather than an absolute angle because the handle is not where the pointer
+ * grabbed it: taking the pointer's own angle would snap the shape round to meet
+ * the cursor the instant the drag began.
+ *
+ * `box` must be the shape as it sits on the slide, because that is the space
+ * the pointer was measured in.
+ */
+export function applyRotation(
+  transform: { rotation: number },
+  box: { x: number; y: number; width: number; height: number },
+  drag: DragState,
+): number {
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  const angleOf = (point: { x: number; y: number }) =>
+    Math.atan2(point.y - centre.y, point.x - centre.x)
+
+  const turned = ((angleOf(drag.to) - angleOf(drag.from)) * 180) / Math.PI
+  const raw = transform.rotation + turned * 60000
+
+  const snapped = drag.shift ? Math.round(raw / SNAP_TO) * SNAP_TO : raw
+
+  // Kept inside one turn: a shape turned round eleven times is turned once, and
+  // the number in the file should say so.
+  return ((snapped % FULL_TURN) + FULL_TURN) % FULL_TURN
 }

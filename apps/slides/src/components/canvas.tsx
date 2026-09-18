@@ -1,8 +1,13 @@
-import { intoGroupSpace, withAncestors, writeTransform } from '@orangery/ooxml-presentation'
+import {
+  absoluteTransform,
+  intoGroupSpace,
+  withAncestors,
+  writeTransform,
+} from '@orangery/ooxml-presentation'
 import { writeTextBody } from '@orangery/ooxml-drawingml'
 import type { Transform } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
-import { applyDrag } from '../render/use-drag'
+import { applyDrag, applyRotation } from '../render/use-drag'
 import { correct } from '../render/snap'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -82,6 +87,19 @@ export function Canvas() {
                   // coordinates, and the drag was measured on the slide. Writing
                   // one as the other moves a shape in a scaled group by the
                   // wrong amount, and the more the group was resized the wronger.
+                  if (drag.handle === 'rotate') {
+                    // The angle is measured on the slide, so the box it is
+                    // measured against has to be where the shape sits there.
+                    const box = absoluteTransform(transform, ancestors)
+                    if (box === null) return []
+                    return [
+                      writeTransform(shape, {
+                        ...transform,
+                        rotation: applyRotation(transform, box, drag),
+                      }),
+                    ]
+                  }
+
                   const into = intoGroupSpace(ancestors)
                   const scaled = { ...drag, dx: drag.dx * into.x, dy: drag.dy * into.y }
 

@@ -44,7 +44,7 @@ import { TableView } from './table-view'
 import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
-import { applyDrag, useDrag } from './use-drag'
+import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
 import { useMarquee } from './use-marquee'
 import { enclosedBy, groupToOpen, selectionTarget } from './selection'
 import { boundsOf, correct, correctionBetween, NO_CORRECTION, snapRect } from './snap'
@@ -726,6 +726,9 @@ export function SlideView({
   const snapFor = (state: DragState | null) => {
     if (state === null || selection === undefined) return { correction: NO_CORRECTION, guides: [] }
 
+    // Turning moves no edge, so there is no edge to line up with anything.
+    if (state.handle === 'rotate') return { correction: NO_CORRECTION, guides: [] }
+
     const bounds = boundsOf(selectedBoxes.map((one) => one.transform))
     if (bounds === null) return { correction: NO_CORRECTION, guides: [] }
 
@@ -790,6 +793,13 @@ export function SlideView({
       ) === true
 
     if (drag.state === null || !moving) return drawing.transform
+
+    if (drag.state.handle === 'rotate') {
+      return {
+        ...drawing.transform,
+        rotation: applyRotation(drawing.transform, drawing.transform, drag.state),
+      }
+    }
 
     return {
       ...drawing.transform,
@@ -1026,43 +1036,93 @@ function SelectionFrame({
   onHandle?: (event: React.PointerEvent, handle: Handle) => void
 }) {
   const handle = 76200
-  const corners = [
-    ['nw', transform.x, transform.y],
-    ['ne', transform.x + transform.width, transform.y],
-    ['sw', transform.x, transform.y + transform.height],
-    ['se', transform.x + transform.width, transform.y + transform.height],
-  ] as const
+  const { x, y, width, height } = transform
+  const middle = { x: x + width / 2, y: y + height / 2 }
+
+  /** Where each handle sits: corners, then the middle of each edge. */
+  const places: Record<Exclude<Handle, 'rotate'>, { x: number; y: number }> = {
+    nw: { x, y },
+    n: { x: middle.x, y },
+    ne: { x: x + width, y },
+    e: { x: x + width, y: middle.y },
+    se: { x: x + width, y: y + height },
+    s: { x: middle.x, y: y + height },
+    sw: { x, y: y + height },
+    w: { x, y: middle.y },
+  }
+
+  // Far enough above the shape to be grabbed without catching the top edge,
+  // which is the handle right underneath it.
+  const turn = { x: middle.x, y: y - handle * 2 }
+
+  // The whole frame turns with the shape, so the handles stay on its corners
+  // rather than on the corners of the box it would occupy unturned.
+  const turned =
+    transform.rotation === 0
+      ? undefined
+      : `rotate(${String(transform.rotation / 60000)} ${String(middle.x)} ${String(middle.y)})`
 
   return (
-    <g data-testid="selection-frame">
+    <g data-testid="selection-frame" transform={turned}>
       <rect
-        x={transform.x}
-        y={transform.y}
-        width={transform.width}
-        height={transform.height}
+        x={x}
+        y={y}
+        width={width}
+        height={height}
         fill="none"
         stroke="#FF7A00"
         strokeWidth={19050}
         pointerEvents="none"
       />
-      {corners.map(([corner, x, y]) => (
-        <rect
-          key={corner}
-          x={x - handle / 2}
-          y={y - handle / 2}
-          width={handle}
-          height={handle}
-          fill="#FFFFFF"
-          stroke="#FF7A00"
-          strokeWidth={19050}
-          role={onHandle === undefined ? undefined : 'button'}
-          aria-label={onHandle === undefined ? undefined : `Resize ${corner}`}
-          pointerEvents={onHandle === undefined ? 'none' : undefined}
-          onPointerDown={(event) => {
-            onHandle?.(event, corner)
-          }}
-        />
-      ))}
+
+      {onHandle !== undefined && (
+        <g>
+          <line
+            x1={middle.x}
+            y1={y}
+            x2={turn.x}
+            y2={turn.y}
+            stroke="#FF7A00"
+            strokeWidth={19050}
+            pointerEvents="none"
+          />
+          <circle
+            cx={turn.x}
+            cy={turn.y}
+            r={handle / 1.6}
+            fill="#FFFFFF"
+            stroke="#FF7A00"
+            strokeWidth={19050}
+            role="button"
+            aria-label="Rotate"
+            onPointerDown={(event) => {
+              onHandle(event, 'rotate')
+            }}
+          />
+        </g>
+      )}
+
+      {SIZING_HANDLES.map((corner) => {
+        const at = places[corner as Exclude<Handle, 'rotate'>]
+        return (
+          <rect
+            key={`handle-${corner}`}
+            x={at.x - handle / 2}
+            y={at.y - handle / 2}
+            width={handle}
+            height={handle}
+            fill="#FFFFFF"
+            stroke="#FF7A00"
+            strokeWidth={19050}
+            role={onHandle === undefined ? undefined : 'button'}
+            aria-label={onHandle === undefined ? undefined : `Resize ${corner}`}
+            pointerEvents={onHandle === undefined ? 'none' : undefined}
+            onPointerDown={(event) => {
+              onHandle?.(event, corner)
+            }}
+          />
+        )
+      })}
     </g>
   )
 }

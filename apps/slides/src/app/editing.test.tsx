@@ -86,8 +86,9 @@ describe('selecting', () => {
     })
 
     const outlines = [...document.querySelectorAll('rect[stroke="#FF7A00"]')]
-    // The frame itself and four corner handles.
-    expect(outlines).toHaveLength(5)
+    // The frame itself, four corners and four edges. The handle that turns the
+    // shape is a circle, so it is not among them.
+    expect(outlines).toHaveLength(9)
   })
 
   it('drops the selection on moving to another slide', async () => {

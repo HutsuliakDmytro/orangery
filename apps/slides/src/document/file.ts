@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { isTauri } from '@orangery/platform'
 
 /**
@@ -55,4 +55,44 @@ export async function pickPicturePath(): Promise<string | null> {
 export async function readFileBytes(path: string): Promise<Uint8Array> {
   const loaded = await invoke<LoadedFile>('read_document', { path })
   return new Uint8Array(loaded.bytes)
+}
+
+/** What a save did, for the message that follows it. */
+export interface SaveResult {
+  path: string
+  /** The copy of what was there before, when one was kept. */
+  backupPath: string | null
+}
+
+export async function pickSavePath(suggestedName: string): Promise<string | null> {
+  if (!isTauri()) return null
+
+  const selected = await saveDialog({
+    defaultPath: suggestedName,
+    filters: [{ name: 'Presentation', extensions: ['pptx'] }],
+  })
+
+  return selected ?? null
+}
+
+/**
+ * Writes a deck to disk.
+ *
+ * Through Rust, which writes to a temporary file beside the target and renames
+ * it into place: a webview cannot do that, and a half-written deck is a deck
+ * nobody gets back. The copy of what was there before is kept for the same
+ * reason.
+ */
+export async function writeDeckFile(
+  path: string,
+  bytes: Uint8Array,
+  keepBackup = true,
+): Promise<SaveResult> {
+  const result = await invoke<{ path: string; backup_path: string | null }>('write_document', {
+    path,
+    bytes: [...bytes],
+    keepBackup,
+  })
+
+  return { path: result.path, backupPath: result.backup_path }
 }

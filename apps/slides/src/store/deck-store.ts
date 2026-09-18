@@ -79,6 +79,16 @@ interface DeckState {
   redoStack: Edit[]
   /** What went wrong opening the last file, for the banner. */
   error: string | null
+  /**
+   * Whether what is on screen is what is in the file.
+   *
+   * Set by every change and cleared by a save. Undo clears it too: a deck
+   * saved and then undone differs from its file again, and saying otherwise
+   * would lose the undo the next time the window closed.
+   */
+  saved: boolean
+  /** Records that the deck now matches a file, and where that file is. */
+  markSaved: (path: string) => void
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
   select: (index: number) => void
   /** Picks out slides in the filmstrip; the last one given becomes current. */
@@ -144,6 +154,14 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   undoStack: [],
   redoStack: [],
   error: null,
+  saved: true,
+
+  markSaved: (path) => {
+    set((state) => ({
+      open: state.open === null ? null : { ...state.open, path },
+      saved: true,
+    }))
+  },
 
   load: async (bytes, path) => {
     try {
@@ -160,6 +178,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         undoStack: [],
         redoStack: [],
         error: null,
+        saved: true,
       })
     } catch (cause) {
       // Shown rather than thrown: a file that will not open is an answer, and
@@ -217,6 +236,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       undoStack: [],
       redoStack: [],
       error: null,
+      saved: true,
     })
   },
 
@@ -281,6 +301,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
       // A new change is a new branch; what was undone is no longer reachable.
       redoStack: [],
+      saved: false,
     }))
   },
 
@@ -308,6 +329,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         ...withinDeck(reopened, state.current, state.slideSelection),
         undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
         redoStack: [],
+        saved: false,
       }
     })
   },
@@ -325,6 +347,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         ...withinDeck(reopened, state.current, state.slideSelection),
         undoStack: state.undoStack.slice(0, -1),
         redoStack: [...state.redoStack, step],
+        saved: false,
       }
     })
   },
@@ -342,6 +365,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         ...withinDeck(reopened, state.current, state.slideSelection),
         undoStack: [...state.undoStack, step],
         redoStack: state.redoStack.slice(0, -1),
+        saved: false,
       }
     })
   },

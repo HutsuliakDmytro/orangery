@@ -44,6 +44,7 @@ function Shell() {
   const sizes = useViewStore((state) => state.sizes)
   const leftPane = useViewStore((state) => state.leftPane)
   const master = useDeckStore((state) => state.master)
+  const saved = useDeckStore((state) => state.saved)
 
   const paneLabel = master !== null ? 'Masters' : leftPane === 'outline' ? 'Outline' : 'Slides'
   const resize = useViewStore((state) => state.resize)
@@ -52,7 +53,12 @@ function Shell() {
   return (
     <div className="orangery-print-root flex h-full flex-col bg-bg text-text">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
-        <span className="font-medium">{title(open?.path ?? null)}</span>
+        <span className="font-medium">
+          {title(open?.path ?? null)}
+          {/* The dot every editor uses, rather than the word: it says the same
+              thing in the space a title bar has. */}
+          {open !== null && !saved && <span aria-label="Unsaved changes"> •</span>}
+        </span>
         {open !== null && (
           <span className="text-xs text-muted">
             {master === null ? (

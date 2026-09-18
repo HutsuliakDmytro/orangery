@@ -5,8 +5,10 @@ import {
   nameOf,
   pickDeckPath,
   pickPicturePath,
+  pickSavePath,
   readDeckFile,
   readFileBytes,
+  writeDeckFile,
 } from '../document/file'
 import {
   addSection,
@@ -91,9 +93,51 @@ export const fileCommands: readonly Command[] = [
       useDeckStore.getState().close()
     },
   },
+  {
+    id: 'file.save',
+    label: 'Save',
+    group: 'file',
+    shortcut: 'Mod+s',
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void saveDeckFile(false)
+    },
+  },
+  {
+    id: 'file.save-as',
+    label: 'Save As…',
+    group: 'file',
+    shortcut: 'Mod+Shift+s',
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void saveDeckFile(true)
+    },
+  },
   notYet('file.new', 'New Presentation', 'Mod+n'),
-  notYet('file.save', 'Save', 'Mod+s'),
 ]
+
+/**
+ * Writes the deck out, asking where when it has to.
+ *
+ * A deck that has never been saved has nowhere to go, so Save asks the same
+ * question Save As does rather than failing quietly. Everything else about the
+ * write — the temporary file, the rename, the backup — is Rust's, because a
+ * webview cannot rename a file and a half-written deck is a deck nobody gets
+ * back.
+ */
+async function saveDeckFile(askWhere: boolean): Promise<void> {
+  const { open, markSaved } = useDeckStore.getState()
+  if (open === null) return
+
+  const suggested = open.path ?? 'Presentation.pptx'
+  const path = askWhere || open.path === null ? await pickSavePath(nameOf(suggested)) : open.path
+  if (path === null) return
+
+  // The package is what goes to disk, not the model: everything we never
+  // understood is still in it (`docs/adr/0002-pptx-roundtrip.md`).
+  await writeDeckFile(path, await saveDeck(open.package))
+  markSaved(path)
+}
 
 async function openDeck(): Promise<void> {
   const path = await pickDeckPath()

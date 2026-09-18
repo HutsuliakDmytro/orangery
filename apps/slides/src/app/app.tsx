@@ -15,6 +15,7 @@ import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
 import { RecentDecks } from '../components/recent-decks'
+import { PicturesDialog } from '../components/pictures-dialog'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
@@ -109,6 +110,8 @@ function Shell() {
       />
 
       <TemplatePicker />
+
+      <PicturesDialog />
 
       <PrintView />
 

@@ -3,6 +3,7 @@ import { createDeck, saveDeck } from '@orangery/ooxml-presentation'
 import { isTauri } from '@orangery/platform'
 import { useDeckStore } from '../store/deck-store'
 import { noteRecent } from '../store/recent-store'
+import { compressIfAsked } from './pictures-offer'
 import { buildTemplate, templateById } from './templates'
 import { nameOf, pickDeckPath, pickSavePath, readDeckFile, writeDeckFile } from './file'
 
@@ -31,6 +32,10 @@ export async function saveDeckFile(askWhere: boolean): Promise<void> {
   const suggested = open.path ?? 'Presentation.pptx'
   const path = askWhere || open.path === null ? await pickSavePath(nameOf(suggested)) : open.path
   if (path === null) return
+
+  // A deck heavy with pictures gets the offer to shed some, after the file name
+  // and before anything is written: the answer can be to write nothing at all.
+  if (!(await compressIfAsked(open.package, open.deck))) return
 
   // The package is what goes to disk, not the model: everything we never
   // understood is still in it (`docs/adr/0002-pptx-roundtrip.md`).

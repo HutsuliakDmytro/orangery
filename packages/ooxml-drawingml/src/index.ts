@@ -20,6 +20,8 @@ export { blipRelationshipId, NO_CROP, pictureGraphic, readBlipFill } from './pic
 export type { BlipFill, Crop, Picture } from './picture'
 export { readColor, readColorChild, resolveColor } from './color'
 export type { Color, ColorContext, ColorSource, ColorTransform, ResolvedColor } from './color'
+export { imageSize } from './image-size'
+export type { ImageSize } from './image-size'
 export { fontStackFor, parseTheme, resolveThemeFont } from './theme'
 export type { Theme, ThemeFonts } from './theme'
 export {

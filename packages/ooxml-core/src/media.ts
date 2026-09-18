@@ -133,3 +133,36 @@ export function ensureOverride(pkg: OoxmlPackage, path: string, contentType: str
   children(types).push(element('Override', { PartName: name, ContentType: contentType }))
   setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
 }
+
+/**
+ * What the package says a part is.
+ *
+ * `[Content_Types].xml` is the only place that actually knows: an override
+ * names one part outright, and a default names an extension. Guessing from the
+ * extension works for a `.png` and not for the `.vid` a generator writes for a
+ * sound, which is exactly the case where being wrong shows.
+ */
+export function contentTypeOf(pkg: OoxmlPackage, path: string): string | null {
+  const roots = parseXml(getPartText(pkg, CONTENT_TYPES_PART) ?? '')
+  const types = roots.find((node) => tagName(node) === 'Types')
+  if (types === undefined) return null
+
+  const wanted = path.startsWith('/') ? path : `/${path}`
+  const extension = path.split('.').pop()?.toLowerCase() ?? ''
+
+  let byExtension: string | null = null
+
+  for (const child of children(types)) {
+    const tag = tagName(child)
+
+    // An override is about this part and wins over any default.
+    if (tag === 'Override' && attribute(child, 'PartName') === wanted) {
+      return attribute(child, 'ContentType') ?? null
+    }
+    if (tag === 'Default' && (attribute(child, 'Extension') ?? '').toLowerCase() === extension) {
+      byExtension = attribute(child, 'ContentType') ?? null
+    }
+  }
+
+  return byExtension
+}

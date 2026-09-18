@@ -1,5 +1,6 @@
 import { relationshipTarget } from '@orangery/ooxml-presentation'
 import { contentTypeFor } from '@orangery/ooxml-drawingml'
+import { contentTypeOf } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 
 /**
@@ -40,7 +41,10 @@ export function mediaUrl(
 
   const target = relationshipTarget(pkg, part, relationshipId)
   const bytes = target === null ? undefined : pkg.parts.get(target)?.bytes
-  const type = target === null ? null : contentTypeFor(target)
+
+  // What the package declares, before what the extension suggests: a sound
+  // written to a `.vid` file is exactly the case where guessing is wrong.
+  const type = target === null ? null : (contentTypeOf(pkg, target) ?? contentTypeFor(target))
 
   const url = bytes === undefined || type === null ? null : `data:${type};base64,${encode(bytes)}`
   byPart.set(key, url)

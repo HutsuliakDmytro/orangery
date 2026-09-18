@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import {
   absoluteTransform,
+  autoplayShapes,
   backgroundOf,
   colorContextFor,
   flatten,
@@ -222,6 +223,71 @@ function ShapeImage({ drawing, pkg, part }: { drawing: Drawing; pkg: OoxmlPackag
         clipPath={`url(#clip-${key})`}
       />
     </g>
+  )
+}
+
+/**
+ * A film or a sound, where there is somewhere to play it.
+ *
+ * The poster frame is drawn underneath by the ordinary picture path — it is a
+ * picture, and it is what every program shows until somebody presses play. This
+ * goes over it only while a show is running: a player in the editor would be a
+ * control competing with selecting and moving the thing it sits on.
+ *
+ * A pointer that lands on it stays on it. In a show a click anywhere advances
+ * the slide, and a click on a video means play the video.
+ */
+function MediaPlayer({
+  drawing,
+  pkg,
+  part,
+  autoplay,
+}: {
+  drawing: Drawing
+  pkg: OoxmlPackage
+  part: string
+  autoplay: boolean
+}) {
+  const { shape, transform } = drawing
+  if (shape.media === null) return null
+
+  // `p14:media` is the embedded copy; `r:link` is the original, which is inside
+  // the package as often as not.
+  const url =
+    mediaUrl(pkg, part, shape.media.embeddedId) ?? mediaUrl(pkg, part, shape.media.relationshipId)
+  if (url === null) return null
+
+  const stop = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation()
+  }
+
+  return (
+    <foreignObject
+      x={transform.x}
+      y={transform.y}
+      width={transform.width}
+      height={transform.height}
+      onPointerDown={stop}
+      onClick={stop}
+    >
+      {shape.media.kind === 'video' ? (
+        <video
+          data-testid="media-video"
+          src={url}
+          controls
+          autoPlay={autoplay}
+          style={{ width: '100%', height: '100%' }}
+        />
+      ) : (
+        <audio
+          data-testid="media-audio"
+          src={url}
+          controls
+          autoPlay={autoplay}
+          style={{ width: '100%' }}
+        />
+      )}
+    </foreignObject>
   )
 }
 
@@ -481,6 +547,7 @@ export function SlideView({
   editing,
   onEdit,
   onCommitText,
+  playing = false,
   className,
   style,
 }: {
@@ -501,6 +568,13 @@ export function SlideView({
   onEdit?: (id: number | null) => void
   /** The edited document, handed over when the shape is left. */
   onCommitText?: (id: number, doc: PmNode) => void
+  /**
+   * Whether a film or a sound on the slide gets a player over its poster frame.
+   *
+   * Only the show sets this. A player in the editor would be a control
+   * competing with selecting and moving the thing it sits on.
+   */
+  playing?: boolean
   className?: string
   style?: React.CSSProperties
 }) {
@@ -561,6 +635,9 @@ export function SlideView({
     }
   }
 
+  // Which media begins with the slide, asked once rather than per shape.
+  const autoplay = playing ? autoplayShapes(slide) : new Set<number>()
+
   const background = backgroundOf(deck, slide, theme)
   const backgroundPaint = fillPaint(
     background.fill,
@@ -620,7 +697,17 @@ export function SlideView({
         {drawings.map((drawing) => (
           <Fragment key={drawing.key}>
             {drawing.shape.kind === 'pic' && pkg !== undefined ? (
-              <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
+              <>
+                <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
+                {playing && drawing.shape.media !== null && (
+                  <MediaPlayer
+                    drawing={drawing}
+                    pkg={pkg}
+                    part={slide.path}
+                    autoplay={autoplay.has(drawing.shape.id)}
+                  />
+                )}
+              </>
             ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
               <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
             ) : drawing.shape.graphic?.table != null ? (

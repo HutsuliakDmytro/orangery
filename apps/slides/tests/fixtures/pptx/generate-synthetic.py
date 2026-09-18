@@ -15,6 +15,7 @@ parts we do not understand, which is the whole guarantee (see
 Run:  python3 apps/slides/tests/fixtures/pptx/generate-synthetic.py
 """
 
+import io
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.oxml import parse_xml
+from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 OUT = Path(__file__).parent / "synthetic"
@@ -224,6 +226,8 @@ def widescreen() -> Presentation:
 
 
 
+NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
 NS_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -375,6 +379,61 @@ def animations() -> Presentation:
     return prs
 
 
+
+def media() -> Presentation:
+    """A video on one slide and an audio clip on another.
+
+    The bytes are a stand-in: nothing in the tests decodes them, and a real
+    encoder is a dependency this corpus does not need. What has to be real is
+    the package around them — the media part, its content type, the two
+    relationships a video carries, and the poster frame the slide draws until it
+    is played.
+    """
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Emu(9144000), Emu(6858000)
+
+    clip = io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
+    slide = prs.slides.add_slide(title_only(prs))
+    slide.shapes.title.text = "Video"
+    slide.shapes.add_movie(
+        clip,
+        Inches(1),
+        Inches(2.5),
+        Inches(6),
+        Inches(3.5),
+        poster_frame_image=str(Path(__file__).parent / "sample.png"),
+        mime_type="video/mp4",
+    )
+
+    tune = io.BytesIO(b"ID3\x03\x00\x00\x00" + b"\x00" * 64)
+    second = prs.slides.add_slide(title_only(prs))
+    second.shapes.title.text = "Audio"
+    sound = second.shapes.add_movie(
+        tune,
+        Inches(1),
+        Inches(3),
+        Inches(1),
+        Inches(1),
+        poster_frame_image=str(Path(__file__).parent / "sample.png"),
+        mime_type="audio/mpeg",
+    )
+
+    # python-pptx writes a video whatever the mime type says, and PowerPoint
+    # writes `a:audioFile` for a sound. That difference is the whole of what
+    # tells a player to draw a control instead of a picture.
+    nv_pr = sound._element.nvPicPr.nvPr
+    video = nv_pr.find(qn("a:videoFile"))
+    nv_pr.replace(
+        video,
+        parse_xml(
+            '<a:audioFile xmlns:a="%s" xmlns:r="%s" r:link="%s"/>'
+            % (NS_A, NS_R, video.get(qn("r:link")))
+        ),
+    )
+
+    return prs
+
+
 DECKS = {
     "empty": empty,
     "placeholders": placeholders,
@@ -389,6 +448,7 @@ DECKS = {
     "sixteen-by-nine": widescreen,
     "transitions": transitions,
     "animations": animations,
+    "media": media,
 }
 
 

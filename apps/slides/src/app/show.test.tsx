@@ -428,3 +428,61 @@ describe('a deck with animations', () => {
     expect(screen.getByText(/Animations are kept in the file but do not play/u)).toBeInTheDocument()
   })
 })
+
+describe('film and sound', () => {
+  it('shows the poster frame in the editor and no player over it', async () => {
+    // A player there would be a control competing with selecting and moving the
+    // thing it sits on.
+    await openDeck('media')
+    render(<App />)
+
+    expect(screen.queryByTestId('media-video')).toBeNull()
+  })
+
+  it('puts a player over it once the show is running', async () => {
+    await openDeck('media')
+    render(<App />)
+    await start()
+
+    expect(screen.getByTestId('media-video')).toBeInTheDocument()
+  })
+
+  it('draws a sound as a sound', async () => {
+    await openDeck('media')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    expect(screen.getByTestId('media-audio')).toBeInTheDocument()
+    expect(screen.queryByTestId('media-video')).toBeNull()
+  })
+
+  it('waits to be asked where the file says it waits', async () => {
+    await openDeck('media')
+    render(<App />)
+    await start()
+
+    expect(screen.getByTestId<HTMLVideoElement>('media-video').autoplay).toBe(false)
+  })
+
+  it('does not advance the slide when the player is clicked', async () => {
+    // A click anywhere in a show moves on, and a click on a film means play it.
+    await openDeck('media')
+    render(<App />)
+    await start()
+
+    fireEvent.pointerDown(screen.getByTestId('media-video'))
+    expect(useShowStore.getState().at).toBe(0)
+  })
+
+  it('still advances on a click beside it', async () => {
+    await openDeck('media')
+    render(<App />)
+    await start()
+
+    fireEvent.pointerDown(screen.getByTestId('show'))
+    expect(useShowStore.getState().at).toBe(1)
+  })
+})

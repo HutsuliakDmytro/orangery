@@ -1,4 +1,4 @@
-import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
+import { attribute, children, findChild, findDescendant, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import {
   readBlipFill,
@@ -114,6 +114,14 @@ export interface Shape {
   text: TextBody | null
   /** The image, for a `p:pic`. Null for everything else. */
   picture: BlipFill | null
+  /**
+   * The film or the sound a `p:pic` stands for, when it stands for one.
+   *
+   * A video on a slide is a picture of its first frame with a relationship to
+   * the film beside it; the picture is what every program draws until somebody
+   * plays it, and it is the only thing in the file with a size and a place.
+   */
+  media: Media | null
   /** What a connector is attached to, for a `p:cxnSp`. */
   connection: Connection | null
   /** What is inside a `p:graphicFrame`: a table, a chart, a diagram, an object. */
@@ -211,6 +219,42 @@ function parsePlaceholder(nonVisual: XmlNode | undefined): Placeholder | null {
   }
 }
 
+export interface Media {
+  kind: 'video' | 'audio'
+  /**
+   * The relationship to the media part.
+   *
+   * `a:videoFile`/`a:audioFile` name it with `r:link`, which is a link even when
+   * the file sits inside the package. PowerPoint 2010 added `p14:media
+   * r:embed` beside it for the embedded copy, and where both are present they
+   * point at the same bytes.
+   */
+  relationshipId: string | null
+  /** Set where the file offers the 2010 extension as well as the original. */
+  embeddedId: string | null
+}
+
+/** The film or the sound a picture stands for, when the file says it stands for one. */
+function parseMedia(node: XmlNode): Media | null {
+  const nonVisual = nonVisualOf(node)
+  const properties = nonVisual === undefined ? undefined : findChild(nonVisual, 'p:nvPr')
+  if (properties === undefined) return null
+
+  const video = findChild(properties, 'a:videoFile')
+  const audio = findChild(properties, 'a:audioFile')
+  const stated = video ?? audio
+  if (stated === undefined) return null
+
+  const extensions = findChild(properties, 'p:extLst')
+  const embedded = extensions === undefined ? undefined : findDescendant(extensions, 'p14:media')
+
+  return {
+    kind: video === undefined ? 'audio' : 'video',
+    relationshipId: attribute(stated, 'r:link') ?? attribute(stated, 'r:embed') ?? null,
+    embeddedId: embedded === undefined ? null : (attribute(embedded, 'r:embed') ?? null),
+  }
+}
+
 /** Reads one shape element, for a node that is not being walked as a tree. */
 export function parseShape(node: XmlNode): Shape {
   const kind = KINDS[tagName(node) ?? ''] ?? 'unknown'
@@ -233,6 +277,7 @@ export function parseShape(node: XmlNode): Shape {
     style: styleNode === undefined ? null : readShapeStyle(styleNode),
     text: textNode === undefined ? null : readTextBody(textNode),
     picture: pictureNode === undefined ? null : readBlipFill(pictureNode),
+    media: kind === 'pic' ? parseMedia(node) : null,
     connection: kind === 'cxnSp' ? readConnection(nonVisual) : null,
     graphic: kind === 'graphicFrame' ? readGraphicContent(node) : null,
     shapes: kind === 'grpSp' ? parseShapeTree(node) : [],

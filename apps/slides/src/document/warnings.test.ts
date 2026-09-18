@@ -39,6 +39,7 @@ describe('inspect', () => {
             style: null,
             text: null,
             picture: null,
+            media: null,
             connection: null,
             graphic: null,
             shapes: [],

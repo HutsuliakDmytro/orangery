@@ -209,6 +209,7 @@ export function Show() {
               slide={slide}
               themes={open.themes}
               package={open.package}
+              playing
               // The slide keeps its shape, so one axis is filled and the other
               // is letterboxed; stretching it would be showing a different one.
               className="max-h-full max-w-full"

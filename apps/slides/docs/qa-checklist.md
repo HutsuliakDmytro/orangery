@@ -122,6 +122,13 @@ These are the ones that matter most. Take them seriously.
       its own outline, its own place and its own size.
 - [ ] Paint a shape whose text is a link. The link survives, and the shape it
       was painted from does not lend it one.
+- [ ] View → Grid and Guides. Turn the grid on; it appears behind the shapes,
+      not over them. Turn snapping on and drag a shape; it lands on the lines.
+- [ ] Change the spacing, save, reopen. The spacing is still what you chose.
+- [ ] Drag a guide out of the ruler and drag a shape near it. The shape takes
+      the guide, and the guide is still there on every other slide.
+- [ ] Turn snapping on with the grid hidden. Dragging still lands on the grid —
+      the two switches are separate on purpose.
 
 ## Getting a deck in
 

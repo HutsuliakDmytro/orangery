@@ -19,6 +19,7 @@ import { PicturesDialog } from '../components/pictures-dialog'
 import { ShapeGallery } from '../components/shape-gallery'
 import { TablePicker } from '../components/table-picker'
 import { HeaderFooterDialog } from '../components/header-footer-dialog'
+import { GridDialog } from '../components/grid-dialog'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
@@ -120,6 +121,8 @@ function Shell() {
       <TablePicker />
 
       <HeaderFooterDialog />
+
+      <GridDialog />
 
       <PicturesDialog />
 

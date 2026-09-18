@@ -75,6 +75,18 @@ interface ViewState {
   printLayout: PrintLayout
   /** Whether the rulers and the guides dragged out of them are showing. */
   rulers: boolean
+  /** Whether the grid is drawn behind the slide. */
+  grid: boolean
+  /** Whether the grid and guides dialog is up. */
+  editingGrid: boolean
+  /**
+   * Whether a drag lands on the grid.
+   *
+   * Apart from whether the grid is drawn, as in PowerPoint: people who want
+   * things lined up do not necessarily want to look at the lines, and people
+   * who want the lines are sometimes only measuring.
+   */
+  snapToGrid: boolean
   /** Whether the left pane shows the slides or the words on them. */
   leftPane: 'filmstrip' | 'outline'
   /**
@@ -100,6 +112,9 @@ interface ViewState {
   setRenamingSection: (id: string | null) => void
   setEditingOutline: (at: { slide: number; shape: number } | null) => void
   setRulers: (showing: boolean) => void
+  setGrid: (showing: boolean) => void
+  setEditingGrid: (editing: boolean) => void
+  setSnapToGrid: (snapping: boolean) => void
   setPrintLayout: (layout: PrintLayout) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
   setContentFit: (fit: 'maximize' | 'fit') => void
@@ -130,6 +145,9 @@ export const useViewStore = create<ViewState>((set) => ({
   renamingSection: null,
   editingOutline: null,
   rulers: false,
+  grid: false,
+  editingGrid: false,
+  snapToGrid: false,
   printLayout: 'slides',
   leftPane: 'filmstrip',
   contentFit: 'fit',
@@ -154,6 +172,18 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setRulers: (showing) => {
     set({ rulers: showing })
+  },
+
+  setGrid: (showing) => {
+    set({ grid: showing })
+  },
+
+  setEditingGrid: (editing) => {
+    set({ editingGrid: editing })
+  },
+
+  setSnapToGrid: (snapping) => {
+    set({ snapToGrid: snapping })
   },
 
   setPrintLayout: (layout) => {

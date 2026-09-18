@@ -6,6 +6,8 @@ import {
   intoGroupSpace,
   moveConnectorEnd,
   moveGeometryPoint,
+  readGridSpacing,
+  readGuides,
   writeCrop,
   withAncestors,
   writeTransform,
@@ -31,6 +33,8 @@ export function Canvas() {
   const editing = useDeckStore((state) => state.editing)
   const zoom = useViewStore((state) => state.zoom)
   const rulers = useViewStore((state) => state.rulers)
+  const grid = useViewStore((state) => state.grid)
+  const snapToGrid = useViewStore((state) => state.snapToGrid)
   const setEditing = useDeckStore((state) => state.setEditing)
   const drawing = useViewStore((state) => state.drawing)
   const setDrawing = useViewStore((state) => state.setDrawing)
@@ -72,6 +76,10 @@ export function Canvas() {
           themes={open.themes}
           package={open.package}
           selection={selection}
+          grid={{ spacing: readGridSpacing(open.package), shown: grid, snap: snapToGrid }}
+          // Deck-wide and not per slide: `viewProps.xml` is one part, which is
+          // what makes a guide placed on slide 3 still there on slide 40.
+          slideGuides={readGuides(open.package)}
           onSelect={(id, extend) => {
             selectShapes(id === null ? [] : [id], extend && id !== null)
           }}

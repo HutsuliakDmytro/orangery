@@ -64,13 +64,17 @@ function alignment(
   slide: Rect,
   axis: 'x' | 'y',
   tolerance: number,
+  guides: readonly number[] = [],
 ): Match | null {
   const mine = linesOf(rect, axis)
   let best: Match | null = null
 
-  // The slide's own edges and middle count as much as any shape's.
+  // The slide's own edges and middle count as much as any shape's, and so does
+  // a line somebody dragged out of the ruler — that is what it was dragged out
+  // for, and a guide nothing snaps to is a decoration.
   const targets: { at: number; rect: Rect | null }[] = [
     ...linesOf(slide, axis).map((at) => ({ at, rect: null })),
+    ...guides.map((at) => ({ at, rect: null })),
     ...others.flatMap((other) => linesOf(other, axis).map((at) => ({ at, rect: other }))),
   ]
 
@@ -176,12 +180,24 @@ export function snapRect({
   slide,
   tolerance,
   resizing = false,
+  lines = { x: [], y: [] },
+  grid = null,
 }: {
   rect: Rect
   others: readonly Rect[]
   slide: { width: number; height: number }
   tolerance: number
   resizing?: boolean
+  /** The guides dragged out of the rulers, by the axis each one lies on. */
+  lines?: { x: readonly number[]; y: readonly number[] }
+  /**
+   * How far apart the grid's lines are, or null when it is not being snapped to.
+   *
+   * Last of the three: a shape that lines up with another shape or with a guide
+   * has found something meant, and pulling it a further half-millimetre onto
+   * the grid would undo the alignment it just made.
+   */
+  grid?: number | null
 }): Snapped {
   const bounds: Rect = { x: 0, y: 0, width: slide.width, height: slide.height }
   const guides: Guide[] = []
@@ -189,9 +205,22 @@ export function snapRect({
 
   for (const axis of ['x', 'y'] as const) {
     const match =
-      alignment(snapped, others, bounds, axis, tolerance) ??
+      alignment(snapped, others, bounds, axis, tolerance, lines[axis]) ??
       (resizing ? null : spacing(snapped, others, axis, tolerance))
-    if (match === null) continue
+
+    if (match === null) {
+      // The grid is drawn, so it needs no line to say what happened. It also
+      // never refuses: unlike an alignment, there is always a nearest one.
+      const onto = toGrid(snapped, axis, grid, resizing)
+      if (onto !== 0) {
+        if (axis === 'x') {
+          if (resizing) snapped.width = Math.max(snapped.width + onto, 0)
+          else snapped.x += onto
+        } else if (resizing) snapped.height = Math.max(snapped.height + onto, 0)
+        else snapped.y += onto
+      }
+      continue
+    }
 
     guides.push(match.guide)
 
@@ -220,6 +249,19 @@ export function snapRect({
   }
 
   return { rect: snapped, guides }
+}
+
+/**
+ * How far a rectangle is from the nearest grid line on one axis.
+ *
+ * The leading edge when moving — the whole shape then sits on the grid — and
+ * the trailing one when resizing, which is the edge the pointer has hold of.
+ */
+function toGrid(rect: Rect, axis: 'x' | 'y', grid: number | null, resizing: boolean): number {
+  if (grid === null || grid <= 0) return 0
+
+  const edge = resizing ? endOf(rect, axis) : startOf(rect, axis)
+  return Math.round(edge / grid) * grid - edge
 }
 
 /** The rectangle around several, which is what a multiple selection drags as. */

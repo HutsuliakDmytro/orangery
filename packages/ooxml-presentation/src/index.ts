@@ -149,7 +149,18 @@ export { setThemeColors, setThemeFonts, setThemeName } from './write-theme'
 export type { ColorSlot, ThemeFontChange } from './write-theme'
 export { applyTheme, THEME_GALLERY, themePathsOf } from './theme-gallery'
 export type { GalleryTheme } from './theme-gallery'
-export { addGuide, moveGuide, readGuides, removeGuide, writeGuides } from './guides'
+export {
+  addGuide,
+  DEFAULT_GRID,
+  MAX_GRID,
+  MIN_GRID,
+  moveGuide,
+  readGridSpacing,
+  readGuides,
+  removeGuide,
+  writeGridSpacing,
+  writeGuides,
+} from './guides'
 export type { SlideGuide } from './guides'
 export { insertIcon } from './insert-icon'
 export type { NewIcon } from './insert-icon'

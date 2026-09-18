@@ -49,7 +49,7 @@ beforeEach(() => {
   })
   // The find strip is a toggle, so a test that left it open would flip it shut
   // for the next one — which is how three of these failed before this line.
-  useViewStore.setState({ finding: false })
+  useViewStore.setState({ finding: false, grid: false, snapToGrid: false, editingGrid: false })
 })
 
 describe('selecting', () => {
@@ -1106,5 +1106,58 @@ describe('the format painter', () => {
     })
     // The whole paint, not the fill and then the outline and then the text.
     expect(shapeAt(1)?.properties?.fill).toEqual(before)
+  })
+})
+
+describe('the grid', () => {
+  it('is not drawn until it is asked for', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    expect(screen.queryByTestId('grid')).not.toBeInTheDocument()
+  })
+
+  it('appears behind the slide when it is', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('view.grid-and-guides', {})
+    })
+    await user.click(screen.getByRole('checkbox', { name: 'Display grid on screen' }))
+
+    expect(screen.getByTestId('grid')).toBeInTheDocument()
+  })
+
+  it('remembers its spacing in the file rather than in the session', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('view.grid-and-guides', {})
+    })
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Grid spacing' }), '228600')
+
+    // A grid you set again every morning is not doing its job.
+    const { open } = useDeckStore.getState()
+    expect(getPartText(open?.package ?? { parts: new Map() }, 'ppt/viewProps.xml')).toContain(
+      'cx="228600"',
+    )
+  })
+
+  it('is shown and snapped to as two separate answers', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('view.snap-to-grid', {})
+    })
+
+    // Wanting things lined up is not wanting to look at the lines.
+    expect(getCommand('view.snap-to-grid')?.isActive?.({})).toBe(true)
+    expect(getCommand('view.grid')?.isActive?.({})).toBe(false)
+    expect(screen.queryByTestId('grid')).not.toBeInTheDocument()
   })
 })

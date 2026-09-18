@@ -104,6 +104,56 @@ function Guides({ guides, slide }: { guides: readonly Guide[]; slide: { width: n
   )
 }
 
+/**
+ * The grid, drawn behind everything on the slide.
+ *
+ * Under the shapes rather than over them: it is there to place things against,
+ * and a mesh drawn across a photograph would be in the way of the one thing it
+ * is meant to help with.
+ *
+ * As a pattern rather than as a few thousand lines: a slide is ten inches wide
+ * and a twelfth-inch grid is a hundred and twenty of them each way, which is
+ * fifteen thousand SVG elements re-made on every render.
+ */
+function Grid({
+  spacing,
+  slide,
+  id,
+}: {
+  spacing: number
+  slide: { width: number; height: number }
+  id: string
+}) {
+  if (spacing <= 0) return null
+
+  const thickness = slide.width / 2400
+
+  return (
+    <>
+      <defs>
+        <pattern id={id} width={spacing} height={spacing} patternUnits="userSpaceOnUse">
+          <path
+            d={`M ${String(spacing)} 0 L 0 0 0 ${String(spacing)}`}
+            fill="none"
+            stroke="#9A9A9A"
+            strokeOpacity={0.5}
+            strokeWidth={thickness}
+          />
+        </pattern>
+      </defs>
+      <rect
+        data-testid="grid"
+        x={0}
+        y={0}
+        width={slide.width}
+        height={slide.height}
+        fill={`url(#${id})`}
+        pointerEvents="none"
+      />
+    </>
+  )
+}
+
 /** How near a shape has to come before it is taken onto a line, in pixels. */
 const SNAP_PIXELS = 8
 
@@ -766,6 +816,8 @@ export function SlideView({
   cells = null,
   onPickCell,
   onMarquee,
+  grid = null,
+  slideGuides = [],
   drawing = null,
   onDraw,
   editing,
@@ -809,6 +861,15 @@ export function SlideView({
   onOpenGroup?: (id: number | null) => void
   /** Given the ids a rubber band enclosed, once it is let go. */
   onMarquee?: (ids: number[]) => void
+  /**
+   * The grid: how far apart, whether it is drawn, whether a drag lands on it.
+   *
+   * The two are apart because PowerPoint keeps them apart, and because they
+   * answer different wishes — to see where things are, and to have them line up.
+   */
+  grid?: { spacing: number; shown: boolean; snap: boolean } | null
+  /** The guides dragged out of the rulers, which a drag also snaps to. */
+  slideGuides?: readonly { orientation: 'horz' | 'vert'; at: number }[]
   /**
    * Set while a shape is armed for drawing.
    *
@@ -881,6 +942,14 @@ export function SlideView({
       // to be reachable without aiming.
       tolerance: SNAP_PIXELS * state.scale,
       resizing: state.handle !== null,
+      lines: {
+        // A guide that runs across the slide is a height, so it is something
+        // to line the y axis up with. The word in the file is about the line;
+        // the axis is about what it constrains.
+        x: slideGuides.filter((one) => one.orientation === 'vert').map((one) => one.at),
+        y: slideGuides.filter((one) => one.orientation === 'horz').map((one) => one.at),
+      },
+      grid: grid?.snap === true ? grid.spacing : null,
     })
 
     return { correction: correctionBetween(applied, rect), guides }
@@ -995,6 +1064,9 @@ export function SlideView({
           fill={backgroundPaint.paint}
           fillOpacity={backgroundPaint.opacity}
         />
+        {grid?.shown === true && (
+          <Grid spacing={grid.spacing} slide={deck.slideSize} id={`grid-${slide.path}`} />
+        )}
         <Guides guides={snapped.guides} slide={deck.slideSize} />
 
         {onSelect !== undefined && (

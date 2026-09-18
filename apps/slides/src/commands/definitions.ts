@@ -1214,6 +1214,42 @@ export const zoomCommands: readonly Command[] = [
     },
   },
   {
+    id: 'view.grid',
+    label: 'Gridlines',
+    group: 'view',
+    isActive: () => useViewStore.getState().grid,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setGrid(!view.grid)
+    },
+  },
+  {
+    id: 'view.snap-to-grid',
+    label: 'Snap to Grid',
+    group: 'view',
+    // Apart from showing it, as in PowerPoint: wanting things lined up and
+    // wanting to look at the lines are two different wishes.
+    isActive: () => useViewStore.getState().snapToGrid,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setSnapToGrid(!view.snapToGrid)
+    },
+  },
+  {
+    id: 'view.grid-and-guides',
+    label: 'Grid and Guides…',
+    group: 'view',
+    // Where PowerPoint keeps the same four answers, which is the reason to put
+    // them here rather than to invent a place of our own.
+    keywords: ['grid', 'guides', 'snap', 'spacing'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setEditingGrid(true)
+    },
+  },
+  {
     id: 'view.outline',
     label: 'Outline View',
     group: 'view',

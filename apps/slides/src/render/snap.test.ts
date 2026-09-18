@@ -163,3 +163,82 @@ describe('the rectangle around several', () => {
     expect(boundsOf([])).toBeNull()
   })
 })
+
+describe('lining up with a guide', () => {
+  const at = 3000000
+
+  it('takes a shape onto one dragged out of the ruler', () => {
+    const { rect: snapped, guides } = snapRect({
+      rect: rect(at + 20000, 1000000),
+      others: [],
+      slide: SLIDE,
+      tolerance: NEAR,
+      lines: { x: [at], y: [] },
+    })
+
+    // A guide nothing snaps to is a decoration.
+    expect(snapped.x).toBe(at)
+    expect(guides.map((guide) => guide.at)).toContain(at)
+  })
+
+  it('reads a guide across the slide as something for the other axis', () => {
+    const { rect: snapped } = snapRect({
+      rect: rect(1000000, at + 20000),
+      others: [],
+      slide: SLIDE,
+      tolerance: NEAR,
+      lines: { x: [], y: [at] },
+    })
+
+    expect(snapped.y).toBe(at)
+  })
+})
+
+describe('landing on the grid', () => {
+  const STEP = 228600
+
+  const onGrid = (one: Rect, resizing = false) =>
+    snapRect({ rect: one, others: [], slide: SLIDE, tolerance: NEAR, grid: STEP, resizing })
+
+  it('puts a shape on the nearest line', () => {
+    expect(onGrid(rect(STEP * 3 + 40000, 2000000)).rect.x).toBe(STEP * 3)
+  })
+
+  it('leaves the size alone while moving', () => {
+    const moved = onGrid(rect(STEP * 3 + 40000, STEP * 2 + 40000, 777777, 555555)).rect
+    expect(moved.width).toBe(777777)
+    expect(moved.height).toBe(555555)
+  })
+
+  it('moves the edge being dragged while resizing', () => {
+    // The far edge is where it was; the near one landed on a line.
+    const resized = onGrid(rect(STEP, STEP, STEP * 4 + 30000, STEP * 4 + 30000), true).rect
+    expect(resized.x).toBe(STEP)
+    expect(resized.width).toBe(STEP * 4)
+  })
+
+  it('draws no line for it, because the grid is the line', () => {
+    expect(onGrid(rect(STEP * 3 + 40000, 2000000)).guides).toEqual([])
+  })
+
+  it('gives way to an alignment, which is something meant', () => {
+    const other = rect(STEP * 3 + 40000, 4000000)
+    const { rect: snapped, guides } = snapRect({
+      rect: rect(STEP * 3 + 60000, 2000000),
+      others: [other],
+      slide: SLIDE,
+      tolerance: NEAR,
+      grid: STEP,
+    })
+
+    // Pulled onto the shape it nearly lined up with, not the half-millimetre
+    // further onto the grid that would have undone it.
+    expect(snapped.x).toBe(other.x)
+    expect(guides).not.toEqual([])
+  })
+
+  it('does nothing at all when the grid is not being snapped to', () => {
+    const loose = rect(STEP * 3 + 40000, 2000000)
+    expect(snapRect({ rect: loose, others: [], slide: SLIDE, tolerance: NEAR }).rect).toEqual(loose)
+  })
+})

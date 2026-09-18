@@ -1055,6 +1055,16 @@ export const showCommands: readonly Command[] = [
     },
   },
   {
+    id: 'show.record',
+    label: 'Record Slide Show',
+    group: 'view',
+    keywords: ['narration', 'voice', 'microphone', 'timing'],
+    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      void present(0, true, true)
+    },
+  },
+  {
     id: 'show.end',
     label: 'End Slide Show',
     group: 'view',
@@ -1729,13 +1739,16 @@ async function backgroundPictureFromDisk(): Promise<void> {
  * one of those falls back to showing it here, because a presentation that does
  * not start is worse than one on the wrong screen.
  */
-async function present(at: number, rehearsing = false): Promise<void> {
+async function present(at: number, rehearsing = false, recording = false): Promise<void> {
   const { open } = useDeckStore.getState()
   if (open === null) return
 
   // A rehearsal stays in this window: the point is the numbers at the end, and
   // a second window would take them somewhere this one cannot read them.
-  if (isTauri() && !rehearsing) {
+  // A rehearsal or a recording stays in this window: the point is what comes
+  // back at the end, and a second window would take it somewhere this one
+  // cannot read it.
+  if (isTauri() && !rehearsing && !recording) {
     try {
       // Whether a presenter view came with it or not, the show is on its own
       // screen and this window has nothing to add.
@@ -1748,7 +1761,9 @@ async function present(at: number, rehearsing = false): Promise<void> {
 
   // In a browser there is one window, and writing the deck out to hand it to
   // nobody would be a copy made for nothing.
-  useShowStore.getState().start(at, open.deck.slides.length, stepsPerSlide(open.deck), rehearsing)
+  useShowStore
+    .getState()
+    .start(at, open.deck.slides.length, stepsPerSlide(open.deck), rehearsing, recording)
   await enterFullScreen()
 }
 

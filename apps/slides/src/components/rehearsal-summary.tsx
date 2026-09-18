@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { PickerPopover } from '@orangery/ui-kit'
-import { setAdvanceTime } from '@orangery/ooxml-presentation'
+import { addNarration, setAdvanceTime } from '@orangery/ooxml-presentation'
+import { useNarration } from '../document/use-narration'
 import { useDeckStore } from '../store/deck-store'
 import { useShowStore } from '../store/show-store'
 
@@ -14,6 +15,10 @@ import { useShowStore } from '../store/show-store'
  * Keeping them writes `advTm` on each slide — the timing and nothing else. A
  * deck that began dissolving because it was practised would be a deck changed
  * by being practised.
+ *
+ * A run that was recorded brings its narration here too, because it is the same
+ * question asked once: what happened during the run, and is any of it worth
+ * keeping. Two dialogs in a row would be two answers to one decision.
  */
 
 /** Milliseconds as a presenter reads them. */
@@ -26,6 +31,7 @@ export function RehearsalSummary() {
   const open = useDeckStore((state) => state.open)
   const editDeck = useDeckStore((state) => state.editDeck)
   const [times, setTimes] = useState<number[] | null>(null)
+  const narration = useNarration()
 
   useEffect(() => {
     const stop = useShowStore.subscribe((state, before) => {
@@ -46,21 +52,33 @@ export function RehearsalSummary() {
 
   const keep = () => {
     editDeck((deck) => {
-      const written = deck.slides.map((slide, index) =>
-        setAdvanceTime(slide, Math.max(times[index] ?? 0, 0)),
-      )
+      const written = deck.slides.map((slide, index) => {
+        const timed = setAdvanceTime(slide, Math.max(times[index] ?? 0, 0))
+
+        const recorded = narration?.[index]
+        const sound =
+          recorded === undefined ? false : addNarration(open.package, slide, recorded) !== null
+
+        return timed || sound
+      })
       return written.some(Boolean)
     })
     close()
   }
 
   const total = times.reduce((sum, one) => sum + one, 0)
+  const recordings = narration === null ? 0 : Object.keys(narration).length
 
   return (
     <PickerPopover title="Rehearsal" onClose={close}>
       <div className="w-72 space-y-3 text-xs text-text">
         <p className="text-muted">
           {`${String(open.deck.slides.length)} slides in ${spoken(total)}.`}
+          {recordings === 0
+            ? ''
+            : recordings === 1
+              ? ' One slide was recorded.'
+              : ` ${String(recordings)} slides were recorded.`}
         </p>
 
         <ol className="max-h-64 space-y-0.5 overflow-y-auto">
@@ -85,7 +103,7 @@ export function RehearsalSummary() {
             onClick={keep}
             className="rounded bg-accent px-3 py-1 text-black hover:bg-accent-hover"
           >
-            Keep timings
+            {recordings === 0 ? 'Keep timings' : 'Keep timings and narration'}
           </button>
         </div>
       </div>

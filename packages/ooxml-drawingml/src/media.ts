@@ -30,3 +30,35 @@ export function contentTypeFor(fileName: string): string | null {
       return null
   }
 }
+
+/**
+ * Content type for a sound or a film, from its extension.
+ *
+ * Kept apart from the picture table on purpose: a place that asks "is this an
+ * image" must not be told yes about an `.m4a` because both questions happen to
+ * be "what is this file". A recorder writes whichever of these the engine it
+ * runs on produces, and they differ by engine rather than by choice.
+ */
+export function mediaContentTypeFor(fileName: string): string | null {
+  const extension = fileName.split('.').pop()?.toLowerCase()
+  switch (extension) {
+    case 'm4a':
+      return 'audio/mp4'
+    case 'mp3':
+      return 'audio/mpeg'
+    case 'wav':
+      return 'audio/wav'
+    case 'ogg':
+      return 'audio/ogg'
+    case 'weba':
+      return 'audio/webm'
+    case 'mp4':
+      return 'video/mp4'
+    case 'webm':
+      return 'video/webm'
+    case 'mov':
+      return 'video/quicktime'
+    default:
+      return null
+  }
+}

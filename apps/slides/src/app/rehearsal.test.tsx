@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getPartText } from '@orangery/ooxml-core'
-import { runCommand } from '@orangery/ui-kit'
+import { getCommand, runCommand } from '@orangery/ui-kit'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useShowStore } from '../store/show-store'
@@ -21,6 +21,30 @@ import { useShowStore } from '../store/show-store'
 const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
 
 let now = 1_000_000
+
+/**
+ * A recorder that produces four bytes.
+ *
+ * jsdom has none, and neither has any machine running these tests without a
+ * microphone — which is also the case the code has to answer for, so the stub
+ * is the only way to reach the path where there *is* one.
+ */
+class StubRecorder {
+  state = 'recording'
+  mimeType = 'audio/mp4'
+  ondataavailable: ((event: { data: Blob }) => void) | null = null
+  onstop: (() => void) | null = null
+
+  start(): void {
+    this.state = 'recording'
+  }
+
+  stop(): void {
+    this.state = 'inactive'
+    this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3, 4])]) })
+    this.onstop?.()
+  }
+}
 
 beforeEach(async () => {
   now = 1_000_000
@@ -174,5 +198,70 @@ describe('what is offered afterwards', () => {
 
     expect(partText(0)).not.toContain('advTm')
     expect(useDeckStore.getState().saved).toBe(true)
+  })
+})
+
+describe('recording a run', () => {
+  /** A recorder that produces four bytes and says it is MP4. */
+  function stubRecorder() {
+    const tracks = [{ stop: () => undefined }]
+    vi.stubGlobal('MediaRecorder', StubRecorder)
+    // Only what the recorder asks for: spreading the real navigator would
+    // lose it, and nothing else here reaches for one.
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia: () => Promise.resolve({ getTracks: () => tracks }) },
+    })
+  }
+
+  it('is offered as a command of its own', () => {
+    render(<App />)
+    expect(getCommand('show.record')).toBeDefined()
+  })
+
+  it('records a piece for each slide and keeps it on that slide', async () => {
+    stubRecorder()
+    const user = userEvent.setup({ advanceTimers: () => undefined })
+    render(<App />)
+
+    act(() => {
+      runCommand('show.record', {})
+    })
+    // Let the microphone be granted before the slide changes.
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    after(5)
+    await act(async () => {
+      useShowStore.getState().next()
+      await Promise.resolve()
+    })
+    after(5)
+    await act(async () => {
+      useShowStore.getState().end()
+      await Promise.resolve()
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Keep timings/u }))
+
+    // A sound on each of the two slides that were talked over.
+    expect(partText(0)).toContain('a:audioFile')
+    expect(partText(1)).toContain('a:audioFile')
+  })
+
+  it('goes on without a microphone rather than refusing to start', async () => {
+    // A show that did not happen because the microphone was busy is worse than
+    // a show with no narration in it.
+    vi.stubGlobal('MediaRecorder', undefined)
+    render(<App />)
+
+    act(() => {
+      runCommand('show.record', {})
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(useShowStore.getState().at).toBe(0)
   })
 })

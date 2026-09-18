@@ -92,13 +92,27 @@ interface ShowState {
   /** What has been drawn, by the slide it was drawn on. */
   ink: Record<number, Stroke[]>
   /**
+   * Whether this run is being recorded.
+   *
+   * A flag rather than a recorder: the store says what is happening and the
+   * thing that owns a microphone listens. A store holding a `MediaRecorder`
+   * would be a store that cannot be reasoned about in a test.
+   */
+  recording: boolean
+  /**
    * How large the notes are drawn in the presenter view, as a multiple.
    *
    * The presenter is the one person reading from further away than anybody, and
    * the size that suits them has nothing to do with the deck.
    */
   notesScale: number
-  start: (at: number, count: number, steps?: readonly number[], rehearsing?: boolean) => void
+  start: (
+    at: number,
+    count: number,
+    steps?: readonly number[],
+    rehearsing?: boolean,
+    recording?: boolean,
+  ) => void
   end: () => void
   go: (to: number) => void
   next: () => void
@@ -149,9 +163,10 @@ export const useShowStore = create<ShowState>((set, get) => ({
   rehearsing: false,
   tool: 'none',
   ink: {},
+  recording: false,
   notesScale: 1,
 
-  start: (at, count, steps = [], rehearsing = false) => {
+  start: (at, count, steps = [], rehearsing = false, recording = false) => {
     const now = Date.now()
     set({
       at: count === 0 ? null : Math.min(Math.max(at, 0), count - 1),
@@ -164,6 +179,7 @@ export const useShowStore = create<ShowState>((set, get) => ({
       spent: Array.from({ length: count }, () => 0),
       enteredAt: count === 0 ? null : now,
       rehearsing,
+      recording: count === 0 ? false : recording,
       tool: 'none',
       ink: {},
     })
@@ -172,7 +188,14 @@ export const useShowStore = create<ShowState>((set, get) => ({
   end: () => {
     // The slide on screen when the show ends counts too; a run that stopped
     // the clock at the last change would lose the whole of the last slide.
-    set((state) => ({ ...counted(state), at: null, blank: null, typed: '', shown: 0 }))
+    set((state) => ({
+      ...counted(state),
+      at: null,
+      blank: null,
+      typed: '',
+      shown: 0,
+      recording: false,
+    }))
   },
 
   go: (to) => {

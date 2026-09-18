@@ -15,7 +15,7 @@ export {
   fitWithin,
   pointsToEmu,
 } from './units'
-export { contentTypeFor } from './media'
+export { contentTypeFor, mediaContentTypeFor } from './media'
 export { blipRelationshipId, NO_CROP, pictureGraphic, readBlipFill } from './picture'
 export type { BlipFill, Crop, Picture } from './picture'
 export { readColor, readColorChild, resolveColor } from './color'

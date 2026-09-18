@@ -224,6 +224,13 @@ These are the ones that matter most. Take them seriously.
 - [ ] End the show and keep the ink. Save, open in PowerPoint: the marks are
       there as freeform shapes — **not as PowerPoint's own ink**, which is the
       known difference.
+- [ ] Record Slide Show, talk over two slides, end, keep. Each slide has a
+      sound icon; clicking it plays what was said on that slide and not the
+      other. **Needs a microphone** — the unit tests stand one in.
+- [ ] Save and open in PowerPoint. The narration plays there too, and the
+      timings came with it.
+- [ ] Deny the microphone, or run on a machine with none. The show still runs;
+      only the narration is missing.
 
 ## Getting a deck in
 

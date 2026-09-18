@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
+import { Outline } from '../components/outline'
 import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
@@ -38,6 +39,7 @@ function Shell() {
   const setFinding = useViewStore((state) => state.setFinding)
   const panels = useViewStore((state) => state.panels)
   const sizes = useViewStore((state) => state.sizes)
+  const leftPane = useViewStore((state) => state.leftPane)
   const resize = useViewStore((state) => state.resize)
   const middle = useRef<HTMLDivElement>(null)
 
@@ -66,11 +68,11 @@ function Shell() {
         {panels.filmstrip && (
           <>
             <aside
-              aria-label="Slides"
+              aria-label={leftPane === 'outline' ? 'Outline' : 'Slides'}
               style={{ width: sizes.filmstrip }}
               className="shrink-0 overflow-y-auto bg-surface"
             >
-              <Filmstrip />
+              {leftPane === 'outline' ? <Outline /> : <Filmstrip />}
             </aside>
             <ResizeHandle
               orientation="vertical"

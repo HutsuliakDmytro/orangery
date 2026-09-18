@@ -37,6 +37,16 @@ interface ViewState {
   collapsedSections: string[]
   /** The section whose name is being typed, or null. */
   renamingSection: string | null
+  /**
+   * Which text the outline has open, or null.
+   *
+   * Its own flag rather than the deck store's `editing`, because the canvas
+   * would otherwise open an editor on the same shape at the same time: two
+   * ProseMirror views over one text body, both of which would commit.
+   */
+  editingOutline: { slide: number; shape: number } | null
+  /** Whether the left pane shows the slides or the words on them. */
+  leftPane: 'filmstrip' | 'outline'
   panels: Panels
   /** Widths and heights in pixels, so a drag can be written straight back. */
   sizes: { filmstrip: number; properties: number; notes: number }
@@ -46,6 +56,8 @@ interface ViewState {
   setZoom: (zoom: number | null) => void
   toggleSection: (id: string) => void
   setRenamingSection: (id: string | null) => void
+  setEditingOutline: (at: { slide: number; shape: number } | null) => void
+  setLeftPane: (pane: 'filmstrip' | 'outline') => void
   togglePanel: (panel: keyof Panels) => void
   resize: (panel: keyof Panels, size: number) => void
 }
@@ -66,6 +78,8 @@ export const useViewStore = create<ViewState>((set) => ({
   zoom: null,
   collapsedSections: [],
   renamingSection: null,
+  editingOutline: null,
+  leftPane: 'filmstrip',
   panels: { filmstrip: true, properties: true, notes: true },
   sizes: DEFAULT_SIZES,
 
@@ -79,6 +93,14 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setRenamingSection: (id) => {
     set({ renamingSection: id })
+  },
+
+  setEditingOutline: (at) => {
+    set({ editingOutline: at })
+  },
+
+  setLeftPane: (pane) => {
+    set({ leftPane: pane })
   },
 
   setTheme: (theme) => {

@@ -180,11 +180,20 @@ export const editCommands: readonly Command[] = [
     shortcut: 'Escape',
     // At the window rather than inside the editor: Escape should leave the
     // shape wherever the focus happens to be.
-    isEnabled: () =>
-      useDeckStore.getState().editing !== null || useViewStore.getState().editingNotes,
+    isEnabled: () => {
+      const view = useViewStore.getState()
+      return (
+        useDeckStore.getState().editing !== null ||
+        view.editingNotes ||
+        view.editingOutline !== null
+      )
+    },
     run: () => {
       useDeckStore.getState().setEditing(null)
-      useViewStore.getState().setEditingNotes(false)
+
+      const view = useViewStore.getState()
+      view.setEditingNotes(false)
+      view.setEditingOutline(null)
     },
   },
   {
@@ -611,6 +620,18 @@ export const slideEditCommands: readonly Command[] = [
 ]
 
 export const zoomCommands: readonly Command[] = [
+  {
+    id: 'view.outline',
+    label: 'Outline View',
+    group: 'view',
+    isActive: () => useViewStore.getState().leftPane === 'outline',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setLeftPane(view.leftPane === 'outline' ? 'filmstrip' : 'outline')
+      if (!view.panels.filmstrip) view.togglePanel('filmstrip')
+    },
+  },
   {
     id: 'view.zoom-in',
     label: 'Zoom In',

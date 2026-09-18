@@ -1,5 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { readTransition } from '@orangery/ooxml-presentation'
+import type { Transition } from '@orangery/ooxml-presentation'
 import { leaveFullScreen } from '../commands/definitions'
+import { transitionStyles } from '../render/transition-style'
 import { SlideView } from '../render/slide-view'
 import { useDeckStore } from '../store/deck-store'
 import { useShowStore } from '../store/show-store'
@@ -30,6 +33,54 @@ export function Show() {
     if (at !== null) return
     void leaveFullScreen()
   }, [at])
+
+  /**
+   * The slide being left behind while the new one arrives.
+   *
+   * PowerPoint puts the transition on the slide being moved *to*: a deck where
+   * slide 4 fades in fades whichever slide you came from, including the one
+   * after it when you go back. The old index is kept rather than the old slide,
+   * so a deck edited mid-show cannot leave a stale object on screen.
+   *
+   * Driven by a subscription rather than by watching `at` across renders: the
+   * thing that starts a transition is the moment the slide changed, and a
+   * subscription is handed exactly that.
+   */
+  const [leaving, setLeaving] = useState<{ index: number; transition: Transition } | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const stop = useShowStore.subscribe((state, before) => {
+      if (state.at === before.at) return
+      if (timer.current !== null) clearTimeout(timer.current)
+
+      const deck = useDeckStore.getState().open?.deck
+      const slide = state.at === null ? undefined : deck?.slides[state.at]
+      const transition = slide === undefined ? null : readTransition(slide)
+
+      // A cut is not an animation, and neither is a transition of no length.
+      if (
+        before.at === null ||
+        state.at === null ||
+        transition === null ||
+        transition.kind === 'none' ||
+        transition.duration === 0
+      ) {
+        setLeaving(null)
+        return
+      }
+
+      setLeaving({ index: before.at, transition })
+      timer.current = setTimeout(() => {
+        setLeaving(null)
+      }, transition.duration)
+    })
+
+    return () => {
+      stop()
+      if (timer.current !== null) clearTimeout(timer.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (at === null) return
@@ -108,6 +159,9 @@ export function Show() {
   const slide = open.deck.slides[at]
   if (slide === undefined) return null
 
+  const previous = leaving === null ? undefined : open.deck.slides[leaving.index]
+  const styles = leaving === null ? null : transitionStyles(leaving.transition)
+
   return (
     <div
       role="presentation"
@@ -124,16 +178,44 @@ export function Show() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black"
     >
       {blank === null ? (
-        <SlideView
-          deck={open.deck}
-          slide={slide}
-          themes={open.themes}
-          package={open.package}
-          // The slide keeps its shape, so one axis is filled and the other is
-          // letterboxed; stretching it would be showing a different slide.
-          className="max-h-full max-w-full"
-          style={{ width: '100vw', maxHeight: '100vh' }}
-        />
+        <>
+          {/* The slide being left, underneath, for as long as it takes to go. */}
+          {previous !== undefined && styles !== null && (
+            <div
+              key={`leaving-${String(leaving?.index ?? 0)}`}
+              data-testid="leaving"
+              style={styles.leaving ?? undefined}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <SlideView
+                deck={open.deck}
+                slide={previous}
+                themes={open.themes}
+                package={open.package}
+                className="max-h-full max-w-full"
+                style={{ width: '100vw', maxHeight: '100vh' }}
+              />
+            </div>
+          )}
+
+          <div
+            key={`arriving-${String(at)}`}
+            data-testid="arriving"
+            style={styles?.arriving}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <SlideView
+              deck={open.deck}
+              slide={slide}
+              themes={open.themes}
+              package={open.package}
+              // The slide keeps its shape, so one axis is filled and the other
+              // is letterboxed; stretching it would be showing a different one.
+              className="max-h-full max-w-full"
+              style={{ width: '100vw', maxHeight: '100vh' }}
+            />
+          </div>
+        </>
       ) : (
         <div
           data-testid="blank"

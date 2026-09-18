@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { act } from 'react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
@@ -300,5 +300,89 @@ describe('what the room sees', () => {
 
     // The show is the last thing in the tree and covers the window.
     expect(screen.getByTestId('show').className).toContain('fixed inset-0')
+  })
+})
+
+describe('the transition between slides', () => {
+  it('keeps the slide being left on screen while the new one arrives', async () => {
+    await openDeck('transitions')
+    render(<App />)
+    await start()
+
+    // Slide 2 pushes, so moving to it animates.
+    act(() => {
+      press('ArrowRight')
+    })
+
+    expect(screen.getByTestId('leaving')).toBeInTheDocument()
+    expect(screen.getByTestId('arriving')).toBeInTheDocument()
+  })
+
+  it('takes it away once the transition is over', async () => {
+    await openDeck('transitions')
+    render(<App />)
+    await start()
+
+    // Frozen only now: reading a deck goes through timers of its own, and
+    // freezing them first never lets it finish — but the transition's timer
+    // has to be one of the frozen ones to be advanced.
+    vi.useFakeTimers()
+    try {
+      act(() => {
+        press('ArrowRight')
+      })
+      expect(screen.getByTestId('leaving')).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(screen.queryByTestId('leaving')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('animates for as long as the file says', async () => {
+    await openDeck('transitions')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(4)
+    })
+
+    // The last slide states a second and a half in `p14:dur`.
+    expect(screen.getByTestId('arriving').style.animation).toContain('1.5s')
+  })
+
+  it('uses the transition of the slide being arrived at', async () => {
+    await openDeck('transitions')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(2)
+    })
+
+    // Slide 3 wipes, whichever slide you came from.
+    expect(screen.getByTestId('arriving').style.animation).toContain('orangery-wipe-in')
+  })
+
+  it('shows no transition at all for a deck that states none', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+    await start()
+    act(() => {
+      press('ArrowRight')
+    })
+
+    expect(screen.queryByTestId('leaving')).toBeNull()
+  })
+
+  it('does not animate the slide the show opens on', async () => {
+    // Arriving at the first slide is not a transition from anywhere.
+    await openDeck('transitions')
+    render(<App />)
+    await start()
+
+    expect(screen.queryByTestId('leaving')).toBeNull()
   })
 })

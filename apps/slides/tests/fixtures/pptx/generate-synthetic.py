@@ -15,6 +15,7 @@ parts we do not understand, which is the whole guarantee (see
 Run:  python3 apps/slides/tests/fixtures/pptx/generate-synthetic.py
 """
 
+import sys
 from pathlib import Path
 
 from pptx import Presentation
@@ -22,6 +23,7 @@ from pptx.dml.color import RGBColor
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.oxml import parse_xml
 from pptx.util import Emu, Inches, Pt
 
 OUT = Path(__file__).parent / "synthetic"
@@ -221,6 +223,61 @@ def widescreen() -> Presentation:
     return prs
 
 
+
+NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+NS_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+
+
+def add_transition(slide, xml: str) -> None:
+    """Appends raw transition markup, which python-pptx has no model for.
+
+    `p:transition` comes after `p:cSld` and `p:clrMapOvr` and before `p:timing`,
+    and a slide built here has neither of the latter, so appending is in order.
+    """
+    slide._element.append(parse_xml(xml))
+
+
+def transitions() -> Presentation:
+    """One slide per kind, including two we deliberately do not animate.
+
+    A dissolve is not none — it is a change we cannot draw, and the show has to
+    decide what to do with it rather than pretend the slide simply appeared.
+    The last slide writes its duration the way PowerPoint 2010 onwards does,
+    inside `mc:AlternateContent`, which is the form most real decks carry.
+    """
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Emu(9144000), Emu(6858000)
+
+    plain = [
+        ("Fade", f'<p:transition xmlns:p="{NS_P}" spd="slow"><p:fade/></p:transition>'),
+        ("Push", f'<p:transition xmlns:p="{NS_P}" spd="med"><p:push dir="u"/></p:transition>'),
+        ("Wipe", f'<p:transition xmlns:p="{NS_P}" spd="fast"><p:wipe dir="r"/></p:transition>'),
+        ("Dissolve", f'<p:transition xmlns:p="{NS_P}"><p:dissolve/></p:transition>'),
+    ]
+
+    for title, xml in plain:
+        slide = prs.slides.add_slide(title_only(prs))
+        slide.shapes.title.text = title
+        add_transition(slide, xml)
+
+    slide = prs.slides.add_slide(title_only(prs))
+    slide.shapes.title.text = "Timed"
+    add_transition(
+        slide,
+        f'''<mc:AlternateContent xmlns:mc="{NS_MC}" xmlns:p="{NS_P}" xmlns:p14="{NS_P14}">
+          <mc:Choice Requires="p14">
+            <p:transition spd="slow" p14:dur="1500"><p:fade/></p:transition>
+          </mc:Choice>
+          <mc:Fallback>
+            <p:transition spd="slow"><p:fade/></p:transition>
+          </mc:Fallback>
+        </mc:AlternateContent>''',
+    )
+
+    return prs
+
+
 DECKS = {
     "empty": empty,
     "placeholders": placeholders,
@@ -233,12 +290,24 @@ DECKS = {
     "notes": notes,
     "many-slides": many_slides,
     "sixteen-by-nine": widescreen,
+    "transitions": transitions,
 }
 
 
 def main() -> None:
+    """Writes every deck, or only the ones named on the command line.
+
+    Naming one matters: python-pptx writes a slightly different package from
+    version to version, so regenerating a deck nobody changed would rewrite
+    files the round-trip corpus is pinned to.
+    """
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, build in DECKS.items():
+
+    wanted = sys.argv[1:] or list(DECKS)
+    for name in wanted:
+        build = DECKS.get(name)
+        if build is None:
+            raise SystemExit(f"no such deck: {name}")
         build().save(OUT / f"{name}.pptx")
         print(f"wrote {name}.pptx")
 

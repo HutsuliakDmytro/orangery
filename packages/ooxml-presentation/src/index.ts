@@ -117,3 +117,5 @@ export { addGuide, moveGuide, readGuides, removeGuide, writeGuides } from './gui
 export type { SlideGuide } from './guides'
 export { insertIcon } from './insert-icon'
 export type { NewIcon } from './insert-icon'
+export { readTransition } from './transition'
+export type { Transition, TransitionDirection, TransitionKind } from './transition'

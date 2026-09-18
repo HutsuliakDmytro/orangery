@@ -25,3 +25,46 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/**
+ * The slide-show transitions.
+ *
+ * One keyframe per shape of movement rather than one per direction: the
+ * distances come from custom properties the component sets, so a push upwards
+ * and a push to the left are the same animation given different numbers.
+ */
+@keyframes orangery-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes orangery-slide-in {
+  from {
+    transform: translate(var(--orangery-from-x, 0), var(--orangery-from-y, 0));
+  }
+  to {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes orangery-slide-out {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(var(--orangery-to-x, 0), var(--orangery-to-y, 0));
+  }
+}
+
+@keyframes orangery-wipe-in {
+  from {
+    clip-path: var(--orangery-clip, inset(0));
+  }
+  to {
+    clip-path: inset(0);
+  }
+}

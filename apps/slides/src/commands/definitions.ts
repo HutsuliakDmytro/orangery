@@ -19,7 +19,6 @@ import {
   duplicateSlides,
   insertConnector,
   insertIcon,
-  insertPicture,
   flatten,
   geometryPoints,
   insertColumn,
@@ -60,6 +59,7 @@ import {
   saveDeckFile,
 } from '../document/file-operations'
 import { groupAfterEscape } from '../render/selection'
+import { insertPictureOnSlide } from '../document/insert-picture'
 import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
 import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
@@ -1405,41 +1405,12 @@ export const iconCommands: readonly Command[] = ICONS.map((icon) => ({
   },
 }))
 
-/**
- * Putting a picture on the slide.
- *
- * Sized to a quarter of the slide's width and the shape of the file, which
- * needs the picture measured; until that is wired up it goes in square and can
- * be resized, which is better than guessing an aspect ratio and being wrong.
- */
+/** Putting a picture on the slide, through the one place that does that. */
 async function insertPictureFromDisk(): Promise<void> {
   const path = await pickPicturePath()
   if (path === null) return
 
-  const bytes = await readFileBytes(path)
-  const { open, current, edit, selectShapes } = useDeckStore.getState()
-  const size = open?.deck.slideSize ?? { width: 0, height: 0 }
-  const slide = open?.deck.slides[current]
-  if (open === null || slide === undefined) return
-
-  const side = size.width / 4
-  const made: { id: number | null } = { id: null }
-
-  edit((edited) => {
-    made.id = insertPicture(open.package, edited, {
-      fileName: nameOf(path),
-      bytes,
-      transform: {
-        x: (size.width - side) / 2,
-        y: (size.height - side) / 2,
-        width: side,
-        height: side,
-      },
-    })
-    return true
-  })
-
-  if (made.id !== null) selectShapes([made.id])
+  insertPictureOnSlide(nameOf(path), await readFileBytes(path))
 }
 
 export const groupCommands: readonly Command[] = [

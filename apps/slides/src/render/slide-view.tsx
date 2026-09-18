@@ -391,6 +391,7 @@ export function SlideView({
   onEdit,
   onCommitText,
   className,
+  style,
 }: {
   deck: Deck
   slide: Slide
@@ -410,6 +411,7 @@ export function SlideView({
   /** The edited document, handed over when the shape is left. */
   onCommitText?: (id: number, doc: PmNode) => void
   className?: string
+  style?: React.CSSProperties
 }) {
   const base = colorContextFor(deck, themes, slide)
   const master = [...deck.masters.values()][0]
@@ -438,7 +440,11 @@ export function SlideView({
     <div
       className={className}
       data-testid="slide"
-      style={{ position: 'relative', aspectRatio: `${String(width)} / ${String(height)}` }}
+      style={{
+        position: 'relative',
+        aspectRatio: `${String(width)} / ${String(height)}`,
+        ...style,
+      }}
     >
       <svg
         viewBox={`0 0 ${String(width)} ${String(height)}`}

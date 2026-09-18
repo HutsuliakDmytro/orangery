@@ -1,12 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { textOfBody } from '@orangery/ooxml-drawingml'
+import { getPartText } from '@orangery/ooxml-core'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
+import { useEditorStore } from '../store/editor-store'
 import { useViewStore } from '../store/view-store'
 
 /** Adding, removing and reordering the slides of a deck. */
@@ -35,7 +38,7 @@ beforeEach(() => {
     redoStack: [],
     error: null,
   })
-  useViewStore.setState({ finding: false })
+  useViewStore.setState({ finding: false, zoom: null, editingNotes: false })
 })
 
 describe('a new slide', () => {
@@ -160,5 +163,109 @@ describe('reordering', () => {
     })
 
     expect(useDeckStore.getState().open?.deck.slides[1]?.path).toBe('ppt/slides/slide1.xml')
+  })
+})
+
+describe('speaker notes', () => {
+  it('says when a slide has no notes page to write on', async () => {
+    // Making one is its own operation; pretending otherwise would lose what
+    // was typed.
+    await openDeck('shapes')
+    render(<App />)
+
+    expect(screen.getByText('This slide has no notes page')).toBeInTheDocument()
+  })
+
+  it('shows what the notes page holds', async () => {
+    await openDeck('notes')
+    render(<App />)
+
+    expect(screen.getByText(/The quick brown fox/u)).toBeInTheDocument()
+  })
+
+  it('opens an editor on the notes when they are clicked', async () => {
+    const user = userEvent.setup()
+    await openDeck('notes')
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit speaker notes' }))
+    expect(document.querySelector('.slide-text')).toBeInTheDocument()
+  })
+
+  it('writes the notes into their own part', async () => {
+    const user = userEvent.setup()
+    await openDeck('notes')
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit speaker notes' }))
+    act(() => {
+      const editor = useEditorStore.getState().editor
+      editor?.commands.selectAll()
+      editor?.commands.insertContent('Remember the projector')
+    })
+    await user.keyboard('{Escape}')
+
+    const { open } = useDeckStore.getState()
+    const text =
+      open === null ? '' : (getPartText(open.package, 'ppt/notesSlides/notesSlide1.xml') ?? '')
+    expect(text).toContain('Remember the projector')
+  })
+
+  it('leaves the slide itself alone', async () => {
+    const user = userEvent.setup()
+    await openDeck('notes')
+    render(<App />)
+    const before = (() => {
+      const { open } = useDeckStore.getState()
+      return open === null ? '' : (getPartText(open.package, 'ppt/slides/slide1.xml') ?? '')
+    })()
+
+    await user.click(screen.getByRole('button', { name: 'Edit speaker notes' }))
+    act(() => {
+      useEditorStore.getState().editor?.commands.insertContent('x')
+    })
+    await user.keyboard('{Escape}')
+
+    const { open } = useDeckStore.getState()
+    expect(open === null ? '' : getPartText(open.package, 'ppt/slides/slide1.xml')).toBe(before)
+  })
+})
+
+describe('zoom', () => {
+  it('fits the window until something says otherwise', async () => {
+    await openDeck('empty')
+    expect(getCommand('view.zoom-fit')?.isActive?.({})).toBe(true)
+  })
+
+  it('steps out from life size rather than from whatever was fitted', async () => {
+    await openDeck('empty')
+    act(() => {
+      runCommand('view.zoom-in', {})
+    })
+
+    expect(useViewStore.getState().zoom).toBeCloseTo(1.25, 5)
+  })
+
+  it('goes back to fitting', async () => {
+    await openDeck('empty')
+    act(() => {
+      runCommand('view.zoom-in', {})
+      runCommand('view.zoom-fit', {})
+    })
+
+    expect(useViewStore.getState().zoom).toBeNull()
+  })
+
+  it('stops at the ends of the range', async () => {
+    await openDeck('empty')
+    act(() => {
+      for (let step = 0; step < 20; step += 1) runCommand('view.zoom-in', {})
+    })
+    expect(useViewStore.getState().zoom).toBe(4)
+
+    act(() => {
+      for (let step = 0; step < 40; step += 1) runCommand('view.zoom-out', {})
+    })
+    expect(useViewStore.getState().zoom).toBe(0.25)
   })
 })

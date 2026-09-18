@@ -4,6 +4,7 @@ import type { Transform } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
 import { applyDrag } from '../render/use-drag'
 import { currentSlide, useDeckStore } from '../store/deck-store'
+import { useViewStore } from '../store/view-store'
 import { WelcomeScreen } from './welcome-screen'
 
 /** The slide being edited, centred with room around it. */
@@ -15,6 +16,7 @@ export function Canvas() {
   const selectShapes = useDeckStore((state) => state.selectShapes)
   const edit = useDeckStore((state) => state.edit)
   const editing = useDeckStore((state) => state.editing)
+  const zoom = useViewStore((state) => state.zoom)
   const setEditing = useDeckStore((state) => state.setEditing)
 
   if (error !== null) {
@@ -31,6 +33,8 @@ export function Canvas() {
 
   return (
     <div className="flex h-full items-center justify-center overflow-auto p-6">
+      {/* At a set zoom the slide keeps that size and the canvas scrolls; fitted,
+          it takes what the window gives it. */}
       <SlideView
         deck={open.deck}
         slide={slide}
@@ -62,7 +66,12 @@ export function Canvas() {
               .reduce((changed: boolean, one) => changed || one, false),
           )
         }}
-        className="w-full max-w-4xl shadow-lg"
+        className="shadow-lg"
+        style={
+          zoom === null
+            ? { width: '100%', maxWidth: '56rem' }
+            : { width: `${String(zoom * 56)}rem`, flexShrink: 0 }
+        }
       />
     </div>
   )

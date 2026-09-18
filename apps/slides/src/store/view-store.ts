@@ -13,11 +13,28 @@ interface ViewState {
   theme: Theme
   /** Whether the find and replace strip is showing. */
   finding: boolean
+  /**
+   * Whether the speaker notes are open for editing.
+   *
+   * Here rather than inside the panel so that one command can end any text
+   * edit: two ways out of a text box is one too many, and the one that is not
+   * wired up is the one that silently loses what was typed.
+   */
+  editingNotes: boolean
+  /**
+   * How large the slide is drawn, as a multiple — or null to fit the window.
+   *
+   * Fitting is the default because a slide has a fixed shape and the useful
+   * thing is almost always to see all of it.
+   */
+  zoom: number | null
   panels: Panels
   /** Widths and heights in pixels, so a drag can be written straight back. */
   sizes: { filmstrip: number; properties: number; notes: number }
   setTheme: (theme: Theme) => void
   setFinding: (finding: boolean) => void
+  setEditingNotes: (editing: boolean) => void
+  setZoom: (zoom: number | null) => void
   togglePanel: (panel: keyof Panels) => void
   resize: (panel: keyof Panels, size: number) => void
 }
@@ -34,6 +51,8 @@ const LIMITS: Record<keyof Panels, { min: number; max: number }> = {
 export const useViewStore = create<ViewState>((set) => ({
   theme: 'dark',
   finding: false,
+  editingNotes: false,
+  zoom: null,
   panels: { filmstrip: true, properties: true, notes: true },
   sizes: DEFAULT_SIZES,
 
@@ -43,6 +62,16 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setFinding: (finding) => {
     set({ finding })
+  },
+
+  setEditingNotes: (editing) => {
+    set({ editingNotes: editing })
+  },
+
+  setZoom: (zoom) => {
+    // PowerPoint's own range; beyond it the slide is either unreadable or so
+    // large that scrolling is the only thing left to do.
+    set({ zoom: zoom === null ? null : Math.min(Math.max(zoom, 0.25), 4) })
   },
 
   togglePanel: (panel) => {

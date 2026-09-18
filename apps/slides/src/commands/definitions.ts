@@ -173,9 +173,11 @@ export const editCommands: readonly Command[] = [
     shortcut: 'Escape',
     // At the window rather than inside the editor: Escape should leave the
     // shape wherever the focus happens to be.
-    isEnabled: () => useDeckStore.getState().editing !== null,
+    isEnabled: () =>
+      useDeckStore.getState().editing !== null || useViewStore.getState().editingNotes,
     run: () => {
       useDeckStore.getState().setEditing(null)
+      useViewStore.getState().setEditingNotes(false)
     },
   },
   {
@@ -494,6 +496,44 @@ export const slideEditCommands: readonly Command[] = [
   },
 ]
 
+export const zoomCommands: readonly Command[] = [
+  {
+    id: 'view.zoom-in',
+    label: 'Zoom In',
+    group: 'view',
+    shortcut: 'Mod+=',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { zoom, setZoom } = useViewStore.getState()
+      // From fitted, the first step out is life size rather than a guess at
+      // whatever the window happened to be showing.
+      setZoom((zoom ?? 1) * 1.25)
+    },
+  },
+  {
+    id: 'view.zoom-out',
+    label: 'Zoom Out',
+    group: 'view',
+    shortcut: 'Mod+-',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { zoom, setZoom } = useViewStore.getState()
+      setZoom((zoom ?? 1) / 1.25)
+    },
+  },
+  {
+    id: 'view.zoom-fit',
+    label: 'Fit to Window',
+    group: 'view',
+    shortcut: 'Mod+0',
+    isActive: () => useViewStore.getState().zoom === null,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setZoom(null)
+    },
+  },
+]
+
 export const spacingCommands: readonly Command[] = (
   [
     ['single', 'Single Spacing', 1],
@@ -783,6 +823,7 @@ export function registerBuiltinCommands(): void {
   registerAll(paragraphCommands)
   registerAll(spacingCommands)
   registerAll(slideEditCommands)
+  registerAll(zoomCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
   registerAll(distributeCommands)

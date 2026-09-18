@@ -41,6 +41,8 @@ export {
 export type { MasterPlaceholder } from './placeholders'
 export { colorContextFor, readColorMap, readThemes, themeFor } from './theme-context'
 export { buildThemeFile } from './theme-file'
+export { readEmbeddedFonts } from './embedded-fonts'
+export type { EmbeddedFace, EmbeddedFont, FontStyle } from './embedded-fonts'
 export {
   listStyleChain,
   masterStyleFor,

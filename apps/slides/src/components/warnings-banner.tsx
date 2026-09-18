@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { describeSlides, inspect } from '../document/warnings'
 import { useImportStore } from '../document/import-note'
+import { useEmbeddedFonts } from '../render/use-embedded-fonts'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -16,7 +17,17 @@ export function WarningsBanner() {
   const note = useImportStore((state) => state.note)
 
   const warnings = useMemo(() => (open === null ? [] : inspect(open.deck)), [open])
-  if ((warnings.length === 0 && note === null) || dismissed === open?.path) return null
+
+  // A typeface the deck carried and this engine could not read. Said here
+  // rather than in `inspect`, which knows the file and not the browser.
+  const refused = useEmbeddedFonts()
+
+  if (
+    (warnings.length === 0 && note === null && refused.length === 0) ||
+    dismissed === open?.path
+  ) {
+    return null
+  }
 
   return (
     <div
@@ -25,6 +36,11 @@ export function WarningsBanner() {
     >
       <ul className="flex-1 space-y-0.5 text-muted">
         {note !== null && <li>{note}</li>}
+        {refused.length > 0 && (
+          <li>
+            {`The deck carries ${refused.join(', ')}, which could not be read here — lines may break differently.`}
+          </li>
+        )}
         {warnings.map((warning) => (
           <li key={warning.message}>
             {warning.message} — {describeSlides(warning.slides)}.

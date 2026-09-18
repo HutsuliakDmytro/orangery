@@ -184,6 +184,13 @@ These are the ones that matter most. Take them seriously.
       by the time you stop — this is the one that needs a real display.
 - [ ] Drag the scrollbar from top to bottom in one motion. Nothing jumps, and
       the strip does not change length as it fills in.
+- [ ] Save a deck from PowerPoint with "embed fonts" ticked, in a typeface this
+      machine does not have. Open it here: the text is in that typeface and the
+      lines break where PowerPoint broke them. **This is the check the unit
+      tests cannot make** — whether a real engine reads a real `.fntdata`.
+- [ ] If it cannot, the banner says which typeface, and the deck still opens.
+- [ ] Close that deck and open another using the same typeface name without
+      embedding it. It is drawn in the substitute, not in the first deck's font.
 
 ## Getting a deck in
 

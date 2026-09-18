@@ -156,6 +156,73 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
   star5: star(5, 0.38),
   star6: star(6, 0.58),
   star8: star(8, 0.38),
+
+  // Flowchart. The shapes are the notation, so the ones a diagram cannot do
+  // without are here: a decision, a start and an end, and something read or
+  // written.
+  flowChartDecision: polygon(({ width, height }) => [
+    [width / 2, 0],
+    [width, height / 2],
+    [width / 2, height],
+    [0, height / 2],
+  ]),
+  flowChartInputOutput: polygon(({ width, height }) => [
+    [width * 0.25, 0],
+    [width, 0],
+    [width * 0.75, height],
+    [0, height],
+  ]),
+  flowChartTerminator: ({ width, height }) => {
+    // A stadium: two semicircles joined by a pair of straight edges.
+    const radius = Math.min(width, height) / 2
+    return [
+      `M${n(radius)},0`,
+      `L${n(width - radius)},0`,
+      `A${n(radius)},${n(radius)} 0 0 1 ${n(width - radius)},${n(height)}`,
+      `L${n(radius)},${n(height)}`,
+      `A${n(radius)},${n(radius)} 0 0 1 ${n(radius)},0`,
+      'Z',
+    ].join(' ')
+  },
+  flowChartPreparation: polygon(({ width, height }) => [
+    [width * 0.2, 0],
+    [width * 0.8, 0],
+    [width, height / 2],
+    [width * 0.8, height],
+    [width * 0.2, height],
+    [0, height / 2],
+  ]),
+
+  // Callouts: a box with a tail, which is the whole of what makes them one.
+  // The tail hangs from the bottom left, where PowerPoint's own default puts it.
+  wedgeRectCallout: ({ width, height }) => {
+    const body = height * 0.75
+    return [
+      `M0,0`,
+      `L${n(width)},0`,
+      `L${n(width)},${n(body)}`,
+      `L${n(width * 0.35)},${n(body)}`,
+      `L${n(width * 0.2)},${n(height)}`,
+      `L${n(width * 0.25)},${n(body)}`,
+      `L0,${n(body)}`,
+      'Z',
+    ].join(' ')
+  },
+  wedgeEllipseCallout: ({ width, height }) => {
+    const body = height * 0.75
+    const rx = width / 2
+    const ry = body / 2
+    return [
+      `M${n(rx)},0`,
+      `A${n(rx)},${n(ry)} 0 1 1 ${n(rx - 0.01)},0`,
+      'Z',
+      `M${n(width * 0.34)},${n(body * 0.95)}`,
+      `L${n(width * 0.2)},${n(height)}`,
+      `L${n(width * 0.46)},${n(body)}`,
+      'Z',
+    ].join(' ')
+  },
+
   line: ({ width, height }) => `M0,0 L${n(width)},${n(height)}`,
   straightConnector1: ({ width, height }) => `M0,0 L${n(width)},${n(height)}`,
 }

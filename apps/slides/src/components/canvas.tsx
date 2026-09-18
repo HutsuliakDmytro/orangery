@@ -1,5 +1,6 @@
 import {
   absoluteTransform,
+  createShape,
   intoGroupSpace,
   withAncestors,
   writeTransform,
@@ -26,6 +27,8 @@ export function Canvas() {
   const zoom = useViewStore((state) => state.zoom)
   const rulers = useViewStore((state) => state.rulers)
   const setEditing = useDeckStore((state) => state.setEditing)
+  const drawing = useViewStore((state) => state.drawing)
+  const setDrawing = useViewStore((state) => state.setDrawing)
   const openGroup = useDeckStore((state) => state.openGroup)
   const setOpenGroup = useDeckStore((state) => state.setOpenGroup)
 
@@ -66,6 +69,20 @@ export function Canvas() {
           onOpenGroup={setOpenGroup}
           onMarquee={(ids) => {
             selectShapes(ids)
+          }}
+          drawing={drawing}
+          onDraw={(box) => {
+            const made: { id: number | null } = { id: null }
+            edit((slide) => {
+              made.id = createShape(slide, { preset: drawing ?? 'rect', transform: box })
+              return true
+            })
+
+            // Disarmed after one shape, as PowerPoint does: drawing five
+            // rectangles is five choices, and a tool that stayed armed would
+            // turn every later click on the slide into a sixth.
+            setDrawing(null)
+            if (made.id !== null) selectShapes([made.id])
           }}
           editing={editing}
           onEdit={setEditing}

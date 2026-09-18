@@ -47,6 +47,7 @@ import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
 import { useMarquee } from './use-marquee'
 import { enclosedBy, groupToOpen, selectionTarget } from './selection'
+import type { Box } from './selection'
 import { boundsOf, correct, correctionBetween, NO_CORRECTION, snapRect } from './snap'
 import type { Correction, Guide } from './snap'
 import { TextEditor } from './text-editor'
@@ -698,6 +699,8 @@ export function SlideView({
   openGroup = null,
   onOpenGroup,
   onMarquee,
+  drawing = null,
+  onDraw,
   editing,
   onEdit,
   onCommitText,
@@ -723,6 +726,15 @@ export function SlideView({
   onOpenGroup?: (id: number | null) => void
   /** Given the ids a rubber band enclosed, once it is let go. */
   onMarquee?: (ids: number[]) => void
+  /**
+   * Set while a shape is armed for drawing.
+   *
+   * The band on the background then draws the shape out instead of selecting:
+   * one gesture, two meanings, decided by whether anything is armed.
+   */
+  drawing?: string | null
+  /** Given the box a shape was drawn out to, in EMU. */
+  onDraw?: (box: Box) => void
   /** The shape whose text is open for editing. */
   editing?: number | null
   /** Asked to enter a shape's text, or to leave it with `null`. */
@@ -798,6 +810,14 @@ export function SlideView({
     slideWidth: width,
     slideHeight: height,
     onPick: (band) => {
+      // The same gesture draws a shape when one is armed and selects when none
+      // is: a band on an empty slide means "this area", and what happens to the
+      // area is the only thing that differs.
+      if (drawing !== null) {
+        onDraw?.(band)
+        return
+      }
+
       // Whatever sits at the level the pointer is working at: the top of the
       // slide, or the inside of the group that is open.
       const here = ({ ancestors }: { ancestors: readonly Shape[] }) =>
@@ -901,10 +921,12 @@ export function SlideView({
             height={height}
             fill="transparent"
             onPointerDown={(event) => {
-              onSelect(null, false)
-              onEdit?.(null)
-              onOpenGroup?.(null)
-              if (onMarquee !== undefined) marquee.start(event)
+              if (drawing === null) {
+                onSelect(null, false)
+                onEdit?.(null)
+                onOpenGroup?.(null)
+              }
+              if (onMarquee !== undefined || onDraw !== undefined) marquee.start(event)
             }}
           />
         )}
@@ -916,7 +938,7 @@ export function SlideView({
             width={marquee.box.width}
             height={marquee.box.height}
             fill="var(--accent)"
-            fillOpacity={0.12}
+            fillOpacity={drawing === null ? 0.12 : 0.25}
             stroke="var(--accent)"
             strokeWidth={2 * (width / 960)}
             pointerEvents="none"

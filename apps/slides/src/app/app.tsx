@@ -16,6 +16,7 @@ import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
 import { RecentDecks } from '../components/recent-decks'
 import { PicturesDialog } from '../components/pictures-dialog'
+import { ShapeGallery } from '../components/shape-gallery'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
@@ -110,6 +111,8 @@ function Shell() {
       />
 
       <TemplatePicker />
+
+      <ShapeGallery />
 
       <PicturesDialog />
 

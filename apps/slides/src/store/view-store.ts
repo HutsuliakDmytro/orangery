@@ -19,6 +19,17 @@ interface ViewState {
   /** Whether the template chooser is up. */
   choosingTemplate: boolean
   /**
+   * The shape preset armed for drawing, or null.
+   *
+   * Armed rather than placed: choosing a shape says what to draw, and the drag
+   * that follows says where and how big. Placing it at a guessed size in the
+   * middle and letting the person fix it afterwards is two operations where
+   * there should be one.
+   */
+  drawing: string | null
+  /** Whether the shape gallery is up. */
+  choosingShape: boolean
+  /**
    * Whether the speaker notes are open for editing.
    *
    * Here rather than inside the panel so that one command can end any text
@@ -75,6 +86,8 @@ interface ViewState {
   setTheme: (theme: Theme) => void
   setFinding: (finding: boolean) => void
   setChoosingTemplate: (choosing: boolean) => void
+  setDrawing: (preset: string | null) => void
+  setChoosingShape: (choosing: boolean) => void
   setEditingNotes: (editing: boolean) => void
   setZoom: (zoom: number | null) => void
   toggleSection: (id: string) => void
@@ -101,6 +114,8 @@ export const useViewStore = create<ViewState>((set) => ({
   theme: 'dark',
   finding: false,
   choosingTemplate: false,
+  drawing: null,
+  choosingShape: false,
   editingNotes: false,
   zoom: null,
   collapsedSections: [],
@@ -151,6 +166,14 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setChoosingTemplate: (choosing) => {
     set({ choosingTemplate: choosing })
+  },
+
+  setDrawing: (preset) => {
+    set({ drawing: preset })
+  },
+
+  setChoosingShape: (choosing) => {
+    set({ choosingShape: choosing })
   },
 
   setFinding: (finding) => {

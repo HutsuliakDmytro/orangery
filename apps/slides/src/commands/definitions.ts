@@ -1,4 +1,4 @@
-import { registerAll, resetRegistry } from '@orangery/ui-kit'
+import { register, registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import {
@@ -1147,6 +1147,16 @@ export const tableCommands: readonly Command[] = [
   },
 ]
 
+export const shapeGalleryCommand: Command = {
+  id: 'insert.shape',
+  label: 'Shape…',
+  group: 'insert',
+  isEnabled: () => useDeckStore.getState().open !== null,
+  run: () => {
+    useViewStore.getState().setChoosingShape(true)
+  },
+}
+
 export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) => ({
   id: `insert.${preset}`,
   label,
@@ -1384,6 +1394,7 @@ export function registerBuiltinCommands(): void {
   registerAll(editCommands)
   registerAll(arrangeCommands)
   registerAll(insertCommands)
+  register(shapeGalleryCommand)
   registerAll(iconCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)

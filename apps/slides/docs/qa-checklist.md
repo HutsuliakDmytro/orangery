@@ -240,6 +240,8 @@ These are the ones that matter most. Take them seriously.
       open in PowerPoint, **and open Edit Data**: the workbook holds the new
       number too — that is the check the cache alone would fail.
 - [ ] The chart's colours and styling are the ones it had; nothing was rebuilt.
+- [ ] Rename a category in the panel. Every series' label changes with it, and
+      Edit Data in PowerPoint shows the new name.
 - [ ] Open a deck with SmartArt made in PowerPoint. It is drawn — the boxes,
       the arrows and the words — and the banner says nothing about it.
 - [ ] Open one whose SmartArt was made by something else and never opened in

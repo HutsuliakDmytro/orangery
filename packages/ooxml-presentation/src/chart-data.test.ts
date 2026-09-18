@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { getPartText, readPackage } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { allSeries, readChart } from '@orangery/ooxml-drawingml'
-import { cellsOf, patchedWorkbook, writeChartCache } from './chart-data'
+import { cellsOf, patchedWorkbook, writeChartCache, writeChartCategories } from './chart-data'
 import { readPptxPackage } from './parts'
 import { saveDeck } from './save'
 
@@ -130,5 +130,62 @@ describe('the workbook Edit Data opens', () => {
 
     // The cache is still worth writing, so this is not an error.
     expect(await patchedWorkbook(pkg, PART, { series: 0, values: [1] })).toBeNull()
+  })
+})
+
+describe('the names along the bottom', () => {
+  const namesOf = (pkg: OoxmlPackage) => {
+    const chart = readChart(getPartText(pkg, PART) ?? '')
+    return chart?.categories ?? []
+  }
+
+  it('takes a new name into the cache', async () => {
+    const pkg = await load()
+    expect(writeChartCategories(pkg, PART, { categories: ['Jan', 'Feb', 'Mar', 'Apr'] })).toBe(true)
+
+    expect(namesOf(pkg)).toEqual(['Jan', 'Feb', 'Mar', 'Apr'])
+  })
+
+  it('changes every series, which all carry the same list', async () => {
+    // A chart where two series disagreed about what Q2 is called is one
+    // PowerPoint redraws from whichever it read last.
+    const pkg = await load()
+    writeChartCategories(pkg, PART, { categories: ['Jan', 'Feb', 'Mar', 'Apr'] })
+
+    expect(getPartText(pkg, PART)?.match(/<c:v>Q2<\/c:v>/gu)).toBeNull()
+    expect(getPartText(pkg, PART)?.match(/<c:v>Feb<\/c:v>/gu)).toHaveLength(2)
+  })
+
+  it('survives a save and a reopen', async () => {
+    const pkg = await load()
+    writeChartCategories(pkg, PART, { categories: ['Jan', 'Feb', 'Mar', 'Apr'] })
+
+    expect(namesOf(await readPptxPackage(await saveDeck(pkg)))[0]).toBe('Jan')
+  })
+
+  it('changes only the ones it was given a name for', async () => {
+    const pkg = await load()
+    writeChartCategories(pkg, PART, { categories: ['Jan'] })
+
+    expect(namesOf(pkg)).toEqual(['Jan', 'Q2', 'Q3', 'Q4'])
+  })
+
+  it('reaches the workbook too, as words rather than a number', async () => {
+    const pkg = await load()
+    const patched = await patchedWorkbook(pkg, PART, { categories: ['Jan', 'Feb', 'Mar', 'Apr'] })
+    if (patched === null) throw new Error('nothing was patched')
+
+    pkg.parts.set(patched.path, { path: patched.path, bytes: patched.bytes, date: new Date() })
+
+    // An inline string, because the other way is an index into the workbook's
+    // shared table and adding to that means keeping its counts right.
+    const sheet = await sheetOf(pkg)
+    expect(sheet).toContain('t="inlineStr"')
+    expect(sheet).toContain('<t>Jan</t>')
+  })
+
+  it('says nothing changed when the names are the ones already there', async () => {
+    const pkg = await load()
+    expect(writeChartCategories(pkg, PART, { categories: ['Q1', 'Q2', 'Q3', 'Q4'] })).toBe(false)
   })
 })

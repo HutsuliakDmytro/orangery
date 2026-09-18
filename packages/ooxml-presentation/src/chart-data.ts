@@ -35,7 +35,7 @@ import { relsPartFor } from './insert-picture'
  *
  * What is not done here is changing how many points there are. That moves the
  * range in `c:f`, which moves the cells, which is a different operation from
- * putting a new number in a cell that already exists.
+ * putting a new value in a cell that already exists.
  */
 
 export interface ChartValues {
@@ -155,8 +155,18 @@ function sheetPart(book: OoxmlPackage, name: string): string | null {
   return target === undefined ? null : resolveTarget(target, 'xl')
 }
 
-/** Writes a number into a cell that is already there. */
-function setCell(sheet: XmlNode, reference: string, value: number): boolean {
+/**
+ * Writes a value into a cell that is already there.
+ *
+ * A number becomes a plain value; words become an inline string. The other way
+ * to write words is an index into the workbook's shared table, and adding to
+ * that table means keeping its counts right for a gain nobody can see — an
+ * inline string is what the format offers for exactly this.
+ *
+ * The type attribute has to change with the value, or a workbook that held a
+ * shared string reads a number as an index into the table.
+ */
+function setCell(sheet: XmlNode, reference: string, value: number | string): boolean {
   const data = findChild(sheet, 'sheetData')
   if (data === undefined) return false
 
@@ -164,12 +174,17 @@ function setCell(sheet: XmlNode, reference: string, value: number): boolean {
     for (const cell of children(row)) {
       if (attribute(cell, 'r') !== reference) continue
 
-      // A cell that held a string holds a number now, and the type attribute
-      // has to stop saying otherwise or the workbook reads it as an index.
       const nodes = children(cell)
       nodes.length = 0
-      nodes.push(element('v', {}, [{ '#text': String(value) }]))
-      setAttribute(cell, 't', 'n')
+
+      if (typeof value === 'number') {
+        nodes.push(element('v', {}, [{ '#text': String(value) }]))
+        setAttribute(cell, 't', 'n')
+      } else {
+        nodes.push(element('is', {}, [element('t', {}, [{ '#text': value }])]))
+        setAttribute(cell, 't', 'inlineStr')
+      }
+
       return true
     }
   }
@@ -188,16 +203,25 @@ function setCell(sheet: XmlNode, reference: string, value: number): boolean {
 export async function patchedWorkbook(
   pkg: OoxmlPackage,
   part: string,
-  change: ChartValues,
+  change: ChartValues | ChartCategories,
 ): Promise<{ path: string; bytes: Uint8Array } | null> {
   const found = chartSpace(pkg, part)
-  const series = found === null ? undefined : seriesNodes(found.space)[change.series]
-  const holder = series === undefined ? undefined : valuesOf(series)
+  const series =
+    found === null ? undefined : seriesNodes(found.space)['series' in change ? change.series : 0]
+  const holder =
+    series === undefined
+      ? undefined
+      : 'series' in change
+        ? valuesOf(series)
+        : findChild(series, 'c:cat')
   const formula = holder === undefined ? undefined : findDescendant(holder, 'c:f')
   if (formula === undefined) return null
 
   const range = cellsOf(textOf(formula))
   if (range === null) return null
+
+  const wanted: readonly (number | string)[] =
+    'series' in change ? change.values : change.categories
 
   const relationships = parseRelationships(getPartText(pkg, relsPartFor(part)) ?? '')
   const embedded = [...relationships.values()].find((one) => one.type.endsWith('/package'))
@@ -217,11 +241,58 @@ export async function patchedWorkbook(
 
   let changed = false
   for (const [index, reference] of range.cells.entries()) {
-    const value = change.values[index]
+    const value = wanted[index]
     if (value !== undefined && setCell(sheet, reference, value)) changed = true
   }
   if (!changed) return null
 
   setPartText(book, sheetPath, withDeclaration(buildXml(roots)))
   return { path, bytes: await writePackage(book) }
+}
+
+export interface ChartCategories {
+  /** The names along the bottom, which every series shares. */
+  categories: readonly string[]
+}
+
+/**
+ * Renames the categories in the cache every series carries.
+ *
+ * Every one of them, because a chart writes the same list into each series and
+ * a chart where two series disagreed about what Q2 is called would be one
+ * PowerPoint redraws from whichever it read last.
+ */
+export function writeChartCategories(
+  pkg: OoxmlPackage,
+  part: string,
+  change: ChartCategories,
+): boolean {
+  const found = chartSpace(pkg, part)
+  if (found === null) return false
+
+  let changed = false
+
+  for (const series of seriesNodes(found.space)) {
+    const holder = findChild(series, 'c:cat')
+    const cache = holder === undefined ? undefined : findDescendant(holder, 'c:strCache')
+    if (cache === undefined) continue
+
+    for (const point of children(cache)) {
+      if (tagName(point) !== 'c:pt') continue
+
+      const index = Number(attribute(point, 'idx'))
+      const wanted = change.categories[index]
+      const value = findChild(point, 'c:v')
+      if (!Number.isFinite(index) || wanted === undefined || value === undefined) continue
+      if (textOf(value) === wanted) continue
+
+      const nodes = children(value)
+      nodes.length = 0
+      nodes.push({ '#text': wanted })
+      changed = true
+    }
+  }
+
+  if (changed) setPartText(pkg, part, withDeclaration(buildXml(found.roots)))
+  return changed
 }

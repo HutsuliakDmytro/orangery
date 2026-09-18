@@ -1,6 +1,6 @@
 import { allSeries, readChart } from '@orangery/ooxml-drawingml'
 import { getPartText } from '@orangery/ooxml-core'
-import { chartPartOf, editChartValues } from '../document/chart-editing'
+import { chartPartOf, editChartCategories, editChartValues } from '../document/chart-editing'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 
 /**
@@ -10,10 +10,9 @@ import { currentSlide, useDeckStore } from '../store/deck-store'
  * change the data. PowerPoint opens Excel for this; here the numbers are in
  * the panel, because a spreadsheet is a large answer to "make that bar taller".
  *
- * The numbers only. Categories are text in a shared table inside the workbook
- * and adding a point moves every range in the chart — both are their own
- * piece of work, and a table that could change a label but lost the chart's
- * ranges doing it would be worse than one that changes numbers.
+ * The values and the names. Adding a point is not here: it moves every range
+ * the chart names in `c:f`, which is a different operation from putting a new
+ * value in a cell that already exists.
  */
 export function ChartDataPanel() {
   const open = useDeckStore((state) => state.open)
@@ -53,7 +52,25 @@ export function ChartDataPanel() {
             : (series[0]?.values ?? []).map((_, index) => `Point ${String(index + 1)}`)
           ).map((category, row) => (
             <tr key={row}>
-              <td className="truncate pr-1 text-muted">{category}</td>
+              <td className="pr-1">
+                {chart.categories.length === 0 ? (
+                  // A scatter numbers its own bottom; there is no name to edit.
+                  <span className="text-muted">{category}</span>
+                ) : (
+                  <input
+                    type="text"
+                    aria-label={`Category ${String(row + 1)}`}
+                    defaultValue={category}
+                    onBlur={(event) => {
+                      const names = chart.categories.map((one, at) =>
+                        at === row ? event.target.value : one,
+                      )
+                      void editChartCategories(part, { categories: names })
+                    }}
+                    className="w-full rounded border border-border bg-transparent px-1 py-0.5 text-text outline-none focus:border-accent"
+                  />
+                )}
+              </td>
               {series.map((one, index) => (
                 <td key={index} className="pr-1">
                   <input

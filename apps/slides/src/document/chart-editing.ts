@@ -1,5 +1,10 @@
-import { patchedWorkbook, relationshipTarget, writeChartCache } from '@orangery/ooxml-presentation'
-import type { ChartValues, Shape } from '@orangery/ooxml-presentation'
+import {
+  patchedWorkbook,
+  relationshipTarget,
+  writeChartCache,
+  writeChartCategories,
+} from '@orangery/ooxml-presentation'
+import type { ChartCategories, ChartValues, Shape } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -24,14 +29,25 @@ export function chartPartOf(shape: Shape, slidePath: string): string | null {
   return relationshipTarget(open.package, slidePath, id)
 }
 
-export async function editChartValues(part: string, change: ChartValues): Promise<void> {
+/**
+ * Changes a chart, in the cache and in the workbook, as one edit.
+ *
+ * The same shape of work whether the change is a number or a name: what
+ * differs is which cache is patched, and both halves have to move together or
+ * PowerPoint rebuilds one from the other.
+ */
+async function edit(part: string, change: ChartValues | ChartCategories): Promise<void> {
   const { open } = useDeckStore.getState()
   if (open === null) return
 
   const workbook = await patchedWorkbook(open.package, part, change)
 
   useDeckStore.getState().editPackage((deck) => {
-    const cached = writeChartCache(deck.package, part, change)
+    const cached =
+      'series' in change
+        ? writeChartCache(deck.package, part, change)
+        : writeChartCategories(deck.package, part, change)
+
     if (workbook !== null) {
       deck.package.parts.set(workbook.path, {
         path: workbook.path,
@@ -43,3 +59,7 @@ export async function editChartValues(part: string, change: ChartValues): Promis
     return cached || workbook !== null
   })
 }
+
+export const editChartValues = (part: string, change: ChartValues) => edit(part, change)
+
+export const editChartCategories = (part: string, change: ChartCategories) => edit(part, change)

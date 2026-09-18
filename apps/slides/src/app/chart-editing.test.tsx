@@ -145,3 +145,63 @@ describe('changing a number', () => {
     expect(valuesOf()[0]).toEqual([10.5, 14.2, 9.8, 18.1])
   })
 })
+
+describe('changing a name', () => {
+  const namesOf = () => {
+    const { open } = useDeckStore.getState()
+    const chart = readChart(
+      getPartText(open?.package ?? { parts: new Map() }, 'ppt/charts/chart1.xml') ?? '',
+    )
+    return chart?.categories ?? []
+  }
+
+  it('reaches the chart the deck draws from', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+
+    const box = screen.getByRole('textbox', { name: 'Category 2' })
+    await user.clear(box)
+    await user.type(box, 'Spring')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(namesOf()).toEqual(['Q1', 'Spring', 'Q3', 'Q4'])
+    })
+  })
+
+  it('renames the box the values are listed under too', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+
+    const box = screen.getByRole('textbox', { name: 'Category 1' })
+    await user.clear(box)
+    await user.type(box, 'Spring')
+    await user.tab()
+
+    // The table's own row label is the category, so it follows.
+    await waitFor(() => {
+      expect(screen.getByRole('spinbutton', { name: 'Revenue, Spring' })).toBeInTheDocument()
+    })
+  })
+
+  it('is one step to undo, cache and workbook together', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+
+    const box = screen.getByRole('textbox', { name: 'Category 2' })
+    await user.clear(box)
+    await user.type(box, 'Spring')
+    await user.tab()
+    await waitFor(() => {
+      expect(namesOf()[1]).toBe('Spring')
+    })
+
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+    expect(namesOf()).toEqual(['Q1', 'Q2', 'Q3', 'Q4'])
+  })
+})

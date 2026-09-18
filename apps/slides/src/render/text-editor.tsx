@@ -2,10 +2,13 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TextStyle from '@tiptap/extension-text-style'
 import FontFamily from '@tiptap/extension-font-family'
+import Superscript from '@tiptap/extension-superscript'
+import Subscript from '@tiptap/extension-subscript'
 import Underline from '@tiptap/extension-underline'
 import { useEffect } from 'react'
 import {
   FontSize,
+  RunStyle,
   OoxmlParagraph,
   PastePlainText,
   PreservedRunProperties,
@@ -56,6 +59,13 @@ export function TextEditor({
       // this the attribute the bridge reads out has nowhere to live and a font
       // chosen in the panel would be dropped on the way in.
       FontFamily,
+      // Colour, highlight, capitals and letter spacing: the rest of what a run
+      // says about its characters, on the same mark as the size beside them.
+      RunStyle,
+      // `baseline` on a run is a raise or a drop, and the sign is the whole of
+      // what these two differ by.
+      Superscript,
+      Subscript,
       OoxmlParagraph,
       PreservedRunProperties,
       /**

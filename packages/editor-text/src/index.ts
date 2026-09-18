@@ -36,6 +36,9 @@ export {
 } from './paragraph-spacing'
 export type { ParagraphSpacingOptions } from './paragraph-spacing'
 
+export { clampLetterSpacing, MAX_LETTER_SPACING, MIN_LETTER_SPACING, RunStyle } from './run-style'
+export type { Capitals, RunStyleOptions } from './run-style'
+
 export { TabIndent } from './tab-indent'
 export { PastePlainText, pastePlainTextKey } from './paste-plain-text'
 

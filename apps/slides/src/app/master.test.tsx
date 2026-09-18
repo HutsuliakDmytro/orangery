@@ -244,6 +244,10 @@ describe('the font picker', () => {
         .getState()
         .setEditing(useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.id ?? null)
     })
+
+    // The editor puts the cursor at the end of the text once it has mounted,
+    // so anything selected before that lands is about to be collapsed.
+    await screen.findByLabelText('Font')
   }
 
   it('offers the two theme fonts before the families', async () => {
@@ -293,5 +297,96 @@ describe('the font picker', () => {
       'ppt/slides/slide1.xml',
     )
     expect(text ?? '').toContain('+mj-lt')
+  })
+})
+
+describe('the rest of what a run says', () => {
+  const enterText = async () => {
+    await openDeck('shapes')
+    render(<App />)
+    act(() => {
+      useDeckStore
+        .getState()
+        .setEditing(useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.id ?? null)
+    })
+
+    // Selecting before the editor has put its own cursor down would be undone
+    // by it: everything here is about a stretch of text, not a caret.
+    await screen.findByLabelText('Font')
+    act(() => {
+      useEditorStore.getState().editor?.commands.selectAll()
+    })
+  }
+
+  const partText = () =>
+    getPartText(
+      useDeckStore.getState().open?.package ?? { parts: new Map() },
+      'ppt/slides/slide1.xml',
+    ) ?? ''
+
+  const leave = () => {
+    act(() => {
+      runCommand('edit.leave-text', {})
+    })
+  }
+
+  it('strikes text through', async () => {
+    await enterText()
+    act(() => {
+      runCommand('format.strike', {})
+    })
+    leave()
+
+    expect(partText()).toContain('strike="sngStrike"')
+  })
+
+  it('raises and drops the baseline, one replacing the other', async () => {
+    await enterText()
+    act(() => {
+      runCommand('format.superscript', {})
+      runCommand('format.subscript', {})
+    })
+    leave()
+
+    const text = partText()
+    expect(text).toContain('baseline="-25000"')
+    expect(text).not.toContain('baseline="30000"')
+  })
+
+  it('colours the selected text', async () => {
+    await enterText()
+    fireEvent.change(await screen.findByLabelText('Text colour'), {
+      target: { value: '#ff7a00' },
+    })
+    leave()
+
+    expect(partText()).toContain('<a:srgbClr val="FF7A00"/>')
+  })
+
+  it('highlights and unhighlights', async () => {
+    await enterText()
+    fireEvent.change(await screen.findByLabelText('Highlight colour'), {
+      target: { value: '#ff00ff' },
+    })
+    expect(useEditorStore.getState().editor?.getAttributes('textStyle')['highlight']).toBe(
+      '#FF00FF',
+    )
+
+    await userEvent.click(screen.getByLabelText('No highlight'))
+    leave()
+
+    expect(partText()).not.toContain('a:highlight')
+  })
+
+  it('sets capitals and letter spacing', async () => {
+    await enterText()
+    fireEvent.change(screen.getByLabelText('Capitals'), { target: { value: 'small' } })
+    fireEvent.change(screen.getByLabelText('Letter spacing'), { target: { value: '1.5' } })
+    expect(useEditorStore.getState().editor?.getAttributes('textStyle')['caps']).toBe('small')
+    leave()
+
+    const text = partText()
+    expect(text).toContain('cap="small"')
+    expect(text).toContain('spc="150"')
   })
 })

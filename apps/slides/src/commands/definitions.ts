@@ -355,6 +355,9 @@ export const textCommands: readonly Command[] = [
       ['bold', 'Bold', 'Mod+b'],
       ['italic', 'Italic', 'Mod+i'],
       ['underline', 'Underline', 'Mod+u'],
+      ['strike', 'Strikethrough', 'Mod+Shift+x'],
+      ['superscript', 'Superscript', 'Mod+Shift+.'],
+      ['subscript', 'Subscript', 'Mod+Shift+,'],
     ] as const
   ).map(([mark, label, shortcut]) => ({
     id: `format.${mark}`,
@@ -371,6 +374,11 @@ export const textCommands: readonly Command[] = [
       if (mark === 'bold') editor?.chain().focus().toggleBold().run()
       if (mark === 'italic') editor?.chain().focus().toggleItalic().run()
       if (mark === 'underline') editor?.chain().focus().toggleUnderline().run()
+      if (mark === 'strike') editor?.chain().focus().toggleStrike().run()
+      // A raise and a drop are the same attribute with opposite signs, so one
+      // replaces the other rather than stacking with it.
+      if (mark === 'superscript') editor?.chain().focus().unsetSubscript().toggleSuperscript().run()
+      if (mark === 'subscript') editor?.chain().focus().unsetSuperscript().toggleSubscript().run()
     },
   })),
   ...(

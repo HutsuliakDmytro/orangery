@@ -67,6 +67,27 @@ const RUN_PROPERTIES = [
   'a:extLst',
 ]
 
+/**
+ * A colour the editor can carry, or null for one it cannot.
+ *
+ * Only a literal `a:srgbClr` comes across. A theme colour is `accent1`, and a
+ * mark shaped like CSS has nowhere to put that — so it stays in the preserved
+ * properties and is written back untouched. Flattening it to the hex it happens
+ * to resolve to today would quietly detach the run from its theme.
+ */
+function literalColorOf(properties: XmlNode, tag: string): string | null {
+  const holder = children(properties).find((child) => tagName(child) === tag)
+  if (holder === undefined) return null
+
+  const value = children(holder).find((child) => tagName(child) === 'a:srgbClr')
+  const hex = value === undefined ? undefined : attribute(value, 'val')
+
+  // A colour carrying transforms — an alpha, a shade — is not a hex either:
+  // the editor would drop them, and dropping them is a change nobody asked for.
+  if (hex === undefined || children(value ?? properties).length > 0) return null
+  return `#${hex.toUpperCase()}`
+}
+
 /** The marks a run's properties amount to. */
 function marksOf(properties: XmlNode | undefined): PmMark[] {
   if (properties === undefined) return []
@@ -83,6 +104,15 @@ function marksOf(properties: XmlNode | undefined): PmMark[] {
   const underline = attribute(properties, 'u')
   if (underline !== undefined && underline !== 'none') marks.push({ type: 'underline' })
 
+  const strike = attribute(properties, 'strike')
+  if (strike !== undefined && strike !== 'noStrike') marks.push({ type: 'strike' })
+
+  // `baseline` is a raise or a drop as thousandths of a percent; the sign is
+  // the whole of what a superscript and a subscript differ by.
+  const baseline = Number(attribute(properties, 'baseline'))
+  if (Number.isFinite(baseline) && baseline > 0) marks.push({ type: 'superscript' })
+  if (Number.isFinite(baseline) && baseline < 0) marks.push({ type: 'subscript' })
+
   /**
    * Size and typeface go on one mark rather than two.
    *
@@ -97,6 +127,21 @@ function marksOf(properties: XmlNode | undefined): PmMark[] {
   const style: Record<string, unknown> = {}
   if (Number.isFinite(size)) style['fontSize'] = size / 100
   if (typeface !== undefined) style['fontFamily'] = typeface
+
+  const caps = attribute(properties, 'cap')
+  if (caps === 'all' || caps === 'small') style['caps'] = caps
+
+  // `spc` is hundredths of a point, and negative is legal: letters can be drawn
+  // closer together than the font asks for.
+  const spacing = Number(attribute(properties, 'spc'))
+  if (Number.isFinite(spacing)) style['letterSpacing'] = spacing / 100
+
+  const color = literalColorOf(properties, 'a:solidFill')
+  if (color !== null) style['color'] = color
+
+  const highlight = literalColorOf(properties, 'a:highlight')
+  if (highlight !== null) style['highlight'] = highlight
+
   if (Object.keys(style).length > 0) marks.push({ type: 'textStyle', attrs: style })
 
   /**
@@ -293,6 +338,28 @@ function setBullet(properties: XmlNode, kind: unknown): void {
   }
 }
 
+/**
+ * Writes a literal colour, or clears one the editor could carry and no longer
+ * does.
+ *
+ * A theme colour never reached the mark, so it is never cleared by one: null
+ * means "this run has no colour" only where the colour was a hex to begin with.
+ * That asymmetry is the price of keeping `accent1` symbolic, and it is the
+ * right way round — a run painted from the theme keeps following it.
+ */
+function setLiteralColor(properties: XmlNode, tag: string, value: unknown): void {
+  if (typeof value === 'string') {
+    const written = element(tag, {}, [
+      element('a:srgbClr', { val: value.replace('#', '').toUpperCase() }),
+    ])
+    removeChild(properties, tag)
+    upsertChild(properties, written, RUN_PROPERTIES)
+    return
+  }
+
+  if (value === null && literalColorOf(properties, tag) !== null) removeChild(properties, tag)
+}
+
 /** Patches a run's properties with what the marks say, keeping the rest. */
 function propertiesFor(marks: readonly PmMark[]): XmlNode | null {
   const preserved = marks.find((mark) => mark.type === 'preservedRunProperties')
@@ -311,6 +378,14 @@ function propertiesFor(marks: readonly PmMark[]): XmlNode | null {
   if (has('underline')) setAttribute(properties, 'u', 'sng')
   else removeAttribute(properties, 'u')
 
+  if (has('strike')) setAttribute(properties, 'strike', 'sngStrike')
+  else removeAttribute(properties, 'strike')
+
+  // The percentages PowerPoint itself writes for the two.
+  if (has('superscript')) setAttribute(properties, 'baseline', '30000')
+  else if (has('subscript')) setAttribute(properties, 'baseline', '-25000')
+  else removeAttribute(properties, 'baseline')
+
   const style = marks.find((mark) => mark.type === 'textStyle')?.attrs
   const size = style?.['fontSize']
   if (typeof size === 'number') setAttribute(properties, 'sz', String(Math.round(size * 100)))
@@ -319,6 +394,27 @@ function propertiesFor(marks: readonly PmMark[]): XmlNode | null {
   if (typeof family === 'string') {
     upsertChild(properties, element('a:latin', { typeface: family }), RUN_PROPERTIES)
   }
+
+  /**
+   * The attributes below are cleared when the mark says null and left alone
+   * when it says nothing at all.
+   *
+   * Null is the editor stating that a run has none of this — which is what
+   * clearing one looks like, and restoring it from the preserved properties
+   * would be the edit that silently did not happen. Undefined is an editor that
+   * does not model the attribute, and there the file's own answer stands.
+   */
+  const caps = style?.['caps']
+  if (caps === 'all' || caps === 'small') setAttribute(properties, 'cap', caps)
+  else if (caps === null) removeAttribute(properties, 'cap')
+
+  const spacing = style?.['letterSpacing']
+  if (typeof spacing === 'number')
+    setAttribute(properties, 'spc', String(Math.round(spacing * 100)))
+  else if (spacing === null) removeAttribute(properties, 'spc')
+
+  setLiteralColor(properties, 'a:solidFill', style?.['color'])
+  setLiteralColor(properties, 'a:highlight', style?.['highlight'])
 
   return properties
 }

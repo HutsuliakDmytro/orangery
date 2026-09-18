@@ -54,6 +54,7 @@ import {
   closeDeck,
   exportOdp,
   exportTheme,
+  exportVideoFile,
   newDeck,
   openDeck,
   openInNewWindow,
@@ -1133,6 +1134,19 @@ export const exportCommands: readonly Command[] = [
     isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
     run: () => {
       void exportTheme()
+    },
+  },
+  {
+    id: 'export.video',
+    label: 'Export as Video\u2026',
+    group: 'file',
+    keywords: ['film', 'movie', 'mp4', 'record'],
+    isEnabled: () =>
+      isTauri() &&
+      (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0 &&
+      useViewStore.getState().recordingVideo === null,
+    run: () => {
+      void exportVideoFile()
     },
   },
   {

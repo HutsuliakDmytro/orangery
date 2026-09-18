@@ -9,6 +9,8 @@ import {
 import { isTauri } from '@orangery/platform'
 import { writePackage } from '@orangery/ooxml-core'
 import { currentSlide, useDeckStore } from '../store/deck-store'
+import { useViewStore } from '../store/view-store'
+import { exportVideo } from './export-video'
 import { noteRecent } from '../store/recent-store'
 import { compressIfAsked } from './pictures-offer'
 import { buildTemplate, templateById } from './templates'
@@ -160,6 +162,46 @@ export async function exportTheme(): Promise<void> {
   if (path === null) return
 
   await writeFileBytes(path, await writePackage(built))
+}
+
+/**
+ * The deck as a film, which takes as long to make as it takes to watch.
+ *
+ * The progress is reported through the view store so the window can say where
+ * it is: a command that appears to do nothing for twenty minutes is a command
+ * people press again.
+ */
+export async function exportVideoFile(): Promise<void> {
+  const { open } = useDeckStore.getState()
+  if (open === null) return
+
+  const view = useViewStore.getState()
+  view.setRecordingVideo({ at: 0, of: open.deck.slides.length })
+
+  try {
+    const film = await exportVideo({
+      deck: open.deck,
+      themes: open.themes,
+      package: open.package,
+      onProgress: (at, of) => {
+        useViewStore.getState().setRecordingVideo({ at, of })
+      },
+      cancelled: () => useViewStore.getState().recordingVideo === null,
+    })
+
+    if (film === null) return
+
+    const suggested = nameOf(open.path ?? 'Presentation.pptx').replace(
+      /\.[^.]+$/u,
+      `.${film.extension}`,
+    )
+    const path = await pickExportPath(suggested, film.extension)
+    if (path === null) return
+
+    await writeFileBytes(path, film.bytes)
+  } finally {
+    useViewStore.getState().setRecordingVideo(null)
+  }
 }
 
 /**

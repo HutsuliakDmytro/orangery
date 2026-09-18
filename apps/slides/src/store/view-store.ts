@@ -82,6 +82,14 @@ interface ViewState {
   /** Whether the paste special dialog is up. */
   pasting: boolean
   /**
+   * How far a film of the deck has got, or null when none is being made.
+   *
+   * Setting it to null is also how the recording is stopped: it asks after each
+   * slide, so there is one flag rather than a flag and a signal that could
+   * disagree.
+   */
+  recordingVideo: { at: number; of: number } | null
+  /**
    * Whether a drag lands on the grid.
    *
    * Apart from whether the grid is drawn, as in PowerPoint: people who want
@@ -117,6 +125,7 @@ interface ViewState {
   setGrid: (showing: boolean) => void
   setEditingGrid: (editing: boolean) => void
   setPasting: (pasting: boolean) => void
+  setRecordingVideo: (progress: { at: number; of: number } | null) => void
   setSnapToGrid: (snapping: boolean) => void
   setPrintLayout: (layout: PrintLayout) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
@@ -151,6 +160,7 @@ export const useViewStore = create<ViewState>((set) => ({
   grid: false,
   editingGrid: false,
   pasting: false,
+  recordingVideo: null,
   snapToGrid: false,
   printLayout: 'slides',
   leftPane: 'filmstrip',
@@ -188,6 +198,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setPasting: (pasting) => {
     set({ pasting })
+  },
+
+  setRecordingVideo: (recordingVideo) => {
+    set({ recordingVideo })
   },
 
   setSnapToGrid: (snapping) => {

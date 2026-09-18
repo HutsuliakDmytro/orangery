@@ -23,6 +23,7 @@ import { GridDialog } from '../components/grid-dialog'
 import { PasteDialog } from '../components/paste-dialog'
 import { RehearsalSummary } from '../components/rehearsal-summary'
 import { InkPrompt } from '../components/ink-prompt'
+import { VideoProgress } from '../components/video-progress'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
@@ -138,6 +139,8 @@ function Shell() {
       <PrintView />
 
       <Show />
+
+      <VideoProgress />
 
       <WarningsBanner />
 

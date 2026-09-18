@@ -44,7 +44,7 @@ Rule: **nothing OS-specific outside `packages/platform/`, nothing Docs-specific 
 | PPTX engine | `packages/ooxml-presentation` + `ooxml-drawingml` — own parser/serializer, JSZip + fast-xml-parser |
 | Charts | `c:chart` parts: **read-only render** (own SVG renderer for bar/line/pie/scatter/area) in MVP, passthrough on save; editing post-MVP |
 | Media | video/audio via `<video>`/`<audio>` from media parts; playback in slideshow |
-| Other formats | ODP import/export (own layer, same approach), PDF export, PNG/JPEG per slide, Keynote `.key` — no |
+| Other formats | ODP import/export (own layer, same approach), PDF export, PNG/JPEG per slide, `.thmx` theme export, video via canvas capture (real time, engine's container, no audio yet), Keynote `.key` — no |
 | Tests | Vitest, Playwright, cargo test; round-trip corpus + LibreOffice render-diff in CI |
 
 ## Design system

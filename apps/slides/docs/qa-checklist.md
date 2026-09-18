@@ -231,6 +231,11 @@ These are the ones that matter most. Take them seriously.
       timings came with it.
 - [ ] Deny the microphone, or run on a machine with none. The show still runs;
       only the narration is missing.
+- [ ] Export as Video on a short deck. The banner counts the slides through and
+      **takes as long as the deck plays for** — that is the design, not a hang.
+- [ ] Play the file. Every slide is there, in order, for its own time. There is
+      no sound yet; that is known.
+- [ ] Press Stop half way. The file saves and holds the slides recorded so far.
 
 ## Getting a deck in
 

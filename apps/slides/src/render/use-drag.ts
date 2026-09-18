@@ -29,6 +29,13 @@ export interface DragState {
   shift: boolean
   /** Held while dragging: from the centre. */
   alt: boolean
+  /**
+   * EMU per pixel as the slide is drawn right now.
+   *
+   * Carried on the drag because "close enough to snap" is a distance on screen:
+   * a slide zoomed to a quarter would otherwise snap from four times as far.
+   */
+  scale: number
 }
 
 interface Origin {
@@ -67,6 +74,7 @@ export function useDrag({
         handle: from.handle,
         shift: event.shiftKey,
         alt: event.altKey,
+        scale: from.scale,
       }
     }
 
@@ -113,7 +121,14 @@ export function useDrag({
         scale: slideWidth / box.width,
         handle,
       }
-      setState({ dx: 0, dy: 0, handle, shift: event.shiftKey, alt: event.altKey })
+      setState({
+        dx: 0,
+        dy: 0,
+        handle,
+        shift: event.shiftKey,
+        alt: event.altKey,
+        scale: slideWidth / box.width,
+      })
     },
     [slideWidth],
   )

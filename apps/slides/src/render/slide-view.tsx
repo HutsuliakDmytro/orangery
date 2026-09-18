@@ -35,6 +35,8 @@ import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, useDrag } from './use-drag'
+import { boundsOf, correct, correctionBetween, NO_CORRECTION, snapRect } from './snap'
+import type { Correction, Guide } from './snap'
 import { TextEditor } from './text-editor'
 import type { DragState, Handle } from './use-drag'
 
@@ -49,6 +51,39 @@ import type { DragState, Handle } from './use-drag'
  * an approximation on screen — an unhandled preset drawn as its bounding box —
  * costs the file nothing.
  */
+
+/**
+ * The lines that say what the shape being dragged has come into line with.
+ *
+ * Drawn last so they sit over the slide, and in a colour of their own: they are
+ * not part of the deck and should never be mistaken for something on it.
+ */
+function Guides({ guides, slide }: { guides: readonly Guide[]; slide: { width: number } }) {
+  if (guides.length === 0) return null
+
+  // One pixel at any zoom would be too thin to see on a slide drawn small.
+  const thickness = slide.width / 1200
+
+  return (
+    <g data-testid="guides" pointerEvents="none">
+      {guides.map((guide) => (
+        <line
+          key={`${guide.axis}-${String(guide.at)}-${String(guide.from)}-${guide.kind}`}
+          x1={guide.axis === 'x' ? guide.at : guide.from}
+          x2={guide.axis === 'x' ? guide.at : guide.to}
+          y1={guide.axis === 'x' ? guide.from : guide.at}
+          y2={guide.axis === 'x' ? guide.to : guide.at}
+          stroke="#FF3B8B"
+          strokeWidth={thickness}
+          strokeDasharray={guide.kind === 'spacing' ? String(thickness * 4) : undefined}
+        />
+      ))}
+    </g>
+  )
+}
+
+/** How near a shape has to come before it is taken onto a line, in pixels. */
+const SNAP_PIXELS = 8
 
 /** A slide is drawn at its own size and scaled by CSS, so one unit is one EMU. */
 interface Drawing {
@@ -447,7 +482,7 @@ export function SlideView({
   /** Given the shape clicked and whether the click was extending a selection. */
   onSelect?: (id: number | null, extend: boolean) => void
   /** Called once when a drag ends, with how far it went in EMU. */
-  onDrag?: (drag: DragState) => void
+  onDrag?: (drag: DragState, correction: Correction) => void
   /** The shape whose text is open for editing. */
   editing?: number | null
   /** Asked to enter a shape's text, or to leave it with `null`. */
@@ -463,14 +498,55 @@ export function SlideView({
   const drawings = drawingsFor(deck, slide, theme, base)
 
   const { width, height } = deck.slideSize
-  const drag = useDrag({ slideWidth: width, onCommit: (state) => onDrag?.(state) })
+
+  /**
+   * What snapping would add to the drag as it stands, and the lines saying why.
+   *
+   * Computed from the rectangle around the whole selection rather than shape by
+   * shape: dragging three boxes moves one thing, and snapping each of them
+   * separately would pull them apart.
+   */
+  const snapFor = (state: DragState | null) => {
+    if (state === null || selection === undefined) return { correction: NO_CORRECTION, guides: [] }
+
+    const selected = drawings.filter((one) => selection.includes(one.shape.id))
+    const bounds = boundsOf(selected.map((one) => one.transform))
+    if (bounds === null) return { correction: NO_CORRECTION, guides: [] }
+
+    const applied = applyDrag(bounds, state)
+    const { rect, guides } = snapRect({
+      rect: applied,
+      others: drawings
+        .filter((one) => !selection.includes(one.shape.id))
+        .map((one) => one.transform),
+      slide: deck.slideSize,
+      // Eight pixels, which is close enough to feel deliberate and far enough
+      // to be reachable without aiming.
+      tolerance: SNAP_PIXELS * state.scale,
+      resizing: state.handle !== null,
+    })
+
+    return { correction: correctionBetween(applied, rect), guides }
+  }
+
+  const drag = useDrag({
+    slideWidth: width,
+    onCommit: (state) => {
+      onDrag?.(state, snapFor(state).correction)
+    },
+  })
+
+  const snapped = snapFor(drag.state)
 
   /** While dragging, the selection is drawn where it is being taken. */
   const shown = (drawing: Drawing): Transform => {
     if (drag.state === null || selection?.includes(drawing.shape.id) !== true) {
       return drawing.transform
     }
-    return { ...drawing.transform, ...applyDrag(drawing.transform, drag.state) }
+    return {
+      ...drawing.transform,
+      ...correct(applyDrag(drawing.transform, drag.state), snapped.correction),
+    }
   }
 
   const background = backgroundOf(deck, slide, theme)
@@ -512,6 +588,8 @@ export function SlideView({
           fill={backgroundPaint.paint}
           fillOpacity={backgroundPaint.opacity}
         />
+        <Guides guides={snapped.guides} slide={deck.slideSize} />
+
         {onSelect !== undefined && (
           // Catches a click that hit no shape, which is how a selection is
           // cleared. Behind everything, so a shape's own click wins.

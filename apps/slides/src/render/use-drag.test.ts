@@ -10,6 +10,7 @@ const drag = (values: Partial<DragState>): DragState => ({
   handle: null,
   shift: false,
   alt: false,
+  scale: 1,
   ...values,
 })
 

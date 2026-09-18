@@ -3,6 +3,7 @@ import { writeTextBody } from '@orangery/ooxml-drawingml'
 import type { Transform } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
 import { applyDrag } from '../render/use-drag'
+import { correct } from '../render/snap'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { WelcomeScreen } from './welcome-screen'
@@ -52,14 +53,18 @@ export function Canvas() {
             return shape?.text == null ? false : writeTextBody(shape.text.node, doc)
           })
         }}
-        onDrag={(drag) => {
+        onDrag={(drag, correction) => {
           const selected = useDeckStore.getState().selection
           edit((edited) =>
             edited.shapes
               .flatMap((shape) => {
                 const transform: Transform | null = shape.transform
                 if (!selected.includes(shape.id) || transform === null) return []
-                return [writeTransform(shape, { ...transform, ...applyDrag(transform, drag) })]
+
+                // The same correction the guides were drawn from: a shape that
+                // snapped on screen and not in the file is the worst of both.
+                const moved = correct(applyDrag(transform, drag), correction)
+                return [writeTransform(shape, { ...transform, ...moved })]
               })
               // Reduced rather than `some`, so every shape moves before the
               // answer is worked out.

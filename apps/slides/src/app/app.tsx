@@ -15,6 +15,7 @@ import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
 import { RecentDecks } from '../components/recent-decks'
+import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
@@ -106,6 +107,8 @@ function Shell() {
         onDiscard={recovery.discard}
         onDiscardAll={recovery.discardAll}
       />
+
+      <TemplatePicker />
 
       <PrintView />
 

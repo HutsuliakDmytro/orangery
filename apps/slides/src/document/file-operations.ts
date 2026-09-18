@@ -3,6 +3,7 @@ import { createDeck, saveDeck } from '@orangery/ooxml-presentation'
 import { isTauri } from '@orangery/platform'
 import { useDeckStore } from '../store/deck-store'
 import { noteRecent } from '../store/recent-store'
+import { buildTemplate, templateById } from './templates'
 import { nameOf, pickDeckPath, pickSavePath, readDeckFile, writeDeckFile } from './file'
 
 /**
@@ -68,6 +69,17 @@ export async function openDeck(path?: string): Promise<void> {
 
   document.title = `${nameOf(target)} — Orangery Slides`
   await noteRecent(target)
+}
+
+/**
+ * A new deck with a template's slides already on it.
+ *
+ * The same path as an empty one: built, zipped, opened. A template decides what
+ * is written on the deck and nothing about what the deck is.
+ */
+export async function newFromTemplate(id: string): Promise<void> {
+  await useDeckStore.getState().load(await buildTemplate(templateById(id)), null)
+  document.title = 'Untitled Presentation — Orangery Slides'
 }
 
 /**

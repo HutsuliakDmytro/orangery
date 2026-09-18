@@ -11,6 +11,7 @@ import { openRecent, useRecentDecks } from '../document/recent'
  */
 export function WelcomeScreen() {
   const create = useCommand('file.new')
+  const fromTemplate = useCommand('file.new-from-template')
   const open = useCommand('file.open')
   const recent = useRecentDecks()
 
@@ -26,7 +27,7 @@ export function WelcomeScreen() {
       </div>
 
       <div className="flex gap-2">
-        {[create, open].map((command) => (
+        {[create, fromTemplate, open].map((command) => (
           <button
             key={command.command?.id ?? command.label}
             type="button"

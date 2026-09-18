@@ -123,6 +123,18 @@ export const fileCommands: readonly Command[] = [
     },
   },
   {
+    id: 'file.new-from-template',
+    label: 'New from Template…',
+    group: 'file',
+    isEnabled: () => true,
+    run: () => {
+      // The question about unsaved work waits until a template is chosen: it
+      // would be a poor trade to ask it and then have the person change their
+      // mind about starting a deck at all.
+      useViewStore.getState().setChoosingTemplate(true)
+    },
+  },
+  {
     id: 'file.new-window',
     label: 'New Window',
     group: 'file',

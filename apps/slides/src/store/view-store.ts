@@ -16,6 +16,8 @@ interface ViewState {
   theme: Theme
   /** Whether the find and replace strip is showing. */
   finding: boolean
+  /** Whether the template chooser is up. */
+  choosingTemplate: boolean
   /**
    * Whether the speaker notes are open for editing.
    *
@@ -72,6 +74,7 @@ interface ViewState {
   sizes: { filmstrip: number; properties: number; notes: number }
   setTheme: (theme: Theme) => void
   setFinding: (finding: boolean) => void
+  setChoosingTemplate: (choosing: boolean) => void
   setEditingNotes: (editing: boolean) => void
   setZoom: (zoom: number | null) => void
   toggleSection: (id: string) => void
@@ -97,6 +100,7 @@ const LIMITS: Record<keyof Panels, { min: number; max: number }> = {
 export const useViewStore = create<ViewState>((set) => ({
   theme: 'dark',
   finding: false,
+  choosingTemplate: false,
   editingNotes: false,
   zoom: null,
   collapsedSections: [],
@@ -143,6 +147,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setTheme: (theme) => {
     set({ theme })
+  },
+
+  setChoosingTemplate: (choosing) => {
+    set({ choosingTemplate: choosing })
   },
 
   setFinding: (finding) => {

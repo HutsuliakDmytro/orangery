@@ -57,6 +57,8 @@ export type { GraphicContent, GraphicKind } from './graphic-frame'
 export { backgroundOf, readBackground } from './background'
 export type { Background } from './background'
 export { ensureTextBody, moveShape, writeTransform } from './write-shape'
+export { setShapeText } from './write-text'
+export type { TextLine } from './write-text'
 export { reorderShapes } from './z-order'
 export {
   alignmentBounds,

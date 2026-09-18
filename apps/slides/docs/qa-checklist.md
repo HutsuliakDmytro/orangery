@@ -145,6 +145,13 @@ These are the ones that matter most. Take them seriously.
       to that slide first, one match changes, and the count drops by one.
 - [ ] Press Replace repeatedly. It walks forward through the deck without
       skipping any.
+- [ ] Save Theme. **Open the `.thmx` in PowerPoint** — Design → Browse for
+      Themes. It appears in the gallery and applies; the colours, the fonts and
+      the layouts are the ones the deck had. This is the check the unit tests
+      cannot make: they prove the package holds together, not that Office
+      accepts it.
+- [ ] Do it on a deck whose master has a background picture. The picture comes
+      with the theme.
 
 ## Getting a deck in
 

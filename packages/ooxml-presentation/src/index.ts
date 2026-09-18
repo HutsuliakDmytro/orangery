@@ -40,6 +40,7 @@ export {
 } from './placeholders'
 export type { MasterPlaceholder } from './placeholders'
 export { colorContextFor, readColorMap, readThemes, themeFor } from './theme-context'
+export { buildThemeFile } from './theme-file'
 export {
   listStyleChain,
   masterStyleFor,

@@ -1,7 +1,14 @@
 import { invoke } from '@tauri-apps/api/core'
-import { createDeck, saveDeck } from '@orangery/ooxml-presentation'
+import {
+  buildThemeFile,
+  createDeck,
+  layoutOf,
+  masterOf,
+  saveDeck,
+} from '@orangery/ooxml-presentation'
 import { isTauri } from '@orangery/platform'
-import { useDeckStore } from '../store/deck-store'
+import { writePackage } from '@orangery/ooxml-core'
+import { currentSlide, useDeckStore } from '../store/deck-store'
 import { noteRecent } from '../store/recent-store'
 import { compressIfAsked } from './pictures-offer'
 import { buildTemplate, templateById } from './templates'
@@ -126,6 +133,33 @@ export async function exportOdp(): Promise<void> {
 
   const written = await writeOdp(open.package, open.deck)
   await writeFileBytes(path, written.bytes)
+}
+
+/**
+ * The deck's own look, written out as a theme file.
+ *
+ * The master the slide showing is built on, not the first one: a deck with two
+ * masters has two looks, and the one somebody is looking at is the one they
+ * mean by "this theme".
+ */
+export async function exportTheme(): Promise<void> {
+  const { open } = useDeckStore.getState()
+  const slide = currentSlide(useDeckStore.getState())
+  if (open === null) return
+
+  const layout = slide === null ? null : layoutOf(open.deck, slide)
+  const master =
+    (layout === null ? null : masterOf(open.deck, layout)) ?? [...open.deck.masters.values()][0]
+  if (master === undefined) return
+
+  const built = buildThemeFile(open.package, open.deck, master)
+  if (built === null) return
+
+  const suggested = nameOf(open.path ?? 'Theme.pptx').replace(/\.[^.]+$/u, '.thmx')
+  const path = await pickExportPath(suggested, 'thmx')
+  if (path === null) return
+
+  await writeFileBytes(path, await writePackage(built))
 }
 
 /**

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
+import { readPackage } from '@orangery/ooxml-core'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { useDeckStore } from '../store/deck-store'
 
@@ -168,5 +169,42 @@ describe('every slide', () => {
 
     expect(written).toEqual([])
     expect(useDeckStore.getState().error).not.toBeNull()
+  })
+})
+
+describe('the deck’s own theme', () => {
+  it('is not offered without a deck', () => {
+    expect(getCommand('export.thmx')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('writes a theme file under the name that was chosen', async () => {
+    chosenFile = '/out/Ours.thmx'
+    await openDeck('placeholders')
+    await exporting('export.thmx', 1)
+
+    expect(written).toHaveLength(1)
+    expect(written[0]?.path).toBe('/out/Ours.thmx')
+  })
+
+  it('writes a package something else can open', async () => {
+    chosenFile = '/out/Ours.thmx'
+    await openDeck('placeholders')
+    await exporting('export.thmx', 1)
+
+    const bytes = written[0]?.bytes
+    if (bytes === undefined) throw new Error('nothing was written')
+
+    // A zip, with the theme and the master that gives it its shape.
+    const theme = await readPackage(bytes)
+    expect([...theme.parts.keys()]).toContain('theme/theme1.xml')
+    expect([...theme.parts.keys()]).toContain('theme/slideMasters/slideMaster1.xml')
+  })
+
+  it('writes nothing when the dialog is cancelled', async () => {
+    chosenFile = null
+    await openDeck('placeholders')
+    await exporting('export.thmx', 1)
+
+    expect(written).toHaveLength(0)
   })
 })

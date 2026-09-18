@@ -1,5 +1,7 @@
 import { textOfBody, visibleCells } from '@orangery/ooxml-drawingml'
 import type { ColorContext, Table, TableCell } from '@orangery/ooxml-drawingml'
+import { partsFor } from '@orangery/ooxml-presentation'
+import type { TableStyle } from '@orangery/ooxml-presentation'
 import { fillPaint, linePaint } from './paint'
 
 /**
@@ -74,6 +76,7 @@ export function TableView({
   x,
   y,
   context,
+  style,
   selection,
   onPickCell,
 }: {
@@ -81,6 +84,8 @@ export function TableView({
   x: number
   y: number
   context: ColorContext
+  /** What the table's style says, when the deck says anything at all. */
+  style?: TableStyle
   /** The block of cells picked out, in grid coordinates. */
   selection?: { row: number; column: number; toRow: number; toColumn: number } | null
   /** Given the cell clicked and whether the click was extending a block. */
@@ -101,7 +106,33 @@ export function TableView({
   return (
     <g transform={`translate(${String(x)} ${String(y)})`}>
       {place(table).map((placed) => {
-        const fill = fillPaint(placed.cell.properties?.fill ?? null, context, `cell-${placed.key}`)
+        // A cell's own fill wins; the style only says what an unstated cell is.
+        const fromStyle =
+          style === undefined
+            ? null
+            : (partsFor(style, table.properties, {
+                row: placed.row,
+                column: placed.column,
+                rows: table.rows.length,
+              })
+                .map((part) => part.fill)
+                .filter((one) => one !== null)
+                .at(-1) ?? null)
+
+        const fill = fillPaint(
+          placed.cell.properties?.fill ?? fromStyle,
+          context,
+          `cell-${placed.key}`,
+        )
+
+        const bold =
+          style === undefined
+            ? false
+            : partsFor(style, table.properties, {
+                row: placed.row,
+                column: placed.column,
+                rows: table.rows.length,
+              }).some((part) => part.bold === true)
         const border = linePaint(placed.cell.properties?.borders.top ?? null, context, (emu) => emu)
 
         return (
@@ -134,6 +165,7 @@ export function TableView({
                         ? 'flex-end'
                         : 'flex-start',
                   fontSize: 18 * 12700,
+                  fontWeight: bold ? 700 : undefined,
                   overflow: 'hidden',
                 }}
               >

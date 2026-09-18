@@ -87,6 +87,8 @@ export type { NewShape } from './create-shape'
 export { insertPicture, relsPartFor, UnsupportedPictureError } from './insert-picture'
 export type { NewPicture } from './insert-picture'
 export { defaultTableStyle, insertTable } from './insert-table'
+export { builtInApproximation, partsFor, readTableStyles, styleFor } from './table-styles'
+export type { TablePart, TableStyle } from './table-styles'
 export {
   columnCount,
   insertColumn,

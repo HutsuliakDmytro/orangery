@@ -195,3 +195,18 @@ describe('merging', () => {
     expect(readTable(tableNode().node).rows[0]?.cells[0]?.gridSpan).toBe(1)
   })
 })
+
+describe('how a table is painted', () => {
+  it('fills the header row even though the style is not in the file', () => {
+    // PowerPoint keeps its built-in styles inside itself; the deck names one by
+    // GUID and contains nothing. Drawn bare, a header that should be solid
+    // accent is simply white.
+    render(<App />)
+
+    const canvas = within(screen.getByTestId('canvas'))
+    const header = canvas.getByRole('button', { name: 'Cell 1, 1' })
+    const filled = header.parentElement?.querySelector('rect[fill]:not([fill="transparent"])')
+
+    expect(filled).not.toBeNull()
+  })
+})

@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useMemo } from 'react'
 import {
   absoluteTransform,
   autoplayShapes,
@@ -17,6 +17,8 @@ import {
   shapeLook,
   relationshipTarget,
   withAncestors,
+  readTableStyles,
+  styleFor,
 } from '@orangery/ooxml-presentation'
 import type {
   Deck,
@@ -809,6 +811,10 @@ export function SlideView({
   const drawings = drawingsFor(deck, slide, theme, base)
   const groupBoxes = groupBoxesOf(slide)
 
+  // Read once per slide rather than per table: the part is the deck's, and a
+  // slide with six tables on it would otherwise parse it six times.
+  const tableStyles = useMemo(() => (pkg === undefined ? new Map() : readTableStyles(pkg)), [pkg])
+
   const { width, height } = deck.slideSize
 
   /** Every selected thing's box, groups included, for the frames and the snap. */
@@ -1025,6 +1031,7 @@ export function SlideView({
                 x={drawing.transform.x}
                 y={drawing.transform.y}
                 context={drawing.context}
+                style={styleFor(tableStyles, drawing.shape.graphic.table.properties.styleId)}
                 selection={cells?.table === drawing.shape.id ? cells : null}
                 onPickCell={
                   onPickCell === undefined

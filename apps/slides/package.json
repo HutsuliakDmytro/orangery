@@ -20,7 +20,9 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
     "lint": "eslint .",
     "test:unit": "vitest run",
-    "test:render": "vite-node scripts/render-diff.ts --"
+    "test:render": "vite-node scripts/render-diff.ts --",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@orangery/editor-text": "workspace:*",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@orangery/render-diff": "workspace:*",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/cli": "^2.9.0",

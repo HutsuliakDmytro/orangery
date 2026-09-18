@@ -30,7 +30,7 @@ jobs:
       - run: pnpm check
 
   e2e:
-    name: end-to-end (${{ matrix.os }})
+    name: end-to-end (${{ matrix.app }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -38,6 +38,7 @@ jobs:
         # The webview differs per platform (WKWebView, WebView2, WebKitGTK), and
         # so does the modifier key, so the suite runs on all three.
         os: [ubuntu-latest, macos-latest, windows-latest]
+        app: [docs, slides]
     steps:
       - uses: actions/checkout@v4
 
@@ -50,18 +51,18 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter docs exec playwright install chromium --with-deps
+      - run: pnpm --filter ${{ matrix.app }} exec playwright install chromium --with-deps
 
       # These run against the Vite dev server. `tauri-driver` supports Linux and
       # Windows only — macOS is a TODO in its own README — so the shell-level
       # suite is a separate job rather than the same one on every platform.
-      - run: pnpm --filter docs test:e2e
+      - run: pnpm --filter ${{ matrix.app }} test:e2e
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report-${{ matrix.os }}
-          path: apps/docs/playwright-report
+          name: playwright-report-${{ matrix.app }}-${{ matrix.os }}
+          path: apps/${{ matrix.app }}/playwright-report
           if-no-files-found: ignore
 
   render-diff:

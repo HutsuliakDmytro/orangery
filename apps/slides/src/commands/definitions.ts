@@ -9,6 +9,7 @@ import {
   readFileBytes,
 } from '../document/file'
 import {
+  addSection,
   addSlide,
   alignmentBounds,
   alignShapes,
@@ -19,12 +20,15 @@ import {
   insertPicture,
   insertTable,
   moveSlide,
+  readSections,
+  removeSection,
   removeSlides,
   distributeShapes,
   duplicateShape,
   groupShapes,
   moveShape,
   reorderShapes,
+  sectionOfSlide,
   ungroupShape,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
@@ -429,6 +433,15 @@ export const paragraphCommands: readonly Command[] = [
  * go through `editPackage`, which compares the whole package — the only way to
  * notice a part appearing.
  */
+/** The section the slide being shown falls in, or null when there are none. */
+function sectionHere() {
+  const { open, current } = useDeckStore.getState()
+  if (open === null || current < 0) return null
+
+  const sections = readSections(open.package)
+  return sections[sectionOfSlide(sections, current)] ?? null
+}
+
 export const slideEditCommands: readonly Command[] = [
   {
     id: 'slide.new',
@@ -512,6 +525,51 @@ export const slideEditCommands: readonly Command[] = [
       useDeckStore.getState().selectShapes([])
       const view = useViewStore.getState()
       if (!view.panels.properties) view.togglePanel('properties')
+    },
+  },
+  {
+    id: 'section.add',
+    label: 'Add Section',
+    group: 'insert',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { open, current, editPackage } = useDeckStore.getState()
+      if (open === null) return
+
+      editPackage((deck) => addSection(deck.package, 'Untitled Section', current))
+
+      // Straight into typing the name: a section called "Untitled Section" is
+      // one nobody meant, and naming it is the whole point of making it. It is
+      // found by where it begins rather than by being new — splitting a deck
+      // that had none makes two sections, and the one that was asked for is the
+      // one starting here.
+      const added = readSections(useDeckStore.getState().open?.package ?? open.package).find(
+        (section) => section.start === current,
+      )
+      if (added !== undefined) useViewStore.getState().setRenamingSection(added.id)
+    },
+  },
+  {
+    id: 'section.rename',
+    label: 'Rename Section',
+    group: 'edit',
+    isEnabled: () => sectionHere() !== null,
+    run: () => {
+      const section = sectionHere()
+      if (section !== null) useViewStore.getState().setRenamingSection(section.id)
+    },
+  },
+  {
+    id: 'section.remove',
+    label: 'Remove Section',
+    group: 'edit',
+    isEnabled: () => sectionHere() !== null,
+    run: () => {
+      const section = sectionHere()
+      if (section === null) return
+
+      // The slides stay; only the boundary goes.
+      useDeckStore.getState().editPackage((deck) => removeSection(deck.package, section.id))
     },
   },
   {

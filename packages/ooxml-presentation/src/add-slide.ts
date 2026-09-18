@@ -26,9 +26,14 @@ import {
   SLIDE_RELATIONSHIP,
 } from './parts'
 import { relationshipTarget } from './presentation'
+import { syncSections } from './sections'
 
 /**
  * Adding, duplicating, deleting and reordering slides.
+ *
+ * Every one of them puts the section list back in step afterwards: sections are
+ * runs over this list, so a change here is a change there, and a deck where the
+ * two disagree is one PowerPoint shows slides missing from every section.
  *
  * A slide is not a node in a document — it is a part of the package, and five
  * things have to agree about it: the part itself, its own relationships, the
@@ -173,6 +178,7 @@ export function addSlide(
   children(list).splice(index, 0, entry)
 
   writePresentation(pkg, found.roots)
+  syncSections(pkg)
   return { path, index }
 }
 
@@ -203,6 +209,7 @@ export function moveSlide(pkg: OoxmlPackage, from: number, to: number): boolean 
   entries.splice(to, 0, moving)
 
   writePresentation(pkg, found.roots)
+  syncSections(pkg)
   return true
 }
 
@@ -249,6 +256,7 @@ export function moveSlides(
   entries.splice(0, entries.length, ...rest)
 
   writePresentation(pkg, found.roots)
+  syncSections(pkg)
   return { index: position }
 }
 
@@ -269,6 +277,7 @@ export function removeSlide(pkg: OoxmlPackage, index: number): boolean {
 
   entries.splice(index, 1)
   writePresentation(pkg, found.roots)
+  syncSections(pkg)
   return true
 }
 
@@ -366,6 +375,7 @@ export function duplicateSlide(pkg: OoxmlPackage, index: number): AddedSlide | n
   )
 
   writePresentation(pkg, found.roots)
+  syncSections(pkg)
   return { path, index: index + 1 }
 }
 

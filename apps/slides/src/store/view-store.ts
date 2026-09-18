@@ -28,6 +28,15 @@ interface ViewState {
    * thing is almost always to see all of it.
    */
   zoom: number | null
+  /**
+   * The sections folded shut in the filmstrip, by section id.
+   *
+   * A view concern rather than a document one: what is folded is not something
+   * the file records, and two windows on the same deck can disagree about it.
+   */
+  collapsedSections: string[]
+  /** The section whose name is being typed, or null. */
+  renamingSection: string | null
   panels: Panels
   /** Widths and heights in pixels, so a drag can be written straight back. */
   sizes: { filmstrip: number; properties: number; notes: number }
@@ -35,6 +44,8 @@ interface ViewState {
   setFinding: (finding: boolean) => void
   setEditingNotes: (editing: boolean) => void
   setZoom: (zoom: number | null) => void
+  toggleSection: (id: string) => void
+  setRenamingSection: (id: string | null) => void
   togglePanel: (panel: keyof Panels) => void
   resize: (panel: keyof Panels, size: number) => void
 }
@@ -53,8 +64,22 @@ export const useViewStore = create<ViewState>((set) => ({
   finding: false,
   editingNotes: false,
   zoom: null,
+  collapsedSections: [],
+  renamingSection: null,
   panels: { filmstrip: true, properties: true, notes: true },
   sizes: DEFAULT_SIZES,
+
+  toggleSection: (id) => {
+    set((state) => ({
+      collapsedSections: state.collapsedSections.includes(id)
+        ? state.collapsedSections.filter((one) => one !== id)
+        : [...state.collapsedSections, id],
+    }))
+  },
+
+  setRenamingSection: (id) => {
+    set({ renamingSection: id })
+  },
 
   setTheme: (theme) => {
     set({ theme })

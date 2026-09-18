@@ -90,3 +90,14 @@ export {
   setSlideLayout,
 } from './add-slide'
 export type { AddedSlide } from './add-slide'
+export {
+  addSection,
+  readSections,
+  removeSection,
+  renameSection,
+  sectionOfSlide,
+  slidesOfSection,
+  syncSections,
+  writeSections,
+} from './sections'
+export type { Section } from './sections'

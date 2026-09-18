@@ -152,6 +152,12 @@ These are the ones that matter most. Take them seriously.
       accepts it.
 - [ ] Do it on a deck whose master has a background picture. The picture comes
       with the theme.
+- [ ] Insert → Shape. Every shape in the gallery draws as the thing it is
+      named after, not as a rectangle.
+- [ ] Open a deck full of flowchart shapes beside PowerPoint. Compare shape by
+      shape; note any that read wrong rather than merely differ in proportion.
+- [ ] Find a shape somebody has reshaped by its yellow handle. Ours draws it at
+      the default proportions — known, and written back untouched.
 
 ## Getting a deck in
 

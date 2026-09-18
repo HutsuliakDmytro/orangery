@@ -1,5 +1,7 @@
 import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
+import { readCustomGeometry } from './svg-path'
+import type { CustomPath } from './svg-path'
 import { readColorChild } from './color'
 import type { Color } from './color'
 
@@ -65,6 +67,15 @@ export interface Geometry {
    * shape from a model that only knows "rounded rectangle".
    */
   adjustments: Map<string, string>
+  /**
+   * The outlines of a custom shape, when they are made of the commands we can
+   * draw.
+   *
+   * Null for a preset, and null for a custom shape holding an arc: drawing
+   * three quarters of a shape is worse than drawing the box it sits in. The
+   * file keeps its own XML either way, so this is a difference on screen only.
+   */
+  paths: CustomPath[] | null
 }
 
 /** `p:style` — the theme slots a shape takes its look from when it states none. */
@@ -200,13 +211,19 @@ function readGeometry(properties: XmlNode): Geometry | null {
       if (name !== undefined && formula !== undefined) adjustments.set(name, formula)
     }
 
-    return { kind: 'preset', preset: attribute(preset, 'prst') ?? null, adjustments }
+    return { kind: 'preset', preset: attribute(preset, 'prst') ?? null, adjustments, paths: null }
   }
 
-  if (findChild(properties, 'a:custGeom') !== undefined) {
-    // The path is not modelled; a custom shape draws from its own XML and is
-    // written back from it.
-    return { kind: 'custom', preset: null, adjustments: new Map() }
+  const custom = findChild(properties, 'a:custGeom')
+  if (custom !== undefined) {
+    // Read for drawing only. A custom shape is written back from its own XML,
+    // which is what keeps everything about it that is not modelled here.
+    return {
+      kind: 'custom',
+      preset: null,
+      adjustments: new Map(),
+      paths: readCustomGeometry(custom),
+    }
   }
 
   return null

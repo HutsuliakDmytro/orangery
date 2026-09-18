@@ -22,6 +22,7 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
   EMU_PER_POINT,
   fontStackFor,
+  toSvgPath,
   readChart,
   resolveThemeFont,
   textBodyToDoc,
@@ -265,7 +266,14 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
   const fill = fillPaint(look.fill, context, `fill-${drawing.key}`)
   const stroke = linePaint(look.line, context, (emu) => emu)
 
-  const path = pathFor(preset, { width: transform.width, height: transform.height })
+  const box = { width: transform.width, height: transform.height }
+  const custom = shape.properties?.geometry?.paths ?? null
+
+  // A custom shape draws its own outlines; one holding an arc has none we can
+  // draw, and falls back to the box it sits in rather than to three quarters
+  // of itself.
+  const path =
+    custom === null ? pathFor(preset, box) : custom.map((one) => toSvgPath(one, box)).join(' ')
   const rotation =
     transform.rotation === 0
       ? undefined

@@ -17,6 +17,7 @@ import {
   deleteShapes,
   duplicateSlides,
   insertConnector,
+  insertIcon,
   insertPicture,
   insertTable,
   moveSlide,
@@ -34,6 +35,7 @@ import {
   writePart,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
+import { ICON_SIZE, ICONS } from '../document/icons'
 import { useDeckStore } from '../store/deck-store'
 import { useEditorStore } from '../store/editor-store'
 import { useViewStore } from '../store/view-store'
@@ -841,6 +843,46 @@ export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) 
 }))
 
 /**
+ * The icons the app ships with, each its own command.
+ *
+ * Inserted as custom geometry rather than as a picture: an icon that is a shape
+ * fills from the theme, stays sharp at any size, and every tool that already
+ * knows what to do with a shape knows what to do with it.
+ */
+export const iconCommands: readonly Command[] = ICONS.map((icon) => ({
+  id: `insert.icon.${icon.id}`,
+  label: `${icon.label} Icon`,
+  group: 'insert' as const,
+  isEnabled: () => useDeckStore.getState().open !== null,
+  run: () => {
+    const { open, edit, selectShapes } = useDeckStore.getState()
+    const size = open?.deck.slideSize ?? { width: 0, height: 0 }
+    const made: { id: number | null } = { id: null }
+
+    // Square, and about an inch at any slide size: an icon has no proportions
+    // of its own to respect beyond the box it was drawn in.
+    const side = Math.min(size.width, size.height) / 6
+
+    edit((slide) => {
+      made.id = insertIcon(slide, {
+        name: `${icon.label} Icon`,
+        paths: icon.paths,
+        size: ICON_SIZE,
+        transform: {
+          x: (size.width - side) / 2,
+          y: (size.height - side) / 2,
+          width: side,
+          height: side,
+        },
+      })
+      return true
+    })
+
+    if (made.id !== null) selectShapes([made.id])
+  },
+}))
+
+/**
  * Putting a picture on the slide.
  *
  * Sized to a quarter of the slide's width and the shape of the file, which
@@ -1004,6 +1046,7 @@ export function registerBuiltinCommands(): void {
   registerAll(editCommands)
   registerAll(arrangeCommands)
   registerAll(insertCommands)
+  registerAll(iconCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)
   registerAll(connectorCommands)

@@ -76,3 +76,11 @@ export { docToParagraphs, textBodyToDoc, writeTextBody } from './text-prosemirro
 export type { PmMark, PmNode } from './text-prosemirror'
 export { autofitKindOf, bodyPropertiesOf, writeBodyProperties } from './write-text-body'
 export type { Anchor, AutofitKind, BodyChange, Wrap } from './write-text-body'
+export {
+  customGeometry,
+  parseSvgPath,
+  readCustomGeometry,
+  toSvgPath,
+  UnsupportedPathError,
+} from './svg-path'
+export type { CustomPath, PathSegment, Point } from './svg-path'

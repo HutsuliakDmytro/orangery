@@ -2,6 +2,7 @@ import { writeFill, writeLine } from '@orangery/ooxml-presentation'
 import { resolveColor } from '@orangery/ooxml-drawingml'
 import { colorContextFor, lookContext, shapeLook } from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
+import { SlideProperties } from './slide-properties'
 
 /**
  * What the selection looks like, and how to change it.
@@ -37,9 +38,7 @@ export function PropertiesPanel() {
   const edit = useDeckStore((state) => state.edit)
 
   if (open === null || slide === null) return <p className="text-xs text-muted">No presentation</p>
-  if (selection.length === 0) {
-    return <p className="text-xs text-muted">Nothing selected</p>
-  }
+  if (selection.length === 0) return <SlideProperties />
 
   const shapes = slide.shapes.filter((shape) => selection.includes(shape.id))
   const first = shapes[0]

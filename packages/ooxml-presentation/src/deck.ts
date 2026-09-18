@@ -1,4 +1,4 @@
-import { findChild, getPartText, parseXml, tagName } from '@orangery/ooxml-core'
+import { attribute, findChild, getPartText, parseXml, tagName } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { readListStyle } from '@orangery/ooxml-drawingml'
 import type { ListStyle } from '@orangery/ooxml-drawingml'
@@ -128,6 +128,18 @@ export function readDeck(pkg: OoxmlPackage): Deck {
 /** The layout a slide is built on, or null when the deck does not say. */
 export function layoutOf(deck: Deck, slide: Slide): SlidePart | null {
   return slide.layout === null ? null : (deck.layouts.get(slide.layout) ?? null)
+}
+
+/**
+ * What a layout calls itself: `p:cSld/@name`, as PowerPoint's gallery shows it.
+ *
+ * Falls back to the part's file name, which is at least unique — a layout with
+ * no name is rare but a picker with two blank entries is useless.
+ */
+export function slideName(part: SlidePart): string {
+  const common = findChild(part.root, 'p:cSld')
+  const name = common === undefined ? undefined : attribute(common, 'name')
+  return name !== undefined && name !== '' ? name : (part.path.split('/').pop() ?? part.path)
 }
 
 /** The master behind a layout, found by which master offers it. */

@@ -14,6 +14,7 @@ import {
   alignShapes,
   createShape,
   deleteShapes,
+  duplicateSlide,
   insertConnector,
   insertPicture,
   insertTable,
@@ -459,6 +460,25 @@ export const slideEditCommands: readonly Command[] = [
     },
   },
   {
+    id: 'slide.duplicate',
+    label: 'Duplicate Slide',
+    group: 'edit',
+    shortcut: 'Mod+Shift+d',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const { current, editPackage, select } = useDeckStore.getState()
+
+      const copy: { index: number | null } = { index: null }
+      editPackage((open) => {
+        const result = duplicateSlide(open.package, current)
+        copy.index = result?.index ?? null
+        return result !== null
+      })
+
+      if (copy.index !== null) select(copy.index)
+    },
+  },
+  {
     id: 'slide.delete',
     label: 'Delete Slide',
     group: 'edit',
@@ -467,6 +487,19 @@ export const slideEditCommands: readonly Command[] = [
       const { current, editPackage, select } = useDeckStore.getState()
       editPackage((open) => removeSlide(open.package, current))
       select(Math.max(current - 1, 0))
+    },
+  },
+  {
+    id: 'slide.layout',
+    label: 'Change Layout…',
+    group: 'edit',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    // Which of a master's dozen layouts was meant is not something a command can
+    // guess, so this shows the picker rather than changing anything itself.
+    run: () => {
+      useDeckStore.getState().selectShapes([])
+      const view = useViewStore.getState()
+      if (!view.panels.properties) view.togglePanel('properties')
     },
   },
   {

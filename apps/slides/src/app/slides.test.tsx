@@ -269,3 +269,98 @@ describe('zoom', () => {
     expect(useViewStore.getState().zoom).toBe(0.25)
   })
 })
+
+describe('duplicating a slide', () => {
+  it('puts the copy after the original and shows it', async () => {
+    await openDeck('many-slides')
+    act(() => {
+      useDeckStore.getState().select(2)
+      runCommand('slide.duplicate', {})
+    })
+
+    expect(titles().slice(2, 5)).toEqual(['Slide 3', 'Slide 3', 'Slide 4'])
+    expect(useDeckStore.getState().current).toBe(3)
+  })
+
+  it('undoes to the deck that was there before', async () => {
+    await openDeck('many-slides')
+    act(() => {
+      useDeckStore.getState().select(0)
+      runCommand('slide.duplicate', {})
+    })
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+
+    expect(useDeckStore.getState().open?.deck.slides).toHaveLength(8)
+    expect(titles()).toEqual([
+      'Slide 1',
+      'Slide 2',
+      'Slide 3',
+      'Slide 4',
+      'Slide 5',
+      'Slide 6',
+      'Slide 7',
+      'Slide 8',
+    ])
+  })
+
+  it('leaves the original alone when the copy is edited', async () => {
+    // The copy is a part of its own; sharing one would make this fail.
+    await openDeck('many-slides')
+    act(() => {
+      useDeckStore.getState().select(0)
+      runCommand('slide.duplicate', {})
+    })
+
+    const deck = useDeckStore.getState().open?.deck
+    expect(deck?.slides[0]?.path).not.toBe(deck?.slides[1]?.path)
+  })
+})
+
+describe('changing the layout of a slide', () => {
+  it('offers the layouts of the slide master', async () => {
+    await openDeck('placeholders')
+    render(<App />)
+    act(() => {
+      runCommand('slide.layout', {})
+    })
+
+    const picker = await screen.findByLabelText('Layout')
+    expect(picker).toBeInstanceOf(HTMLSelectElement)
+    expect((picker as HTMLSelectElement).options.length).toBeGreaterThan(1)
+  })
+
+  it('points the slide at the layout that was picked', async () => {
+    await openDeck('placeholders')
+    render(<App />)
+    act(() => {
+      runCommand('slide.layout', {})
+    })
+
+    const picker = await screen.findByLabelText<HTMLSelectElement>('Layout')
+    const other = [...picker.options].find((option) => option.value !== picker.value)
+    if (other === undefined) throw new Error('fixture has one layout')
+
+    await userEvent.selectOptions(picker, other.value)
+
+    expect(useDeckStore.getState().open?.deck.slides[0]?.layout).toBe(other.value)
+  })
+
+  it('keeps the text that was on the slide', async () => {
+    await openDeck('placeholders')
+    const before = titles()[0]
+    render(<App />)
+    act(() => {
+      runCommand('slide.layout', {})
+    })
+
+    const picker = await screen.findByLabelText<HTMLSelectElement>('Layout')
+    const other = [...picker.options].find((option) => option.value !== picker.value)
+    if (other === undefined) throw new Error('fixture has one layout')
+
+    await userEvent.selectOptions(picker, other.value)
+
+    expect(titles()[0]).toBe(before)
+  })
+})

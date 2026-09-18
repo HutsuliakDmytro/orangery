@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getPartText, parseRelationships } from '@orangery/ooxml-core'
 import { textOfBody } from '@orangery/ooxml-drawingml'
-import { addSlide, moveSlide, removeSlide } from './add-slide'
-import { readDeck } from './deck'
+import { addSlide, duplicateSlide, moveSlide, removeSlide, setSlideLayout } from './add-slide'
+import { readDeck, readSlidePart } from './deck'
 import { relsPartFor } from './insert-picture'
 import { readPptxPackage } from './parts'
 import { saveDeck } from './save'
@@ -162,5 +162,175 @@ describe('removing a slide', () => {
     removeSlide(pkg, 0)
 
     expect(pkg.parts.has('ppt/slides/slide1.xml')).toBe(true)
+  })
+})
+
+/** Duplicates a slide, saves, reopens. */
+async function duplicate(name: string, index = 0) {
+  const pkg = await load(name)
+  const copy = duplicateSlide(pkg, index)
+  const reopened = await readPptxPackage(await saveDeck(pkg))
+
+  return { copy, pkg: reopened, deck: readDeck(reopened) }
+}
+
+const titleOf = (slide: { shapes: { text?: unknown }[] } | undefined) => {
+  const text = slide?.shapes[0]?.text
+  return text == null ? '' : textOfBody(text as Parameters<typeof textOfBody>[0])
+}
+
+describe('duplicating a slide', () => {
+  it('lands right after the one it copies', async () => {
+    const { deck } = await duplicate('many-slides', 2)
+
+    expect(deck.slides).toHaveLength(9)
+    expect(deck.slides.map(titleOf).slice(2, 5)).toEqual(['Slide 3', 'Slide 3', 'Slide 4'])
+  })
+
+  it('is a part of its own, not a second entry for the same one', async () => {
+    const { copy, deck } = await duplicate('many-slides', 2)
+
+    expect(deck.slides[3]?.path).toBe(copy?.path)
+    expect(deck.slides[2]?.path).not.toBe(deck.slides[3]?.path)
+  })
+
+  it('carries the shapes over', async () => {
+    const { deck } = await duplicate('shapes')
+    const [original, copy] = deck.slides
+
+    expect(copy?.shapes).toHaveLength(original?.shapes.length ?? -1)
+    expect(copy?.shapes.map((shape) => shape.name)).toEqual(
+      original?.shapes.map((shape) => shape.name),
+    )
+    expect(copy?.shapes.map((shape) => shape.transform)).toEqual(
+      original?.shapes.map((shape) => shape.transform),
+    )
+  })
+
+  it('stays on the same layout', async () => {
+    const { deck } = await duplicate('placeholders')
+    expect(deck.slides[1]?.layout).toBe(deck.slides[0]?.layout)
+  })
+
+  it('shares the picture rather than copying the bytes', async () => {
+    // A deck of copies would grow by a megabyte each time otherwise.
+    const before = await load('picture')
+    const images = (pkg: Awaited<ReturnType<typeof load>>) =>
+      [...pkg.parts.keys()].filter((path) => path.startsWith('ppt/media/'))
+
+    const { pkg, deck } = await duplicate('picture')
+
+    expect(images(pkg)).toEqual(images(before))
+    expect(deck.slides[1]?.shapes.some((shape) => shape.picture !== null)).toBe(true)
+  })
+
+  it('declares the new part, without which PowerPoint offers to repair', async () => {
+    const { copy, pkg } = await duplicate('many-slides')
+    expect(getPartText(pkg, '[Content_Types].xml')).toContain(copy?.path ?? 'missing')
+  })
+
+  it('takes a slide id nothing else is using', async () => {
+    const { pkg } = await duplicate('many-slides')
+    const ids = [
+      ...(getPartText(pkg, 'ppt/presentation.xml') ?? '').matchAll(/<p:sldId id="(\d+)"/gu),
+    ].map((match) => match[1])
+
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('leaves the slide it copied byte for byte', async () => {
+    const before = await load('shapes')
+    const { pkg } = await duplicate('shapes')
+
+    expect(getPartText(pkg, 'ppt/slides/slide1.xml')).toBe(
+      getPartText(before, 'ppt/slides/slide1.xml'),
+    )
+  })
+
+  it('gives the copy its own notes page', async () => {
+    // Sharing one would make notes typed on the copy rewrite the original's.
+    const { deck } = await duplicate('notes')
+    const [original, copy] = deck.slides
+
+    expect(original?.notes).toMatch(/^ppt\/notesSlides\//u)
+    expect(copy?.notes).toMatch(/^ppt\/notesSlides\//u)
+    expect(copy?.notes).not.toBe(original?.notes)
+  })
+
+  it('carries the notes text onto the copy', async () => {
+    const { pkg, deck } = await duplicate('notes')
+    const notesOf = (path: string | null | undefined) => {
+      const part = path == null ? null : readSlidePart(pkg, path)
+      const body = part?.shapes.find((shape) => shape.placeholder?.type === 'body')
+      return body?.text == null ? '' : textOfBody(body.text)
+    }
+
+    expect(notesOf(deck.slides[1]?.notes)).toBe(notesOf(deck.slides[0]?.notes))
+    expect(notesOf(deck.slides[1]?.notes)).not.toBe('')
+  })
+
+  it('reports nothing done for a slide that is not there', async () => {
+    const pkg = await load('empty')
+    expect(duplicateSlide(pkg, 4)).toBeNull()
+  })
+
+  it('never lands on a part that already exists', async () => {
+    const pkg = await load('many-slides')
+    const first = duplicateSlide(pkg, 0)
+    const second = duplicateSlide(pkg, 0)
+
+    expect(first?.path).not.toBe(second?.path)
+  })
+})
+
+describe('changing the layout of a slide', () => {
+  /** Puts slide `index` on layout `layoutIndex`, saves, reopens. */
+  async function relayout(name: string, layoutIndex: number, index = 0) {
+    const pkg = await load(name)
+    const deck = readDeck(pkg)
+    const slide = deck.slides[index]
+    const layout = [...deck.layouts.values()][layoutIndex]
+    if (slide === undefined || layout === undefined) throw new Error('fixture changed')
+
+    const changed = setSlideLayout(pkg, slide, layout)
+    const reopened = await readPptxPackage(await saveDeck(pkg))
+
+    return { changed, layout, deck: readDeck(reopened), pkg: reopened }
+  }
+
+  it('points the slide at the new layout', async () => {
+    const { changed, deck, layout } = await relayout('placeholders', 2)
+
+    expect(changed).toBe(true)
+    expect(deck.slides[0]?.layout).toBe(layout.path)
+  })
+
+  it('keeps the text that was on the slide', async () => {
+    const before = readDeck(await load('placeholders'))
+    const { deck } = await relayout('placeholders', 2)
+
+    expect(deck.slides[0]?.shapes).toHaveLength(before.slides[0]?.shapes.length ?? -1)
+    expect(titleOf(deck.slides[0])).toBe(titleOf(before.slides[0]))
+  })
+
+  it('leaves the slide part itself alone', async () => {
+    // Only the relationship changes; a placeholder resolves against whichever
+    // layout the slide points at.
+    const before = await load('placeholders')
+    const { pkg } = await relayout('placeholders', 2)
+
+    expect(getPartText(pkg, 'ppt/slides/slide1.xml')).toBe(
+      getPartText(before, 'ppt/slides/slide1.xml'),
+    )
+  })
+
+  it('reports nothing done when it is already on that layout', async () => {
+    const pkg = await load('placeholders')
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    const layout = slide === undefined ? undefined : deck.layouts.get(slide.layout ?? '')
+    if (slide === undefined || layout === undefined) throw new Error('fixture changed')
+
+    expect(setSlideLayout(pkg, slide, layout)).toBe(false)
   })
 })

@@ -9,6 +9,7 @@ import {
   getPartText,
   parseRelationships,
   parseXml,
+  resolveTarget,
   serializeRelationships,
   setPartText,
   tagName,
@@ -18,11 +19,13 @@ import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import type { Deck, SlidePart } from './deck'
 import { relsPartFor } from './insert-picture'
 import {
+  NOTES_SLIDE_RELATIONSHIP,
   PRESENTATION_PART,
   PRESENTATION_RELS_PART,
   SLIDE_LAYOUT_RELATIONSHIP,
   SLIDE_RELATIONSHIP,
 } from './parts'
+import { relationshipTarget } from './presentation'
 
 /**
  * Adding, duplicating, deleting and reordering slides.
@@ -152,7 +155,7 @@ export function addSlide(
 
   // Its own relationships: a slide points at the layout it is built on.
   const relationships = parseRelationships('')
-  addRelationship(relationships, SLIDE_LAYOUT_RELATIONSHIP, relativeLayout(path, layout.path))
+  addRelationship(relationships, SLIDE_LAYOUT_RELATIONSHIP, relativeTo(path, layout.path))
   setPartText(pkg, relsPartFor(path), serializeRelationships(relationships))
 
   ensureOverride(pkg, path, SLIDE_CONTENT_TYPE)
@@ -173,10 +176,10 @@ export function addSlide(
   return { path, index }
 }
 
-/** A layout's path as a slide's relationship states it. */
-function relativeLayout(slidePath: string, layoutPath: string): string {
-  const from = slidePath.split('/').slice(0, -1)
-  const to = layoutPath.split('/')
+/** One part's path as another part's relationship states it. */
+function relativeTo(fromPath: string, toPath: string): string {
+  const from = fromPath.split('/').slice(0, -1)
+  const to = toPath.split('/')
 
   let shared = 0
   while (shared < from.length && from[shared] === to[shared]) shared += 1
@@ -220,5 +223,128 @@ export function removeSlide(pkg: OoxmlPackage, index: number): boolean {
 
   entries.splice(index, 1)
   writePresentation(pkg, found.roots)
+  return true
+}
+
+const NOTES_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml'
+
+/** The next free `nameN.xml` in a directory, so a new part never lands on an existing one. */
+function nextPartName(pkg: OoxmlPackage, directory: string, stem: string): string {
+  const pattern = new RegExp(`^${directory}/${stem}(\\d+)\\.xml$`, 'u')
+
+  let highest = 0
+  for (const path of pkg.parts.keys()) {
+    const match = pattern.exec(path)
+    if (match?.[1] !== undefined) highest = Math.max(highest, Number(match[1]))
+  }
+  return `${stem}${String(highest + 1)}.xml`
+}
+
+/**
+ * Copies the notes page of a slide onto the copy of that slide.
+ *
+ * Without this the two slides would share one notes part, and typing notes on
+ * the copy would rewrite the original's. The notes page names its slide in its
+ * own relationships, so that one is repointed; everything else is carried over
+ * as it was.
+ */
+function duplicateNotes(pkg: OoxmlPackage, notesPath: string, slidePath: string): string | null {
+  const text = getPartText(pkg, notesPath)
+  if (text === undefined) return null
+
+  const name = nextPartName(pkg, 'ppt/notesSlides', 'notesSlide')
+  const path = `ppt/notesSlides/${name}`
+  setPartText(pkg, path, text)
+  ensureOverride(pkg, path, NOTES_CONTENT_TYPE)
+
+  const relationships = parseRelationships(getPartText(pkg, relsPartFor(notesPath)) ?? '')
+  for (const [id, relationship] of relationships) {
+    if (relationship.type !== SLIDE_RELATIONSHIP) continue
+    relationships.set(id, { ...relationship, target: relativeTo(path, slidePath) })
+  }
+  setPartText(pkg, relsPartFor(path), serializeRelationships(relationships))
+
+  return path
+}
+
+/**
+ * Copies a slide, with everything on it.
+ *
+ * The part is copied as text rather than rebuilt from the model — the same
+ * reasoning as duplicating a shape, one level up: whatever the file holds that
+ * we never modelled comes with it. Its relationships are copied too, so the
+ * copy points at the same layout and the same pictures; media is shared rather
+ * than duplicated, which is what PowerPoint does and what keeps a deck of
+ * copies from growing by a megabyte each time. The notes page is the exception,
+ * because it is the one part that belongs to this slide alone.
+ */
+export function duplicateSlide(pkg: OoxmlPackage, index: number): AddedSlide | null {
+  const found = presentationRoot(pkg)
+  const list = found === null ? undefined : findChild(found.root, 'p:sldIdLst')
+  if (found === null || list === undefined) return null
+
+  const entries = children(list)
+  const entry = entries[index]
+  if (entry === undefined) return null
+
+  const id = attribute(entry, 'r:id') ?? null
+  const sourcePath = id === null ? null : relationshipTarget(pkg, PRESENTATION_PART, id)
+  const text = sourcePath === null ? undefined : getPartText(pkg, sourcePath)
+  if (sourcePath === null || text === undefined) return null
+
+  const name = nextSlideName(pkg)
+  const path = `ppt/slides/${name}`
+  setPartText(pkg, path, text)
+  ensureOverride(pkg, path, SLIDE_CONTENT_TYPE)
+
+  // The copy's own relationships, as they were: same layout, same media.
+  const relationships = parseRelationships(getPartText(pkg, relsPartFor(sourcePath)) ?? '')
+  for (const [relationshipId, relationship] of relationships) {
+    if (relationship.type !== NOTES_SLIDE_RELATIONSHIP) continue
+
+    const notes = duplicateNotes(pkg, resolveTarget(relationship.target, 'ppt/slides'), path)
+    if (notes === null) relationships.delete(relationshipId)
+    else relationships.set(relationshipId, { ...relationship, target: relativeTo(path, notes) })
+  }
+  setPartText(pkg, relsPartFor(path), serializeRelationships(relationships))
+
+  const presentationRels = parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '')
+  const relationship = addRelationship(presentationRels, SLIDE_RELATIONSHIP, `slides/${name}`)
+  setPartText(pkg, PRESENTATION_RELS_PART, serializeRelationships(presentationRels))
+
+  entries.splice(
+    index + 1,
+    0,
+    element('p:sldId', { id: String(nextSlideId(list)), 'r:id': relationship.id }),
+  )
+
+  writePresentation(pkg, found.roots)
+  return { path, index: index + 1 }
+}
+
+/**
+ * Puts a slide on a different layout.
+ *
+ * Only the relationship changes. A placeholder names what it is — a title, the
+ * second body — and resolves against whichever layout the slide points at, so
+ * the content stays and takes the new layout's geometry and styling. A shape
+ * the new layout has no placeholder for keeps whatever it states itself, which
+ * is the same answer PowerPoint gives.
+ */
+export function setSlideLayout(pkg: OoxmlPackage, slide: SlidePart, layout: SlidePart): boolean {
+  const relsPart = relsPartFor(slide.path)
+  const relationships = parseRelationships(getPartText(pkg, relsPart) ?? '')
+
+  const existing = [...relationships.values()].find(
+    (relationship) => relationship.type === SLIDE_LAYOUT_RELATIONSHIP,
+  )
+  if (existing === undefined) return false
+
+  const target = relativeTo(slide.path, layout.path)
+  if (existing.target === target) return false
+
+  relationships.set(existing.id, { ...existing, target })
+  setPartText(pkg, relsPart, serializeRelationships(relationships))
   return true
 }

@@ -47,6 +47,13 @@ interface ViewState {
   editingOutline: { slide: number; shape: number } | null
   /** Whether the left pane shows the slides or the words on them. */
   leftPane: 'filmstrip' | 'outline'
+  /**
+   * What happens to the content when the deck changes shape.
+   *
+   * Remembered rather than asked each time: PowerPoint puts the question in a
+   * dialog, and the answer is almost always the same one for a given person.
+   */
+  contentFit: 'maximize' | 'fit'
   panels: Panels
   /** Widths and heights in pixels, so a drag can be written straight back. */
   sizes: { filmstrip: number; properties: number; notes: number }
@@ -58,6 +65,7 @@ interface ViewState {
   setRenamingSection: (id: string | null) => void
   setEditingOutline: (at: { slide: number; shape: number } | null) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
+  setContentFit: (fit: 'maximize' | 'fit') => void
   togglePanel: (panel: keyof Panels) => void
   resize: (panel: keyof Panels, size: number) => void
 }
@@ -80,6 +88,7 @@ export const useViewStore = create<ViewState>((set) => ({
   renamingSection: null,
   editingOutline: null,
   leftPane: 'filmstrip',
+  contentFit: 'fit',
   panels: { filmstrip: true, properties: true, notes: true },
   sizes: DEFAULT_SIZES,
 
@@ -101,6 +110,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setLeftPane: (pane) => {
     set({ leftPane: pane })
+  },
+
+  setContentFit: (fit) => {
+    set({ contentFit: fit })
   },
 
   setTheme: (theme) => {

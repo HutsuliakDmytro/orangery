@@ -9,7 +9,9 @@ import {
   writeBackground,
 } from '@orangery/ooxml-presentation'
 import type { Fill } from '@orangery/ooxml-drawingml'
+import { setSlideSize, SLIDE_SIZE_PRESETS } from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
+import { useViewStore } from '../store/view-store'
 
 /**
  * What the slide itself looks like, shown when no shape is selected.
@@ -53,11 +55,18 @@ const hexOf = (fill: Fill | null, at = 0): string => {
   return source?.kind === 'srgb' ? source.hex : ''
 }
 
+/** EMU per centimetre, for the one place a person types a measurement. */
+const EMU_PER_CM = 360000
+
+const cm = (emu: number) => Math.round((emu / EMU_PER_CM) * 10) / 10
+
 export function SlideProperties() {
   const open = useDeckStore((state) => state.open)
   const slide = useDeckStore(currentSlide)
   const edit = useDeckStore((state) => state.edit)
   const editPackage = useDeckStore((state) => state.editPackage)
+  const contentFit = useViewStore((state) => state.contentFit)
+  const setContentFit = useViewStore((state) => state.setContentFit)
 
   if (open === null || slide === null) return <p className="text-xs text-muted">No presentation</p>
 
@@ -72,6 +81,15 @@ export function SlideProperties() {
   const fill = own?.fill ?? null
   const kind: Kind = fill === null ? 'inherit' : fill.kind === 'group' ? 'inherit' : fill.kind
   const shown = masterShapesShown(slide)
+
+  const size = open.deck.slideSize
+  const custom = !SLIDE_SIZE_PRESETS.some(
+    (preset) => preset.width === size.width && preset.height === size.height,
+  )
+
+  const resizeDeck = (next: { width: number; height: number }) => {
+    editPackage((deck) => setSlideSize(deck.package, deck.deck, next, contentFit))
+  }
 
   const paint = (next: Fill | null) => {
     edit((one) => writeBackground(one, next))
@@ -116,6 +134,70 @@ export function SlideProperties() {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="slide-size" className="block text-xs text-muted">
+          Slide size
+        </label>
+        <select
+          id="slide-size"
+          value={`${String(size.width)}x${String(size.height)}`}
+          onChange={(event) => {
+            const [width, height] = event.target.value.split('x').map(Number)
+            if (width === undefined || height === undefined) return
+
+            resizeDeck({ width, height })
+          }}
+          className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text"
+        >
+          {SLIDE_SIZE_PRESETS.map((preset) => (
+            <option key={preset.label} value={`${String(preset.width)}x${String(preset.height)}`}>
+              {preset.label}
+            </option>
+          ))}
+          {custom && (
+            <option value={`${String(size.width)}x${String(size.height)}`}>
+              Custom ({String(cm(size.width))} × {String(cm(size.height))} cm)
+            </option>
+          )}
+        </select>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            aria-label="Slide width in centimetres"
+            value={cm(size.width)}
+            step={0.1}
+            min={1}
+            onChange={(event) => {
+              resizeDeck({ width: Number(event.target.value) * EMU_PER_CM, height: size.height })
+            }}
+            className="w-16 rounded border border-border bg-surface px-1 py-0.5 text-xs text-text"
+          />
+          <input
+            type="number"
+            aria-label="Slide height in centimetres"
+            value={cm(size.height)}
+            step={0.1}
+            min={1}
+            onChange={(event) => {
+              resizeDeck({ width: size.width, height: Number(event.target.value) * EMU_PER_CM })
+            }}
+            className="w-16 rounded border border-border bg-surface px-1 py-0.5 text-xs text-text"
+          />
+          <select
+            aria-label="What happens to the content"
+            value={contentFit}
+            onChange={(event) => {
+              setContentFit(event.target.value === 'maximize' ? 'maximize' : 'fit')
+            }}
+            className="min-w-0 flex-1 rounded border border-border bg-surface px-1 py-0.5 text-xs text-text"
+          >
+            <option value="fit">Ensure fit</option>
+            <option value="maximize">Maximize</option>
+          </select>
+        </div>
       </div>
 
       <div className="space-y-2">

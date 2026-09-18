@@ -107,3 +107,5 @@ export {
   writeBackground,
   writeBackgroundPicture,
 } from './write-background'
+export { setSlideSize, SLIDE_SIZE_PRESETS } from './slide-size'
+export type { ContentFit } from './slide-size'

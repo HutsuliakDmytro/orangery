@@ -37,7 +37,7 @@ beforeEach(() => {
     redoStack: [],
     error: null,
   })
-  useViewStore.setState({ collapsedSections: [], renamingSection: null })
+  useViewStore.setState({ collapsedSections: [], renamingSection: null, contentFit: 'fit' })
 })
 
 describe('the background picker', () => {
@@ -128,5 +128,92 @@ describe('hiding the background graphics', () => {
         'ppt/slides/slide1.xml',
       ),
     ).not.toContain('showMasterSp')
+  })
+})
+
+describe('the slide size', () => {
+  it('shows the size the deck is', async () => {
+    await openDeck('sixteen-by-nine')
+    render(<App />)
+
+    expect(screen.getByLabelText<HTMLSelectElement>('Slide size')).toHaveValue('12192000x6858000')
+  })
+
+  it('changes the deck to the size that was picked', async () => {
+    await openDeck('sixteen-by-nine')
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('Slide size'), { target: { value: '9144000x6858000' } })
+
+    expect(useDeckStore.getState().open?.deck.slideSize).toEqual({
+      width: 9144000,
+      height: 6858000,
+    })
+  })
+
+  it('scales the content when told to ensure it fits', async () => {
+    await openDeck('sixteen-by-nine')
+    render(<App />)
+
+    const layout = [...(useDeckStore.getState().open?.deck.layouts.values() ?? [])][0]
+    const before = layout?.shapes.find((shape) => shape.transform !== null)?.transform ?? null
+    if (layout === undefined || before === null) throw new Error('fixture changed')
+
+    fireEvent.change(screen.getByLabelText('Slide size'), { target: { value: '9144000x6858000' } })
+
+    const after = useDeckStore
+      .getState()
+      .open?.deck.layouts.get(layout.path)
+      ?.shapes.find((shape) => shape.transform !== null)?.transform
+
+    expect(after?.width).toBe(Math.round(before.width * 0.75))
+  })
+
+  it('leaves the content alone when told to maximize', async () => {
+    await openDeck('sixteen-by-nine')
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('What happens to the content'), {
+      target: { value: 'maximize' },
+    })
+
+    const layout = [...(useDeckStore.getState().open?.deck.layouts.values() ?? [])][0]
+    const before = layout?.shapes.find((shape) => shape.transform !== null)?.transform ?? null
+    if (layout === undefined || before === null) throw new Error('fixture changed')
+
+    fireEvent.change(screen.getByLabelText('Slide size'), { target: { value: '9144000x6858000' } })
+
+    const after = useDeckStore
+      .getState()
+      .open?.deck.layouts.get(layout.path)
+      ?.shapes.find((shape) => shape.transform !== null)?.transform
+
+    expect(after).toEqual(before)
+  })
+
+  it('takes a size typed in centimetres', async () => {
+    await openDeck('empty')
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('Slide width in centimetres'), {
+      target: { value: '20' },
+    })
+
+    expect(useDeckStore.getState().open?.deck.slideSize.width).toBe(20 * 360000)
+  })
+
+  it('is one undo step', async () => {
+    await openDeck('sixteen-by-nine')
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('Slide size'), { target: { value: '9144000x6858000' } })
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+
+    expect(useDeckStore.getState().open?.deck.slideSize).toEqual({
+      width: 12192000,
+      height: 6858000,
+    })
   })
 })

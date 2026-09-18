@@ -32,6 +32,7 @@ describe('inspect', () => {
             id: 1,
             name: '',
             description: '',
+            hidden: false,
             transform: null,
             placeholder: null,
             properties: null,

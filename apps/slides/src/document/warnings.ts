@@ -53,7 +53,11 @@ function findingsFor(shape: Shape, slide: number): Finding[] {
 
   const preset = shape.properties?.geometry
   if (preset?.kind === 'custom') {
-    found.push({ kind: 'geometry', message: 'A custom shape is drawn as a rectangle', slide })
+    // Its own outlines are drawn now; only one holding an arc falls back to the
+    // box it sits in, and only that is worth saying.
+    if (preset.paths === null) {
+      found.push({ kind: 'geometry', message: 'A custom shape is drawn as a rectangle', slide })
+    }
   } else if (preset != null && !isKnownPreset(preset.preset)) {
     found.push({ kind: 'geometry', message: 'Some shapes are drawn as rectangles', slide })
   }

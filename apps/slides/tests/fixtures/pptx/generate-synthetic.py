@@ -278,6 +278,103 @@ def transitions() -> Presentation:
     return prs
 
 
+
+TIMING = """<p:timing xmlns:p="{ns}">
+  <p:tnLst>
+    <p:par>
+      <p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">
+        <p:childTnLst>
+          <p:seq concurrent="1" nextAc="seek">
+            <p:cTn id="2" dur="indefinite" nodeType="mainSeq">
+              <p:childTnLst>
+                <p:par>
+                  <p:cTn id="3" fill="hold">
+                    <p:stCondLst><p:cond delay="indefinite"/></p:stCondLst>
+                    <p:childTnLst>
+                      <p:par>
+                        <p:cTn id="4" fill="hold">
+                          <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="5" presetID="10" presetClass="entr" presetSubtype="0"
+                                     fill="hold" nodeType="clickEffect">
+                                <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="6" dur="1" fill="hold">
+                                        <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl><p:spTgt spid="{spid}"/></p:tgtEl>
+                                      <p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to><p:strVal val="visible"/></p:to>
+                                  </p:set>
+                                  <p:animEffect transition="in" filter="fade">
+                                    <p:cBhvr>
+                                      <p:cTn id="7" dur="500"/>
+                                      <p:tgtEl><p:spTgt spid="{spid}"/></p:tgtEl>
+                                    </p:cBhvr>
+                                  </p:animEffect>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                    </p:childTnLst>
+                  </p:cTn>
+                  <p:prevCondLst>
+                    <p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond>
+                  </p:prevCondLst>
+                  <p:nextCondLst>
+                    <p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond>
+                  </p:nextCondLst>
+                </p:par>
+              </p:childTnLst>
+            </p:cTn>
+          </p:seq>
+        </p:childTnLst>
+      </p:cTn>
+    </p:par>
+  </p:tnLst>
+</p:timing>"""
+
+
+def animations() -> Presentation:
+    """A slide with an entrance animation, and one with a hidden shape.
+
+    The timing is real markup nothing here models: the point of the deck is that
+    it comes back out of a round-trip exactly as it went in. The hidden shape is
+    the other half of "objects in their final state" — a shape PowerPoint does
+    not draw is one we must not draw either, animation or no animation.
+    """
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Emu(9144000), Emu(6858000)
+
+    slide = prs.slides.add_slide(title_only(prs))
+    slide.shapes.title.text = "Animated"
+    box = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(3), Inches(3), Inches(1.5)
+    )
+    box.text_frame.text = "Fades in"
+    slide._element.append(parse_xml(TIMING.format(ns=NS_P, spid=box.shape_id)))
+
+    second = prs.slides.add_slide(title_only(prs))
+    second.shapes.title.text = "Hidden shape"
+    shown = second.shapes.add_shape(
+        MSO_SHAPE.OVAL, Inches(1), Inches(3), Inches(2), Inches(2)
+    )
+    shown.text_frame.text = "Shown"
+    unseen = second.shapes.add_shape(
+        MSO_SHAPE.OVAL, Inches(4), Inches(3), Inches(2), Inches(2)
+    )
+    unseen.text_frame.text = "Not shown"
+    unseen._element.nvSpPr.cNvPr.set("hidden", "1")
+
+    return prs
+
+
 DECKS = {
     "empty": empty,
     "placeholders": placeholders,
@@ -291,6 +388,7 @@ DECKS = {
     "many-slides": many_slides,
     "sixteen-by-nine": widescreen,
     "transitions": transitions,
+    "animations": animations,
 }
 
 

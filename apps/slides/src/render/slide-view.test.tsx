@@ -338,3 +338,19 @@ describe('what the layout and the master draw behind the slide', () => {
     expect(container.textContent).not.toContain('Click to add')
   })
 })
+
+describe('a shape the file hides', () => {
+  it('is left off the slide, and takes nothing beside it with it', async () => {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'animations.pptx')))
+    const deck = readDeck(pkg)
+    const slide = deck.slides[1]
+    if (slide === undefined) throw new Error('fixture changed')
+
+    const { container } = render(
+      <SlideView deck={deck} slide={slide} themes={readThemes(pkg, deck)} />,
+    )
+
+    expect(container.textContent).toContain('Shown')
+    expect(container.textContent).not.toContain('Not shown')
+  })
+})

@@ -386,3 +386,45 @@ describe('the transition between slides', () => {
     expect(screen.queryByTestId('leaving')).toBeNull()
   })
 })
+
+describe('a deck with animations', () => {
+  it('shows every object in its final state, animation or not', async () => {
+    // Nothing plays, so nothing may be waiting to appear: a shape that fades in
+    // is simply there.
+    await openDeck('animations')
+    render(<App />)
+    await start()
+
+    const shown = screen.getByTestId('show')
+    expect(shown.textContent).toContain('Fades in')
+  })
+
+  it('draws nothing the file hides', async () => {
+    await openDeck('animations')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    const shown = screen.getByTestId('show')
+    expect(shown.textContent).toContain('Shown')
+    expect(shown.textContent).not.toContain('Not shown')
+  })
+
+  it('advances a whole slide at a time, since there are no builds to step', async () => {
+    await openDeck('animations')
+    render(<App />)
+    await start()
+
+    press('ArrowRight')
+    expect(useShowStore.getState().at).toBe(1)
+  })
+
+  it('says so in the editor rather than letting it be discovered on stage', async () => {
+    await openDeck('animations')
+    render(<App />)
+
+    expect(screen.getByText(/Animations are kept in the file but do not play/u)).toBeInTheDocument()
+  })
+})

@@ -106,6 +106,10 @@ function drawingsOf(
     // A group is a coordinate space, not something drawn; its children are.
     if (shape.kind === 'grpSp') return []
 
+    // A hidden shape is hidden before the show starts and after it ends;
+    // drawing it would put something on the slide nothing else shows.
+    if (shape.hidden) return []
+
     const transform = absoluteTransform(shape.transform ?? resolve(shape), ancestors)
     if (transform === null) return []
 

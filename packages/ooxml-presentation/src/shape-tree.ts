@@ -79,6 +79,14 @@ export interface Shape {
   /** Alt text, when the shape carries any. */
   description: string
   /**
+   * `p:cNvPr/@hidden` — a shape PowerPoint does not draw.
+   *
+   * Nothing to do with animation: a shape hidden here is hidden before the show
+   * starts and after it ends, and drawing it would put something on the slide
+   * that nobody else shows.
+   */
+  hidden: boolean
+  /**
    * Null when the shape states no transform of its own.
    *
    * For a placeholder that is the normal case, not a defect: position and size
@@ -218,6 +226,7 @@ export function parseShape(node: XmlNode): Shape {
     id: number(identity === undefined ? undefined : attribute(identity, 'id'), -1),
     name: (identity === undefined ? undefined : attribute(identity, 'name')) ?? '',
     description: (identity === undefined ? undefined : attribute(identity, 'descr')) ?? '',
+    hidden: (identity === undefined ? undefined : attribute(identity, 'hidden')) === '1',
     transform: parseTransform(transformNodeOf(node, kind)),
     placeholder: parsePlaceholder(nonVisual),
     properties: propertiesNode === undefined ? null : readShapeProperties(propertiesNode),

@@ -1,10 +1,17 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { flatten } from '@orangery/ooxml-presentation'
+import { getPartText } from '@orangery/ooxml-core'
+import {
+  clipboardHistory,
+  forgetClipboardHistory,
+  pasteShapesHere,
+} from '../document/shape-clipboard'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -23,6 +30,8 @@ const held = { text: '' }
 
 beforeEach(async () => {
   held.text = ''
+  // Module state, so a copy made by one test would be remembered by the next.
+  forgetClipboardHistory()
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: {
@@ -35,7 +44,10 @@ beforeEach(async () => {
   })
 
   useDeckStore.getState().close()
-  useViewStore.setState({ panels: { filmstrip: true, properties: true, notes: true } })
+  useViewStore.setState({
+    pasting: false,
+    panels: { filmstrip: true, properties: true, notes: true },
+  })
 
   const bytes = await readFile(join(FIXTURES, 'shapes.pptx'))
   await act(async () => {
@@ -172,5 +184,150 @@ describe('cutting', () => {
     await waitFor(() => {
       expect(shapes()).toHaveLength(before)
     })
+  })
+})
+
+describe('paste special', () => {
+  const textOf = () => {
+    const { open, current } = useDeckStore.getState()
+    const slide = open?.deck.slides[current]
+    return open === null || slide === undefined ? '' : (getPartText(open.package, slide.path) ?? '')
+  }
+
+  it('makes a text box out of the words and nothing else', async () => {
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+
+    const before = shapes().length
+    await run('edit.paste-text-only')
+
+    // The words, in a box of their own: no fill, no outline, and the flag that
+    // says it is a text box rather than a rectangle that happens to hold text.
+    await waitFor(() => {
+      expect(shapes()).toHaveLength(before + 1)
+    })
+    expect(textOf()).toContain('txBox="1"')
+    expect(textOf()).toContain('Rectangle')
+  })
+
+  const count = (text: string, needle: string) => text.split(needle).length - 1
+
+  it('settles the theme colours when asked to keep the source’s look', async () => {
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+
+    const before = count(textOf(), 'schemeClr')
+    await run('edit.paste-keep-source')
+
+    // The copy arrives with its colours already settled, so it adds none of
+    // the symbolic references the original is full of.
+    await waitFor(() => {
+      expect(shapes()).toHaveLength(5)
+    })
+    expect(count(textOf(), 'schemeClr')).toBe(before)
+  })
+
+  it('leaves them symbolic on an ordinary paste', async () => {
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+
+    const before = count(textOf(), 'schemeClr')
+    await run('edit.paste')
+
+    // Which is what makes a shape pasted into a branded deck come out in that
+    // deck's brand.
+    await waitFor(() => {
+      expect(shapes()).toHaveLength(5)
+    })
+    expect(count(textOf(), 'schemeClr')).toBeGreaterThan(before)
+  })
+
+  it('remembers what this window copied, newest first', async () => {
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapes()[1]?.id ?? 0])
+    })
+    await run('edit.copy')
+
+    const history = clipboardHistory()
+    expect(history).toHaveLength(2)
+    expect(history[0]?.label).toBe('Oval')
+    expect(history[1]?.label).toBe('Rectangle')
+  })
+
+  it('pastes an older copy, not only the last one', async () => {
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+    act(() => {
+      useDeckStore.getState().selectShapes([shapes()[1]?.id ?? 0])
+    })
+    await run('edit.copy')
+
+    const older = clipboardHistory().find((entry) => entry.label === 'Rectangle')
+    if (older === undefined) throw new Error('nothing remembered')
+
+    const before = shapes().length
+    await act(async () => {
+      await pasteShapesHere({ entry: older.text })
+    })
+
+    // A clipboard holds one thing, which is right until you need the one
+    // before it.
+    expect(shapes()).toHaveLength(before + 1)
+    expect(shapes()[before]?.name).toContain('Rectangle')
+  })
+
+  it('counts one copy once, however often it is made', async () => {
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+    await run('edit.copy')
+
+    expect(clipboardHistory()).toHaveLength(1)
+  })
+})
+
+describe('the paste special dialog', () => {
+  it('lists what this window copied, and pastes the one that was picked', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    selectFirst()
+    await run('edit.copy')
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapes()[1]?.id ?? 0])
+    })
+    await run('edit.copy')
+
+    act(() => {
+      runCommand('edit.paste-special', {})
+    })
+
+    const before = shapes().length
+    await user.click(screen.getByRole('radio', { name: 'Rectangle' }))
+    await user.click(screen.getByRole('button', { name: 'Paste' }))
+
+    await waitFor(() => {
+      expect(shapes()).toHaveLength(before + 1)
+    })
+    expect(shapes()[before]?.name).toContain('Rectangle')
+  })
+
+  it('offers the three ways a paste can look', () => {
+    render(<App />)
+    act(() => {
+      runCommand('edit.paste-special', {})
+    })
+
+    expect(screen.getByRole('radio', { name: /Use destination theme/u })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /Keep source formatting/u })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Text only/u })).toBeInTheDocument()
   })
 })

@@ -391,6 +391,37 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.paste-keep-source',
+    label: 'Paste Keeping Source Formatting',
+    group: 'edit',
+    keywords: ['paste', 'special', 'formatting'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      void pasteShapesHere({ formatting: 'source' })
+    },
+  },
+  {
+    id: 'edit.paste-text-only',
+    label: 'Paste Text Only',
+    group: 'edit',
+    keywords: ['paste', 'special', 'text', 'unformatted'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      void pasteShapesHere({ textOnly: true })
+    },
+  },
+  {
+    id: 'edit.paste-special',
+    label: 'Paste Special…',
+    group: 'edit',
+    shortcut: 'Mod+Shift+v',
+    keywords: ['clipboard', 'history', 'formatting'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setPasting(true)
+    },
+  },
+  {
     id: 'edit.duplicate',
     label: 'Duplicate',
     group: 'edit',

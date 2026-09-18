@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getPartText } from '@orangery/ooxml-core'
-import { copyShapes, parseClipboard, pasteShapes } from './clipboard'
+import { getPartText, parseXml } from '@orangery/ooxml-core'
+import { clipboardText, copyShapes, parseClipboard, pasteShapes } from './clipboard'
 import { readDeck } from './deck'
 import { readPptxPackage } from './parts'
 import { saveDeck, writeSlidePart } from './save'
-import { flatten } from './shape-tree'
+import { flatten, parseShape } from './shape-tree'
 
 /**
  * Shapes on the clipboard.
@@ -133,5 +133,112 @@ describe('reading the clipboard', () => {
   it('accepts one with no media at all', () => {
     const text = '{"kind":"orangery/slides-shapes","version":1,"shapes":["<p:sp/>"]}'
     expect(parseClipboard(text)?.shapes).toEqual(['<p:sp/>'])
+  })
+})
+
+describe('what a pasted shape looks like', () => {
+  const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+
+  /** A shape whose fill and font are named rather than stated. */
+  function themed() {
+    const xml =
+      `<p:sp ${NS}><p:nvSpPr><p:cNvPr id="9" name="Themed"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+      '<p:spPr><a:solidFill><a:schemeClr val="accent1"><a:lumMod val="75000"/></a:schemeClr>' +
+      '</a:solidFill></p:spPr>' +
+      '<p:txBody><a:bodyPr/><a:p><a:r><a:rPr><a:latin typeface="+mn-lt"/></a:rPr>' +
+      '<a:t>Words</a:t></a:r></a:p></p:txBody></p:sp>'
+
+    const node = parseXml(xml)[0]
+    if (node === undefined) throw new Error('bad fixture')
+    return parseShape(node)
+  }
+
+  const THEME = {
+    colors: { accent1: '#123456' },
+    fonts: { major: 'Georgia', minor: 'Verdana' },
+  }
+
+  /** Pastes one shape into a deck and gives back the slide part as text. */
+  async function pasteInto(formatting: 'source' | 'destination') {
+    const pkg = await load('empty')
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+
+    const payload = parseClipboard(
+      JSON.stringify({ ...copyShapes(pkg, slide.path, [themed()], THEME) }),
+    )
+    if (payload === null) throw new Error('unreadable payload')
+
+    pasteShapes(pkg, slide, payload, { offset: { x: 0, y: 0 }, formatting })
+    writeSlidePart(pkg, slide)
+    return getPartText(pkg, slide.path) ?? ''
+  }
+
+  it('takes this deck’s palette by default', async () => {
+    const written = await pasteInto('destination')
+
+    // The reference stays symbolic, which is what makes a shape pasted into a
+    // branded deck come out in that brand.
+    expect(written).toContain('accent1')
+    expect(written).not.toContain('123456')
+    expect(written).toContain('+mn-lt')
+  })
+
+  it('settles the colours against where it came from when asked', async () => {
+    const written = await pasteInto('source')
+
+    expect(written).toContain('123456')
+    expect(written).not.toContain('schemeClr')
+  })
+
+  it('keeps the transform on a colour it settles', async () => {
+    // `accent1` darkened by a quarter becomes that hex darkened by a quarter:
+    // the same colour by a different route, not a flat one.
+    expect(await pasteInto('source')).toContain('lumMod')
+  })
+
+  it('names the font the source was written with', async () => {
+    const written = await pasteInto('source')
+
+    expect(written).toContain('Verdana')
+    expect(written).not.toContain('+mn-lt')
+  })
+
+  it('pastes in this deck’s colours when the payload carries no palette', async () => {
+    const pkg = await load('empty')
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+
+    // A payload from a build that did not carry one: a reason to fall back,
+    // not a reason to refuse.
+    const payload = parseClipboard(JSON.stringify(copyShapes(pkg, slide.path, [themed()])))
+    if (payload === null) throw new Error('unreadable payload')
+
+    pasteShapes(pkg, slide, payload, { offset: { x: 0, y: 0 }, formatting: 'source' })
+    writeSlidePart(pkg, slide)
+
+    expect(getPartText(pkg, slide.path) ?? '').toContain('accent1')
+  })
+})
+
+describe('the words on the clipboard', () => {
+  it('are read out a paragraph at a time', async () => {
+    const pkg = await load('shapes')
+    const slide = readDeck(pkg).slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+
+    const payload = copyShapes(pkg, slide.path, slide.shapes)
+    expect(clipboardText(payload)).toContain('Rectangle')
+  })
+
+  it('are empty for shapes that hold none', async () => {
+    const pkg = await load('picture')
+    const slide = readDeck(pkg).slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+
+    const payload = copyShapes(pkg, slide.path, slide.shapes)
+    expect(clipboardText(payload).join('')).toBe('')
   })
 })

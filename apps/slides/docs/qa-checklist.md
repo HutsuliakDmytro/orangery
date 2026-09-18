@@ -129,6 +129,13 @@ These are the ones that matter most. Take them seriously.
       the guide, and the guide is still there on every other slide.
 - [ ] Turn snapping on with the grid hidden. Dragging still lands on the grid —
       the two switches are separate on purpose.
+- [ ] Copy a themed shape from one deck and paste it into another with a
+      different theme. It arrives in the second deck's colours.
+- [ ] Do it again with Paste Special → keep source formatting. It arrives
+      looking like where it came from, transforms and all.
+- [ ] Paste Special → text only. A text box appears with the words and no fill.
+- [ ] Copy three different things, then Paste Special. All three are listed,
+      newest first, and picking the oldest pastes the oldest.
 
 ## Getting a deck in
 

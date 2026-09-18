@@ -79,6 +79,8 @@ interface ViewState {
   grid: boolean
   /** Whether the grid and guides dialog is up. */
   editingGrid: boolean
+  /** Whether the paste special dialog is up. */
+  pasting: boolean
   /**
    * Whether a drag lands on the grid.
    *
@@ -114,6 +116,7 @@ interface ViewState {
   setRulers: (showing: boolean) => void
   setGrid: (showing: boolean) => void
   setEditingGrid: (editing: boolean) => void
+  setPasting: (pasting: boolean) => void
   setSnapToGrid: (snapping: boolean) => void
   setPrintLayout: (layout: PrintLayout) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
@@ -147,6 +150,7 @@ export const useViewStore = create<ViewState>((set) => ({
   rulers: false,
   grid: false,
   editingGrid: false,
+  pasting: false,
   snapToGrid: false,
   printLayout: 'slides',
   leftPane: 'filmstrip',
@@ -180,6 +184,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setEditingGrid: (editing) => {
     set({ editingGrid: editing })
+  },
+
+  setPasting: (pasting) => {
+    set({ pasting })
   },
 
   setSnapToGrid: (snapping) => {

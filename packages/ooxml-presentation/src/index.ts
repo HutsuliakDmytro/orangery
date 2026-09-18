@@ -39,7 +39,7 @@ export {
   resolveTransform,
 } from './placeholders'
 export type { MasterPlaceholder } from './placeholders'
-export { colorContextFor, readColorMap, readThemes } from './theme-context'
+export { colorContextFor, readColorMap, readThemes, themeFor } from './theme-context'
 export {
   listStyleChain,
   masterStyleFor,
@@ -86,8 +86,21 @@ export type { Alignment } from './arrange'
 export { groupShapes, ungroupShape } from './group'
 export { writeFill, writeLine, writeShadow } from './write-look'
 export type { LineChange } from './write-look'
-export { CLIPBOARD_KIND, copyShapes, parseClipboard, pasteShapes } from './clipboard'
-export type { ClipboardMedia, ClipboardShapes, PasteOptions } from './clipboard'
+export {
+  CLIPBOARD_KIND,
+  clipboardText,
+  copyShapes,
+  parseClipboard,
+  pasteShapes,
+  themeSnapshot,
+} from './clipboard'
+export type {
+  ClipboardMedia,
+  ClipboardShapes,
+  ClipboardTheme,
+  PasteFormatting,
+  PasteOptions,
+} from './clipboard'
 export { createShape, deleteShapes } from './create-shape'
 export { geometryPoints, moveGeometryPoint, pathSpace } from './geometry-points'
 export type { GeometryPoint } from './geometry-points'

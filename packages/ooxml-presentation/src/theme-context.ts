@@ -38,6 +38,17 @@ export function readThemes(pkg: OoxmlPackage, deck: Deck): Map<string, Theme> {
   return themes
 }
 
+/** The theme a slide draws from, through its layout and its master. */
+export function themeFor(
+  deck: Deck,
+  themes: ReadonlyMap<string, Theme>,
+  slide: Slide,
+): Theme | undefined {
+  const layout = layoutOf(deck, slide)
+  const master = layout === null ? null : masterOf(deck, layout)
+  return master?.theme == null ? undefined : themes.get(master.theme)
+}
+
 /**
  * The context for resolving colours on a slide.
  *

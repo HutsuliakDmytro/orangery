@@ -3,13 +3,15 @@ import {
   attribute,
   children,
   deserializeNode,
+  element,
   removeAttribute,
   serializeNode,
   setAttribute,
   tagName,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
-import { contentTypeFor } from '@orangery/ooxml-drawingml'
+import { contentTypeFor, resolveColor } from '@orangery/ooxml-drawingml'
+import type { ColorContext, ThemeFonts } from '@orangery/ooxml-drawingml'
 import { parseShape } from './shape-tree'
 import type { Shape } from './shape-tree'
 import type { SlidePart } from './deck'
@@ -44,6 +46,21 @@ export interface ClipboardMedia {
   data: string
 }
 
+/**
+ * What the shapes looked like where they came from.
+ *
+ * A theme colour stays symbolic in the file, so a shape pasted into another
+ * deck comes out in that deck's palette — which is what PowerPoint calls "use
+ * destination theme" and is the right default. Keeping the source's look means
+ * settling those references against the palette they were written for, and
+ * that palette has to travel with them.
+ */
+export interface ClipboardTheme {
+  /** Slot name as a shape writes it (`accent1`, `tx1`, …) to `#RRGGBB`. */
+  colors: Record<string, string>
+  fonts: ThemeFonts
+}
+
 export interface ClipboardShapes {
   kind: typeof CLIPBOARD_KIND
   version: 1
@@ -51,6 +68,26 @@ export interface ClipboardShapes {
   shapes: string[]
   /** Media by the relationship id the shapes refer to it by. */
   media: Record<string, ClipboardMedia>
+  /** The palette they were written against; absent on an older payload. */
+  theme?: ClipboardTheme
+}
+
+/**
+ * The palette of the slide being copied from, flattened to hexes.
+ *
+ * Both vocabularies are walked: what a theme defines (`dk1`, `accent1`) and
+ * what a shape asks for (`tx1`, `bg1`), because the two are different names
+ * joined by the master's colour map and a shape only ever uses the second.
+ */
+export function themeSnapshot(context: ColorContext, fonts: ThemeFonts): ClipboardTheme {
+  const colors: Record<string, string> = {}
+
+  for (const name of [...context.scheme.keys(), ...context.map.keys()]) {
+    const resolved = resolveColor({ source: { kind: 'scheme', name }, transforms: [] }, context)
+    if (resolved !== null) colors[name] = resolved.hex
+  }
+
+  return { colors, fonts }
 }
 
 /** Attributes that name a relationship rather than a value. */
@@ -101,6 +138,7 @@ export function copyShapes(
   pkg: OoxmlPackage,
   part: string,
   shapes: readonly Shape[],
+  theme?: ClipboardTheme,
 ): ClipboardShapes {
   const media: Record<string, ClipboardMedia> = {}
 
@@ -124,6 +162,7 @@ export function copyShapes(
     version: 1,
     shapes: shapes.map((shape) => serializeNode(shape.node)),
     media,
+    ...(theme === undefined ? {} : { theme }),
   }
 }
 
@@ -156,7 +195,31 @@ export function parseClipboard(text: string): ClipboardShapes | null {
     }
   }
 
-  return { kind: CLIPBOARD_KIND, version: 1, shapes: shapes as string[], media }
+  const theme = candidate['theme']
+  const palette =
+    typeof theme === 'object' && theme !== null ? (theme as Record<string, unknown>) : null
+  const colors = palette === null ? null : palette['colors']
+  const fonts = palette === null ? null : palette['fonts']
+
+  return {
+    kind: CLIPBOARD_KIND,
+    version: 1,
+    shapes: shapes as string[],
+    media,
+    // Absent on a payload from a build that did not carry one, which is a
+    // reason to paste in this deck's colours rather than a reason to refuse.
+    ...(typeof colors === 'object' && colors !== null
+      ? {
+          theme: {
+            colors: colors as Record<string, string>,
+            fonts:
+              typeof fonts === 'object' && fonts !== null
+                ? (fonts as ThemeFonts)
+                : { major: null, minor: null },
+          },
+        }
+      : {}),
+  }
 }
 
 /** Points every relationship in a subtree at this package, or unhooks it. */
@@ -179,6 +242,98 @@ function rehome(node: XmlNode, moved: ReadonlyMap<string, string>): void {
   walk(node)
 }
 
+/** How a pasted shape decides what it looks like. */
+export type PasteFormatting = 'source' | 'destination'
+
+/**
+ * Settles a subtree's theme references against the palette it came from.
+ *
+ * The transforms stay where they are: `accent1` darkened by a quarter becomes
+ * that accent's hex darkened by a quarter, which is the same colour by a
+ * different route. Only the base changes.
+ */
+function keepSourceLook(node: XmlNode, theme: ClipboardTheme): void {
+  const walk = (current: XmlNode) => {
+    const nodes = children(current)
+
+    nodes.forEach((child, index) => {
+      const tag = tagName(child)
+
+      if (tag === 'a:schemeClr') {
+        const hex = theme.colors[attribute(child, 'val') ?? '']
+        if (hex !== undefined) {
+          // Replaced rather than renamed: the element is a key in the parsed
+          // node, and a key cannot be changed without building a new one.
+          const settled = element('a:srgbClr', { val: hex.replace('#', '') }, children(child))
+          nodes[index] = settled
+          walk(settled)
+          return
+        }
+      }
+
+      if (tag === 'a:latin' || tag === 'a:ea' || tag === 'a:cs') {
+        const typeface = attribute(child, 'typeface')
+        const named =
+          typeface === '+mj-lt'
+            ? theme.fonts.major
+            : typeface === '+mn-lt'
+              ? theme.fonts.minor
+              : null
+        if (named !== null) setAttribute(child, 'typeface', named)
+      }
+
+      walk(child)
+    })
+  }
+
+  walk(node)
+}
+
+/** The words on the clipboard, for a paste that wants those and nothing else. */
+export function clipboardText(payload: ClipboardShapes): string[] {
+  return payload.shapes.flatMap((xml) => {
+    const node = deserializeNode(xml)
+    return node === null ? [] : paragraphTexts(node)
+  })
+}
+
+/** Every `a:p` in a subtree, as one line each. */
+function paragraphTexts(node: XmlNode): string[] {
+  const lines: string[] = []
+
+  const walk = (current: XmlNode) => {
+    for (const child of children(current)) {
+      if (tagName(child) === 'a:p') {
+        lines.push(textIn(child))
+        continue
+      }
+      walk(child)
+    }
+  }
+
+  walk(node)
+  return lines
+}
+
+function textIn(node: XmlNode): string {
+  let text = ''
+  const walk = (current: XmlNode) => {
+    for (const child of children(current)) {
+      if (tagName(child) === 'a:t') {
+        for (const value of children(child)) {
+          const raw = value['#text']
+          if (typeof raw === 'string') text += raw
+        }
+        continue
+      }
+      walk(child)
+    }
+  }
+
+  walk(node)
+  return text
+}
+
 export interface PasteOptions {
   /**
    * How far to move what is pasted, in EMU.
@@ -189,6 +344,15 @@ export interface PasteOptions {
    * the position, because there is nothing there to be confused with.
    */
   offset: { x: number; y: number }
+  /**
+   * Whose look the shapes keep.
+   *
+   * `destination` is the default because it is PowerPoint's, and because it is
+   * what the format does on its own: a symbolic theme colour resolves against
+   * whichever deck it finds itself in, and that is usually what somebody
+   * pasting into a branded deck wants.
+   */
+  formatting?: PasteFormatting
 }
 
 /** Puts clipboard shapes onto a slide, and answers with their new ids. */
@@ -226,6 +390,9 @@ export function pasteShapes(
     if (node === null) continue
 
     rehome(node, moved)
+    if (options.formatting === 'source' && payload.theme !== undefined) {
+      keepSourceLook(node, payload.theme)
+    }
     children(part.tree).push(node)
 
     // A fresh id, free in the part it is arriving in rather than in the one it

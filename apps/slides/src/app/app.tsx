@@ -20,6 +20,7 @@ import { ShapeGallery } from '../components/shape-gallery'
 import { TablePicker } from '../components/table-picker'
 import { HeaderFooterDialog } from '../components/header-footer-dialog'
 import { GridDialog } from '../components/grid-dialog'
+import { PasteDialog } from '../components/paste-dialog'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
@@ -123,6 +124,8 @@ function Shell() {
       <HeaderFooterDialog />
 
       <GridDialog />
+
+      <PasteDialog />
 
       <PicturesDialog />
 

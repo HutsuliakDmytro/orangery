@@ -525,9 +525,50 @@ describe('the properties panel', () => {
     act(() => {
       useDeckStore.getState().selectShapes([firstShapeId()])
     })
-    await user.click(screen.getByRole('button', { name: 'Fill #FF7A00' }))
+    await user.click(screen.getByRole('button', { name: 'Fill #FF3B30' }))
 
-    expect(partText()).toContain('FF7A00')
+    expect(partText()).toContain('FF3B30')
+  })
+
+  it('writes a theme colour as the slot rather than as the colour it looks like', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill Accent 2' }))
+
+    // The whole difference: a slot follows the theme, a literal does not.
+    expect(partText()).toContain('schemeClr val="accent2"')
+  })
+
+  it('gives the outline a colour, which it had no way to be given before', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Line #007AFF' }))
+
+    expect(partText()).toContain('007AFF')
+  })
+
+  it('fills with a gradient', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill gradient' }))
+
+    expect(partText()).toContain('<a:gradFill')
+    expect(partText()).toContain('<a:gs')
   })
 
   it('changes every selected shape at once, in one step', async () => {

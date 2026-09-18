@@ -4,27 +4,18 @@ import { colorContextFor, lookContext, shapeLook } from '@orangery/ooxml-present
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { SlideProperties } from './slide-properties'
 import { BoxProperties } from './box-properties'
+import { ColorControl } from './color-control'
 import { TextProperties } from './text-properties'
 
 /**
  * What the selection looks like, and how to change it.
  *
- * Colours are written as literal values rather than theme slots. Picking
- * "accent 2" from a palette is a different action from picking a colour, and
- * offering only the second is honest about which one this is; the theme picker
- * comes with the theme gallery.
+ * A colour can be picked from the theme or stated outright, and the difference
+ * is the whole point: `accent1` means "whatever this deck calls accent 1" and
+ * follows the theme, while a literal means that colour for ever. Both are
+ * things a person wants; offering only the second, as this panel did, quietly
+ * made every deck edited here stop following its own theme.
  */
-
-const SWATCHES = [
-  '#000000',
-  '#FFFFFF',
-  '#FF7A00',
-  '#C0504D',
-  '#4F81BD',
-  '#9BBB59',
-  '#8064A2',
-  '#F79646',
-]
 
 const WIDTHS = [
   ['Hairline', 9525],
@@ -58,6 +49,15 @@ export function PropertiesPanel() {
     return resolveColor(look.fill.color, lookContext(base, look))?.hex ?? null
   })()
 
+  /** The same for the outline, which had no colour control at all before. */
+  const lineColour = (() => {
+    if (first === undefined) return null
+    const look = shapeLook(first, theme)
+    const fill = look.line?.fill
+    if (fill?.kind !== 'solid' || fill.color === null) return null
+    return resolveColor(fill.color, lookContext(base, look))?.hex ?? null
+  })()
+
   const apply = (change: (shape: (typeof shapes)[number]) => boolean) => {
     edit((edited) =>
       edited.shapes
@@ -75,38 +75,43 @@ export function PropertiesPanel() {
 
       <section aria-label="Fill" className="space-y-2">
         <h2 className="uppercase tracking-wide text-muted">Fill</h2>
-        <div className="flex flex-wrap gap-1">
-          {SWATCHES.map((hex) => (
-            <button
-              key={hex}
-              type="button"
-              aria-label={`Fill ${hex}`}
-              aria-pressed={shown === hex}
-              onClick={() => {
-                apply((shape) =>
-                  writeFill(shape, {
-                    kind: 'solid',
-                    color: { source: { kind: 'srgb', hex }, transforms: [] },
-                  }),
-                )
-              }}
-              style={{ background: hex }}
-              className={`h-5 w-5 rounded border ${
-                shown === hex ? 'border-accent' : 'border-border'
-              }`}
-            />
-          ))}
-          <button
-            type="button"
-            aria-label="No fill"
-            onClick={() => {
-              apply((shape) => writeFill(shape, { kind: 'none' }))
-            }}
-            className="h-5 rounded border border-border px-1.5 text-muted"
-          >
-            None
-          </button>
-        </div>
+        <ColorControl
+          label="Fill"
+          selected={shown}
+          onPick={(color) => {
+            apply((shape) => writeFill(shape, { kind: 'solid', color }))
+          }}
+          onClear={() => {
+            apply((shape) => writeFill(shape, { kind: 'none' }))
+          }}
+        />
+        <button
+          type="button"
+          aria-label="Fill gradient"
+          onClick={() => {
+            // From the colour it already has to nothing, which is the gradient
+            // people actually reach for; the stops can be moved afterwards
+            // because they are ordinary stops in the file.
+            const from = shown ?? '#FF7A00'
+            apply((shape) =>
+              writeFill(shape, {
+                kind: 'gradient',
+                radial: false,
+                angle: 90 * 60000,
+                stops: [
+                  { position: 0, color: { source: { kind: 'srgb', hex: from }, transforms: [] } },
+                  {
+                    position: 1,
+                    color: { source: { kind: 'srgb', hex: '#FFFFFF' }, transforms: [] },
+                  },
+                ],
+              }),
+            )
+          }}
+          className="rounded border border-border px-1.5 py-0.5 text-muted"
+        >
+          Gradient
+        </button>
       </section>
 
       <BoxProperties shapes={shapes} />
@@ -115,6 +120,16 @@ export function PropertiesPanel() {
 
       <section aria-label="Line" className="space-y-2">
         <h2 className="uppercase tracking-wide text-muted">Line</h2>
+        <ColorControl
+          label="Line"
+          selected={lineColour}
+          onPick={(color) => {
+            apply((shape) => writeLine(shape, { fill: { kind: 'solid', color } }))
+          }}
+          onClear={() => {
+            apply((shape) => writeLine(shape, { fill: { kind: 'none' } }))
+          }}
+        />
         <div className="flex flex-wrap gap-1">
           {WIDTHS.map(([label, width]) => (
             <button

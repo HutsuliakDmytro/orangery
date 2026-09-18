@@ -323,3 +323,77 @@ describe('line spacing', () => {
     expect(serializeNode(element)).toBe(before)
   })
 })
+
+describe('paragraph indents', () => {
+  it('reads how far a paragraph is pushed in', () => {
+    const body = readTextBody(
+      node(
+        '<a:txBody><a:bodyPr/><a:p><a:pPr marL="457200" indent="-228600"/><a:r><a:t>In</a:t></a:r></a:p></a:txBody>',
+      ),
+    )
+
+    const paragraph = textBodyToDoc(body).content?.[0]
+    expect(paragraph?.attrs?.['marginLeft']).toBe(457200)
+    expect(paragraph?.attrs?.['firstLine']).toBe(-228600)
+  })
+
+  it('says nothing about a paragraph that says nothing', () => {
+    const body = readTextBody(
+      node('<a:txBody><a:bodyPr/><a:p><a:r><a:t>Plain</a:t></a:r></a:p></a:txBody>'),
+    )
+    const paragraph = textBodyToDoc(body).content?.[0]
+
+    // Null and zero are different answers: one inherits, the other decides.
+    expect(paragraph?.attrs?.['marginLeft']).toBeNull()
+  })
+
+  it('writes an indent back', () => {
+    const target = node('<a:txBody><a:bodyPr/><a:p><a:r><a:t>Move me</a:t></a:r></a:p></a:txBody>')
+    const doc = textBodyToDoc(readTextBody(target))
+    const first = doc.content?.[0]
+    if (first === undefined) throw new Error('no paragraph')
+
+    writeTextBody(target, {
+      ...doc,
+      content: [{ ...first, attrs: { ...first.attrs, marginLeft: 228600 } }],
+    })
+
+    expect(serializeNode(target)).toContain('marL="228600"')
+  })
+
+  it('takes it away again rather than writing a zero', () => {
+    const target = node(
+      '<a:txBody><a:bodyPr/><a:p><a:pPr marL="228600"/><a:r><a:t>Back</a:t></a:r></a:p></a:txBody>',
+    )
+    const doc = textBodyToDoc(readTextBody(target))
+    const first = doc.content?.[0]
+    if (first === undefined) throw new Error('no paragraph')
+
+    writeTextBody(target, {
+      ...doc,
+      content: [{ ...first, attrs: { ...first.attrs, marginLeft: null } }],
+    })
+
+    // A paragraph indented and then un-indented is the paragraph it was.
+    expect(serializeNode(target)).not.toContain('marL')
+  })
+
+  it('leaves the rest of the properties alone', () => {
+    const target = node(
+      '<a:txBody><a:bodyPr/><a:p><a:pPr lvl="2"><a:buChar char="—"/></a:pPr><a:r><a:t>Deep</a:t></a:r></a:p></a:txBody>',
+    )
+    const doc = textBodyToDoc(readTextBody(target))
+    const first = doc.content?.[0]
+    if (first === undefined) throw new Error('no paragraph')
+
+    writeTextBody(target, {
+      ...doc,
+      content: [{ ...first, attrs: { ...first.attrs, marginLeft: 457200 } }],
+    })
+
+    const written = serializeNode(target)
+    expect(written).toContain('marL="457200"')
+    expect(written).toContain('lvl="2"')
+    expect(written).toContain('buChar')
+  })
+})

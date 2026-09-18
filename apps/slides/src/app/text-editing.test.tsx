@@ -438,3 +438,51 @@ describe('line spacing', () => {
     expect(partText()).not.toContain('a:lnSpc')
   })
 })
+
+describe('indenting a paragraph', () => {
+  /** Opens a shape's text and leaves it, which is what commits the change. */
+  const commit = (rerender: (ui: React.ReactElement) => void, change: () => void) => {
+    act(() => {
+      useDeckStore.getState().setEditing(firstShape()?.id ?? null)
+    })
+    act(change)
+    act(() => {
+      useDeckStore.getState().setEditing(null)
+    })
+    rerender(<App />)
+  }
+
+  it('pushes the paragraph in by a quarter inch', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    commit(rerender, () => {
+      runCommand('format.indent-in', {})
+    })
+
+    expect(partText()).toContain('marL="228600"')
+  })
+
+  it('takes it back to inheriting rather than to a stated zero', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    commit(rerender, () => {
+      runCommand('format.indent-in', {})
+      runCommand('format.indent-out', {})
+    })
+
+    expect(partText()).not.toContain('marL=')
+  })
+
+  it('does not go past the left edge', async () => {
+    await openDeck('shapes')
+    const { rerender } = render(<App />)
+
+    commit(rerender, () => {
+      runCommand('format.indent-out', {})
+    })
+
+    expect(partText()).not.toContain('marL="-')
+  })
+})

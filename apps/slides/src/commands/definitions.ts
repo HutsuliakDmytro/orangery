@@ -692,6 +692,38 @@ function paragraphAttribute(name: string): unknown {
   return useEditorStore.getState().editor?.getAttributes('paragraph')[name]
 }
 
+/** A quarter inch, which is the step Word and PowerPoint both indent by. */
+const INDENT_STEP = 228600
+
+/**
+ * Moving a paragraph in or out.
+ *
+ * Distinct from `Tab`, which changes the outline level: a level is a rung on
+ * the master's list style and brings a bullet and a size with it, while an
+ * indent is a distance and brings nothing. Offering only the first, as this did,
+ * means a paragraph can be moved but not moved *a little*.
+ */
+export const indentCommands: readonly Command[] = (
+  [
+    ['in', 'Increase Indent', 1],
+    ['out', 'Decrease Indent', -1],
+  ] as const
+).map(([id, label, direction]) => ({
+  id: `format.indent-${id}`,
+  label,
+  group: 'format' as const,
+  isEnabled: () => useEditorStore.getState().editor !== null,
+  run: () => {
+    const current = paragraphAttribute('marginLeft')
+    const from = typeof current === 'number' ? current : 0
+    const next = Math.max(from + direction * INDENT_STEP, 0)
+
+    // Back to nothing is back to inheriting, not a stated zero: a paragraph
+    // indented and then un-indented should be the paragraph it was.
+    setParagraph({ marginLeft: next === 0 ? null : next })
+  },
+}))
+
 export const paragraphCommands: readonly Command[] = [
   ...(
     [
@@ -1535,6 +1567,7 @@ export function registerBuiltinCommands(): void {
   registerAll(connectorCommands)
   registerAll(textCommands)
   registerAll(paragraphCommands)
+  registerAll(indentCommands)
   registerAll(spacingCommands)
   registerAll(slideEditCommands)
   registerAll(exportCommands)

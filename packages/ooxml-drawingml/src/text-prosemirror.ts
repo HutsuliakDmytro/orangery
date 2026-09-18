@@ -198,12 +198,21 @@ export function textBodyToDoc(body: TextBody): PmNode {
       })
 
       const level = Number(properties === undefined ? undefined : attribute(properties, 'lvl'))
+      const emu = (name: string) => {
+        const value = Number(properties === undefined ? undefined : attribute(properties, name))
+        return Number.isFinite(value) ? value : null
+      }
 
       return {
         type: 'paragraph',
         attrs: {
           level: Number.isFinite(level) ? level : 0,
           align: (properties === undefined ? undefined : attribute(properties, 'algn')) ?? null,
+          // `marL` is how far the whole paragraph is pushed in; `indent` is how
+          // much further, or less far, the first line goes. Both in EMU, and
+          // both absent far more often than present.
+          marginLeft: emu('marL'),
+          firstLine: emu('indent'),
           bullet: properties === undefined ? null : bulletKindOf(properties),
           lineSpacing: properties === undefined ? null : lineSpacingOf(properties),
           pPrOriginal: properties === undefined ? null : serializeNode(properties),
@@ -436,11 +445,15 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
     const level = Number(paragraph.attrs?.['level'] ?? 0)
     const align = paragraph.attrs?.['align']
     const bullet = paragraph.attrs?.['bullet']
+    const marginLeft = paragraph.attrs?.['marginLeft']
+    const firstLine = paragraph.attrs?.['firstLine']
     const patched =
       properties ??
       (level > 0 ||
       typeof align === 'string' ||
       typeof bullet === 'string' ||
+      typeof marginLeft === 'number' ||
+      typeof firstLine === 'number' ||
       typeof paragraph.attrs?.['lineSpacing'] === 'number'
         ? element('a:pPr')
         : null)
@@ -451,6 +464,17 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
 
       if (typeof align === 'string') setAttribute(patched, 'algn', align)
       else removeAttribute(patched, 'algn')
+
+      // Cleared rather than written as zero: zero is a stated answer, and a
+      // paragraph that never said anything about its margin should go back to
+      // inheriting one from its level.
+      if (typeof marginLeft === 'number')
+        setAttribute(patched, 'marL', String(Math.round(marginLeft)))
+      else removeAttribute(patched, 'marL')
+
+      if (typeof firstLine === 'number')
+        setAttribute(patched, 'indent', String(Math.round(firstLine)))
+      else removeAttribute(patched, 'indent')
 
       setBullet(patched, paragraph.attrs?.['bullet'])
       setLineSpacing(patched, paragraph.attrs?.['lineSpacing'])

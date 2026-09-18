@@ -10,6 +10,7 @@ import { animationAt, effectStyle } from './animation'
  */
 
 const effect = (over: Partial<Effect> = {}): Effect => ({
+  id: 5,
   shapeId: 1,
   kind: 'entrance',
   preset: null,

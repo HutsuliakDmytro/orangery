@@ -15,6 +15,7 @@ import { PictureProperties } from './picture-properties'
 import { ColorControl } from './color-control'
 import { GradientEditor } from './gradient-editor'
 import { TextProperties } from './text-properties'
+import { AnimationPanel } from './animation-panel'
 
 /**
  * What the selection looks like, and how to change it.
@@ -160,6 +161,8 @@ export function PropertiesPanel() {
       <BoxProperties shapes={shapes} />
 
       <TextProperties />
+
+      <AnimationPanel />
 
       <section aria-label="Shadow" className="space-y-2">
         <h2 className="uppercase tracking-wide text-muted">Shadow</h2>

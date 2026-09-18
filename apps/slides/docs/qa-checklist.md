@@ -197,6 +197,13 @@ These are the ones that matter most. Take them seriously.
 - [ ] Compare a deck of varied effects beside PowerPoint. Note which read wrong
       rather than merely differ — everything we do not model fades, which is
       the intent, and a motion path stays put.
+- [ ] Add a fade to a shape, save, **open in PowerPoint**. The animation is
+      there, in PowerPoint's own pane, and plays. This is the check the unit
+      tests cannot make.
+- [ ] Do it on a slide that already had animations from PowerPoint. The old
+      ones are still there and still play.
+- [ ] Remove the last effect of a step. The press that played it is gone too —
+      no press that does nothing.
 
 ## Getting a deck in
 

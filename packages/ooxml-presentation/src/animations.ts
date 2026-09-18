@@ -38,6 +38,14 @@ const TRIGGERS: Readonly<Record<string, Trigger>> = {
 }
 
 export interface Effect {
+  /**
+   * `p:cTn/@id` of the effect node — its name in the file.
+   *
+   * What an editor holds on to. A position in a list changes when anything
+   * before it does; this does not, which is what makes "change that one"
+   * mean the same thing after the list has been rearranged.
+   */
+  id: number
   /** The shape it is aimed at; null for an effect aimed at something else. */
   shapeId: number | null
   kind: EffectKind
@@ -124,6 +132,7 @@ function readEffect(node: XmlNode, trigger: Trigger): Effect {
   const animEffect = descendants(node, 'p:animEffect')[0]
 
   return {
+    id: numberOr(attribute(timing ?? {}, 'id'), -1) ?? -1,
     shapeId: targetOf(node),
     kind: KINDS[attribute(timing ?? {}, 'presetClass') ?? ''] ?? 'other',
     preset: numberOr(attribute(timing ?? {}, 'presetID'), null),

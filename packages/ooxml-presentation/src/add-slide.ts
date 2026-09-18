@@ -207,6 +207,52 @@ export function moveSlide(pkg: OoxmlPackage, from: number, to: number): boolean 
 }
 
 /**
+ * Moves several slides at once, keeping their order among themselves.
+ *
+ * `to` is the slide they were dropped on: the block lands before it when it
+ * came from below and after it when it came from above, which is the side the
+ * drop line was drawn on. Dropping a block on one of its own slides does
+ * nothing — there is no position that would be a move.
+ *
+ * Returns where the block landed, or null when nothing moved.
+ */
+export function moveSlides(
+  pkg: OoxmlPackage,
+  indexes: readonly number[],
+  to: number,
+): { index: number } | null {
+  const found = presentationRoot(pkg)
+  const list = found === null ? undefined : findChild(found.root, 'p:sldIdLst')
+  if (found === null || list === undefined) return null
+
+  const entries = children(list)
+  const moving = [...new Set(indexes)]
+    .filter((index) => index >= 0 && index < entries.length)
+    .sort((first, second) => first - second)
+
+  const highest = moving.at(-1)
+  if (highest === undefined || moving.includes(to) || to < 0 || to >= entries.length) return null
+
+  const picked = new Set(moving)
+  const rest = entries.filter((_, index) => !picked.has(index))
+  const above = entries.filter((_, index) => !picked.has(index) && index < to).length
+  const position = to > highest ? above + 1 : above
+
+  rest.splice(
+    position,
+    0,
+    ...moving.flatMap((index) => {
+      const entry = entries[index]
+      return entry === undefined ? [] : [entry]
+    }),
+  )
+  entries.splice(0, entries.length, ...rest)
+
+  writePresentation(pkg, found.roots)
+  return { index: position }
+}
+
+/**
  * Removes a slide from the deck.
  *
  * The part is left in the package. A slide nobody can reach is not a slide, and
@@ -321,6 +367,59 @@ export function duplicateSlide(pkg: OoxmlPackage, index: number): AddedSlide | n
 
   writePresentation(pkg, found.roots)
   return { path, index: index + 1 }
+}
+
+/**
+ * Copies several slides at once.
+ *
+ * The copies go after the last one selected, in the order they were in, which
+ * is where PowerPoint puts them — one copy tucked in behind each original would
+ * interleave the two halves of a section and lose the reason they were picked
+ * together. Each copy is made where its original is and then moved into place,
+ * so no original ever shifts under the next copy.
+ */
+export function duplicateSlides(
+  pkg: OoxmlPackage,
+  indexes: readonly number[],
+): { paths: string[]; index: number } | null {
+  const sorted = [...new Set(indexes)].sort((first, second) => first - second)
+  const last = sorted.at(-1)
+  if (last === undefined) return null
+
+  const paths: string[] = []
+  for (const source of sorted) {
+    const copy = duplicateSlide(pkg, source)
+    if (copy === null) continue
+
+    const destination = last + 1 + paths.length
+    if (copy.index !== destination) moveSlide(pkg, copy.index, destination)
+    paths.push(copy.path)
+  }
+
+  return paths.length === 0 ? null : { paths, index: last + 1 }
+}
+
+/**
+ * Removes several slides at once.
+ *
+ * Highest first, so each removal leaves the indexes below it alone. A deck with
+ * no slides is one PowerPoint will not open, so removing every slide does
+ * nothing at all rather than part of what was asked.
+ */
+export function removeSlides(pkg: OoxmlPackage, indexes: readonly number[]): boolean {
+  const found = presentationRoot(pkg)
+  const list = found === null ? undefined : findChild(found.root, 'p:sldIdLst')
+  if (found === null || list === undefined) return false
+
+  const total = children(list).length
+  const sorted = [...new Set(indexes)]
+    .filter((index) => index >= 0 && index < total)
+    .sort((first, second) => second - first)
+
+  if (sorted.length === 0 || sorted.length >= total) return false
+
+  for (const index of sorted) removeSlide(pkg, index)
+  return true
 }
 
 /**

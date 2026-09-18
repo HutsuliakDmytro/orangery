@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -38,6 +38,7 @@ beforeEach(() => {
     redoStack: [],
     error: null,
   })
+  useDeckStore.setState({ slideSelection: [] })
   useViewStore.setState({ finding: false, zoom: null, editingNotes: false })
 })
 
@@ -362,5 +363,190 @@ describe('changing the layout of a slide', () => {
     await userEvent.selectOptions(picker, other.value)
 
     expect(titles()[0]).toBe(before)
+  })
+})
+
+describe('dragging a slide in the filmstrip', () => {
+  /** Drags the thumbnail of one slide onto another's. */
+  const dragOnto = (from: number, to: number) => {
+    const thumbnail = (index: number) => screen.getByLabelText(`Slide ${String(index + 1)}`)
+
+    fireEvent.dragStart(thumbnail(from))
+    fireEvent.dragOver(thumbnail(to))
+    fireEvent.drop(thumbnail(to))
+  }
+
+  it('puts it where it was dropped', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    dragOnto(0, 3)
+
+    expect(titles().slice(0, 5)).toEqual(['Slide 2', 'Slide 3', 'Slide 4', 'Slide 1', 'Slide 5'])
+  })
+
+  it('shows the slide that moved', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    dragOnto(0, 3)
+
+    expect(useDeckStore.getState().current).toBe(3)
+  })
+
+  it('is one undo step', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    dragOnto(4, 1)
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+
+    expect(titles().slice(0, 5)).toEqual(['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5'])
+  })
+
+  it('does nothing when a slide is dropped on itself', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    dragOnto(2, 2)
+
+    expect(useDeckStore.getState().undoStack).toHaveLength(0)
+  })
+
+  it('shows where the slide would land while it is being dragged', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    fireEvent.dragStart(screen.getByLabelText('Slide 1'))
+    fireEvent.dragOver(screen.getByLabelText('Slide 4'))
+
+    expect(screen.getAllByTestId('drop-line')).toHaveLength(1)
+  })
+
+  it('shows no line over the slide being dragged', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    fireEvent.dragStart(screen.getByLabelText('Slide 1'))
+    fireEvent.dragOver(screen.getByLabelText('Slide 1'))
+
+    expect(screen.queryByTestId('drop-line')).toBeNull()
+  })
+})
+
+describe('picking out several slides', () => {
+  const thumbnail = (index: number) => screen.getByLabelText(`Slide ${String(index + 1)}`)
+  const pickedOut = () =>
+    screen
+      .getAllByRole('button')
+      .filter((button) => button.dataset.selected === 'true')
+      .map((button) => button.getAttribute('aria-label'))
+
+  it('takes the run between two slides on a shift click', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(1))
+    fireEvent.click(thumbnail(4), { shiftKey: true })
+
+    expect(pickedOut()).toEqual(['Slide 2', 'Slide 3', 'Slide 4', 'Slide 5'])
+  })
+
+  it('adds and removes one at a time on a platform click', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(0))
+    fireEvent.click(thumbnail(3), { ctrlKey: true })
+    expect(pickedOut()).toEqual(['Slide 1', 'Slide 4'])
+
+    fireEvent.click(thumbnail(3), { ctrlKey: true })
+    expect(pickedOut()).toEqual(['Slide 1'])
+  })
+
+  it('goes back to one on a plain click', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(0))
+    fireEvent.click(thumbnail(2), { shiftKey: true })
+    await userEvent.click(thumbnail(1))
+
+    expect(pickedOut()).toEqual(['Slide 2'])
+  })
+
+  it('deletes all of them as one step', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(1))
+    fireEvent.click(thumbnail(3), { shiftKey: true })
+    act(() => {
+      runCommand('slide.delete', {})
+    })
+
+    expect(titles()).toEqual(['Slide 1', 'Slide 5', 'Slide 6', 'Slide 7', 'Slide 8'])
+
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+    expect(useDeckStore.getState().open?.deck.slides).toHaveLength(8)
+  })
+
+  it('will not delete every slide in the deck', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(0))
+    fireEvent.click(thumbnail(7), { shiftKey: true })
+
+    expect(getCommand('slide.delete')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('duplicates all of them after the last one', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(0))
+    fireEvent.click(thumbnail(1), { shiftKey: true })
+    act(() => {
+      runCommand('slide.duplicate', {})
+    })
+
+    expect(titles().slice(0, 4)).toEqual(['Slide 1', 'Slide 2', 'Slide 1', 'Slide 2'])
+    expect(useDeckStore.getState().slideSelection).toEqual([2, 3])
+  })
+
+  it('drags the whole block to where it was dropped', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(0))
+    fireEvent.click(thumbnail(1), { shiftKey: true })
+
+    fireEvent.dragStart(thumbnail(0))
+    fireEvent.dragOver(thumbnail(4))
+    fireEvent.drop(thumbnail(4))
+
+    expect(titles().slice(0, 5)).toEqual(['Slide 3', 'Slide 4', 'Slide 5', 'Slide 1', 'Slide 2'])
+    expect(useDeckStore.getState().slideSelection).toEqual([3, 4])
+  })
+
+  it('keeps the indexes inside the deck when slides go away', async () => {
+    await openDeck('many-slides')
+    render(<App />)
+
+    await userEvent.click(thumbnail(5))
+    fireEvent.click(thumbnail(7), { shiftKey: true })
+    act(() => {
+      runCommand('slide.delete', {})
+    })
+
+    const { current, slideSelection, open } = useDeckStore.getState()
+    const count = open?.deck.slides.length ?? 0
+    expect(current).toBeLessThan(count)
+    expect(slideSelection.every((index) => index < count)).toBe(true)
   })
 })

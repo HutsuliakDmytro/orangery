@@ -79,5 +79,14 @@ export { facingSites, insertConnector, SITES } from './insert-connector'
 export type { NewConnector, Site } from './insert-connector'
 export { findInDeck, replaceInDeck, replaceInSlide } from './find-replace'
 export type { Match, SearchOptions } from './find-replace'
-export { addSlide, duplicateSlide, moveSlide, removeSlide, setSlideLayout } from './add-slide'
+export {
+  addSlide,
+  duplicateSlide,
+  duplicateSlides,
+  moveSlide,
+  moveSlides,
+  removeSlide,
+  removeSlides,
+  setSlideLayout,
+} from './add-slide'
 export type { AddedSlide } from './add-slide'

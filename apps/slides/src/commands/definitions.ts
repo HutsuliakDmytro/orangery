@@ -14,12 +14,12 @@ import {
   alignShapes,
   createShape,
   deleteShapes,
-  duplicateSlide,
+  duplicateSlides,
   insertConnector,
   insertPicture,
   insertTable,
   moveSlide,
-  removeSlide,
+  removeSlides,
   distributeShapes,
   duplicateShape,
   groupShapes,
@@ -466,27 +466,39 @@ export const slideEditCommands: readonly Command[] = [
     shortcut: 'Mod+Shift+d',
     isEnabled: () => useDeckStore.getState().open !== null,
     run: () => {
-      const { current, editPackage, select } = useDeckStore.getState()
+      const { slideSelection, editPackage, selectSlides } = useDeckStore.getState()
 
-      const copy: { index: number | null } = { index: null }
+      const copies: { indexes: number[] } = { indexes: [] }
       editPackage((open) => {
-        const result = duplicateSlide(open.package, current)
-        copy.index = result?.index ?? null
-        return result !== null
+        const result = duplicateSlides(open.package, slideSelection)
+        if (result === null) return false
+
+        copies.indexes = result.paths.map((_, offset) => result.index + offset)
+        return true
       })
 
-      if (copy.index !== null) select(copy.index)
+      // The copies are what a person goes on to work with, so they end up
+      // picked out rather than the originals they were made from.
+      if (copies.indexes.length > 0) selectSlides(copies.indexes)
     },
   },
   {
     id: 'slide.delete',
     label: 'Delete Slide',
     group: 'edit',
-    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 1,
+    isEnabled: () => {
+      const { open, slideSelection } = useDeckStore.getState()
+      const count = open?.deck.slides.length ?? 0
+      // A deck with no slides is one PowerPoint will not open, so deleting all
+      // of them is not offered rather than silently doing part of it.
+      return count > 0 && slideSelection.length < count
+    },
     run: () => {
-      const { current, editPackage, select } = useDeckStore.getState()
-      editPackage((open) => removeSlide(open.package, current))
-      select(Math.max(current - 1, 0))
+      const { slideSelection, editPackage, select } = useDeckStore.getState()
+      const first = Math.min(...slideSelection)
+
+      editPackage((open) => removeSlides(open.package, slideSelection))
+      select(Math.max(first - 1, 0))
     },
   },
   {

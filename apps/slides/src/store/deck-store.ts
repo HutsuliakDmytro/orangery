@@ -47,6 +47,15 @@ interface DeckState {
   current: number
   /** Shape ids selected on the current slide. */
   selection: number[]
+  /**
+   * The slides picked out in the filmstrip, `current` always among them.
+   *
+   * Separate from `current` because they answer different questions: one slide
+   * is being shown and edited, and any number of them can be the subject of an
+   * action on slides. Collapsing the two would mean deleting four slides had to
+   * decide which one had been on screen.
+   */
+  slideSelection: number[]
   /** The shape whose text is being edited, or null. */
   editing: number | null
   undoStack: Edit[]
@@ -55,6 +64,8 @@ interface DeckState {
   error: string | null
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
   select: (index: number) => void
+  /** Picks out slides in the filmstrip; the last one given becomes current. */
+  selectSlides: (indexes: readonly number[]) => void
   close: () => void
   /** Selects shapes on the current slide; `add` extends rather than replaces. */
   selectShapes: (ids: readonly number[], add?: boolean) => void
@@ -90,10 +101,25 @@ function reread(open: OpenDeck): OpenDeck {
   return { ...open, deck, themes: readThemes(open.package, deck) }
 }
 
+/**
+ * Keeps the shown slide and the filmstrip selection inside a deck that changed
+ * size — deleting four slides or undoing the add of one both leave indexes
+ * pointing past the end otherwise.
+ */
+function withinDeck(open: OpenDeck, current: number, picked: readonly number[]) {
+  const count = open.deck.slides.length
+  const shown = count === 0 ? -1 : Math.min(Math.max(current, 0), count - 1)
+  const within = picked.filter((index) => index >= 0 && index < count)
+
+  if (within.length > 0) return { current: shown, slideSelection: within }
+  return { current: shown, slideSelection: shown === -1 ? [] : [shown] }
+}
+
 export const useDeckStore = create<DeckState>((set, get) => ({
   open: null,
   current: -1,
   selection: [],
+  slideSelection: [],
   editing: null,
   undoStack: [],
   redoStack: [],
@@ -108,6 +134,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         open: { package: pkg, deck, themes: readThemes(pkg, deck), path },
         current: deck.slides.length > 0 ? 0 : -1,
         selection: [],
+        slideSelection: deck.slides.length > 0 ? [0] : [],
         editing: null,
         undoStack: [],
         redoStack: [],
@@ -128,6 +155,23 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         // Selection belongs to a slide, so moving away drops it rather than
         // carrying ids that mean something else on the slide arrived at.
         selection: [],
+        slideSelection: count === 0 ? [] : [Math.min(Math.max(index, 0), count - 1)],
+        editing: null,
+      }
+    })
+  },
+
+  selectSlides: (indexes) => {
+    set((state) => {
+      const count = state.open?.deck.slides.length ?? 0
+      const within = [...new Set(indexes)].filter((index) => index >= 0 && index < count)
+      const last = within.at(-1)
+      if (last === undefined) return {}
+
+      return {
+        current: last,
+        selection: [],
+        slideSelection: [...within].sort((first, second) => first - second),
         editing: null,
       }
     })
@@ -138,6 +182,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       open: null,
       current: -1,
       selection: [],
+      slideSelection: [],
       editing: null,
       undoStack: [],
       redoStack: [],
@@ -211,11 +256,15 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     })
     if (parts.length === 0) return
 
-    set((state) => ({
-      open: reread(open),
-      undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
-      redoStack: [],
-    }))
+    set((state) => {
+      const reopened = reread(open)
+      return {
+        open: reopened,
+        ...withinDeck(reopened, state.current, state.slideSelection),
+        undoStack: [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
+        redoStack: [],
+      }
+    })
   },
 
   undo: () => {
@@ -224,11 +273,15 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     if (open === null || step === undefined) return
 
     for (const part of step.parts) setPartText(open.package, part.path, part.before)
-    set((state) => ({
-      open: reread(open),
-      undoStack: state.undoStack.slice(0, -1),
-      redoStack: [...state.redoStack, step],
-    }))
+    set((state) => {
+      const reopened = reread(open)
+      return {
+        open: reopened,
+        ...withinDeck(reopened, state.current, state.slideSelection),
+        undoStack: state.undoStack.slice(0, -1),
+        redoStack: [...state.redoStack, step],
+      }
+    })
   },
 
   redo: () => {
@@ -237,11 +290,15 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     if (open === null || step === undefined) return
 
     for (const part of step.parts) setPartText(open.package, part.path, part.after)
-    set((state) => ({
-      open: reread(open),
-      undoStack: [...state.undoStack, step],
-      redoStack: state.redoStack.slice(0, -1),
-    }))
+    set((state) => {
+      const reopened = reread(open)
+      return {
+        open: reopened,
+        ...withinDeck(reopened, state.current, state.slideSelection),
+        undoStack: [...state.undoStack, step],
+        redoStack: state.redoStack.slice(0, -1),
+      }
+    })
   },
 }))
 

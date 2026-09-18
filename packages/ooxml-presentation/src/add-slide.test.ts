@@ -3,7 +3,16 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getPartText, parseRelationships } from '@orangery/ooxml-core'
 import { textOfBody } from '@orangery/ooxml-drawingml'
-import { addSlide, duplicateSlide, moveSlide, removeSlide, setSlideLayout } from './add-slide'
+import {
+  addSlide,
+  duplicateSlide,
+  duplicateSlides,
+  moveSlide,
+  moveSlides,
+  removeSlide,
+  removeSlides,
+  setSlideLayout,
+} from './add-slide'
 import { readDeck, readSlidePart } from './deck'
 import { relsPartFor } from './insert-picture'
 import { readPptxPackage } from './parts'
@@ -332,5 +341,136 @@ describe('changing the layout of a slide', () => {
     if (slide === undefined || layout === undefined) throw new Error('fixture changed')
 
     expect(setSlideLayout(pkg, slide, layout)).toBe(false)
+  })
+})
+
+describe('duplicating several slides', () => {
+  /** Duplicates slides, saves, reopens. */
+  async function duplicateMany(indexes: readonly number[]) {
+    const pkg = await load('many-slides')
+    const copies = duplicateSlides(pkg, indexes)
+    return { copies, deck: readDeck(await readPptxPackage(await saveDeck(pkg))) }
+  }
+
+  it('puts the copies after the last one picked, in order', async () => {
+    const { deck } = await duplicateMany([1, 2])
+
+    expect(deck.slides.map(titleOf).slice(0, 6)).toEqual([
+      'Slide 1',
+      'Slide 2',
+      'Slide 3',
+      'Slide 2',
+      'Slide 3',
+      'Slide 4',
+    ])
+  })
+
+  it('takes them in order however they were picked', async () => {
+    const { deck } = await duplicateMany([4, 0, 2])
+
+    expect(deck.slides.map(titleOf).slice(5, 8)).toEqual(['Slide 1', 'Slide 3', 'Slide 5'])
+  })
+
+  it('gives each copy a part of its own', async () => {
+    const { copies } = await duplicateMany([0, 1, 2])
+    expect(new Set(copies?.paths).size).toBe(3)
+  })
+
+  it('reports nothing done for an empty selection', async () => {
+    const pkg = await load('many-slides')
+    expect(duplicateSlides(pkg, [])).toBeNull()
+  })
+})
+
+describe('removing several slides', () => {
+  it('takes them all out, whatever order they were picked in', async () => {
+    const pkg = await load('many-slides')
+    expect(removeSlides(pkg, [5, 1, 3])).toBe(true)
+
+    const deck = readDeck(await readPptxPackage(await saveDeck(pkg)))
+    expect(deck.slides.map(titleOf)).toEqual([
+      'Slide 1',
+      'Slide 3',
+      'Slide 5',
+      'Slide 7',
+      'Slide 8',
+    ])
+  })
+
+  it('refuses to empty the deck rather than doing part of it', async () => {
+    const pkg = await load('many-slides')
+    expect(removeSlides(pkg, [0, 1, 2, 3, 4, 5, 6, 7])).toBe(false)
+
+    const deck = readDeck(await readPptxPackage(await saveDeck(pkg)))
+    expect(deck.slides).toHaveLength(8)
+  })
+
+  it('reports nothing done for an empty selection', async () => {
+    const pkg = await load('many-slides')
+    expect(removeSlides(pkg, [])).toBe(false)
+  })
+})
+
+describe('moving several slides', () => {
+  /** Moves slides onto the one at `to`, saves, reopens. */
+  async function moveMany(indexes: readonly number[], to: number) {
+    const pkg = await load('many-slides')
+    const landed = moveSlides(pkg, indexes, to)
+    return { landed, deck: readDeck(await readPptxPackage(await saveDeck(pkg))) }
+  }
+
+  it('drops a block below the slide it came to from above', async () => {
+    const { landed, deck } = await moveMany([0, 1], 4)
+
+    expect(deck.slides.map(titleOf)).toEqual([
+      'Slide 3',
+      'Slide 4',
+      'Slide 5',
+      'Slide 1',
+      'Slide 2',
+      'Slide 6',
+      'Slide 7',
+      'Slide 8',
+    ])
+    expect(landed?.index).toBe(3)
+  })
+
+  it('drops a block above the slide it came to from below', async () => {
+    const { landed, deck } = await moveMany([5, 6], 1)
+
+    expect(deck.slides.map(titleOf).slice(0, 4)).toEqual([
+      'Slide 1',
+      'Slide 6',
+      'Slide 7',
+      'Slide 2',
+    ])
+    expect(landed?.index).toBe(1)
+  })
+
+  it('keeps the slides in the order they were in', async () => {
+    const { deck } = await moveMany([6, 2, 4], 0)
+    expect(deck.slides.map(titleOf).slice(0, 4)).toEqual([
+      'Slide 3',
+      'Slide 5',
+      'Slide 7',
+      'Slide 1',
+    ])
+  })
+
+  it('agrees with moving one slide on its own', async () => {
+    const one = await moveMany([0], 3)
+
+    const pkg = await load('many-slides')
+    moveSlide(pkg, 0, 3)
+    const expected = readDeck(await readPptxPackage(await saveDeck(pkg)))
+
+    expect(one.deck.slides.map(titleOf)).toEqual(expected.slides.map(titleOf))
+  })
+
+  it('reports nothing done when a block is dropped on itself', async () => {
+    const pkg = await load('many-slides')
+    expect(moveSlides(pkg, [2, 3], 3)).toBeNull()
+    expect(moveSlides(pkg, [], 3)).toBeNull()
+    expect(moveSlides(pkg, [0], 99)).toBeNull()
   })
 })

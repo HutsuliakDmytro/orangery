@@ -21,6 +21,7 @@ import {
   insertIcon,
   insertPicture,
   flatten,
+  geometryPoints,
   insertColumn,
   insertRow,
   mergeCells,
@@ -258,6 +259,39 @@ export const editCommands: readonly Command[] = [
     run: () => {
       const { finding, setFinding } = useViewStore.getState()
       setFinding(!finding)
+    },
+  },
+  {
+    id: 'format.edit-points',
+    label: 'Edit Points',
+    group: 'format',
+    // Only a shape that states its own outline has points to move. A preset's
+    // shape is a name rather than a list of corners, and offering handles that
+    // did nothing would be worse than offering none.
+    isEnabled: () => {
+      const slide = currentSlide(useDeckStore.getState())
+      const selection = useDeckStore.getState().selection
+      if (slide === null || selection.length !== 1) return false
+
+      const shape = flatten(slide.shapes).find((one) => selection.includes(one.id))
+      return shape !== undefined && geometryPoints(shape).length > 0
+    },
+    run: () => {
+      const { editingPoints, selection, setEditingPoints } = useDeckStore.getState()
+      const first = selection[0] ?? null
+      // A toggle, because the way out of it is the same gesture as the way in
+      // as well as `Escape`.
+      setEditingPoints(editingPoints === first ? null : first)
+    },
+  },
+  {
+    id: 'edit.leave-points',
+    label: 'Finish Editing Points',
+    group: 'edit',
+    shortcut: 'Escape',
+    isEnabled: () => useDeckStore.getState().editingPoints !== null,
+    run: () => {
+      useDeckStore.getState().setEditingPoints(null)
     },
   },
   {

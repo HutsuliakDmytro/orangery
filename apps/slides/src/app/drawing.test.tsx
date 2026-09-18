@@ -4,8 +4,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { runCommand } from '@orangery/ui-kit'
-import { connectorEnds, flatten } from '@orangery/ooxml-presentation'
+import { getCommand, runCommand } from '@orangery/ui-kit'
+import { connectorEnds, createDeck, flatten, geometryPoints } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { isKnownPreset } from '../render/geometry'
 import { SHAPE_GROUPS } from '../render/shape-presets'
@@ -229,5 +229,88 @@ describe('a selected connector', () => {
     fireEvent.pointerUp(window, client(middle))
 
     expect(found(connector.id)?.connection?.end?.shapeId).toBe(target.id)
+  })
+})
+
+describe('editing a shape’s own points', () => {
+  /** Draws a shape with custom geometry: the icons are stored that way. */
+  async function withCustomShape() {
+    await act(async () => {
+      await useDeckStore.getState().load(await createDeck(), null)
+    })
+
+    act(() => {
+      runCommand('insert.icon.triangle', {})
+    })
+
+    const shape = flatten(shapes()).find((one) => one.properties?.geometry?.kind === 'custom')
+    if (shape === undefined) throw new Error('no custom shape was inserted')
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shape.id])
+    })
+    return shape
+  }
+
+  it('is offered for a shape with its own outline and not for a preset', () => {
+    render(<App />)
+    act(() => {
+      useViewStore.getState().setDrawing('rect')
+    })
+    drawOut({ x: 0, y: 0 }, { x: 2_000_000, y: 1_000_000 })
+
+    // A preset's shape is a name, not a list of corners.
+    expect(getCommand('format.edit-points')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('shows a handle for every vertex', async () => {
+    const shape = await withCustomShape()
+    render(<App />)
+
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    expect(useDeckStore.getState().editingPoints).toBe(shape.id)
+    expect(screen.getAllByRole('button', { name: /^Point \d+$/u }).length).toBeGreaterThan(2)
+  })
+
+  it('moves the vertex that was dragged and leaves the rest', async () => {
+    await withCustomShape()
+    render(<App />)
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    const before = geometryPoints(
+      flatten(shapes()).find((one) => one.id === useDeckStore.getState().editingPoints) as never,
+    )
+
+    const handle = screen.getAllByRole('button', { name: /^Point \d+$/u })[0]
+    if (handle === undefined) throw new Error('no point handle')
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(window, { clientX: 20, clientY: 20 })
+    fireEvent.pointerUp(window, { clientX: 20, clientY: 20 })
+
+    const after = geometryPoints(
+      flatten(shapes()).find((one) => one.id === useDeckStore.getState().editingPoints) as never,
+    )
+
+    expect(after[0]).not.toEqual(before[0])
+    expect(after[1]).toEqual(before[1])
+  })
+
+  it('is left on Escape', async () => {
+    await withCustomShape()
+    render(<App />)
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    act(() => {
+      runCommand('edit.leave-points', {})
+    })
+
+    expect(useDeckStore.getState().editingPoints).toBeNull()
   })
 })

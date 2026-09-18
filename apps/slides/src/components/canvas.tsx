@@ -5,6 +5,7 @@ import {
   flatten,
   intoGroupSpace,
   moveConnectorEnd,
+  moveGeometryPoint,
   writeCrop,
   withAncestors,
   writeTransform,
@@ -35,6 +36,7 @@ export function Canvas() {
   const setDrawing = useViewStore((state) => state.setDrawing)
   const cells = useDeckStore((state) => state.cells)
   const pickCell = useDeckStore((state) => state.pickCell)
+  const editingPoints = useDeckStore((state) => state.editingPoints)
   const cropping = useDeckStore((state) => state.cropping)
   const setCropping = useDeckStore((state) => state.setCropping)
   const openGroup = useDeckStore((state) => state.openGroup)
@@ -102,6 +104,13 @@ export function Canvas() {
           }}
           cropping={cropping}
           onCrop={setCropping}
+          editingPoints={editingPoints}
+          onMovePoint={(id, at, to) => {
+            edit((slide) => {
+              const shape = flatten(slide.shapes).find((one) => one.id === id)
+              return shape === undefined ? false : moveGeometryPoint(shape, at, to)
+            })
+          }}
           cells={cells}
           onPickCell={pickCell}
           onDrag={(drag, correction) => {

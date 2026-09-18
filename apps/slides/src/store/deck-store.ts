@@ -143,6 +143,14 @@ interface DeckState {
    */
   cropping: number | null
   /**
+   * The shape whose outline points are being dragged, or null.
+   *
+   * Beside cropping rather than folded into it: both turn the handles into
+   * something other than sizing, and both are left with `Escape`, but a picture
+   * has no points and a drawn shape has no crop.
+   */
+  editingPoints: number | null
+  /**
    * The block of cells picked out in a table, or null.
    *
    * Carries the table's id as well as the coordinates: a cell is only a cell of
@@ -223,6 +231,8 @@ interface DeckState {
   setOpenGroup: (id: number | null) => void
   /** Enters crop on a picture, or leaves it with null. */
   setCropping: (id: number | null) => void
+  /** Enters point editing on a shape, or leaves it with null. */
+  setEditingPoints: (id: number | null) => void
   /** Picks a cell out of a table; `extend` grows the block from where it was. */
   pickCell: (table: number, at: { row: number; column: number }, extend: boolean) => void
   /**
@@ -332,6 +342,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   editing: null,
   openGroup: null,
   cropping: null,
+  editingPoints: null,
   cells: null,
   undoStack: [],
   redoStack: [],
@@ -406,6 +417,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         editing: null,
         openGroup: null,
         cropping: null,
+        editingPoints: null,
         cells: null,
         undoStack: [],
         redoStack: [],
@@ -439,6 +451,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         // something else on the slide arrived at.
         openGroup: null,
         cropping: null,
+        editingPoints: null,
         cells: null,
       }
     })
@@ -459,6 +472,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         editing: null,
         openGroup: null,
         cropping: null,
+        editingPoints: null,
         cells: null,
       }
     })
@@ -478,6 +492,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       editing: null,
       openGroup: null,
       cropping: null,
+      editingPoints: null,
       cells: null,
       undoStack: [],
       redoStack: [],
@@ -497,6 +512,10 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
   setOpenGroup: (id) => {
     set({ openGroup: id })
+  },
+
+  setEditingPoints: (id) => {
+    set({ editingPoints: id, ...(id === null ? {} : { selection: [id], editing: null }) })
   },
 
   setCropping: (id) => {

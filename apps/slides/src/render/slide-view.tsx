@@ -17,6 +17,8 @@ import {
   shapeLook,
   relationshipTarget,
   withAncestors,
+  geometryPoints,
+  pathSpace,
   readTableStyles,
   styleFor,
 } from '@orangery/ooxml-presentation'
@@ -740,6 +742,8 @@ export function SlideView({
   onOpenGroup,
   cropping = null,
   onCrop,
+  editingPoints = null,
+  onMovePoint,
   cells = null,
   onPickCell,
   onMarquee,
@@ -768,6 +772,14 @@ export function SlideView({
   openGroup?: number | null
   /** The picture being cropped, whose handles then take away rather than resize. */
   cropping?: number | null
+  /** The shape whose outline points are shown and draggable. */
+  editingPoints?: number | null
+  /** Given the vertex dragged and where it was taken, in slide EMU. */
+  onMovePoint?: (
+    shape: number,
+    at: { path: number; index: number },
+    to: { x: number; y: number },
+  ) => void
   /** The block of cells picked out in a table, and which table it is in. */
   cells?: { table: number; row: number; column: number; toRow: number; toColumn: number } | null
   /** Given the table, the cell clicked, and whether the click extends a block. */
@@ -1117,8 +1129,28 @@ export function SlideView({
             )}
           </Fragment>
         ))}
+        {editingPoints !== null &&
+          selectedBoxes
+            .filter((drawing) => drawing.shape.id === editingPoints)
+            .map((drawing) => (
+              <OutlinePoints
+                key={`points-${String(drawing.shape.id)}`}
+                shape={drawing.shape}
+                transform={drawing.transform}
+                slideWidth={width}
+                slideHeight={height}
+                onMove={
+                  onMovePoint === undefined
+                    ? undefined
+                    : (at, to) => {
+                        onMovePoint(drawing.shape.id, at, to)
+                      }
+                }
+              />
+            ))}
+
         {selectedBoxes.map((drawing) =>
-          drawing.shape.kind === 'cxnSp' ? (
+          editingPoints === drawing.shape.id ? null : drawing.shape.kind === 'cxnSp' ? (
             <ConnectorEnds
               key={`selected-${String(drawing.shape.id)}`}
               transform={shown(drawing)}
@@ -1274,6 +1306,95 @@ function SelectionFrame({
             pointerEvents={onHandle === undefined ? 'none' : undefined}
             onPointerDown={(event) => {
               onHandle?.(event, corner)
+            }}
+          />
+        )
+      })}
+    </g>
+  )
+}
+
+/**
+ * The vertices of a shape's own outline, draggable.
+ *
+ * Only for a shape that states its own geometry. A preset has no points to
+ * move — its shape is a name, not a list of corners — and showing handles that
+ * did nothing would be worse than showing none.
+ *
+ * The points are written in the path's own space, which is almost never the
+ * slide's, so each one is mapped out to be drawn and back to be written.
+ */
+function OutlinePoints({
+  shape,
+  transform,
+  slideWidth,
+  slideHeight,
+  onMove,
+}: {
+  shape: Shape
+  transform: Transform
+  /** The slide's own size, to turn pointer pixels into its units first. */
+  slideWidth: number
+  slideHeight: number
+  onMove?: (at: { path: number; index: number }, to: { x: number; y: number }) => void
+}) {
+  const points = geometryPoints(shape)
+  const grip = 60960
+
+  return (
+    <g data-testid="outline-points">
+      {points.map((point) => {
+        const space = pathSpace(shape, point.path)
+        if (space === null) return null
+
+        const x = transform.x + (point.x / space.width) * transform.width
+        const y = transform.y + (point.y / space.height) * transform.height
+
+        return (
+          <rect
+            key={`${String(point.path)}-${String(point.index)}`}
+            x={x - grip / 2}
+            y={y - grip / 2}
+            width={grip}
+            height={grip}
+            fill="#FFFFFF"
+            stroke="#FF7A00"
+            strokeWidth={19050}
+            role={onMove === undefined ? undefined : 'button'}
+            aria-label={onMove === undefined ? undefined : `Point ${String(point.index + 1)}`}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+              if (onMove === undefined) return
+
+              const rect = event.currentTarget.closest('svg')?.getBoundingClientRect()
+              if (rect === undefined || rect.width === 0 || rect.height === 0) return
+              if (transform.width === 0 || transform.height === 0) return
+
+              // Two conversions, because there are two spaces between the
+              // pointer and the file: pixels to the slide's units, and the
+              // slide's units to the path's, which the shape's box maps onto.
+              const perPixelX = (slideWidth / rect.width) * (space.width / transform.width)
+              const perPixelY = (slideHeight / rect.height) * (space.height / transform.height)
+
+              // Followed on the window, like every other drag here: the pointer
+              // leaving a handle four pixels across is the normal case.
+              const from = { x: event.clientX, y: event.clientY }
+              const move = (moved: PointerEvent) => {
+                onMove(
+                  { path: point.path, index: point.index },
+                  {
+                    x: point.x + (moved.clientX - from.x) * perPixelX,
+                    y: point.y + (moved.clientY - from.y) * perPixelY,
+                  },
+                )
+              }
+
+              const up = () => {
+                window.removeEventListener('pointermove', move)
+                window.removeEventListener('pointerup', up)
+              }
+              window.addEventListener('pointermove', move)
+              window.addEventListener('pointerup', up)
             }}
           />
         )

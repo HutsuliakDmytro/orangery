@@ -21,6 +21,7 @@ import {
   geometryPoints,
   pathIsClosed,
   pathSpace,
+  readDiagramShapes,
   readTableStyles,
   slideNumberOf,
   styleFor,
@@ -188,6 +189,8 @@ function drawingsOf(
   resolve: (shape: Shape) => Transform | null,
   theme: Theme | undefined,
   base: ColorContext,
+  /** Given a diagram frame, the shapes PowerPoint drew inside it. */
+  expand?: (shape: Shape, transform: Transform) => Shape[],
 ) {
   return withAncestors(shapes).flatMap(({ shape, ancestors }, index): Drawing[] => {
     // A group is a coordinate space, not something drawn; its children are.
@@ -200,17 +203,33 @@ function drawingsOf(
     const transform = absoluteTransform(shape.transform ?? resolve(shape), ancestors)
     if (transform === null) return []
 
-    const look = shapeLook(shape, theme)
-    return [
-      {
-        shape,
+    const drawn = (one: Shape, box: Transform, key: string): Drawing => {
+      const look = shapeLook(one, theme)
+      return {
+        shape: one,
         ancestors,
-        transform,
+        transform: box,
         look,
         context: lookContext(base, look),
-        key: `${prefix}${String(shape.id)}-${String(index)}`,
-      },
-    ]
+        key,
+      }
+    }
+
+    // A diagram is a frame with a drawing of its own inside. Its shapes are
+    // drawn in its place rather than the frame being drawn at all: the frame
+    // is where they are, not a thing to look at.
+    if (shape.graphic?.kind === 'diagram') {
+      const inside = expand?.(shape, transform) ?? []
+      if (inside.length > 0) {
+        return inside.flatMap((one, at) =>
+          one.transform === null
+            ? []
+            : [drawn(one, one.transform, `${prefix}dgm-${String(shape.id)}-${String(at)}`)],
+        )
+      }
+    }
+
+    return [drawn(shape, transform, `${prefix}${String(shape.id)}-${String(index)}`)]
   })
 }
 
@@ -243,10 +262,31 @@ function inheritedDrawings(deck: Deck, slide: Slide, theme: Theme | undefined, b
   ]
 }
 
-function drawingsFor(deck: Deck, slide: Slide, theme: Theme | undefined, base: ColorContext) {
+function drawingsFor(
+  deck: Deck,
+  slide: Slide,
+  theme: Theme | undefined,
+  base: ColorContext,
+  pkg?: OoxmlPackage,
+) {
+  const expand = (shape: Shape, transform: Transform) =>
+    pkg === undefined
+      ? []
+      : readDiagramShapes(pkg, slide.path, {
+          transform,
+          dataId: shape.graphic?.relationshipId ?? null,
+        })
+
   return [
     ...inheritedDrawings(deck, slide, theme, base),
-    ...drawingsOf(slide.shapes, '', (shape) => resolveTransform(deck, slide, shape), theme, base),
+    ...drawingsOf(
+      slide.shapes,
+      '',
+      (shape) => resolveTransform(deck, slide, shape),
+      theme,
+      base,
+      expand,
+    ),
   ]
 }
 
@@ -1011,7 +1051,7 @@ export function SlideView({
   const base = colorContextFor(deck, themes, slide)
   const master = [...deck.masters.values()][0]
   const theme = master?.theme == null ? undefined : themes.get(master.theme)
-  const drawings = drawingsFor(deck, slide, theme, base)
+  const drawings = drawingsFor(deck, slide, theme, base, pkg)
   const groupBoxes = groupBoxesOf(slide)
 
   // Read once per slide rather than per table: the part is the deck's, and a

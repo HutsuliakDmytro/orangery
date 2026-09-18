@@ -1,5 +1,6 @@
-import { flatten } from '@orangery/ooxml-presentation'
+import { diagramDrawingPart, flatten } from '@orangery/ooxml-presentation'
 import type { Deck, Shape } from '@orangery/ooxml-presentation'
+import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { isKnownPreset } from '../render/geometry'
 
 /**
@@ -30,7 +31,7 @@ interface Finding {
   slide: number
 }
 
-function findingsFor(shape: Shape, slide: number): Finding[] {
+function findingsFor(shape: Shape, slide: number, drawable: boolean): Finding[] {
   const found: Finding[] = []
 
   if (shape.kind === 'unknown') {
@@ -43,8 +44,14 @@ function findingsFor(shape: Shape, slide: number): Finding[] {
     // draws from too — but without its styling, so it is worth mentioning.
     found.push({ kind: 'chart', message: 'Charts are drawn simply, without their styling', slide })
   }
-  if (graphic === 'diagram') {
-    found.push({ kind: 'diagram', message: 'SmartArt is shown as an empty frame', slide })
+  if (graphic === 'diagram' && !drawable) {
+    // Only the ones we cannot draw. A diagram PowerPoint has saved carries the
+    // picture it drew, and that one is on the slide like anything else.
+    found.push({
+      kind: 'diagram',
+      message: 'SmartArt made elsewhere is shown as an empty frame',
+      slide,
+    })
   }
   if (graphic === 'ole' || graphic === 'unknown') {
     found.push({ kind: 'embedded', message: 'An embedded object is not shown', slide })
@@ -68,10 +75,17 @@ function findingsFor(shape: Shape, slide: number): Finding[] {
   return found
 }
 
-export function inspect(deck: Deck): Warning[] {
+export function inspect(deck: Deck, pkg?: OoxmlPackage): Warning[] {
   const findings = deck.slides.flatMap((slide, index) => {
     const number = index + 1
-    const shapes = flatten(slide.shapes).flatMap((shape) => findingsFor(shape, number))
+    const shapes = flatten(slide.shapes).flatMap((shape) =>
+      findingsFor(
+        shape,
+        number,
+        pkg !== undefined &&
+          diagramDrawingPart(pkg, slide.path, shape.graphic?.relationshipId ?? null) !== null,
+      ),
+    )
 
     // Comments are a part of their own, not something on the slide, so they are
     // asked about the package rather than the shape tree.

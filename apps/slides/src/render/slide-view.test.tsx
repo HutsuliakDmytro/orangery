@@ -13,7 +13,13 @@ import {
   writeSlidePart,
 } from '@orangery/ooxml-presentation'
 import { readBodyProperties } from '@orangery/ooxml-drawingml'
-import { getPartText, parseXml, setPartText } from '@orangery/ooxml-core'
+import {
+  getPartText,
+  parseRelationships,
+  parseXml,
+  serializeRelationships,
+  setPartText,
+} from '@orangery/ooxml-core'
 import { SlideView } from './slide-view'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
@@ -419,5 +425,71 @@ describe('the fields on a slide', () => {
     // Cached as the first of January 2020, which is a date nobody is reading it on.
     expect(container.textContent).not.toContain('2020')
     expect(container.textContent).toContain(String(new Date().getFullYear()))
+  })
+})
+
+describe('SmartArt', () => {
+  /** A deck whose slide holds a diagram frame with a drawing behind it. */
+  async function withDiagram() {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'empty.pptx')))
+
+    const drawing =
+      '<dsp:drawing xmlns:dsp="dsp" xmlns:a="a"><dsp:spTree><dsp:nvGrpSpPr/><dsp:grpSpPr/>' +
+      '<dsp:sp><dsp:nvSpPr><dsp:cNvPr id="9" name="Node"/><dsp:cNvSpPr/></dsp:nvSpPr>' +
+      '<dsp:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>' +
+      '<a:prstGeom prst="roundRect"/></dsp:spPr>' +
+      '<dsp:txBody><a:bodyPr/><a:p><a:r><a:t>Idea</a:t></a:r></a:p></dsp:txBody>' +
+      '</dsp:sp></dsp:spTree></dsp:drawing>'
+
+    setPartText(pkg, 'ppt/diagrams/drawing1.xml', drawing)
+
+    const rels = parseRelationships(getPartText(pkg, 'ppt/slides/_rels/slide1.xml.rels') ?? '')
+    rels.set('rId9', {
+      id: 'rId9',
+      type: 'http://schemas.microsoft.com/office/2007/relationships/diagramDrawing',
+      target: '../diagrams/drawing1.xml',
+      external: false,
+    })
+    setPartText(pkg, 'ppt/slides/_rels/slide1.xml.rels', serializeRelationships(rels))
+
+    const slideText = getPartText(pkg, 'ppt/slides/slide1.xml') ?? ''
+    const frame =
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="5" name="Diagram"/>' +
+      '<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' +
+      '<p:xfrm><a:off x="1000000" y="500000"/><a:ext cx="2000000" cy="1000000"/></p:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">' +
+      '<dgm:relIds xmlns:dgm="dgm" r:dm="rId8"/></a:graphicData></a:graphic></p:graphicFrame>'
+    setPartText(
+      pkg,
+      'ppt/slides/slide1.xml',
+      slideText.replace('</p:spTree>', `${frame}</p:spTree>`),
+    )
+
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+    return { deck, slide, pkg, themes: readThemes(pkg, deck) }
+  }
+
+  it('draws the shapes PowerPoint drew rather than an empty frame', async () => {
+    const { deck, slide, pkg, themes } = await withDiagram()
+    const { container } = render(
+      <SlideView deck={deck} slide={slide} themes={themes} package={pkg} />,
+    )
+
+    expect(container.textContent).toContain('Idea')
+    expect(container.textContent).not.toContain('SmartArt')
+  })
+
+  it('falls back to a labelled box where the deck carries no drawing', async () => {
+    // A diagram made somewhere that never opened it in PowerPoint. Nothing
+    // here knows what it should look like, and saying so is the honest answer.
+    const { deck, slide, pkg, themes } = await withDiagram()
+    pkg.parts.delete('ppt/diagrams/drawing1.xml')
+
+    const { container } = render(
+      <SlideView deck={deck} slide={slide} themes={themes} package={pkg} />,
+    )
+    expect(container.textContent).toContain('SmartArt')
   })
 })

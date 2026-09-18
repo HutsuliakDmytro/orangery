@@ -16,7 +16,7 @@ export function WarningsBanner() {
 
   const note = useImportStore((state) => state.note)
 
-  const warnings = useMemo(() => (open === null ? [] : inspect(open.deck)), [open])
+  const warnings = useMemo(() => (open === null ? [] : inspect(open.deck, open.package)), [open])
 
   // A typeface the deck carried and this engine could not read. Said here
   // rather than in `inspect`, which knows the file and not the browser.

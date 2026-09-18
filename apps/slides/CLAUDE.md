@@ -60,7 +60,7 @@ Icons: `lucide-react`. Focus ring: orange. Keyboard-complete.
 - The in-memory model mirrors PPTX: `Presentation → SlideMaster[] → SlideLayout[] → Slide[]`, each slide has a `spTree` of shapes (`sp`, `pic`, `graphicFrame`, `grpSp`, `cxnSp`). Placeholders (`p:ph`) inherit from layout → master; inheritance is resolved at render time, never baked into the slide on save.
 - Coordinates are EMU internally (OOXML native, 914400/inch). Convert to px only in the renderer. Never store px.
 - Every shape keeps its original XML subtree; on save, only the properties we model are rewritten into it, the rest is preserved (per-shape passthrough, not just per-file).
-- Unknown shape types render as a bounding box with a label and stay untouched.
+- Unknown shape types render as a bounding box with a label and stay untouched. SmartArt is drawn from the `dsp:` drawing part PowerPoint writes beside it — running `dgm:layoutDef` would be writing an interpreter for a language only PowerPoint implements.
 - Theme colors (`schemeClr`) stay symbolic in the model; resolve to RGB only in render. Changing the theme must recolor the deck like PowerPoint does.
 - Text autofit (`normAutofit`, `spAutoFit`) is computed after layout; results are written as PowerPoint does (`fontScale`, `lnSpcReduction`).
 

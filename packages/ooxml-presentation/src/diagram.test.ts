@@ -9,7 +9,13 @@ import {
   setPartText,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, Relationship } from '@orangery/ooxml-core'
-import { diagramDrawingPart, readDiagramShapes } from './diagram'
+import { readSlidePart } from './deck'
+import type { SlidePart } from './deck'
+import { convertDiagramToShapes, diagramDrawingPart, readDiagramShapes } from './diagram'
+import { absoluteTransform } from './group-transform'
+import { writeSlidePart } from './save'
+import { flatten } from './shape-tree'
+import type { Shape } from './shape-tree'
 import { readPptxPackage } from './parts'
 
 /**
@@ -148,5 +154,97 @@ describe('the shapes of a diagram', () => {
     expect(readDiagramShapes(pkg, 'ppt/slides/slide1.xml', { ...FRAME, transform: null })).toEqual(
       [],
     )
+  })
+})
+
+describe('turning a diagram into shapes', () => {
+  /** A slide holding a diagram frame, with the drawing behind it. */
+  async function withFrame(): Promise<{ pkg: OoxmlPackage; slide: SlidePart; frame: Shape }> {
+    const pkg = await withDrawing('slide')
+
+    const slideText = getPartText(pkg, 'ppt/slides/slide1.xml') ?? ''
+    const frame =
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="5" name="Diagram"/>' +
+      '<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' +
+      '<p:xfrm><a:off x="1000000" y="500000"/><a:ext cx="4000000" cy="1000000"/></p:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">' +
+      '<dgm:relIds xmlns:dgm="dgm" r:dm="rId5"/></a:graphicData></a:graphic></p:graphicFrame>'
+    setPartText(
+      pkg,
+      'ppt/slides/slide1.xml',
+      slideText.replace('</p:spTree>', `${frame}</p:spTree>`),
+    )
+
+    const slide = readSlidePart(pkg, 'ppt/slides/slide1.xml')
+    const found = slide?.shapes.find((one) => one.graphic?.kind === 'diagram')
+    if (slide === null || found === undefined) throw new Error('the frame was not added')
+
+    return { pkg, slide, frame: found }
+  }
+
+  it('leaves a group of the shapes PowerPoint drew', async () => {
+    const { pkg, slide, frame } = await withFrame()
+    const id = convertDiagramToShapes(pkg, slide, frame)
+    writeSlidePart(pkg, slide)
+
+    const after = readSlidePart(pkg, 'ppt/slides/slide1.xml')
+    const group = after?.shapes.find((one) => one.id === id)
+
+    expect(group?.kind).toBe('grpSp')
+    expect(flatten(group === undefined ? [] : [group])).toHaveLength(3)
+  })
+
+  it('puts the shapes where the diagram had them', async () => {
+    const { pkg, slide, frame } = await withFrame()
+    const id = convertDiagramToShapes(pkg, slide, frame)
+    writeSlidePart(pkg, slide)
+
+    const after = readSlidePart(pkg, 'ppt/slides/slide1.xml')
+    const group = after?.shapes.find((one) => one.id === id)
+    const members = flatten(group === undefined ? [] : [group]).filter((one) => one.kind === 'sp')
+
+    // Through the group, which does the mapping the frame was doing.
+    const first = members[0]
+    expect(
+      first === undefined || group?.transform == null
+        ? null
+        : absoluteTransform(first.transform, [group]),
+    ).toMatchObject({ x: 1_000_000, width: 2_000_000 })
+  })
+
+  it('takes the frame away', async () => {
+    const { pkg, slide, frame } = await withFrame()
+    convertDiagramToShapes(pkg, slide, frame)
+    writeSlidePart(pkg, slide)
+
+    const after = readSlidePart(pkg, 'ppt/slides/slide1.xml')
+    expect(after?.shapes.some((one) => one.graphic?.kind === 'diagram')).toBe(false)
+  })
+
+  it('gives every shape an id no other shape is using', async () => {
+    const { pkg, slide, frame } = await withFrame()
+    convertDiagramToShapes(pkg, slide, frame)
+    writeSlidePart(pkg, slide)
+
+    const after = readSlidePart(pkg, 'ppt/slides/slide1.xml')
+    const ids = flatten(after?.shapes ?? []).map((one) => one.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('takes the diagram’s own parts with it', async () => {
+    const { pkg, slide, frame } = await withFrame()
+    convertDiagramToShapes(pkg, slide, frame)
+
+    // An orphan in an OPC package is what makes PowerPoint offer to repair it.
+    expect([...pkg.parts.keys()].some((path) => path.startsWith('ppt/diagrams/'))).toBe(false)
+  })
+
+  it('refuses a diagram with no picture of itself', async () => {
+    const { pkg, slide, frame } = await withFrame()
+    pkg.parts.delete('ppt/diagrams/drawing1.xml')
+
+    // Nothing to convert it into, and guessing would invent a picture nobody
+    // has seen.
+    expect(convertDiagramToShapes(pkg, slide, frame)).toBeNull()
   })
 })

@@ -244,6 +244,9 @@ These are the ones that matter most. Take them seriously.
       the arrows and the words — and the banner says nothing about it.
 - [ ] Open one whose SmartArt was made by something else and never opened in
       PowerPoint. It is a labelled box, and the banner says so.
+- [ ] Convert SmartArt to Shapes. The picture does not move or change; the
+      boxes can now be selected and dragged. Save and open in PowerPoint: the
+      shapes are there, and it does not offer to repair the file.
 
 ## Getting a deck in
 

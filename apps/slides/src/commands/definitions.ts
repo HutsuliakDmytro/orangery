@@ -41,8 +41,11 @@ import {
   sectionOfSlide,
   ungroupShape,
   withAncestors,
+  convertDiagramToShapes,
+  diagramDrawingPart,
   writeBackgroundPicture,
   writePart,
+  writeSlidePart,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { findDescendant } from '@orangery/ooxml-core'
@@ -1470,6 +1473,51 @@ export const painterCommands: readonly Command[] = [
   },
 ]
 
+/** The one thing to do to a diagram: stop it being one. */
+export const diagramCommands: readonly Command[] = [
+  {
+    id: 'format.convert-diagram',
+    label: 'Convert SmartArt to Shapes',
+    group: 'format',
+    keywords: ['smartart', 'diagram', 'ungroup'],
+    isEnabled: () => selectedDiagram() !== null,
+    run: () => {
+      const { open } = useDeckStore.getState()
+      const slide = currentSlide(useDeckStore.getState())
+      if (open === null || slide === null) return
+
+      const made: { id: number | null } = { id: null }
+      useDeckStore.getState().editPackage((deck) => {
+        const part = deck.deck.slides[useDeckStore.getState().current]
+        const frame = part?.shapes.find((one) => one.id === selectedDiagram())
+        if (part === undefined || frame === undefined) return false
+
+        made.id = convertDiagramToShapes(deck.package, part, frame)
+        if (made.id !== null) writeSlidePart(deck.package, part)
+        return made.id !== null
+      })
+
+      if (made.id !== null) useDeckStore.getState().selectShapes([made.id])
+    },
+  },
+]
+
+/** The selected shape's id, when it is a diagram we could draw. */
+function selectedDiagram(): number | null {
+  const state = useDeckStore.getState()
+  const slide = currentSlide(state)
+  if (state.open === null || slide === null || state.selection.length !== 1) return null
+
+  const shape = slide.shapes.find((one) => state.selection.includes(one.id))
+  if (shape?.graphic?.kind !== 'diagram') return null
+
+  // A diagram nobody has opened in PowerPoint has no picture to convert into,
+  // and offering the command would be offering to make an empty group.
+  return diagramDrawingPart(state.open.package, slide.path, shape.graphic.relationshipId) === null
+    ? null
+    : shape.id
+}
+
 export const footerCommands: readonly Command[] = [
   {
     id: 'insert.header-footer',
@@ -1705,6 +1753,7 @@ export function registerBuiltinCommands(): void {
   registerAll(pictureCommands)
   registerAll(tableCommands)
   registerAll(footerCommands)
+  registerAll(diagramCommands)
   registerAll(painterCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)

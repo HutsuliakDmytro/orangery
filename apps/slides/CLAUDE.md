@@ -109,7 +109,7 @@ pnpm --filter slides tauri build
 
 ## Out of scope for MVP
 
-SmartArt editing (render via passthrough preview or bounding box), collaboration, cloud, Keynote import, mobile.
+collaboration, cloud, Keynote import, mobile.
 
 ## Known hard problems
 

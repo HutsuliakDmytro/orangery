@@ -1,15 +1,22 @@
 import {
   attribute,
   children,
+  element,
+  findDescendant,
   getPartText,
   isTextNode,
   parseRelationships,
   parseXml,
   resolveTarget,
+  serializeRelationships,
+  setAttribute,
+  setPartText,
   tagName,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { nextShapeId } from './arrange'
 import { relsPartFor } from './insert-picture'
+import type { SlidePart } from './deck'
 import { parseShapeTree } from './shape-tree'
 import type { Shape, Transform } from './shape-tree'
 
@@ -54,6 +61,20 @@ function asPresentation(node: XmlNode): XmlNode {
   if (attributes !== undefined) copied[':@'] = attributes
 
   return copied
+}
+
+/** The `dsp:spTree` of a diagram's drawing, already renamed to `p:`. */
+function drawingTree(pkg: OoxmlPackage, part: string): XmlNode | null {
+  const text = getPartText(pkg, part)
+  if (text === undefined) return null
+
+  const root = parseXml(text).find((node) => (tagName(node) ?? '').endsWith('drawing'))
+  const tree =
+    root === undefined
+      ? undefined
+      : children(root).find((child) => (tagName(child) ?? '').endsWith('spTree'))
+
+  return tree === undefined ? null : asPresentation(tree)
 }
 
 /** Every relationship of a part, resolved to package paths. */
@@ -139,18 +160,10 @@ export function readDiagramShapes(
   frame: { transform: Transform | null; dataId: string | null },
 ): Shape[] {
   const part = diagramDrawingPart(pkg, slidePath, frame.dataId)
-  const text = part === null ? undefined : getPartText(pkg, part)
-  if (text === undefined || frame.transform === null) return []
-
-  const root = parseXml(text).find((node) => (tagName(node) ?? '').endsWith('drawing'))
-  const tree =
-    root === undefined
-      ? undefined
-      : children(root).find((child) => (tagName(child) ?? '').endsWith('spTree'))
-  if (tree === undefined) return []
+  const presented = part === null ? null : drawingTree(pkg, part)
+  if (presented === null || frame.transform === null) return []
 
   const box = frame.transform
-  const presented = asPresentation(tree)
   const shapes = parseShapeTree(presented)
 
   // A drawing that states no child space is written in the frame's own units
@@ -174,4 +187,114 @@ export function readDiagramShapes(
           },
         },
   )
+}
+
+/** Whether any relationship in the package still names a part. */
+function referenced(pkg: OoxmlPackage, path: string): boolean {
+  for (const [relsPath, part] of pkg.parts) {
+    if (!relsPath.endsWith('.rels') || part.text === undefined) continue
+
+    const directory = relsPath.replace(/\/_rels\/[^/]+$/u, '')
+    for (const relationship of parseRelationships(part.text).values()) {
+      if (relationship.external) continue
+      if (resolveTarget(relationship.target, directory) === path) return true
+    }
+  }
+
+  return false
+}
+
+/** Drops a relationship, and the part it named when nothing else wants it. */
+function forget(pkg: OoxmlPackage, from: string, id: string): void {
+  const relsPart = relsPartFor(from)
+  const relationships = parseRelationships(getPartText(pkg, relsPart) ?? '')
+  const relationship = relationships.get(id)
+  if (relationship === undefined) return
+
+  const directory = from.slice(0, from.lastIndexOf('/'))
+  const target = resolveTarget(relationship.target, directory)
+
+  relationships.delete(id)
+  setPartText(pkg, relsPart, serializeRelationships(relationships))
+
+  // The part goes too when nothing else names it: an orphan in an OPC package
+  // is what makes PowerPoint offer to repair the file.
+  if (!referenced(pkg, target)) pkg.parts.delete(target)
+}
+
+/**
+ * Turns a diagram into the shapes it is drawn as.
+ *
+ * The same thing PowerPoint's own "Convert to Shapes" does, and possible for
+ * the same reason drawing one is possible at all: the picture is already in the
+ * file as shapes. Nothing is invented — the nodes are the ones PowerPoint
+ * wrote, under a prefix this app reads.
+ *
+ * They arrive as a group carrying the frame's box and the drawing's own
+ * coordinate space, so no coordinate is rewritten: the group does the mapping
+ * the frame was doing, which is what a group is for.
+ *
+ * Returns the group's id, or null for a diagram with no drawing behind it —
+ * there is nothing to convert it into, and guessing would be inventing a
+ * picture nobody has seen.
+ */
+export function convertDiagramToShapes(
+  pkg: OoxmlPackage,
+  slide: SlidePart,
+  frame: Shape,
+): number | null {
+  const part = diagramDrawingPart(pkg, slide.path, frame.graphic?.relationshipId ?? null)
+  const tree = part === null ? null : drawingTree(pkg, part)
+  if (tree === null || frame.transform === null) return null
+
+  const members = children(tree).filter(
+    (child) => !/^p:(nvGrpSpPr|grpSpPr)$/u.test(tagName(child) ?? ''),
+  )
+  if (members.length === 0) return null
+
+  const box = frame.transform
+  const space = childSpace(tree) ?? { x: 0, y: 0, width: box.width, height: box.height }
+  const round = (value: number) => String(Math.round(value))
+
+  let id = nextShapeId(slide)
+  const groupId = id
+
+  // Ids are unique per part, and the drawing's were unique only within itself;
+  // two shapes sharing one is a file PowerPoint refuses.
+  for (const member of members) {
+    const identity = findDescendant(member, 'p:cNvPr')
+    if (identity === undefined) continue
+    id += 1
+    setAttribute(identity, 'id', String(id))
+  }
+
+  const group = element('p:grpSp', {}, [
+    element('p:nvGrpSpPr', {}, [
+      element('p:cNvPr', { id: String(groupId), name: `Diagram ${String(groupId)}` }),
+      element('p:cNvGrpSpPr'),
+      element('p:nvPr'),
+    ]),
+    element('p:grpSpPr', {}, [
+      element('a:xfrm', {}, [
+        element('a:off', { x: round(box.x), y: round(box.y) }),
+        element('a:ext', { cx: round(box.width), cy: round(box.height) }),
+        element('a:chOff', { x: round(space.x), y: round(space.y) }),
+        element('a:chExt', { cx: round(space.width), cy: round(space.height) }),
+      ]),
+    ]),
+    ...members,
+  ])
+
+  const siblings = children(slide.tree)
+  const at = siblings.indexOf(frame.node)
+  if (at === -1) return null
+  siblings.splice(at, 1, group)
+
+  // The diagram's own parts are nobody's now. Left behind they would be four
+  // files the deck carries and never opens.
+  for (const relationship of relationshipsOf(pkg, slide.path)) {
+    if (relationship.target.startsWith('ppt/diagrams/')) forget(pkg, slide.path, relationship.id)
+  }
+
+  return groupId
 }

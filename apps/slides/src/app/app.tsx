@@ -14,6 +14,7 @@ import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
+import { RecentDecks } from '../components/recent-decks'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
@@ -22,6 +23,7 @@ import { useAutosave } from '../document/use-autosave'
 import { useCrashRecovery } from '../document/use-crash-recovery'
 import { resolveUnsaved, unsavedDeckName, useGuardStore } from '../document/unsaved'
 import { useCloseGuard } from './use-close-guard'
+import { useExternalOpen } from './use-external-open'
 import { useDeckStore } from '../store/deck-store'
 import type { OpenDeck } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -48,6 +50,7 @@ function Shell() {
   useShortcuts()
   useAutosave()
   useCloseGuard()
+  useExternalOpen()
   const recovery = useCrashRecovery()
   const prompting = useGuardStore((state) => state.pending) !== null
 
@@ -74,6 +77,8 @@ function Shell() {
               thing in the space a title bar has. */}
           {open !== null && !saved && <span aria-label="Unsaved changes"> •</span>}
         </span>
+        <RecentDecks />
+
         {open !== null && (
           <span className="text-xs text-muted">
             {master === null ? (

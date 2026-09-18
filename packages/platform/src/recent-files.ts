@@ -1,14 +1,24 @@
 import { invoke } from '@tauri-apps/api/core'
-import { appDataRoot } from '@orangery/platform'
-import { isTauri } from '@orangery/platform'
-import { fileNameOf } from './formats'
+import { appDataRoot } from './paths'
+import { isTauri } from './os'
 
 /**
  * The File → Open Recent list.
  *
  * Stored in app data rather than in the document, and capped: a recent list that
  * grows without bound turns into a second, worse file browser.
+ *
+ * Here rather than in an app because every app in the suite keeps the same list
+ * of the same shape, and because this package is what owns the app data
+ * directory — the list is one of the things in it. Nothing about it is specific
+ * to documents or to decks: it is paths and the order they were last opened in.
  */
+
+/** The name a path ends with, which is what a person recognises it by. */
+function nameOf(path: string): string {
+  const name = path.split(/[\\/]/u).pop()
+  return name === undefined || name === '' ? path : name
+}
 
 export const MAX_RECENT_FILES = 10
 export const RECENT_FILES_NAME = 'recent-files.json'
@@ -22,7 +32,7 @@ export interface RecentFile {
 export function addRecent(existing: readonly RecentFile[], path: string): RecentFile[] {
   const entry: RecentFile = {
     path,
-    name: fileNameOf(path),
+    name: nameOf(path),
     openedAt: new Date().toISOString(),
   }
 
@@ -56,7 +66,7 @@ export function parseRecentFiles(contents: string): RecentFile[] {
 
     files.push({
       path,
-      name: typeof entry['name'] === 'string' ? entry['name'] : fileNameOf(path),
+      name: typeof entry['name'] === 'string' ? entry['name'] : nameOf(path),
       openedAt: typeof entry['openedAt'] === 'string' ? entry['openedAt'] : '',
     })
   }

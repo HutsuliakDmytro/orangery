@@ -371,6 +371,29 @@ mod close_tests {
     }
 }
 
+/// Paths the OS handed the app at launch: a double-click, "Open With", or a
+/// path typed on the command line.
+///
+/// Emitted rather than acted on, because opening one means parsing OOXML and
+/// that lives in the frontend. The delay is not politeness: the event is sent
+/// during setup, when there is no webview yet to receive it.
+pub fn emit_launch_paths<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let opened: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|argument| !argument.starts_with('-'))
+        .collect();
+
+    if opened.is_empty() {
+        return;
+    }
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        let _ = tauri::Emitter::emit(&handle, "document:open-path", opened);
+    });
+}
+
 /// Opens a new window, optionally on a given file.
 ///
 /// One window holds one document (CLAUDE.md), so "New Window" and "open a second

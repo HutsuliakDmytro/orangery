@@ -33,6 +33,8 @@ pub fn run() {
         ])
         .manage(show::ShowState::default())
         .setup(|app| {
+            document::emit_launch_paths(app.handle());
+
             // A placeholder menu so the window never appears bare; the frontend
             // replaces it with the registry-driven one as soon as it mounts.
             app.set_menu(menu::build_bootstrap(app.handle())?)?;

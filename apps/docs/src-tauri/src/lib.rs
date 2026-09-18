@@ -28,21 +28,7 @@ pub fn run() {
             diagnostics::clear_diagnostics,
         ])
         .setup(|app| {
-            // A file the OS handed us: double-click, "Open With", or a path on
-            // the command line. Emitted rather than handled here, because opening
-            // a document means parsing OOXML, which lives in the frontend.
-            let opened: Vec<String> = std::env::args()
-                .skip(1)
-                .filter(|argument| !argument.starts_with('-'))
-                .collect();
-            if !opened.is_empty() {
-                let handle = app.handle().clone();
-                // Emitted after setup so the webview exists to receive it.
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-                    let _ = tauri::Emitter::emit(&handle, "document:open-path", opened);
-                });
-            }
+            document::emit_launch_paths(app.handle());
 
             // A placeholder menu so the window never appears bare; the frontend
             // replaces it with the registry-driven one as soon as it mounts.

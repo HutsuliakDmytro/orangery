@@ -46,6 +46,15 @@
     "shortDescription": "Presentation editor that writes real PPTX",
     "longDescription": "Orangery Slides is a desktop presentation editor that uses PPTX as its native format.",
     "copyright": "© Dmytro Hutsuliak",
-    "publisher": "Dmytro Hutsuliak"
+    "publisher": "Dmytro Hutsuliak",
+    "fileAssociations": [
+      {
+        "ext": ["pptx"],
+        "name": "PowerPoint Presentation",
+        "description": "Microsoft PowerPoint Presentation",
+        "role": "Editor",
+        "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      }
+    ]
   }
 }

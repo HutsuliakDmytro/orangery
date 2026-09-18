@@ -1,5 +1,6 @@
 import { Presentation } from 'lucide-react'
 import { useCommand } from '@orangery/ui-kit'
+import { openRecent, useRecentDecks } from '../document/recent'
 
 /**
  * What the window shows before there is a deck.
@@ -11,6 +12,7 @@ import { useCommand } from '@orangery/ui-kit'
 export function WelcomeScreen() {
   const create = useCommand('file.new')
   const open = useCommand('file.open')
+  const recent = useRecentDecks()
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
@@ -36,6 +38,30 @@ export function WelcomeScreen() {
           </button>
         ))}
       </div>
+
+      {recent.length > 0 && (
+        <div className="w-[min(420px,80vw)] text-left">
+          <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Recent</h2>
+          <ul className="flex flex-col">
+            {/* Six, not all ten: a welcome screen that scrolls is a file
+                browser, and there is already one of those behind Open. */}
+            {recent.slice(0, 6).map((file) => (
+              <li key={file.path}>
+                <button
+                  type="button"
+                  title={file.path}
+                  onClick={() => {
+                    openRecent(file.path)
+                  }}
+                  className="w-full truncate rounded px-2 py-1 text-left text-sm text-text"
+                >
+                  {file.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

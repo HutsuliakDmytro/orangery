@@ -1,5 +1,6 @@
 import { createDeck, saveDeck } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
+import { noteRecent } from '../store/recent-store'
 import { nameOf, pickDeckPath, pickSavePath, readDeckFile, writeDeckFile } from './file'
 
 /**
@@ -32,6 +33,10 @@ export async function saveDeckFile(askWhere: boolean): Promise<void> {
   // understood is still in it (`docs/adr/0002-pptx-roundtrip.md`).
   await writeDeckFile(path, await saveDeck(open.package))
   markSaved(path)
+
+  // Save As gives a deck a file it did not have, or a different one; either way
+  // that file is the one to offer next time, and the old name is not.
+  await noteRecent(path)
 }
 
 /**
@@ -47,12 +52,20 @@ export async function newDeck(): Promise<void> {
   document.title = 'Untitled Presentation — Orangery Slides'
 }
 
-export async function openDeck(): Promise<void> {
-  const path = await pickDeckPath()
-  if (path === null) return
+export async function openDeck(path?: string): Promise<void> {
+  // No path given means the person is choosing one; a path given means the OS
+  // or the recent list already did.
+  const target = path ?? (await pickDeckPath())
+  if (target === null) return
 
-  await useDeckStore.getState().load(await readDeckFile(path), path)
-  document.title = `${nameOf(path)} — Orangery Slides`
+  await useDeckStore.getState().load(await readDeckFile(target), target)
+
+  // Only a deck that actually opened is worth offering again. A file that threw
+  // — moved, or not a deck at all — would otherwise sit at the top of the list.
+  if (useDeckStore.getState().open?.path !== target) return
+
+  document.title = `${nameOf(target)} — Orangery Slides`
+  await noteRecent(target)
 }
 
 export function closeDeck(): void {

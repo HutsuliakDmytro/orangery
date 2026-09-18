@@ -247,6 +247,10 @@ These are the ones that matter most. Take them seriously.
 - [ ] Convert SmartArt to Shapes. The picture does not move or change; the
       boxes can now be selected and dragged. Save and open in PowerPoint: the
       shapes are there, and it does not offer to repair the file.
+- [ ] Open a deck somebody commented on in a current PowerPoint. The remarks
+      are in the pane, with the right names, and cannot be deleted here.
+- [ ] Say something yourself, save, open in PowerPoint. The comment is there
+      and attributed, and the older and newer ones sit side by side.
 
 ## Getting a deck in
 

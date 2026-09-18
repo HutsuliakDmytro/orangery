@@ -81,6 +81,8 @@ interface ViewState {
   editingGrid: boolean
   /** Whether the paste special dialog is up. */
   pasting: boolean
+  /** Whether the comments pane is open beside the slide. */
+  commenting: boolean
   /**
    * How far a film of the deck has got, or null when none is being made.
    *
@@ -125,6 +127,7 @@ interface ViewState {
   setGrid: (showing: boolean) => void
   setEditingGrid: (editing: boolean) => void
   setPasting: (pasting: boolean) => void
+  setCommenting: (commenting: boolean) => void
   setRecordingVideo: (progress: { at: number; of: number } | null) => void
   setSnapToGrid: (snapping: boolean) => void
   setPrintLayout: (layout: PrintLayout) => void
@@ -160,6 +163,7 @@ export const useViewStore = create<ViewState>((set) => ({
   grid: false,
   editingGrid: false,
   pasting: false,
+  commenting: false,
   recordingVideo: null,
   snapToGrid: false,
   printLayout: 'slides',
@@ -198,6 +202,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setPasting: (pasting) => {
     set({ pasting })
+  },
+
+  setCommenting: (commenting) => {
+    set({ commenting })
   },
 
   setRecordingVideo: (recordingVideo) => {

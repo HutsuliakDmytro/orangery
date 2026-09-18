@@ -45,6 +45,14 @@ export { hiddenUntilAnimated, readAnimations } from './animations'
 export { addEffect, moveStep, removeEffect, setEffectTiming } from './write-animations'
 export { cellsOf, patchedWorkbook, writeChartCache } from './chart-data'
 export type { ChartValues } from './chart-data'
+export {
+  addComment,
+  hasComments,
+  readCommentAuthors,
+  readComments,
+  removeComment,
+} from './comments'
+export type { Comment, CommentAuthor, NewComment } from './comments'
 export { addInkStroke } from './ink'
 export { addNarration } from './narration'
 export type { Narration } from './narration'

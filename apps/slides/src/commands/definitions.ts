@@ -1473,6 +1473,22 @@ export const painterCommands: readonly Command[] = [
   },
 ]
 
+export const commentCommands: readonly Command[] = [
+  {
+    id: 'review.comments',
+    label: 'Comments',
+    group: 'view',
+    shortcut: 'Mod+Alt+m',
+    keywords: ['review', 'remark', 'note'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    isActive: () => useViewStore.getState().commenting,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setCommenting(!view.commenting)
+    },
+  },
+]
+
 /** The one thing to do to a diagram: stop it being one. */
 export const diagramCommands: readonly Command[] = [
   {
@@ -1754,6 +1770,7 @@ export function registerBuiltinCommands(): void {
   registerAll(tableCommands)
   registerAll(footerCommands)
   registerAll(diagramCommands)
+  registerAll(commentCommands)
   registerAll(painterCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)

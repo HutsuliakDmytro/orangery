@@ -13,6 +13,7 @@ export function FindPanel({ onClose }: { onClose: () => void }) {
   const open = useDeckStore((state) => state.open)
   const editDeck = useDeckStore((state) => state.editDeck)
   const select = useDeckStore((state) => state.select)
+  const selectShapes = useDeckStore((state) => state.selectShapes)
 
   const [query, setQuery] = useState('')
   const [replacement, setReplacement] = useState('')
@@ -23,7 +24,32 @@ export function FindPanel({ onClose }: { onClose: () => void }) {
     [open, query, caseSensitive],
   )
 
+  const [at, setAt] = useState(0)
+
+  /**
+   * Goes to a match: the slide it is on, and the shape it is in.
+   *
+   * Both, because a slide with forty shapes on it is not an answer to "where is
+   * this word". Wrapping round rather than stopping at the ends — a search that
+   * refuses to continue is one you have to restart by hand.
+   */
+  const goTo = (index: number) => {
+    if (matches.length === 0) return
+
+    const wrapped = ((index % matches.length) + matches.length) % matches.length
+    const match = matches[wrapped]
+    if (match === undefined) return
+
+    setAt(wrapped)
+    select(match.slide - 1)
+    selectShapes([match.shapeId])
+  }
+
   if (open === null) return null
+
+  // The count changes as the query is typed, and a position inside the old list
+  // means nothing in the new one.
+  const here = at < matches.length ? at : 0
 
   return (
     <section
@@ -37,6 +63,13 @@ export function FindPanel({ onClose }: { onClose: () => void }) {
         }}
         aria-label="Find"
         placeholder="Find"
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          // Enter steps forward and Shift+Enter back, which is what the field
+          // does in every editor that has one.
+          goTo(here + (event.shiftKey ? -1 : 1))
+        }}
         className="rounded border border-border bg-transparent px-2 py-1 text-text outline-none focus:border-accent"
       />
       <input
@@ -76,21 +109,33 @@ export function FindPanel({ onClose }: { onClose: () => void }) {
           ? ''
           : matches.length === 0
             ? 'No matches'
-            : `${String(matches.length)} on ${String(new Set(matches.map((match) => match.slide)).size)} slides`}
+            : `${String(here + 1)} of ${String(matches.length)} on ${String(new Set(matches.map((match) => match.slide)).size)} slides`}
       </p>
 
-      {matches[0] !== undefined && (
+      <div className="flex gap-1">
         <button
           type="button"
+          aria-label="Previous match"
+          disabled={matches.length === 0}
           onClick={() => {
-            const first = matches[0]
-            if (first !== undefined) select(first.slide - 1)
+            goTo(here - 1)
           }}
-          className="rounded border border-border px-2 py-1 text-muted"
+          className="rounded border border-border px-2 py-1 text-text disabled:text-muted"
         >
-          Go to first
+          ‹
         </button>
-      )}
+        <button
+          type="button"
+          aria-label="Next match"
+          disabled={matches.length === 0}
+          onClick={() => {
+            goTo(here + 1)
+          }}
+          className="rounded border border-border px-2 py-1 text-text disabled:text-muted"
+        >
+          ›
+        </button>
+      </div>
 
       <button
         type="button"

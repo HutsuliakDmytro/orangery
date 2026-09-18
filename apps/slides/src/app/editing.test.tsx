@@ -678,7 +678,52 @@ describe('find and replace', () => {
     open()
 
     await user.type(screen.getByLabelText('Find'), 'Slide')
-    expect(screen.getByText('8 on 8 slides')).toBeInTheDocument()
+    // Where you are as well as how many there are: a count with no position is
+    // a number you cannot walk through.
+    expect(screen.getByText('1 of 8 on 8 slides')).toBeInTheDocument()
+  })
+
+  it('steps to the next match and to the slide it is on', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.click(screen.getByRole('button', { name: 'Next match' }))
+
+    expect(screen.getByText('2 of 8 on 8 slides')).toBeInTheDocument()
+    expect(useDeckStore.getState().current).toBe(1)
+    // And the shape, because a slide is not an answer to "where is this word".
+    expect(useDeckStore.getState().selection).toHaveLength(1)
+  })
+
+  it('wraps round rather than stopping at the end', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.click(screen.getByRole('button', { name: 'Previous match' }))
+
+    // A search that refuses to continue is one you restart by hand.
+    expect(screen.getByText('8 of 8 on 8 slides')).toBeInTheDocument()
+  })
+
+  it('steps on Enter, and back on Shift+Enter', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    const field = screen.getByLabelText('Find')
+    await user.type(field, 'Slide')
+    await user.type(field, '{Enter}')
+    expect(screen.getByText('2 of 8 on 8 slides')).toBeInTheDocument()
+
+    await user.type(field, '{Shift>}{Enter}{/Shift}')
+    expect(screen.getByText('1 of 8 on 8 slides')).toBeInTheDocument()
   })
 
   it('says so when there is nothing', async () => {

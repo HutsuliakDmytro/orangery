@@ -663,6 +663,17 @@ export const zoomCommands: readonly Command[] = [
     },
   },
   {
+    id: 'view.rulers',
+    label: 'Rulers and Guides',
+    group: 'view',
+    isActive: () => useViewStore.getState().rulers,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setRulers(!view.rulers)
+    },
+  },
+  {
     id: 'view.outline',
     label: 'Outline View',
     group: 'view',

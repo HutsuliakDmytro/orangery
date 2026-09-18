@@ -45,6 +45,8 @@ interface ViewState {
    * ProseMirror views over one text body, both of which would commit.
    */
   editingOutline: { slide: number; shape: number } | null
+  /** Whether the rulers and the guides dragged out of them are showing. */
+  rulers: boolean
   /** Whether the left pane shows the slides or the words on them. */
   leftPane: 'filmstrip' | 'outline'
   /**
@@ -64,6 +66,7 @@ interface ViewState {
   toggleSection: (id: string) => void
   setRenamingSection: (id: string | null) => void
   setEditingOutline: (at: { slide: number; shape: number } | null) => void
+  setRulers: (showing: boolean) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
   setContentFit: (fit: 'maximize' | 'fit') => void
   togglePanel: (panel: keyof Panels) => void
@@ -87,6 +90,7 @@ export const useViewStore = create<ViewState>((set) => ({
   collapsedSections: [],
   renamingSection: null,
   editingOutline: null,
+  rulers: false,
   leftPane: 'filmstrip',
   contentFit: 'fit',
   panels: { filmstrip: true, properties: true, notes: true },
@@ -106,6 +110,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setEditingOutline: (at) => {
     set({ editingOutline: at })
+  },
+
+  setRulers: (showing) => {
+    set({ rulers: showing })
   },
 
   setLeftPane: (pane) => {

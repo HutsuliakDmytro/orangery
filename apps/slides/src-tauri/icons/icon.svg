@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    Orangery Slides.
+
+    The same family as Docs: a black tile, an orange sun behind, a white sheet
+    in front. What differs is the only thing that should — the sheet is a slide.
+    Landscape rather than portrait is the whole signal, and it is the one that
+    still reads at 32 pixels, where the marks on the sheet have long since
+    turned to mush.
+
+    Source of truth for every other file in this directory; `pnpm icon` in this
+    app regenerates the lot from it, straight from this SVG.
+
+    Note for anyone editing: a double hyphen is not allowed inside an XML
+    comment. A browser will forgive it and the icon generator will not, which
+    is exactly the order you do not want to find out in.
+  -->
+  <rect width="1024" height="1024" rx="230" fill="#0B0B0B"/>
+  <circle cx="706" cy="322" r="176" fill="#FF7A00"/>
+
+  <g>
+    <rect x="128" y="438" width="672" height="394" rx="34" fill="#F5F5F5"/>
+    <!-- A title and two lines under it: what is on almost every slide. -->
+    <rect x="188" y="516" width="312" height="50" rx="10" fill="#FF7A00"/>
+    <rect x="188" y="622" width="484" height="38" rx="10" fill="#FF7A00" opacity="0.5"/>
+    <rect x="188" y="700" width="352" height="38" rx="10" fill="#FF7A00" opacity="0.5"/>
+  </g>
+</svg>

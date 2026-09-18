@@ -1,0 +1,4 @@
+# `tauri icon` writes an Android and an iOS set as well. This app is desktop
+# only, so they are output nobody asked for and nobody should have to review.
+android/
+ios/

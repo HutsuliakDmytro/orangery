@@ -236,6 +236,10 @@ These are the ones that matter most. Take them seriously.
 - [ ] Play the file. Every slide is there, in order, for its own time. There is
       no sound yet; that is known.
 - [ ] Press Stop half way. The file saves and holds the slides recorded so far.
+- [ ] Pick a chart, change a number in the panel. The chart redraws. Save,
+      open in PowerPoint, **and open Edit Data**: the workbook holds the new
+      number too — that is the check the cache alone would fail.
+- [ ] The chart's colours and styling are the ones it had; nothing was rebuilt.
 
 ## Getting a deck in
 

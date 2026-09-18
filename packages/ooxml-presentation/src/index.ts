@@ -43,6 +43,8 @@ export { colorContextFor, readColorMap, readThemes, themeFor } from './theme-con
 export { buildThemeFile } from './theme-file'
 export { hiddenUntilAnimated, readAnimations } from './animations'
 export { addEffect, moveStep, removeEffect, setEffectTiming } from './write-animations'
+export { cellsOf, patchedWorkbook, writeChartCache } from './chart-data'
+export type { ChartValues } from './chart-data'
 export { addInkStroke } from './ink'
 export { addNarration } from './narration'
 export type { Narration } from './narration'

@@ -40,11 +40,9 @@ pub fn run() {
             // is handed to it rather than answered here. It calls back through
             // `confirm_close` once the user has chosen.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if document::close_is_confirmed(window.label()) {
-                    return;
+                if document::close_requested(window) {
+                    api.prevent_close();
                 }
-                api.prevent_close();
-                let _ = tauri::Emitter::emit(window, "window:close-requested", window.label());
             }
         })
         .on_menu_event(|app, event| {

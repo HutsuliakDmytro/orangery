@@ -24,6 +24,9 @@ const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
 /** The app data directory the shell would have, as a map of file to contents. */
 const appData = new Map<string, string>()
 
+/** Paths the app asked the shell to open in a window of their own. */
+const windows: (string | null)[] = []
+
 /** Handlers registered by the window, so a test can play the shell's part. */
 const listeners = new Map<string, (event: { payload: unknown }) => void>()
 
@@ -46,6 +49,7 @@ vi.mock('@tauri-apps/api/core', () => ({
     }
     if (command === 'read_autosave') return Promise.resolve(appData.get(key) ?? null)
     if (command === 'list_autosaves') return Promise.resolve([])
+    if (command === 'open_window') windows.push(args['path'] ?? null)
     return Promise.resolve(null)
   },
 }))
@@ -99,6 +103,7 @@ beforeEach(() => {
 
   appData.clear()
   listeners.clear()
+  windows.length = 0
   opened.length = 0
   picked.path = '/decks/shapes.pptx'
   useGuardStore.getState().clear()
@@ -162,6 +167,37 @@ describe('the recent list', () => {
   })
 })
 
+describe('a second window', () => {
+  it('is asked for with nothing in it', async () => {
+    render(<App />)
+
+    act(() => {
+      runCommand('file.new-window', {})
+    })
+
+    await waitFor(() => {
+      expect(windows).toEqual([null])
+    })
+    // The deck in this window is untouched: a new window is not a way of
+    // closing the one you are in.
+    expect(useDeckStore.getState().open).toBeNull()
+  })
+
+  it('leaves the deck in this window where it is', async () => {
+    render(<App />)
+    await openThrough('file.open')
+
+    act(() => {
+      runCommand('file.new-window', {})
+    })
+
+    await waitFor(() => {
+      expect(windows).toEqual([null])
+    })
+    expect(useDeckStore.getState().open?.path).toBe('/decks/shapes.pptx')
+  })
+})
+
 describe('a file the window is handed', () => {
   it('opens a deck dropped onto it', async () => {
     render(<App />)
@@ -200,7 +236,7 @@ describe('a file the window is handed', () => {
     })
   })
 
-  it('asks before displacing unsaved work', async () => {
+  it('gives a window of its own rather than displacing unsaved work', async () => {
     render(<App />)
     await openThrough('file.open')
     edit()
@@ -208,7 +244,12 @@ describe('a file the window is handed', () => {
 
     deliver('tauri://drag-drop', { paths: ['/decks/dropped.pptx'] })
 
-    expect(screen.getByRole('alertdialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    // Nothing is asked and nothing is lost: the deck on screen stays, and the
+    // dropped one arrives beside it.
+    await waitFor(() => {
+      expect(windows).toEqual(['/decks/dropped.pptx'])
+    })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(opened).toEqual([])
   })
 })

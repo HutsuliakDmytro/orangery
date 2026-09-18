@@ -40,7 +40,13 @@ import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
 import { pictureName, rasterise, slideSvg } from '../document/export-image'
 import type { RasterType } from '../document/export-image'
 import { ICON_SIZE, ICONS } from '../document/icons'
-import { closeDeck, newDeck, openDeck, saveDeckFile } from '../document/file-operations'
+import {
+  closeDeck,
+  newDeck,
+  openDeck,
+  openInNewWindow,
+  saveDeckFile,
+} from '../document/file-operations'
 import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { closeShowWindows, openShowWindows } from '../document/show-windows'
@@ -114,6 +120,18 @@ export const fileCommands: readonly Command[] = [
     isEnabled: () => true,
     run: () => {
       whenSafe(newDeck)
+    },
+  },
+  {
+    id: 'file.new-window',
+    label: 'New Window',
+    group: 'file',
+    shortcut: 'Mod+Shift+n',
+    // A window is the shell's to make, so there is nothing to offer in a
+    // browser — and nothing is displaced either, so no question is asked.
+    isEnabled: () => isTauri(),
+    run: () => {
+      void openInNewWindow()
     },
   },
 ]

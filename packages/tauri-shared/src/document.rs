@@ -343,6 +343,34 @@ pub fn close_is_confirmed(label: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Hands a close request to the window that received it.
+///
+/// Returns whether the close should be held back. The frontend owns "is there
+/// anything unsaved?", because only it knows what is open.
+///
+/// Addressed to the one window rather than emitted at large. `Emitter::emit`
+/// reaches every webview whatever it is called on, so with a second window open
+/// closing either would ask both — and the other would answer for itself by
+/// closing too.
+///
+/// By label rather than by `WebviewWindow`: that target only matches a listener
+/// the runtime classified the same way, and which of the three kinds a webview's
+/// listeners are registered as is not ours to decide. A label matches all of
+/// them, and a label is what we mean.
+pub fn close_requested<R: tauri::Runtime>(window: &tauri::Window<R>) -> bool {
+    if close_is_confirmed(window.label()) {
+        return false;
+    }
+
+    let _ = tauri::Emitter::emit_to(
+        window,
+        tauri::EventTarget::labeled(window.label()),
+        "window:close-requested",
+        window.label(),
+    );
+    true
+}
+
 #[tauri::command]
 pub fn confirm_close(window: tauri::Window) -> Result<(), AppError> {
     if let Ok(mut confirmed) = confirmed_windows().lock() {
@@ -419,9 +447,19 @@ pub async fn open_window<R: tauri::Runtime>(
     if let Some(path) = path {
         // The webview has to exist before it can receive this.
         let target = window.clone();
+        let addressee = label.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            let _ = tauri::Emitter::emit(&target, "document:open-path", vec![path]);
+            // To the new window and no other. Emitted at large, this would also
+            // reach the window that asked for it — which, on being told to open
+            // a file it had just handed away, would open another window for it,
+            // and another, for as long as anyone watched.
+            let _ = tauri::Emitter::emit_to(
+                &target,
+                tauri::EventTarget::labeled(&addressee),
+                "document:open-path",
+                vec![path],
+            );
         });
     }
 

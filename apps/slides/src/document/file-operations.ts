@@ -1,4 +1,6 @@
+import { invoke } from '@tauri-apps/api/core'
 import { createDeck, saveDeck } from '@orangery/ooxml-presentation'
+import { isTauri } from '@orangery/platform'
 import { useDeckStore } from '../store/deck-store'
 import { noteRecent } from '../store/recent-store'
 import { nameOf, pickDeckPath, pickSavePath, readDeckFile, writeDeckFile } from './file'
@@ -66,6 +68,18 @@ export async function openDeck(path?: string): Promise<void> {
 
   document.title = `${nameOf(target)} — Orangery Slides`
   await noteRecent(target)
+}
+
+/**
+ * A second window, on its own deck.
+ *
+ * One window holds one deck, so this is the only way to have two open at once.
+ * The window is a fresh webview and therefore a fresh store: nothing about the
+ * deck in this one travels to it.
+ */
+export async function openInNewWindow(path?: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('open_window', { path: path ?? null })
 }
 
 export function closeDeck(): void {

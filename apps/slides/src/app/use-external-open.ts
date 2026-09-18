@@ -1,16 +1,19 @@
 import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { isTauri } from '@orangery/platform'
-import { openDeck } from '../document/file-operations'
-import { whenSafe } from '../document/unsaved'
+import { openDeck, openInNewWindow } from '../document/file-operations'
+import { useDeckStore } from '../store/deck-store'
 
 /**
  * Decks arriving from outside the app: a double-click, "Open With", a path on
  * the command line, or a file dropped onto the window.
  *
- * One window holds one deck, so an incoming file replaces the one on screen —
- * and only after the unsaved-changes question has been answered. Dropping a
- * file on the wrong window is a slip, and a slip must not cost an hour's work.
+ * One window holds one deck, so an incoming file takes the place of the one on
+ * screen — unless that one has unsaved changes, in which case it gets a window
+ * of its own instead. A dropped file is not a request to throw anything away,
+ * and now that there can be a second window there is nothing to ask about:
+ * dropping on the wrong window is a slip of the hand, and the answer to a slip
+ * is to make it cost nothing.
  */
 export function useExternalOpen(): void {
   useEffect(() => {
@@ -22,7 +25,12 @@ export function useExternalOpen(): void {
       const deck = paths.find((path) => /\.pptx$/iu.test(path))
       if (deck === undefined) return
 
-      whenSafe(() => openDeck(deck))
+      if (!useDeckStore.getState().saved) {
+        void openInNewWindow(deck)
+        return
+      }
+
+      void openDeck(deck)
     }
 
     const listeners = [

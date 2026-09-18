@@ -156,6 +156,15 @@ function Grid({
   )
 }
 
+/**
+ * How far a shape's height may be from what its text needs before it is moved.
+ *
+ * A screen pixel. A difference smaller than anybody can see is not a difference
+ * worth writing into the file, and without a floor the rounding in a
+ * measurement would keep the two disagreeing.
+ */
+const TOLERANCE = 9525
+
 /** How near a shape has to come before it is taken onto a line, in pixels. */
 const SNAP_PIXELS = 8
 
@@ -604,6 +613,7 @@ function ShapeText({
   onFollowLink,
   onLeave,
   onAutofit,
+  onAutofitHeight,
 }: {
   drawing: Drawing
   deck: Deck
@@ -617,18 +627,25 @@ function ShapeText({
   onLeave?: () => void
   /** Told the scale this text needs, once it has been measured in the box. */
   onAutofit?: (id: number, fontScale: number) => void
+  /** Told the height a shape needs, when the shape is the thing that gives. */
+  onAutofitHeight?: (id: number, height: number) => void
 }) {
   const { shape, transform, context } = drawing
   const empty = shape.text !== null && textOfBody(shape.text) === ''
 
   /**
-   * The box the words are laid out in, measured after they have been.
+   * The box the words are laid out in, and the words themselves.
    *
    * Measured rather than calculated: what a line of text comes to depends on
    * the font the machine actually has, and the only thing that knows that is
    * the thing that just drew it.
+   *
+   * Two, because the box clamps. A `scrollHeight` is never smaller than the
+   * element it is read from, so text that has shrunk too far would measure
+   * exactly as tall as its box and never be told it could grow back.
    */
-  const laidOut = useRef<HTMLDivElement>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const words = useRef<HTMLDivElement>(null)
 
   /**
    * What autofit has already done to this text.
@@ -652,14 +669,27 @@ function ShapeText({
    * history for each one.
    */
   useLayoutEffect(() => {
-    if (onAutofit === undefined || autofit?.kind !== 'normal' || editing === true) return
+    if (editing === true || autofit == null) return
 
-    const node = laidOut.current
-    if (node === null || node.clientHeight === 0) return
+    const outer = box.current
+    const inner = words.current
+    if (outer === null || inner === null || outer.clientHeight === 0) return
 
-    const current = Math.round(scale * 100000)
-    const wanted = scaleFor(current, { content: node.scrollHeight, box: node.clientHeight })
-    if (wanted !== current) onAutofit(shape.id, wanted)
+    if (autofit.kind === 'normal' && onAutofit !== undefined) {
+      const current = Math.round(scale * 100000)
+      const wanted = scaleFor(current, { content: inner.scrollHeight, box: outer.clientHeight })
+      if (wanted !== current) onAutofit(shape.id, wanted)
+      return
+    }
+
+    // The other way round: the shape gives instead of the text. The height a
+    // shape needs is its words plus the space it keeps around them, and the
+    // padding is already in the outer box's measurement.
+    if (autofit.kind === 'shape' && onAutofitHeight !== undefined) {
+      const padding = outer.clientHeight - inner.clientHeight
+      const wanted = inner.scrollHeight + Math.max(padding, 0)
+      if (Math.abs(wanted - transform.height) > TOLERANCE) onAutofitHeight(shape.id, wanted)
+    }
   })
 
   /**
@@ -700,7 +730,7 @@ function ShapeText({
       {/* React puts the XHTML namespace on children of a foreignObject itself,
           so the div needs nothing beyond being inside one. */}
       <div
-        ref={laidOut}
+        ref={box}
         style={{
           width: '100%',
           height: '100%',
@@ -716,122 +746,130 @@ function ShapeText({
           overflow: 'hidden',
         }}
       >
-        {prompt !== null ? (
-          <p style={{ margin: 0, opacity: 0.45 }}>{prompt}</p>
-        ) : editing === true ? (
-          <TextEditor
-            doc={textBodyToDoc(shape.text, {
-              field: (type, cached) => fieldValue(type, cached, fields),
-            })}
-            onCommit={(edited) => {
-              onCommitText?.(shape.id, edited)
-            }}
-            onCancel={() => {
-              onLeave?.()
-            }}
-          />
-        ) : (
-          shape.text.paragraphs.map((paragraph, index) => {
-            const properties = resolveParagraphProperties(paragraph.properties, chain)
-            const align = properties.align
+        {/* One block holding the paragraphs, so their own height can be read
+            without the box it sits in rounding it up to itself. */}
+        <div ref={words}>
+          {prompt !== null ? (
+            <p style={{ margin: 0, opacity: 0.45 }}>{prompt}</p>
+          ) : editing === true ? (
+            <TextEditor
+              doc={textBodyToDoc(shape.text, {
+                field: (type, cached) => fieldValue(type, cached, fields),
+              })}
+              onCommit={(edited) => {
+                onCommitText?.(shape.id, edited)
+              }}
+              onCancel={() => {
+                onLeave?.()
+              }}
+            />
+          ) : (
+            shape.text.paragraphs.map((paragraph, index) => {
+              const properties = resolveParagraphProperties(paragraph.properties, chain)
+              const align = properties.align
 
-            return (
-              <p
-                key={index}
-                style={{
-                  margin: 0,
-                  marginLeft: properties.marginLeft ?? 0,
-                  textIndent: properties.indent ?? 0,
-                  textAlign:
-                    align === 'ctr'
-                      ? 'center'
-                      : align === 'r'
-                        ? 'right'
-                        : align === 'just'
-                          ? 'justify'
-                          : 'left',
-                  lineHeight:
-                    (properties.lineSpacing?.kind === 'percent'
-                      ? properties.lineSpacing.value
-                      : 1.2) *
-                    (1 - lineReduction),
-                }}
-              >
-                {paragraph.runs.map((run, runIndex) => {
-                  const resolved = resolveRunProperties(run.properties, properties)
-                  const family = resolveThemeFont(
-                    theme?.fonts ?? { major: null, minor: null },
-                    resolved?.font ?? undefined,
-                  )
-                  const named = resolved?.font?.startsWith('+') === true ? family : resolved?.font
+              return (
+                <p
+                  key={index}
+                  style={{
+                    margin: 0,
+                    marginLeft: properties.marginLeft ?? 0,
+                    textIndent: properties.indent ?? 0,
+                    textAlign:
+                      align === 'ctr'
+                        ? 'center'
+                        : align === 'r'
+                          ? 'right'
+                          : align === 'just'
+                            ? 'justify'
+                            : 'left',
+                    lineHeight:
+                      (properties.lineSpacing?.kind === 'percent'
+                        ? properties.lineSpacing.value
+                        : 1.2) *
+                      (1 - lineReduction),
+                  }}
+                >
+                  {paragraph.runs.map((run, runIndex) => {
+                    const resolved = resolveRunProperties(run.properties, properties)
+                    const family = resolveThemeFont(
+                      theme?.fonts ?? { major: null, minor: null },
+                      resolved?.font ?? undefined,
+                    )
+                    const named = resolved?.font?.startsWith('+') === true ? family : resolved?.font
 
-                  if (run.kind === 'break') return <br key={runIndex} />
+                    if (run.kind === 'break') return <br key={runIndex} />
 
-                  // A field shows what it stands for; its text is only the
-                  // answer whatever saved the file last happened to write.
-                  const shown =
-                    run.kind === 'field' ? fieldValue(run.fieldType, run.text, fields) : run.text
+                    // A field shows what it stands for; its text is only the
+                    // answer whatever saved the file last happened to write.
+                    const shown =
+                      run.kind === 'field' ? fieldValue(run.fieldType, run.text, fields) : run.text
 
-                  // A link on a run is a relationship id and nothing else; what
-                  // it points at is a question about the package.
-                  const link =
-                    pkg === undefined || !playing
-                      ? null
-                      : resolveHyperlink(pkg, deck, slide.path, {
-                          relationshipId: resolved?.hyperlink ?? null,
-                          action: null,
-                        })
+                    // A link on a run is a relationship id and nothing else; what
+                    // it points at is a question about the package.
+                    const link =
+                      pkg === undefined || !playing
+                        ? null
+                        : resolveHyperlink(pkg, deck, slide.path, {
+                            relationshipId: resolved?.hyperlink ?? null,
+                            action: null,
+                          })
 
-                  const drawn = (
-                    <span
-                      key={runIndex}
-                      style={{
-                        fontSize: (resolved?.size ?? 18) * EMU_PER_POINT * scale,
-                        fontWeight: resolved?.bold === true ? 700 : 400,
-                        fontStyle: resolved?.italic === true ? 'italic' : 'normal',
-                        textDecoration:
-                          resolved?.underline != null && resolved.underline !== 'none'
-                            ? 'underline'
-                            : undefined,
-                        fontFamily: named == null ? undefined : fontStackFor(named),
-                        color: (() => {
-                          const colour = resolved?.color
-                          if (colour == null) return undefined
-                          const paint = fillPaint({ kind: 'solid', color: colour }, context, 'text')
-                          return paint.paint === 'none' ? undefined : paint.paint
-                        })(),
-                      }}
-                    >
-                      {shown}
-                    </span>
-                  )
+                    const drawn = (
+                      <span
+                        key={runIndex}
+                        style={{
+                          fontSize: (resolved?.size ?? 18) * EMU_PER_POINT * scale,
+                          fontWeight: resolved?.bold === true ? 700 : 400,
+                          fontStyle: resolved?.italic === true ? 'italic' : 'normal',
+                          textDecoration:
+                            resolved?.underline != null && resolved.underline !== 'none'
+                              ? 'underline'
+                              : undefined,
+                          fontFamily: named == null ? undefined : fontStackFor(named),
+                          color: (() => {
+                            const colour = resolved?.color
+                            if (colour == null) return undefined
+                            const paint = fillPaint(
+                              { kind: 'solid', color: colour },
+                              context,
+                              'text',
+                            )
+                            return paint.paint === 'none' ? undefined : paint.paint
+                          })(),
+                        }}
+                      >
+                        {shown}
+                      </span>
+                    )
 
-                  return link === null ? (
-                    drawn
-                  ) : (
-                    <a
-                      key={runIndex}
-                      href={link.kind === 'url' ? link.url : undefined}
-                      style={{ cursor: 'pointer' }}
-                      onClick={(event) => {
-                        // The browser would follow an href into this window,
-                        // and a presentation that navigates away has ended.
-                        event.preventDefault()
-                        event.stopPropagation()
-                        onFollowLink?.(link)
-                      }}
-                      onPointerDown={(event) => {
-                        event.stopPropagation()
-                      }}
-                    >
-                      {drawn}
-                    </a>
-                  )
-                })}
-              </p>
-            )
-          })
-        )}
+                    return link === null ? (
+                      drawn
+                    ) : (
+                      <a
+                        key={runIndex}
+                        href={link.kind === 'url' ? link.url : undefined}
+                        style={{ cursor: 'pointer' }}
+                        onClick={(event) => {
+                          // The browser would follow an href into this window,
+                          // and a presentation that navigates away has ended.
+                          event.preventDefault()
+                          event.stopPropagation()
+                          onFollowLink?.(link)
+                        }}
+                        onPointerDown={(event) => {
+                          event.stopPropagation()
+                        }}
+                      >
+                        {drawn}
+                      </a>
+                    )
+                  })}
+                </p>
+              )
+            })
+          )}
+        </div>
       </div>
     </foreignObject>
   )
@@ -864,6 +902,7 @@ export function SlideView({
   onEdit,
   onCommitText,
   onAutofit,
+  onAutofitHeight,
   playing = false,
   onFollowLink,
   className,
@@ -935,6 +974,8 @@ export function SlideView({
   onCommitText?: (id: number, doc: PmNode) => void
   /** Given a shape that asks to be shrunk and the scale its text now needs. */
   onAutofit?: (id: number, fontScale: number) => void
+  /** Given a shape that grows to its text, and the height it now needs. */
+  onAutofitHeight?: (id: number, height: number) => void
   /**
    * Whether a film or a sound on the slide gets a player over its poster frame.
    *
@@ -1212,6 +1253,7 @@ export function SlideView({
               editing={editing === drawing.shape.id}
               onCommitText={onCommitText}
               onAutofit={onAutofit}
+              onAutofitHeight={onAutofitHeight}
               onFollowLink={onFollowLink}
               onLeave={() => {
                 onEdit?.(null)

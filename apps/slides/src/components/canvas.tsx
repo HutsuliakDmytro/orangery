@@ -118,6 +118,17 @@ export function Canvas() {
               return shape?.text == null ? false : writeAutofitScale(shape.text.node, fontScale)
             })
           }}
+          onAutofitHeight={(id, height) => {
+            edit((edited) => {
+              const shape = flatten(edited.shapes).find((one) => one.id === id)
+              // Only a shape that states its own box. A placeholder takes its
+              // geometry from the layout, and writing a height into it here
+              // would cut it loose from the layout for good.
+              return shape?.transform == null
+                ? false
+                : writeTransform(shape, { ...shape.transform, height })
+            })
+          }}
           cropping={cropping}
           onCrop={setCropping}
           editingPoints={editingPoints}

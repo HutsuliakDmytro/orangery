@@ -131,3 +131,70 @@ describe('a shape that did not ask', () => {
     expect(parseXml(partText())).not.toHaveLength(0)
   })
 })
+
+describe('a shape that grows to its text', () => {
+  /** Opens the fixture and asks its first shape to grow instead of shrink. */
+  async function openGrowing() {
+    const bytes = await readFile(join(FIXTURES, 'shapes.pptx'))
+    await act(async () => {
+      await useDeckStore.getState().load(new Uint8Array(bytes), '/decks/shapes.pptx')
+    })
+
+    act(() => {
+      useDeckStore.getState().edit((slide) => {
+        const shape = slide.shapes[0]
+        return shape?.text == null
+          ? false
+          : writeBodyProperties(shape.text.node, { autofit: 'shape' })
+      })
+    })
+  }
+
+  const firstHeight = () =>
+    useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.transform?.height ?? 0
+
+  it('takes the height its words need', async () => {
+    await openGrowing()
+    const before = firstHeight()
+    // The stood-in measurement says the words are 150 tall in a box of 100.
+    overflow = 1.5
+
+    await act(async () => {
+      render(<App />)
+      await Promise.resolve()
+    })
+
+    expect(firstHeight()).not.toBe(before)
+    expect(firstHeight()).toBe(150)
+  })
+
+  it('shrinks the shape when the words are taken away', async () => {
+    await openGrowing()
+    overflow = 0.4
+
+    await act(async () => {
+      render(<App />)
+      await Promise.resolve()
+    })
+
+    // The shape gives in both directions; that is what makes it autofit rather
+    // than a minimum.
+    expect(firstHeight()).toBe(40)
+  })
+
+  it('settles instead of nudging itself for ever', async () => {
+    await openGrowing()
+    overflow = 1.5
+
+    await act(async () => {
+      render(<App />)
+      await Promise.resolve()
+    })
+
+    const steps = useDeckStore.getState().undoStack.length
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(useDeckStore.getState().undoStack).toHaveLength(steps)
+  })
+})

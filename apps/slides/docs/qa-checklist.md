@@ -166,6 +166,10 @@ These are the ones that matter most. Take them seriously.
 - [ ] Delete most of it again. The text grows back, once.
 - [ ] Save and open in PowerPoint. PowerPoint agrees about the size rather than
       resizing it again on open.
+- [ ] Put a text box set to "resize shape to fit text" on a slide and type into
+      it. The box grows a line at a time, and shrinks again when you delete.
+- [ ] Do the same inside a group. The box grows and nothing else in the group
+      moves.
 
 ## Getting a deck in
 

@@ -17,6 +17,7 @@ import { buildTemplate, templateById } from './templates'
 import {
   nameOf,
   pickDeckPath,
+  pickDocumentPath,
   pickExportPath,
   pickSavePath,
   readDeckFile,
@@ -26,6 +27,7 @@ import {
 import { deckFromOdp } from './converters/odp-import'
 import { readOdp } from './converters/odp-read'
 import { writeOdp } from './converters/odp-write'
+import { deckFromOutline } from './converters/outline-import'
 import { useImportStore } from './import-note'
 
 /**
@@ -202,6 +204,29 @@ export async function exportVideoFile(): Promise<void> {
   } finally {
     useViewStore.getState().setRecordingVideo(null)
   }
+}
+
+/**
+ * A deck made from a document's outline.
+ *
+ * A new deck rather than slides added to this one: an outline is a whole
+ * argument, and dropping it into the middle of a deck somebody is working on
+ * would be answering a question nobody asked.
+ */
+export async function importOutline(): Promise<void> {
+  const path = await pickDocumentPath()
+  if (path === null) return
+
+  const built = await deckFromOutline(await readDeckFile(path))
+  if (built === null) {
+    // A document with no headings has no outline. Saying so beats opening an
+    // empty deck and leaving somebody to work out why.
+    useImportStore.getState().set('That document has no headings to make slides from.')
+    return
+  }
+
+  await useDeckStore.getState().load(built, null)
+  document.title = 'Untitled Presentation \u2014 Orangery Slides'
 }
 
 /**

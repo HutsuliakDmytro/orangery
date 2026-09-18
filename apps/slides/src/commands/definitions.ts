@@ -58,6 +58,7 @@ import {
   exportOdp,
   exportTheme,
   exportVideoFile,
+  importOutline,
   newDeck,
   openDeck,
   openInNewWindow,
@@ -1128,6 +1129,16 @@ export const exportCommands: readonly Command[] = [
     isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
     run: () => {
       void exportOdp()
+    },
+  },
+  {
+    id: 'file.import-outline',
+    label: 'New from Document Outline\u2026',
+    group: 'file',
+    keywords: ['docx', 'word', 'outline', 'import'],
+    isEnabled: () => isTauri(),
+    run: () => {
+      whenSafe(importOutline)
     },
   },
   {

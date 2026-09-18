@@ -30,6 +30,19 @@ export async function pickDeckPath(): Promise<string | null> {
   return typeof selected === 'string' ? selected : null
 }
 
+/** A document to take an outline from, which is a different question. */
+export async function pickDocumentPath(): Promise<string | null> {
+  if (!isTauri()) return null
+
+  const selected = await openDialog({
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'Document', extensions: ['docx'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
 export async function readDeckFile(path: string): Promise<Uint8Array> {
   const loaded = await invoke<LoadedFile>('read_document', { path })
   return new Uint8Array(loaded.bytes)

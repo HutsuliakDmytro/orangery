@@ -256,6 +256,11 @@ These are the ones that matter most. Take them seriously.
       slides; accepting takes them and rejecting does not.
 - [ ] Have them delete a slide. It is listed and marked as shown only — known,
       and better than a button that does half the job.
+- [ ] New from Document Outline on a `.docx` with headings. The first heading
+      is the title slide; the rest are slides with their sub-headings as
+      bullets at the right depth.
+- [ ] Try it on a document with no headings. It says so rather than opening an
+      empty deck.
 
 ## Getting a deck in
 

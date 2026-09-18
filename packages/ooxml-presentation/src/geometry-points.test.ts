@@ -1,13 +1,20 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getPartText, parseXml } from '@orangery/ooxml-core'
+import { getPartText, parseXml, serializeNode } from '@orangery/ooxml-core'
 import { readDeck } from './deck'
 import { readPptxPackage } from './parts'
 import { saveDeck, writeSlidePart } from './save'
 import { flatten, parseShape } from './shape-tree'
 import type { Shape } from './shape-tree'
-import { geometryPoints, moveGeometryPoint, pathSpace } from './geometry-points'
+import {
+  addGeometryPoint,
+  geometryPoints,
+  moveGeometryPoint,
+  pathIsClosed,
+  pathSpace,
+  removeGeometryPoint,
+} from './geometry-points'
 
 /**
  * The vertices of a shape's own outline.
@@ -38,9 +45,9 @@ const triangle = (
 describe('reading the vertices', () => {
   it('lists every point in order', () => {
     expect(geometryPoints(triangle())).toEqual([
-      { path: 0, index: 0, x: 0, y: 0 },
-      { path: 0, index: 1, x: 100, y: 0 },
-      { path: 0, index: 2, x: 50, y: 100 },
+      { path: 0, index: 0, x: 0, y: 0, vertex: true },
+      { path: 0, index: 1, x: 100, y: 0, vertex: true },
+      { path: 0, index: 2, x: 50, y: 100, vertex: true },
     ])
   })
 
@@ -73,7 +80,7 @@ describe('moving one', () => {
     const shape = triangle()
     expect(moveGeometryPoint(shape, { path: 0, index: 2 }, { x: 20, y: 80 })).toBe(true)
 
-    expect(geometryPoints(shape)[2]).toEqual({ path: 0, index: 2, x: 20, y: 80 })
+    expect(geometryPoints(shape)[2]).toEqual({ path: 0, index: 2, x: 20, y: 80, vertex: true })
   })
 
   it('leaves every other point alone', () => {
@@ -111,5 +118,133 @@ describe('moving one', () => {
     // Nothing was moved, so nothing changed: the guard that this does not
     // rebuild what it did not touch.
     expect(after).toBe(before)
+  })
+})
+
+/** A square, which has one corner more than the least an outline can be. */
+const square = () =>
+  triangle(
+    '<a:moveTo><a:pt x="0" y="0"/></a:moveTo>' +
+      '<a:lnTo><a:pt x="100" y="0"/></a:lnTo>' +
+      '<a:lnTo><a:pt x="100" y="100"/></a:lnTo>' +
+      '<a:lnTo><a:pt x="0" y="100"/></a:lnTo><a:close/>',
+  )
+
+/** A square whose last side is a curve, so it holds handles as well as corners. */
+const curved = () =>
+  triangle(
+    '<a:moveTo><a:pt x="0" y="0"/></a:moveTo>' +
+      '<a:lnTo><a:pt x="100" y="0"/></a:lnTo>' +
+      '<a:lnTo><a:pt x="100" y="100"/></a:lnTo>' +
+      '<a:cubicBezTo><a:pt x="70" y="120"/><a:pt x="30" y="120"/><a:pt x="0" y="100"/>' +
+      '</a:cubicBezTo><a:close/>',
+  )
+
+describe('telling a corner from a handle', () => {
+  it('calls the point a curve arrives at a corner and its handles not', () => {
+    const points = geometryPoints(curved())
+
+    // Three corners, then two handles and the corner they curve towards.
+    expect(points.map((point) => point.vertex)).toEqual([true, true, true, false, false, true])
+  })
+})
+
+describe('adding a vertex', () => {
+  it('puts a straight segment in after the corner named', () => {
+    const shape = square()
+    expect(addGeometryPoint(shape, { path: 0, index: 1 }, { x: 100, y: 50 })).toBe(true)
+
+    // A corner somebody pointed at is a corner, not a curve through it.
+    expect(geometryPoints(shape).map((point) => [point.x, point.y])).toEqual([
+      [0, 0],
+      [100, 0],
+      [100, 50],
+      [100, 100],
+      [0, 100],
+    ])
+  })
+
+  it('keeps the new corner inside the path’s own space', () => {
+    const shape = square()
+    addGeometryPoint(shape, { path: 0, index: 1 }, { x: 500, y: -20 })
+
+    const added = geometryPoints(shape)[2]
+    expect(added).toMatchObject({ x: 100, y: 0 })
+  })
+
+  it('goes before the close, so it is part of the outline', () => {
+    const shape = square()
+    addGeometryPoint(shape, { path: 0, index: 3 }, { x: 0, y: 50 })
+
+    expect(geometryPoints(shape)).toHaveLength(5)
+    expect(pathIsClosed(shape, 0)).toBe(true)
+  })
+
+  it('refuses to follow a handle, which is not a place on the outline', () => {
+    expect(addGeometryPoint(curved(), { path: 0, index: 3 }, { x: 10, y: 10 })).toBe(false)
+  })
+
+  it('refuses on a shape with no outline of its own', async () => {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'shapes.pptx')))
+    const shape = flatten(readDeck(pkg).slides[0]?.shapes ?? [])[0]
+    if (shape === undefined) throw new Error('fixture has no shapes')
+
+    expect(addGeometryPoint(shape, { path: 0, index: 0 }, { x: 1, y: 1 })).toBe(false)
+  })
+})
+
+describe('removing a vertex', () => {
+  it('takes the corner out and leaves the rest', () => {
+    const shape = square()
+    expect(removeGeometryPoint(shape, { path: 0, index: 2 })).toBe(true)
+
+    expect(geometryPoints(shape).map((point) => [point.x, point.y])).toEqual([
+      [0, 0],
+      [100, 0],
+      [0, 100],
+    ])
+  })
+
+  it('takes a curve’s handles with the corner they curve towards', () => {
+    const shape = curved()
+    expect(removeGeometryPoint(shape, { path: 0, index: 5 })).toBe(true)
+
+    // A curve without the corner it curved towards is not a shorter curve.
+    expect(geometryPoints(shape)).toHaveLength(3)
+  })
+
+  it('refuses a handle on its own', () => {
+    expect(removeGeometryPoint(curved(), { path: 0, index: 3 })).toBe(false)
+  })
+
+  it('refuses to leave fewer than three corners', () => {
+    // There would be nothing left to draw, and no way to get the shape back.
+    expect(removeGeometryPoint(triangle(), { path: 0, index: 1 })).toBe(false)
+  })
+
+  it('promotes what follows when the start is the one removed', () => {
+    const shape = square()
+    expect(removeGeometryPoint(shape, { path: 0, index: 0 })).toBe(true)
+
+    const written = serializeNode(shape.node)
+    expect(written.indexOf('a:moveTo')).toBeLessThan(written.indexOf('a:lnTo'))
+    expect(geometryPoints(shape).map((point) => [point.x, point.y])).toEqual([
+      [100, 0],
+      [100, 100],
+      [0, 100],
+    ])
+  })
+
+  it('refuses to promote a curve into a starting position', () => {
+    const shape = triangle(
+      '<a:moveTo><a:pt x="0" y="0"/></a:moveTo>' +
+        '<a:cubicBezTo><a:pt x="20" y="10"/><a:pt x="80" y="10"/><a:pt x="100" y="0"/>' +
+        '</a:cubicBezTo>' +
+        '<a:lnTo><a:pt x="100" y="100"/></a:lnTo>' +
+        '<a:lnTo><a:pt x="0" y="100"/></a:lnTo><a:close/>',
+    )
+
+    // Its handles are stated against a corner that would no longer be there.
+    expect(removeGeometryPoint(shape, { path: 0, index: 0 })).toBe(false)
   })
 })

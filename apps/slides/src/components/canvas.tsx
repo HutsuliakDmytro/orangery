@@ -1,5 +1,6 @@
 import {
   absoluteTransform,
+  addGeometryPoint,
   connectorEnds,
   createShape,
   flatten,
@@ -8,6 +9,7 @@ import {
   moveGeometryPoint,
   readGridSpacing,
   readGuides,
+  removeGeometryPoint,
   writeCrop,
   withAncestors,
   writeTransform,
@@ -117,6 +119,18 @@ export function Canvas() {
             edit((slide) => {
               const shape = flatten(slide.shapes).find((one) => one.id === id)
               return shape === undefined ? false : moveGeometryPoint(shape, at, to)
+            })
+          }}
+          onAddPoint={(id, at, to) => {
+            edit((slide) => {
+              const shape = flatten(slide.shapes).find((one) => one.id === id)
+              return shape === undefined ? false : addGeometryPoint(shape, at, to)
+            })
+          }}
+          onRemovePoint={(id, at) => {
+            edit((slide) => {
+              const shape = flatten(slide.shapes).find((one) => one.id === id)
+              return shape === undefined ? false : removeGeometryPoint(shape, at)
             })
           }}
           cells={cells}

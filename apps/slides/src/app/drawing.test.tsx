@@ -300,6 +300,67 @@ describe('editing a shape’s own points', () => {
     expect(after[1]).toEqual(before[1])
   })
 
+  it('adds a corner where the outline is clicked between two', async () => {
+    await withCustomShape()
+    render(<App />)
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    const before = screen.getAllByRole('button', { name: /^Point \d+$/u }).length
+    const add = screen.getAllByRole('button', { name: /^Add point after \d+$/u })[0]
+    if (add === undefined) throw new Error('no add handle')
+
+    fireEvent.pointerDown(add)
+
+    expect(screen.getAllByRole('button', { name: /^Point \d+$/u })).toHaveLength(before + 1)
+  })
+
+  it('offers a place to add one on every side, the closing one included', async () => {
+    await withCustomShape()
+    render(<App />)
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    // A closed outline's last side is a side like any other.
+    const corners = screen.getAllByRole('button', { name: /^Point \d+$/u }).length
+    expect(screen.getAllByRole('button', { name: /^Add point after \d+$/u })).toHaveLength(corners)
+  })
+
+  it('takes a corner out when it is double-clicked', async () => {
+    await withCustomShape()
+    render(<App />)
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    // One added first, because an outline will not go below three corners.
+    const add = screen.getAllByRole('button', { name: /^Add point after \d+$/u })[0]
+    if (add === undefined) throw new Error('no add handle')
+    fireEvent.pointerDown(add)
+
+    const before = screen.getAllByRole('button', { name: /^Point \d+$/u }).length
+    const handle = screen.getAllByRole('button', { name: /^Point \d+$/u })[1]
+    if (handle === undefined) throw new Error('no point handle')
+    fireEvent.doubleClick(handle)
+
+    expect(screen.getAllByRole('button', { name: /^Point \d+$/u })).toHaveLength(before - 1)
+  })
+
+  it('keeps the last three corners, because below that there is no shape', async () => {
+    await withCustomShape()
+    render(<App />)
+    act(() => {
+      runCommand('format.edit-points', {})
+    })
+
+    const corners = screen.getAllByRole('button', { name: /^Point \d+$/u })
+    for (const handle of corners) fireEvent.doubleClick(handle)
+
+    expect(screen.getAllByRole('button', { name: /^Point \d+$/u }).length).toBeGreaterThanOrEqual(3)
+  })
+
   it('is left on Escape', async () => {
     await withCustomShape()
     render(<App />)

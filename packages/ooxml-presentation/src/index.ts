@@ -102,7 +102,14 @@ export type {
   PasteOptions,
 } from './clipboard'
 export { createShape, deleteShapes } from './create-shape'
-export { geometryPoints, moveGeometryPoint, pathSpace } from './geometry-points'
+export {
+  addGeometryPoint,
+  geometryPoints,
+  moveGeometryPoint,
+  pathIsClosed,
+  pathSpace,
+  removeGeometryPoint,
+} from './geometry-points'
 export type { GeometryPoint } from './geometry-points'
 export type { NewShape } from './create-shape'
 export { insertPicture, relsPartFor, UnsupportedPictureError } from './insert-picture'

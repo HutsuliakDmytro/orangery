@@ -19,6 +19,7 @@ import {
   relationshipTarget,
   withAncestors,
   geometryPoints,
+  pathIsClosed,
   pathSpace,
   readTableStyles,
   slideNumberOf,
@@ -813,6 +814,8 @@ export function SlideView({
   onCrop,
   editingPoints = null,
   onMovePoint,
+  onAddPoint,
+  onRemovePoint,
   cells = null,
   onPickCell,
   onMarquee,
@@ -851,6 +854,13 @@ export function SlideView({
     at: { path: number; index: number },
     to: { x: number; y: number },
   ) => void
+  /** Given the corner a new one should follow, and where it goes in path space. */
+  onAddPoint?: (
+    shape: number,
+    at: { path: number; index: number },
+    to: { x: number; y: number },
+  ) => void
+  onRemovePoint?: (shape: number, at: { path: number; index: number }) => void
   /** The block of cells picked out in a table, and which table it is in. */
   cells?: { table: number; row: number; column: number; toRow: number; toColumn: number } | null
   /** Given the table, the cell clicked, and whether the click extends a block. */
@@ -1241,6 +1251,20 @@ export function SlideView({
                         onMovePoint(drawing.shape.id, at, to)
                       }
                 }
+                onAddPoint={
+                  onAddPoint === undefined
+                    ? undefined
+                    : (at, to) => {
+                        onAddPoint(drawing.shape.id, at, to)
+                      }
+                }
+                onRemovePoint={
+                  onRemovePoint === undefined
+                    ? undefined
+                    : (at) => {
+                        onRemovePoint(drawing.shape.id, at)
+                      }
+                }
               />
             ))}
 
@@ -1472,6 +1496,8 @@ function OutlinePoints({
   slideWidth,
   slideHeight,
   onMove,
+  onAddPoint,
+  onRemovePoint,
 }: {
   shape: Shape
   transform: Transform
@@ -1479,12 +1505,77 @@ function OutlinePoints({
   slideWidth: number
   slideHeight: number
   onMove?: (at: { path: number; index: number }, to: { x: number; y: number }) => void
+  /** Asked to put a new corner after the one named, at a place in path space. */
+  onAddPoint?: (at: { path: number; index: number }, to: { x: number; y: number }) => void
+  onRemovePoint?: (at: { path: number; index: number }) => void
 }) {
   const points = geometryPoints(shape)
   const grip = 60960
 
+  /** Where a point in path space sits on the slide. */
+  const placed = (point: { path: number; x: number; y: number }) => {
+    const space = pathSpace(shape, point.path)
+    if (space === null) return null
+
+    return {
+      x: transform.x + (point.x / space.width) * transform.width,
+      y: transform.y + (point.y / space.height) * transform.height,
+    }
+  }
+
+  /**
+   * The middle of each segment, which is where a new corner goes.
+   *
+   * Between corners only: the handles of a curve are not places on the outline,
+   * so the middle between one of them and the next is not on it either. The
+   * segment back to the start counts when the path closes, because on a closed
+   * outline it is a segment like any other.
+   */
+  const middles = [...new Set(points.map((point) => point.path))].flatMap((path) => {
+    const corners = points.filter((point) => point.path === path && point.vertex)
+    const closed = pathIsClosed(shape, path)
+
+    return corners.flatMap((corner, index) => {
+      const next = corners[index + 1] ?? (closed ? corners[0] : undefined)
+      if (next === undefined || next === corner) return []
+
+      return [
+        {
+          path,
+          after: corner.index,
+          x: (corner.x + next.x) / 2,
+          y: (corner.y + next.y) / 2,
+        },
+      ]
+    })
+  })
+
   return (
     <g data-testid="outline-points">
+      {onAddPoint !== undefined &&
+        middles.map((middle) => {
+          const at = placed(middle)
+          if (at === null) return null
+
+          return (
+            <circle
+              key={`add-${String(middle.path)}-${String(middle.after)}`}
+              cx={at.x}
+              cy={at.y}
+              r={grip / 3}
+              fill="#FF7A00"
+              fillOpacity={0.5}
+              stroke="#FFFFFF"
+              strokeWidth={12700}
+              role="button"
+              aria-label={`Add point after ${String(middle.after + 1)}`}
+              onPointerDown={(event) => {
+                event.stopPropagation()
+                onAddPoint({ path: middle.path, index: middle.after }, { x: middle.x, y: middle.y })
+              }}
+            />
+          )
+        })}
       {points.map((point) => {
         const space = pathSpace(shape, point.path)
         if (space === null) return null
@@ -1504,6 +1595,11 @@ function OutlinePoints({
             strokeWidth={19050}
             role={onMove === undefined ? undefined : 'button'}
             aria-label={onMove === undefined ? undefined : `Point ${String(point.index + 1)}`}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              // A handle is not a corner, so there is nothing to take out.
+              if (point.vertex) onRemovePoint?.({ path: point.path, index: point.index })
+            }}
             onPointerDown={(event) => {
               event.stopPropagation()
               if (onMove === undefined) return

@@ -136,6 +136,11 @@ These are the ones that matter most. Take them seriously.
 - [ ] Paste Special → text only. A text box appears with the words and no fill.
 - [ ] Copy three different things, then Paste Special. All three are listed,
       newest first, and picking the oldest pastes the oldest.
+- [ ] Insert an icon, Edit Points. Click a dot on a side: a corner appears
+      there. Double-click a corner: it goes.
+- [ ] Try to delete corners until there are two left. It stops at three.
+- [ ] Do the same to a shape with a curved side. The curve's handles cannot be
+      deleted on their own, and deleting the corner takes the curve with it.
 
 ## Getting a deck in
 

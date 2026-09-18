@@ -233,8 +233,8 @@ These are the ones that matter most. Take them seriously.
       only the narration is missing.
 - [ ] Export as Video on a short deck. The banner counts the slides through and
       **takes as long as the deck plays for** — that is the design, not a hang.
-- [ ] Play the file. Every slide is there, in order, for its own time. There is
-      no sound yet; that is known.
+- [ ] Play the file. Every slide is there, in order, for its own time, and a
+      slide that was narrated is held for as long as the narration and has it.
 - [ ] Press Stop half way. The file saves and holds the slides recorded so far.
 - [ ] Pick a chart, change a number in the panel. The chart redraws. Save,
       open in PowerPoint, **and open Edit Data**: the workbook holds the new

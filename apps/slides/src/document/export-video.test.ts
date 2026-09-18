@@ -1,7 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { readDeck, readPptxPackage, readThemes, setAdvanceTime } from '@orangery/ooxml-presentation'
+import {
+  addNarration,
+  readDeck,
+  readPptxPackage,
+  readThemes,
+  saveDeck,
+  setAdvanceTime,
+  writeSlidePart,
+} from '@orangery/ooxml-presentation'
 import type { Deck } from '@orangery/ooxml-presentation'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { exportVideo, holdsFor } from './export-video'
@@ -58,7 +66,10 @@ beforeEach(() => {
 
   Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
     configurable: true,
-    value: () => ({ getTracks: () => [{ stop: () => undefined }] }),
+    value: () => ({
+      getTracks: () => [{ stop: () => undefined }],
+      addTrack: () => undefined,
+    }),
   })
 
   // An image that never loads: what the engine does with a `foreignObject` is
@@ -153,5 +164,85 @@ describe('recording the deck', () => {
   it('answers nothing at all where the engine cannot record', async () => {
     vi.stubGlobal('MediaRecorder', undefined)
     expect(await record('many-slides')).toBeNull()
+  })
+})
+
+describe('the sound of the film', () => {
+  /** An audio context that decodes anything into a clip of a known length. */
+  function stubSound(seconds: number) {
+    const track = { enabled: true, stop: () => undefined }
+    const started: unknown[] = []
+
+    class Stub {
+      createMediaStreamDestination() {
+        return { stream: { getAudioTracks: () => [track] } }
+      }
+
+      createBufferSource() {
+        return {
+          buffer: null,
+          connect: () => undefined,
+          start: () => started.push(1),
+        }
+      }
+
+      decodeAudioData() {
+        return Promise.resolve({ duration: seconds })
+      }
+
+      close() {
+        return Promise.resolve()
+      }
+    }
+
+    vi.stubGlobal('AudioContext', Stub)
+    return { started }
+  }
+
+  /** A deck whose first slide carries a recording. */
+  async function withNarration() {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+
+    addNarration(pkg, slide, {
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      fileName: 'narration.m4a',
+      contentType: 'audio/mp4',
+    })
+    writeSlidePart(pkg, slide)
+
+    const reopened = await readPptxPackage(await saveDeck(pkg))
+    return { deck: readDeck(reopened), pkg: reopened }
+  }
+
+  it('plays what was said over the slide it was said on', async () => {
+    const { started } = stubSound(2)
+    const { deck, pkg } = await withNarration()
+
+    await exportVideo({ deck, themes: readThemes(pkg, deck), package: pkg })
+
+    // One recording on one slide, played once.
+    expect(started).toHaveLength(1)
+  })
+
+  it('holds the slide for as long as the talking, not the timing', async () => {
+    stubSound(9)
+    const { deck, pkg } = await withNarration()
+
+    await exportVideo({ deck, themes: readThemes(pkg, deck), package: pkg })
+
+    // Cutting a sentence in half to keep to a timing would be keeping the
+    // wrong promise.
+    expect(held).toContain(9000)
+  })
+
+  it('makes a silent film of a deck nobody recorded', async () => {
+    const { started } = stubSound(2)
+    const film = await record('many-slides')
+
+    expect(started).toHaveLength(0)
+    expect(film).not.toBeNull()
   })
 })

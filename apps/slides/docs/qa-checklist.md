@@ -105,6 +105,15 @@ These are the ones that matter most. Take them seriously.
       sensible each time.
 - [ ] Drag slides in the filmstrip to reorder, including into and out of a
       section.
+- [ ] Insert → Header and Footer, tick the slide number, Apply to All. Every
+      slide shows its own number, in the place its own layout puts it — a deck
+      built from several layouts puts them in several places, which is right.
+- [ ] Reorder the slides afterwards. The numbers follow; none of them keeps the
+      number it had.
+- [ ] Tick the date as well, save, and open the file in PowerPoint tomorrow. It
+      shows tomorrow's date, not today's.
+- [ ] Tick “Don't show on title slide” and Apply to All. The title slides have
+      nothing; the rest do.
 
 ## Getting a deck in
 

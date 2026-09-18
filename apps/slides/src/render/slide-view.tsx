@@ -5,6 +5,7 @@ import {
   backgroundOf,
   resolveHyperlink,
   colorContextFor,
+  fieldValue,
   flatten,
   listStyleChain,
   layoutOf,
@@ -20,6 +21,7 @@ import {
   geometryPoints,
   pathSpace,
   readTableStyles,
+  slideNumberOf,
   styleFor,
 } from '@orangery/ooxml-presentation'
 import type {
@@ -591,6 +593,16 @@ function ShapeText({
   const scale = autofit?.kind === 'normal' ? (autofit.fontScale ?? 1) : 1
   const lineReduction = autofit?.kind === 'normal' ? (autofit.lineSpaceReduction ?? 0) : 0
 
+  /**
+   * What the fields on this slide answer to.
+   *
+   * A slide number is the slide's place in the deck, not the digit the file
+   * remembers writing there — reorder a deck and every one of them is wrong
+   * until something works them out again. The date is the day it is being
+   * looked at, for the same reason.
+   */
+  const fields = { number: slideNumberOf(deck, slide), now: new Date() }
+
   return (
     <foreignObject
       x={transform.x}
@@ -665,6 +677,11 @@ function ShapeText({
 
                   if (run.kind === 'break') return <br key={runIndex} />
 
+                  // A field shows what it stands for; its text is only the
+                  // answer whatever saved the file last happened to write.
+                  const shown =
+                    run.kind === 'field' ? fieldValue(run.fieldType, run.text, fields) : run.text
+
                   // A link on a run is a relationship id and nothing else; what
                   // it points at is a question about the package.
                   const link =
@@ -695,7 +712,7 @@ function ShapeText({
                         })(),
                       }}
                     >
-                      {run.text}
+                      {shown}
                     </span>
                   )
 

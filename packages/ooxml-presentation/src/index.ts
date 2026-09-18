@@ -65,6 +65,10 @@ export {
   writeTransform,
 } from './write-shape'
 export { setShapeText } from './write-text'
+export { DEFAULT_DATE_FIELD, fieldValue, isDateField, slideNumberOf } from './fields'
+export type { FieldContext } from './fields'
+export { applyFooters, NO_FOOTERS, readFooters } from './footers'
+export type { FooterKind, FooterOptions, FooterSettings } from './footers'
 export type { TextLine } from './write-text'
 export { reorderShapes } from './z-order'
 export {

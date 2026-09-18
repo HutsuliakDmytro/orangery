@@ -57,6 +57,14 @@ export interface PresentationMap {
   notesMaster: string | null
   slideSize: SlideSize
   notesSize: SlideSize
+  /**
+   * `p:presentation/@firstSlideNum` — what the first slide is numbered.
+   *
+   * One almost always, and not always: a deck that continues another one starts
+   * where that one stopped, and every slide number on it is then off by the
+   * difference if this is ignored.
+   */
+  firstSlideNum: number
 }
 
 /** A part's relationships, resolved to package paths. */
@@ -103,6 +111,12 @@ function sizeOf(root: XmlNode | undefined, tag: string, fallback: SlideSize): Sl
     width: Number.isFinite(width) && width > 0 ? width : fallback.width,
     height: Number.isFinite(height) && height > 0 ? height : fallback.height,
   }
+}
+
+/** An attribute read as a number, or the fallback when it is absent or junk. */
+function numberOf(value: string | undefined, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 /** PowerPoint's own default, used when a deck does not say. */
@@ -164,6 +178,7 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
     notesMaster: firstTargetOf(relationships, NOTES_MASTER_RELATIONSHIP),
     slideSize: sizeOf(root, 'p:sldSz', DEFAULT_SLIDE_SIZE),
     notesSize: sizeOf(root, 'p:notesSz', DEFAULT_NOTES_SIZE),
+    firstSlideNum: numberOf(root === undefined ? undefined : attribute(root, 'firstSlideNum'), 1),
   }
 }
 

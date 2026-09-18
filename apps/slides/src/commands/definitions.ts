@@ -1322,6 +1322,18 @@ export const tableCommands: readonly Command[] = [
   },
 ]
 
+export const footerCommands: readonly Command[] = [
+  {
+    id: 'insert.header-footer',
+    label: 'Header and Footer…',
+    group: 'insert',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setEditingFooters(true)
+    },
+  },
+]
+
 export const shapeGalleryCommand: Command = {
   id: 'insert.shape',
   label: 'Shape…',
@@ -1544,6 +1556,7 @@ export function registerBuiltinCommands(): void {
   registerAll(iconCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)
+  registerAll(footerCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)
   registerAll(paragraphCommands)

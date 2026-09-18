@@ -45,6 +45,8 @@ export interface Master extends SlidePart {
 export interface Deck {
   slideSize: SlideSize
   notesSize: SlideSize
+  /** What the first slide is numbered, which is not always one. */
+  firstSlideNum: number
   slides: Slide[]
   /** Keyed by part path, which is how a slide names its layout. */
   layouts: Map<string, SlidePart>
@@ -117,6 +119,7 @@ export function readDeck(pkg: OoxmlPackage): Deck {
   return {
     slideSize: map.slideSize,
     notesSize: map.notesSize,
+    firstSlideNum: map.firstSlideNum,
     slides,
     layouts,
     masters,

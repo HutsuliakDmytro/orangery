@@ -2,7 +2,16 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { cleanup, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { readDeck, readPptxPackage, readThemes } from '@orangery/ooxml-presentation'
+import {
+  applyFooters,
+  moveSlide,
+  NO_FOOTERS,
+  readDeck,
+  readPptxPackage,
+  readThemes,
+  saveDeck,
+  writeSlidePart,
+} from '@orangery/ooxml-presentation'
 import { readBodyProperties } from '@orangery/ooxml-drawingml'
 import { getPartText, parseXml, setPartText } from '@orangery/ooxml-core'
 import { SlideView } from './slide-view'
@@ -352,5 +361,63 @@ describe('a shape the file hides', () => {
 
     expect(container.textContent).toContain('Shown')
     expect(container.textContent).not.toContain('Not shown')
+  })
+})
+
+describe('the fields on a slide', () => {
+  /** The text of the slide-number placeholder, which is the only one drawn bare. */
+  const numberShown = (container: HTMLElement) =>
+    [...container.querySelectorAll('foreignObject')]
+      .map((box) => box.textContent)
+      .find((text) => /^\d+$/u.test(text)) ?? null
+
+  /** Puts the date and the number on every slide, then reopens the deck. */
+  async function withFooters() {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    const deck = readDeck(pkg)
+    applyFooters(
+      deck,
+      deck.slides,
+      { ...NO_FOOTERS, date: true, slideNumber: true },
+      { now: new Date(2020, 0, 1), locale: 'en-US' },
+    )
+    for (const slide of deck.slides) writeSlidePart(pkg, slide)
+
+    const reopened = await readPptxPackage(await saveDeck(pkg))
+    return { deck: readDeck(reopened), pkg: reopened }
+  }
+
+  it('numbers the slide it is drawn on, not the one the file remembers', async () => {
+    const { pkg } = await withFooters()
+
+    // The third slide, moved to the front after its number was written into it:
+    // the file says 3 and the deck says 1, which is the whole point of drawing
+    // the field rather than its cache.
+    moveSlide(pkg, 2, 0)
+    const reordered = readDeck(await readPptxPackage(await saveDeck(pkg)))
+    const moved = reordered.slides[0]
+    if (moved === undefined) throw new Error('fixture is too short')
+
+    const { container } = render(
+      <SlideView deck={reordered} slide={moved} themes={readThemes(pkg, reordered)} />,
+    )
+
+    // Its title still says what it always said, so the two are told apart.
+    expect(container.textContent).toContain('Slide 3')
+    expect(numberShown(container)).toBe('1')
+  })
+
+  it('shows the day it is being looked at, not the day it was saved', async () => {
+    const { deck, pkg } = await withFooters()
+    const first = deck.slides[0]
+    if (first === undefined) throw new Error('fixture has no slides')
+
+    const { container } = render(
+      <SlideView deck={deck} slide={first} themes={readThemes(pkg, deck)} />,
+    )
+
+    // Cached as the first of January 2020, which is a date nobody is reading it on.
+    expect(container.textContent).not.toContain('2020')
+    expect(container.textContent).toContain(String(new Date().getFullYear()))
   })
 })

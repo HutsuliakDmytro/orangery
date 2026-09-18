@@ -939,3 +939,78 @@ describe('the gradient editor', () => {
     expect(partText()).toContain('schemeClr val="accent3"')
   })
 })
+
+describe('the header and footer dialog', () => {
+  /** Opens a deck with several slides and puts the dialog up. */
+  async function openDialog() {
+    await openDeck('many-slides')
+    render(<App />)
+    act(() => {
+      runCommand('insert.header-footer', {})
+    })
+  }
+
+  const numbered = () => {
+    const deck = useDeckStore.getState().open?.deck
+    return (deck?.slides ?? []).filter((slide) =>
+      slide.shapes.some((shape) => shape.placeholder?.type === 'sldNum'),
+    ).length
+  }
+
+  it('puts the number on every slide when it is applied to all', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    expect(numbered()).toBe(useDeckStore.getState().open?.deck.slides.length)
+  })
+
+  it('puts it on one slide when that is what was asked', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(numbered()).toBe(1)
+  })
+
+  it('writes the footer text into the file', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Footer' }))
+    await user.type(screen.getByRole('textbox', { name: 'Footer text' }), 'Confidential')
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    expect(partText()).toContain('Confidential')
+  })
+
+  it('leaves the deck alone when it is cancelled', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(numbered()).toBe(0)
+    expect(useDeckStore.getState().saved).toBe(true)
+  })
+
+  it('opens on what the slide already shows', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    act(() => {
+      runCommand('insert.header-footer', {})
+    })
+
+    // Not a form that starts empty: reopening it and pressing Apply again must
+    // not be a way to quietly take the numbers back off.
+    expect(screen.getByRole('checkbox', { name: 'Slide number' })).toBeChecked()
+  })
+})

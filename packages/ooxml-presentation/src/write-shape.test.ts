@@ -5,7 +5,7 @@ import { children, getPartText, tagName } from '@orangery/ooxml-core'
 import { readDeck } from './deck'
 import { readPptxPackage } from './parts'
 import { saveDeck, writeSlidePart } from './save'
-import { moveShape, writeTransform } from './write-shape'
+import { moveShape, writeCrop, writeTransform } from './write-shape'
 import type { Shape } from './shape-tree'
 
 /**
@@ -196,5 +196,45 @@ describe('rotation and flips', () => {
       writeSlidePart(pkg, slide)
     }
     expect(getPartText(pkg, slide?.path ?? '')).not.toContain('flipH=')
+  })
+})
+
+describe('cropping a picture', () => {
+  it('comes back as what was set', async () => {
+    const { deck, after, edited } = await edit('picture', (shapes) => {
+      const picture = shapes.find((shape) => shape.picture !== null)
+      if (picture !== undefined) {
+        writeCrop(picture, { left: 0.1, top: 0.2, right: 0.05, bottom: 0 })
+      }
+    })
+
+    const picture = deck.slides[0]?.shapes.find((shape) => shape.picture !== null)
+    expect(picture?.picture?.crop).toEqual({ left: 0.1, top: 0.2, right: 0.05, bottom: 0 })
+    expect(getPartText(after, edited)).toContain('<a:srcRect')
+  })
+
+  it('writes only the sides that are cropped', async () => {
+    const { after, edited } = await edit('picture', (shapes) => {
+      const picture = shapes.find((shape) => shape.picture !== null)
+      if (picture !== undefined) writeCrop(picture, { left: 0.25, top: 0, right: 0, bottom: 0 })
+    })
+
+    const text = getPartText(after, edited) ?? ''
+    expect(text).toContain('l="25000"')
+    // A side cropped to nothing says nothing, as PowerPoint writes it.
+    expect(text).not.toContain('t="0"')
+  })
+
+  it('takes the element away when nothing is cropped', async () => {
+    const { after, edited } = await edit('picture', (shapes) => {
+      const picture = shapes.find((shape) => shape.picture !== null)
+      if (picture !== undefined) {
+        writeCrop(picture, { left: 0.3, top: 0, right: 0, bottom: 0 })
+        writeCrop(picture, { left: 0, top: 0, right: 0, bottom: 0 })
+      }
+    })
+
+    // Cropped and uncropped is the picture it was, not one stating four zeroes.
+    expect(getPartText(after, edited)).not.toContain('a:srcRect')
   })
 })

@@ -699,6 +699,8 @@ export function SlideView({
   onDrag,
   openGroup = null,
   onOpenGroup,
+  cropping = null,
+  onCrop,
   onMarquee,
   drawing = null,
   onDraw,
@@ -723,6 +725,10 @@ export function SlideView({
   onDrag?: (drag: DragState, correction: Correction) => void
   /** The group the pointer is inside, which decides what a click picks out. */
   openGroup?: number | null
+  /** The picture being cropped, whose handles then take away rather than resize. */
+  cropping?: number | null
+  /** Asked to enter crop on a picture, or to leave it with `null`. */
+  onCrop?: (id: number | null) => void
   /** Asked to step into a group, or back to the top with `null`. */
   onOpenGroup?: (id: number | null) => void
   /** Given the ids a rubber band enclosed, once it is let go. */
@@ -1034,8 +1040,16 @@ export function SlideView({
                     return
                   }
 
-                  // A shape with no text body can still be given one; a picture
-                  // or a chart cannot hold text at all.
+                  // A picture holds no text, so the obvious thing to do to one
+                  // on a second click is to crop it — which is what PowerPoint
+                  // does too.
+                  if (drawing.shape.picture !== null) {
+                    onCrop?.(drawing.shape.id)
+                    return
+                  }
+
+                  // A shape with no text body can still be given one; a chart
+                  // cannot hold text at all.
                   if (drawing.shape.kind === 'sp' || drawing.shape.kind === 'cxnSp') {
                     onEdit?.(drawing.shape.id)
                   }
@@ -1060,6 +1074,7 @@ export function SlideView({
           ) : (
             <SelectionFrame
               key={`selected-${String(drawing.shape.id)}`}
+              cropping={cropping === drawing.shape.id}
               transform={shown(drawing)}
               onHandle={
                 onDrag === undefined
@@ -1107,9 +1122,12 @@ function promptFor(shape: Shape): string | null {
 function SelectionFrame({
   transform,
   onHandle,
+  cropping = false,
 }: {
   transform: Transform
   onHandle?: (event: React.PointerEvent, handle: Handle) => void
+  /** Drawn differently, and without the grip that turns the shape. */
+  cropping?: boolean
 }) {
   const handle = 76200
   const { x, y, width, height } = transform
@@ -1151,7 +1169,7 @@ function SelectionFrame({
         pointerEvents="none"
       />
 
-      {onHandle !== undefined && (
+      {onHandle !== undefined && !cropping && (
         <g>
           <line
             x1={middle.x}
@@ -1187,11 +1205,13 @@ function SelectionFrame({
             y={at.y - handle / 2}
             width={handle}
             height={handle}
-            fill="#FFFFFF"
+            fill={cropping ? '#111111' : '#FFFFFF'}
             stroke="#FF7A00"
             strokeWidth={19050}
             role={onHandle === undefined ? undefined : 'button'}
-            aria-label={onHandle === undefined ? undefined : `Resize ${corner}`}
+            aria-label={
+              onHandle === undefined ? undefined : `${cropping ? 'Crop' : 'Resize'} ${corner}`
+            }
             pointerEvents={onHandle === undefined ? 'none' : undefined}
             onPointerDown={(event) => {
               onHandle?.(event, corner)

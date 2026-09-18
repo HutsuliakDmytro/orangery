@@ -2,7 +2,9 @@ import {
   children,
   ensureChild,
   element,
+  findChild,
   removeAttribute,
+  removeChild,
   setAttribute,
   tagName,
   upsertChild,
@@ -141,5 +143,45 @@ export function ensureTextBody(shape: Shape): boolean {
     ]),
     shape.kind === 'sp' ? SHAPE : CONNECTOR,
   )
+  return true
+}
+
+/**
+ * How much of a picture is hidden on each side, as fractions from 0 to 1.
+ *
+ * `a:srcRect` counts in thousandths of a percent, which is a hundred thousand
+ * to the whole image; every side is optional and absent means nothing cropped.
+ * A side cropped to nothing is removed rather than written as zero, so a
+ * picture cropped and then uncropped is the picture it was.
+ */
+export function writeCrop(
+  shape: Shape,
+  crop: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  const fill = findChild(shape.node, 'p:blipFill') ?? findChild(shape.node, 'a:blipFill')
+  if (fill === undefined) return false
+
+  const sides = [
+    ['l', crop.left],
+    ['t', crop.top],
+    ['r', crop.right],
+    ['b', crop.bottom],
+  ] as const
+
+  // Nothing cropped at all: the element goes, rather than sitting there saying
+  // zero four times.
+  if (sides.every(([, value]) => Math.round(value * 100000) === 0)) {
+    removeChild(fill, 'a:srcRect')
+    return true
+  }
+
+  // Before the stretch or the tile, which is where the schema puts it.
+  const source = ensureChild(fill, 'a:srcRect', ['a:srcRect', 'a:stretch', 'a:tile'])
+  for (const [name, value] of sides) {
+    const thousandths = Math.round(Math.min(Math.max(value, 0), 1) * 100000)
+    if (thousandths === 0) removeAttribute(source, name)
+    else setAttribute(source, name, String(thousandths))
+  }
+
   return true
 }

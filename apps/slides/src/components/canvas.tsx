@@ -5,6 +5,7 @@ import {
   flatten,
   intoGroupSpace,
   moveConnectorEnd,
+  writeCrop,
   withAncestors,
   writeTransform,
 } from '@orangery/ooxml-presentation'
@@ -32,6 +33,8 @@ export function Canvas() {
   const setEditing = useDeckStore((state) => state.setEditing)
   const drawing = useViewStore((state) => state.drawing)
   const setDrawing = useViewStore((state) => state.setDrawing)
+  const cropping = useDeckStore((state) => state.cropping)
+  const setCropping = useDeckStore((state) => state.setCropping)
   const openGroup = useDeckStore((state) => state.openGroup)
   const setOpenGroup = useDeckStore((state) => state.setOpenGroup)
 
@@ -95,8 +98,34 @@ export function Canvas() {
               return shape?.text == null ? false : writeTextBody(shape.text.node, doc)
             })
           }}
+          cropping={cropping}
+          onCrop={setCropping}
           onDrag={(drag, correction) => {
             const selected = useDeckStore.getState().selection
+
+            // While cropping, a handle takes a side away rather than resizing
+            // the frame: the picture stays where it is and less of it shows.
+            const side = drag.handle
+            if (cropping !== null && side !== null && side !== 'rotate') {
+              edit((edited) => {
+                const picture = flatten(edited.shapes).find((one) => one.id === cropping)
+                const box = picture?.transform
+                if (picture?.picture == null || box == null) return false
+
+                const crop = picture.picture.crop
+                const across = box.width === 0 ? 0 : drag.dx / box.width
+                const down = box.height === 0 ? 0 : drag.dy / box.height
+                const clamp = (value: number) => Math.min(Math.max(value, 0), 0.9)
+
+                return writeCrop(picture, {
+                  left: side.includes('w') ? clamp(crop.left + across) : crop.left,
+                  right: side.includes('e') ? clamp(crop.right - across) : crop.right,
+                  top: side.includes('n') ? clamp(crop.top + down) : crop.top,
+                  bottom: side.includes('s') ? clamp(crop.bottom - down) : crop.bottom,
+                })
+              })
+              return
+            }
             edit((edited) =>
               withAncestors(edited.shapes)
                 .flatMap(({ shape, ancestors }) => {

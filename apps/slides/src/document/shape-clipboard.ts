@@ -1,4 +1,5 @@
 import { copyShapes, parseClipboard, pasteShapes } from '@orangery/ooxml-presentation'
+import { insertPictureOnSlide } from './insert-picture'
 import type { ClipboardShapes } from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 
@@ -72,11 +73,44 @@ export async function copySelection(): Promise<boolean> {
   return true
 }
 
+/**
+ * A picture from the clipboard, if that is what is on it.
+ *
+ * Tried after our own shapes and before giving up: a screenshot is the most
+ * common thing anybody pastes onto a slide, and until now it was the one thing
+ * paste could not do.
+ */
+async function pastedPicture(): Promise<{ name: string; bytes: Uint8Array } | null> {
+  if (typeof navigator.clipboard.read !== 'function') return null
+
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((one) => one.startsWith('image/'))
+      if (type === undefined) continue
+
+      const blob = await item.getType(type)
+      const extension = type.slice('image/'.length).replace('jpeg', 'jpg')
+      return { name: `pasted.${extension}`, bytes: new Uint8Array(await blob.arrayBuffer()) }
+    }
+  } catch {
+    // No permission, or nothing readable. Not an error: there was simply no
+    // picture to be had.
+  }
+
+  return null
+}
+
 export async function pasteShapesHere(): Promise<void> {
   const payload = await read()
   const { open } = useDeckStore.getState()
   const slide = currentSlide(useDeckStore.getState())
-  if (payload === null || open === null || slide === null) return
+  if (open === null || slide === null) return
+
+  if (payload === null) {
+    const picture = await pastedPicture()
+    if (picture !== null) insertPictureOnSlide(picture.name, picture.bytes)
+    return
+  }
 
   // Onto the slide they came from, they would land exactly on the originals and
   // look like nothing happened; anywhere else there is nothing to be confused

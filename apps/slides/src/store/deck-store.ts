@@ -133,6 +133,15 @@ interface DeckState {
    * flag, and `Escape` walks back out one level at a time.
    */
   openGroup: number | null
+  /**
+   * The picture whose crop is being dragged, or null.
+   *
+   * Its own state rather than a mode on the selection, because cropping is
+   * entered and left the way text is: a double click in, `Escape` out. What a
+   * handle means while it is set is "show less of this side", and the same
+   * handle means "make the frame bigger" the moment it is not.
+   */
+  cropping: number | null
   undoStack: Edit[]
   redoStack: Edit[]
   /** What went wrong opening the last file, for the banner. */
@@ -204,6 +213,8 @@ interface DeckState {
   setEditing: (id: number | null) => void
   /** Steps into a group, or back out to the top with null. */
   setOpenGroup: (id: number | null) => void
+  /** Enters crop on a picture, or leaves it with null. */
+  setCropping: (id: number | null) => void
   /**
    * Runs a change against the current slide and records it.
    *
@@ -310,6 +321,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   slideSelection: [],
   editing: null,
   openGroup: null,
+  cropping: null,
   undoStack: [],
   redoStack: [],
   error: null,
@@ -382,6 +394,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         slideSelection: deck.slides.length > 0 ? [0] : [],
         editing: null,
         openGroup: null,
+        cropping: null,
         undoStack: [],
         redoStack: [],
         error: null,
@@ -413,6 +426,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         // The group belonged to the slide being left, and its id means
         // something else on the slide arrived at.
         openGroup: null,
+        cropping: null,
       }
     })
   },
@@ -431,6 +445,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
         slideSelection: [...within].sort((first, second) => first - second),
         editing: null,
         openGroup: null,
+        cropping: null,
       }
     })
   },
@@ -448,6 +463,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
       slideSelection: [],
       editing: null,
       openGroup: null,
+      cropping: null,
       undoStack: [],
       redoStack: [],
       error: null,
@@ -466,6 +482,10 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
   setOpenGroup: (id) => {
     set({ openGroup: id })
+  },
+
+  setCropping: (id) => {
+    set({ cropping: id, ...(id === null ? {} : { selection: [id], editing: null }) })
   },
 
   setEditing: (id) => {

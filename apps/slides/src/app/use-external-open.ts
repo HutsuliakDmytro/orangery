@@ -2,6 +2,8 @@ import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { isTauri } from '@orangery/platform'
 import { openDeck, openInNewWindow } from '../document/file-operations'
+import { insertPictureOnSlide } from '../document/insert-picture'
+import { nameOf, readFileBytes } from '../document/file'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -15,15 +17,29 @@ import { useDeckStore } from '../store/deck-store'
  * dropping on the wrong window is a slip of the hand, and the answer to a slip
  * is to make it cost nothing.
  */
+/** Puts every picture among the dropped files onto the current slide. */
+async function dropPictures(paths: readonly string[]): Promise<void> {
+  if (useDeckStore.getState().open === null) return
+
+  for (const path of paths) {
+    if (!/\.(png|jpe?g|gif|bmp|webp)$/iu.test(path)) continue
+    insertPictureOnSlide(nameOf(path), await readFileBytes(path))
+  }
+}
+
 export function useExternalOpen(): void {
   useEffect(() => {
     if (!isTauri()) return
 
     const openFirstDeck = (paths: readonly string[]) => {
-      // Several files can be dropped at once, and only decks mean anything
-      // here. The first one wins rather than all of them: there is one window.
+      // A picture dropped on an open deck is a picture for the slide, not a
+      // file to open. Decks are looked for first: dropping a deck while one is
+      // open means "open this", whatever else came with it.
       const deck = paths.find((path) => /\.(pptx|odp)$/iu.test(path))
-      if (deck === undefined) return
+      if (deck === undefined) {
+        void dropPictures(paths)
+        return
+      }
 
       if (!useDeckStore.getState().saved) {
         void openInNewWindow(deck)

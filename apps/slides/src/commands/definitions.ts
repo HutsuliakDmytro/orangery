@@ -253,6 +253,16 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.leave-crop',
+    label: 'Finish Cropping',
+    group: 'edit',
+    shortcut: 'Escape',
+    isEnabled: () => useDeckStore.getState().cropping !== null,
+    run: () => {
+      useDeckStore.getState().setCropping(null)
+    },
+  },
+  {
     id: 'edit.leave-group',
     label: 'Leave Group',
     group: 'edit',

@@ -117,6 +117,11 @@ These are the ones that matter most. Take them seriously.
 - [ ] Double-click into the footer and type beside the slide number. The number
       is one thing the caret steps over, not digits you can edit — and after
       leaving the shape it still follows the slide.
+- [ ] Give a shape a gradient, a thick outline and a shadow. Copy Formatting,
+      pick another shape, Paste Formatting. All three arrive; the shape keeps
+      its own outline, its own place and its own size.
+- [ ] Paint a shape whose text is a link. The link survives, and the shape it
+      was painted from does not lend it one.
 
 ## Getting a deck in
 

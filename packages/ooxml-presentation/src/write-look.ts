@@ -23,7 +23,7 @@ import type { Shape } from './shape-tree'
  */
 
 /** `a:spPr` in schema order — the sequence PowerPoint checks on open. */
-const SHAPE_PROPERTIES = [
+export const SHAPE_PROPERTIES = [
   'a:xfrm',
   'a:custGeom',
   'a:prstGeom',
@@ -58,7 +58,7 @@ const LINE = [
 const FILL_TAGS = ['a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:grpFill']
 
 /** The `p:spPr` a shape keeps its look in. */
-function propertiesOf(shape: Shape): XmlNode | undefined {
+export function propertiesOf(shape: Shape): XmlNode | undefined {
   return children(shape.node).find((child) => /^p:(sp|cxnSp)Pr$/u.test(tagName(child) ?? ''))
 }
 

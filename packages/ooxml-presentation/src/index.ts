@@ -65,6 +65,8 @@ export {
   writeTransform,
 } from './write-shape'
 export { setShapeText } from './write-text'
+export { applyShapeFormat, copyShapeFormat } from './format-painter'
+export type { ShapeFormat } from './format-painter'
 export { DEFAULT_DATE_FIELD, fieldValue, isDateField, slideNumberOf } from './fields'
 export type { FieldContext } from './fields'
 export { applyFooters, NO_FOOTERS, readFooters } from './footers'

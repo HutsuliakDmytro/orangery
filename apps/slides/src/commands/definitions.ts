@@ -61,6 +61,7 @@ import {
 import { groupAfterEscape } from '../render/selection'
 import { insertPictureOnSlide } from '../document/insert-picture'
 import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
+import { copyFormatting, heldFormat, pasteFormatting } from '../document/format-painter'
 import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { closeShowWindows, openShowWindows } from '../document/show-windows'
@@ -1322,6 +1323,40 @@ export const tableCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * The format painter, as two halves of one gesture.
+ *
+ * PowerPoint arms a button and waits for a click on a shape. Two commands do
+ * the same work from the keyboard, the menu and the palette, and this app
+ * already has an armed pointer for drawing — a second mode to get stuck in is
+ * one more than it needs.
+ */
+export const painterCommands: readonly Command[] = [
+  {
+    id: 'format.copy-formatting',
+    label: 'Copy Formatting',
+    group: 'format',
+    shortcut: 'Mod+Alt+C',
+    keywords: ['painter', 'brush', 'style'],
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    isActive: () => heldFormat() !== null,
+    run: () => {
+      copyFormatting()
+    },
+  },
+  {
+    id: 'format.paste-formatting',
+    label: 'Paste Formatting',
+    group: 'format',
+    shortcut: 'Mod+Alt+V',
+    keywords: ['painter', 'brush', 'apply'],
+    isEnabled: () => heldFormat() !== null && useDeckStore.getState().selection.length > 0,
+    run: () => {
+      pasteFormatting()
+    },
+  },
+]
+
 export const footerCommands: readonly Command[] = [
   {
     id: 'insert.header-footer',
@@ -1557,6 +1592,7 @@ export function registerBuiltinCommands(): void {
   registerAll(pictureCommands)
   registerAll(tableCommands)
   registerAll(footerCommands)
+  registerAll(painterCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)
   registerAll(paragraphCommands)

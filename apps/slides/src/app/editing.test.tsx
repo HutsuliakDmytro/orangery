@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { getPartText } from '@orangery/ooxml-core'
 import { isMac } from '@orangery/platform'
+import { writeFill } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -1012,5 +1013,98 @@ describe('the header and footer dialog', () => {
     // Not a form that starts empty: reopening it and pressing Apply again must
     // not be a way to quietly take the numbers back off.
     expect(screen.getByRole('checkbox', { name: 'Slide number' })).toBeChecked()
+  })
+})
+
+describe('the format painter', () => {
+  const shapeAt = (index: number) => useDeckStore.getState().open?.deck.slides[0]?.shapes[index]
+
+  /** Gives the first shape an orange fill, then holds its look. */
+  async function pickUpOrange() {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(0)?.id ?? -1])
+    })
+    act(() => {
+      // Through the same write the properties panel uses: the brush should
+      // carry whatever a person could have put there.
+      useDeckStore.getState().edit((slide) => {
+        const shape = slide.shapes[0]
+        return (
+          shape !== undefined &&
+          writeFill(shape, {
+            kind: 'solid',
+            color: { source: { kind: 'srgb', hex: '#FF7A00' }, transforms: [] },
+          })
+        )
+      })
+    })
+    act(() => {
+      runCommand('format.copy-formatting', {})
+    })
+  }
+
+  it('is offered only once there is something to paste', async () => {
+    await openDeck('shapes')
+    render(<App />)
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(0)?.id ?? -1])
+    })
+
+    expect(getCommand('format.paste-formatting')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('paints the look onto the shape that is picked out next', async () => {
+    await pickUpOrange()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(1)?.id ?? -1])
+    })
+    act(() => {
+      runCommand('format.paste-formatting', {})
+    })
+
+    const painted = shapeAt(1)
+    expect(painted?.properties?.fill).toMatchObject({ kind: 'solid' })
+    expect(partText()).toContain('FF7A00')
+  })
+
+  it('leaves the painted shape where it was and what it was', async () => {
+    await pickUpOrange()
+    const before = shapeAt(1)?.transform
+    const geometry = shapeAt(1)?.properties?.geometry?.preset
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(1)?.id ?? -1])
+    })
+    act(() => {
+      runCommand('format.paste-formatting', {})
+    })
+
+    expect(shapeAt(1)?.transform).toEqual(before)
+    expect(shapeAt(1)?.properties?.geometry?.preset).toBe(geometry)
+  })
+
+  it('is one step to undo', async () => {
+    await pickUpOrange()
+    const steps = useDeckStore.getState().undoStack.length
+    const before = shapeAt(1)?.properties?.fill
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(1)?.id ?? -1])
+    })
+    act(() => {
+      runCommand('format.paste-formatting', {})
+    })
+    expect(useDeckStore.getState().undoStack.length).toBe(steps + 1)
+    expect(shapeAt(1)?.properties?.fill).not.toEqual(before)
+
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+    // The whole paint, not the fill and then the outline and then the text.
+    expect(shapeAt(1)?.properties?.fill).toEqual(before)
   })
 })

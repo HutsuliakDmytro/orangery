@@ -98,6 +98,13 @@ export interface BlipFill {
   crop: Crop
   /** `stretch` fills the shape, `tile` repeats. */
   mode: 'stretch' | 'tile' | null
+  /**
+   * How opaque the picture is, from 0 to 1.
+   *
+   * `a:alphaModFix` states what is left, not what was taken away, and a picture
+   * that says nothing is fully opaque — so this is 1 far more often than not.
+   */
+  opacity: number
 }
 
 const fraction = (value: string | undefined): number => {
@@ -109,8 +116,13 @@ const fraction = (value: string | undefined): number => {
 export function readBlipFill(node: XmlNode): BlipFill {
   const source = findChild(node, 'a:srcRect')
 
+  const blip = findChild(node, 'a:blip')
+  const alpha = blip === undefined ? undefined : findChild(blip, 'a:alphaModFix')
+  const amount = Number(alpha === undefined ? undefined : attribute(alpha, 'amt'))
+
   return {
     relationshipId: blipRelationshipId(node),
+    opacity: Number.isFinite(amount) ? amount / 100000 : 1,
     crop:
       source === undefined
         ? NO_CROP

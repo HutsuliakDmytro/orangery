@@ -122,6 +122,8 @@ describe('pictures and connectors', () => {
       relationshipId: 'rId2',
       crop: { left: 0, top: 0, right: 0, bottom: 0 },
       mode: 'stretch',
+      // A picture that says nothing about its transparency is opaque.
+      opacity: 1,
     })
   })
 

@@ -56,7 +56,14 @@ export { readGraphicContent } from './graphic-frame'
 export type { GraphicContent, GraphicKind } from './graphic-frame'
 export { backgroundOf, readBackground } from './background'
 export type { Background } from './background'
-export { ensureTextBody, moveShape, writeCrop, writeTransform } from './write-shape'
+export {
+  ensureTextBody,
+  moveShape,
+  replacePicture,
+  writeCrop,
+  writePictureOpacity,
+  writeTransform,
+} from './write-shape'
 export { setShapeText } from './write-text'
 export type { TextLine } from './write-text'
 export { reorderShapes } from './z-order'

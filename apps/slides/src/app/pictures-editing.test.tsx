@@ -4,7 +4,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCommand } from '@orangery/ui-kit'
-import { flatten } from '@orangery/ooxml-presentation'
+import userEvent from '@testing-library/user-event'
+import { getPartText } from '@orangery/ooxml-core'
+import { flatten, writeCrop } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -178,5 +180,70 @@ describe('a picture dropped on the window', () => {
 
     expect(useDeckStore.getState().open?.deck.slides[0]?.shapes.length).toBe(before)
     expect(dropped).toEqual([])
+  })
+})
+
+describe('the picture panel', () => {
+  const select = () => {
+    const found = picture()
+    if (found === undefined) throw new Error('fixture has no picture')
+    act(() => {
+      useDeckStore.getState().selectShapes([found.id])
+    })
+  }
+
+  const partText = () => {
+    const { open, current } = useDeckStore.getState()
+    const slide = open?.deck.slides[current]
+    return open == null || slide === undefined ? '' : (getPartText(open.package, slide.path) ?? '')
+  }
+
+  it('makes the picture see-through, and draws it that way', async () => {
+    render(<App />)
+    select()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Opacity 50%' }))
+
+    expect(picture()?.picture?.opacity).toBeCloseTo(0.5, 2)
+    expect(partText()).toContain('alphaModFix')
+    // Before this, a picture made see-through was drawn solid over the words.
+    expect(document.querySelector('image[opacity="0.5"]')).not.toBeNull()
+  })
+
+  it('writes nothing at all for a solid picture', async () => {
+    render(<App />)
+    select()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Opacity 25%' }))
+    await user.click(screen.getByRole('button', { name: 'Opacity solid' }))
+
+    // Opaque is what a picture that says nothing already is.
+    expect(partText()).not.toContain('alphaModFix')
+  })
+
+  it('resets the crop and the transparency, and leaves the frame alone', async () => {
+    render(<App />)
+    select()
+    const before = picture()?.transform
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Opacity 25%' }))
+    act(() => {
+      useDeckStore.getState().edit((slide) => {
+        const found = flatten(slide.shapes).find((shape) => shape.picture !== null)
+        return found === undefined
+          ? false
+          : writeCrop(found, { left: 0.2, top: 0, right: 0, bottom: 0 })
+      })
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Reset picture' }))
+
+    expect(picture()?.picture?.crop.left).toBe(0)
+    expect(picture()?.picture?.opacity).toBe(1)
+    // The frame is where somebody put it; resetting that is a different undo.
+    expect(picture()?.transform?.x).toBe(before?.x)
   })
 })

@@ -11,6 +11,7 @@ import { colorContextFor, lookContext, shapeLook } from '@orangery/ooxml-present
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { SlideProperties } from './slide-properties'
 import { BoxProperties } from './box-properties'
+import { PictureProperties } from './picture-properties'
 import { ColorControl } from './color-control'
 import { TextProperties } from './text-properties'
 
@@ -135,6 +136,8 @@ export function PropertiesPanel() {
           Gradient
         </button>
       </section>
+
+      <PictureProperties />
 
       <BoxProperties shapes={shapes} />
 

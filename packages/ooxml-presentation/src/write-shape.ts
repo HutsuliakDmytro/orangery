@@ -185,3 +185,44 @@ export function writeCrop(
 
   return true
 }
+
+/**
+ * How see-through a picture is, from 0 to 1.
+ *
+ * `a:alphaModFix` states what is left rather than what was taken away, and a
+ * blip that says nothing is opaque — so setting it back to 1 removes the
+ * element rather than writing "100%", and a picture made transparent and put
+ * back is the picture it was.
+ */
+export function writePictureOpacity(shape: Shape, opacity: number): boolean {
+  const fill = findChild(shape.node, 'p:blipFill') ?? findChild(shape.node, 'a:blipFill')
+  const blip = fill === undefined ? undefined : findChild(fill, 'a:blip')
+  if (blip === undefined) return false
+
+  const clamped = Math.min(Math.max(opacity, 0), 1)
+  if (clamped >= 1) {
+    removeChild(blip, 'a:alphaModFix')
+    return true
+  }
+
+  const element = ensureChild(blip, 'a:alphaModFix', ['a:alphaModFix'])
+  setAttribute(element, 'amt', String(Math.round(clamped * 100000)))
+  return true
+}
+
+/**
+ * Points a picture at different bytes, keeping everything else about it.
+ *
+ * The frame, the crop, the transparency and whatever else the shape carries
+ * stay exactly as they were — replacing a picture is not drawing a new one, and
+ * somebody who has spent a minute placing and cropping one does not want that
+ * minute back.
+ */
+export function replacePicture(shape: Shape, relationshipId: string): boolean {
+  const fill = findChild(shape.node, 'p:blipFill') ?? findChild(shape.node, 'a:blipFill')
+  const blip = fill === undefined ? undefined : findChild(fill, 'a:blip')
+  if (blip === undefined) return false
+
+  setAttribute(blip, 'r:embed', relationshipId)
+  return true
+}

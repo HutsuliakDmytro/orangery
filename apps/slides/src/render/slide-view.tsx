@@ -255,6 +255,9 @@ function ShapeImage({ drawing, pkg, part }: { drawing: Drawing; pkg: OoxmlPackag
           y={-top * height}
           width={width}
           height={height}
+          // A picture made see-through is a picture behind the words, and a
+          // deck that used one was drawing it solid over them.
+          opacity={shape.picture.opacity}
           preserveAspectRatio="none"
           clipPath={`url(#clip-${key})`}
         />

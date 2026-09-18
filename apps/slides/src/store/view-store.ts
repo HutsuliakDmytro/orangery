@@ -29,6 +29,8 @@ interface ViewState {
   drawing: string | null
   /** Whether the shape gallery is up. */
   choosingShape: boolean
+  /** Whether the grid that asks how big a table should be is up. */
+  choosingTable: boolean
   /**
    * Whether the speaker notes are open for editing.
    *
@@ -88,6 +90,7 @@ interface ViewState {
   setChoosingTemplate: (choosing: boolean) => void
   setDrawing: (preset: string | null) => void
   setChoosingShape: (choosing: boolean) => void
+  setChoosingTable: (choosing: boolean) => void
   setEditingNotes: (editing: boolean) => void
   setZoom: (zoom: number | null) => void
   toggleSection: (id: string) => void
@@ -116,6 +119,7 @@ export const useViewStore = create<ViewState>((set) => ({
   choosingTemplate: false,
   drawing: null,
   choosingShape: false,
+  choosingTable: false,
   editingNotes: false,
   zoom: null,
   collapsedSections: [],
@@ -174,6 +178,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setChoosingShape: (choosing) => {
     set({ choosingShape: choosing })
+  },
+
+  setChoosingTable: (choosing) => {
+    set({ choosingTable: choosing })
   },
 
   setFinding: (finding) => {

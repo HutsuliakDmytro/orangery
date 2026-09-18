@@ -57,6 +57,12 @@ the raster export, both in `presenting-checklist.md`. Run that one too.
 - [ ] Overwrite an existing file. A `.bak` appears beside it with the previous
       contents.
 - [ ] Open a deck with an embedded video. It plays in the editor and in the show.
+- [ ] Open a deck with styled tables beside PowerPoint and compare. Ours draws
+      an approximation of "Medium Style 2" whenever the deck names one of
+      PowerPoint's built-in styles, because those live inside PowerPoint and not
+      in the file. Write down how far off it looks: banding, header colour, and
+      whether the text is the right weight. This is the check that decides
+      whether the approximation is worth keeping.
 
 ## Losing work
 

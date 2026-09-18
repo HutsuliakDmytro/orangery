@@ -587,18 +587,18 @@ describe('the properties panel', () => {
 })
 
 describe('tables', () => {
-  it('puts one on the slide and selects it', async () => {
-    await openDeck('empty')
+  /** Opens the grid and sweeps to a size, which is how a table is asked for. */
+  async function insert(rows = 3, columns = 3) {
+    const user = userEvent.setup()
     act(() => {
       runCommand('insert.table', {})
     })
+    await user.click(
+      await screen.findByRole('button', { name: `${String(rows)} by ${String(columns)}` }),
+    )
+  }
 
-    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
-    expect(shapes[0]?.graphic?.kind).toBe('table')
-    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
-  })
-
-  it('draws it on the canvas', async () => {
+  it('asks how big before putting one anywhere', async () => {
     await openDeck('empty')
     render(<App />)
 
@@ -606,16 +606,46 @@ describe('tables', () => {
       runCommand('insert.table', {})
     })
 
+    expect(screen.getByRole('dialog', { name: 'Insert Table' })).toBeInTheDocument()
+    expect(useDeckStore.getState().open?.deck.slides[0]?.shapes).toHaveLength(0)
+  })
+
+  it('puts one on the slide and selects it', async () => {
+    await openDeck('empty')
+    render(<App />)
+    await insert()
+
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    expect(shapes[0]?.graphic?.kind).toBe('table')
+    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
+  })
+
+  it('makes it the size that was swept, not a fixed three by three', async () => {
+    await openDeck('empty')
+    render(<App />)
+    await insert(2, 5)
+
+    const table = useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.graphic?.table
+    expect(table?.rows).toHaveLength(2)
+    expect(table?.rows[0]?.cells).toHaveLength(5)
+  })
+
+  it('draws it on the canvas', async () => {
+    await openDeck('empty')
+    render(<App />)
+    await insert()
+
     // Nine cells, each a rectangle with a text box over it.
     expect(document.querySelectorAll('foreignObject').length).toBeGreaterThanOrEqual(9)
   })
 
   it('takes it back in one step', async () => {
     await openDeck('empty')
+    render(<App />)
     const before = partText()
 
+    await insert()
     act(() => {
-      runCommand('insert.table', {})
       runCommand('edit.undo', {})
     })
 

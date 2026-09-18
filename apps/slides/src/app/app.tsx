@@ -22,6 +22,7 @@ import { HeaderFooterDialog } from '../components/header-footer-dialog'
 import { GridDialog } from '../components/grid-dialog'
 import { PasteDialog } from '../components/paste-dialog'
 import { RehearsalSummary } from '../components/rehearsal-summary'
+import { InkPrompt } from '../components/ink-prompt'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
@@ -129,6 +130,8 @@ function Shell() {
       <PasteDialog />
 
       <RehearsalSummary />
+
+      <InkPrompt />
 
       <PicturesDialog />
 

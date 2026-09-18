@@ -79,7 +79,7 @@ Icons: `lucide-react`. Focus ring: orange. Keyboard-complete.
 - Navigation: click/space/arrows/PgUp/PgDn, `B`/`W` black/white, number+Enter goes to slide, `Esc` exits.
 - Transitions: none, fade, push, wipe, and Morph. Everything else plays as fade and is preserved in the file. Morph pairs the shapes of the two slides by creation id, then name, then kind and text, and refuses to pair where the answer would be a guess.
 - Animations play: the main sequence is read from `p:timing` and each click step is one press. Effects this app does not model play as a fade, the same rule transitions follow. Motion paths are not played — the shape sits where it ends. Editing patches `p:timing` in place — a new effect is a new subtree, a removed one is a dropped node — so an effect we cannot describe survives beside one we can. Only effects that can be written exactly are offered: appear, fade, wipe, zoom, pulse.
-- Laser pointer / pen: post-MVP.
+- Pen, highlighter, laser and eraser during a show, on PowerPoint's own keys. Ink kept at the end is written as freeform shapes rather than as InkML: the room sees the same thing and the file opens everywhere, but ours can be selected afterwards and PowerPoint's is ink.
 
 ## File rules
 

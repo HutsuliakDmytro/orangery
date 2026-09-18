@@ -656,3 +656,126 @@ describe('a morph', () => {
     expect(moved).not.toHaveLength(0)
   })
 })
+
+describe('drawing on a slide', () => {
+  /** Starts a show and picks up a tool, as the keyboard would. */
+  async function withTool(tool: 'pen' | 'highlighter' | 'laser' | 'eraser', deck = 'shapes') {
+    await openDeck(deck)
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().setTool(tool)
+    })
+  }
+
+  const draw = () => {
+    act(() => {
+      useShowStore.getState().beginStroke({ x: 0, y: 0 })
+      useShowStore.getState().extendStroke({ x: 1_000_000, y: 500_000 })
+    })
+  }
+
+  it('takes the click, so drawing does not advance the slide', async () => {
+    await withTool('pen')
+    const layer = screen.getByTestId('ink')
+
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 })
+    expect(useShowStore.getState().at).toBe(0)
+  })
+
+  it('keeps what was drawn on the slide it was drawn on', async () => {
+    // A deck of several, or going to the next slide would clamp back to this
+    // one and the test would pass without moving.
+    await withTool('pen', 'many-slides')
+    draw()
+
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+    expect(useShowStore.getState().ink[1] ?? []).toEqual([])
+
+    act(() => {
+      useShowStore.getState().go(0)
+    })
+    expect(useShowStore.getState().ink[0]).toHaveLength(1)
+  })
+
+  it('leaves the ink showing when the pen is put down', async () => {
+    await withTool('pen')
+    draw()
+    act(() => {
+      useShowStore.getState().setTool('none')
+    })
+
+    // What was drawn on the slide is on the slide; only the drawing stops.
+    expect(screen.getByTestId('ink').querySelectorAll('path')).toHaveLength(1)
+  })
+
+  it('advances again once the pen is put down', async () => {
+    await withTool('pen', 'many-slides')
+    act(() => {
+      useShowStore.getState().setTool('none')
+    })
+
+    press('ArrowRight')
+    expect(useShowStore.getState().at).toBe(1)
+  })
+
+  it('leaves nothing behind for the laser', async () => {
+    await withTool('laser')
+    const layer = screen.getByTestId('ink')
+
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(layer, { clientX: 40, clientY: 40 })
+
+    // A finger pointed at the screen. One that left a trail would be a pen.
+    expect(useShowStore.getState().ink[0] ?? []).toEqual([])
+  })
+
+  it('rubs out the stroke that was clicked', async () => {
+    await withTool('pen')
+    draw()
+    act(() => {
+      useShowStore.getState().setTool('eraser')
+    })
+
+    const stroke = screen.getByTestId('ink').querySelector('path')
+    if (stroke === null) throw new Error('nothing was drawn')
+    fireEvent.pointerDown(stroke)
+
+    expect(useShowStore.getState().ink[0]).toHaveLength(0)
+  })
+
+  it('asks what to do with it when the show ends', async () => {
+    await withTool('pen')
+    draw()
+    act(() => {
+      useShowStore.getState().end()
+    })
+
+    expect(screen.getByRole('dialog', { name: 'Ink' })).toBeInTheDocument()
+  })
+
+  it('asks nothing when nothing was drawn', async () => {
+    await withTool('pen')
+    act(() => {
+      useShowStore.getState().end()
+    })
+
+    expect(screen.queryByRole('dialog', { name: 'Ink' })).not.toBeInTheDocument()
+  })
+
+  it('puts the marks on the slide when they are kept', async () => {
+    const user = userEvent.setup()
+    await withTool('pen')
+    const before = useDeckStore.getState().open?.deck.slides[0]?.shapes.length ?? 0
+    draw()
+    act(() => {
+      useShowStore.getState().end()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Keep ink' }))
+
+    expect(useDeckStore.getState().open?.deck.slides[0]?.shapes).toHaveLength(before + 1)
+  })
+})

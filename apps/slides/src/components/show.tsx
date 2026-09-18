@@ -3,6 +3,7 @@ import { morphOrigins, readAnimations, readTransition } from '@orangery/ooxml-pr
 import type { Hyperlink, Transition } from '@orangery/ooxml-presentation'
 import { leaveFullScreen } from '../commands/definitions'
 import { animationAt } from '../render/animation'
+import { InkLayer } from './ink-layer'
 import { transitionStyles } from '../render/transition-style'
 import { SlideView } from '../render/slide-view'
 import { useDeckStore } from '../store/deck-store'
@@ -28,6 +29,7 @@ export function Show() {
   const blank = useShowStore((state) => state.blank)
   const typed = useShowStore((state) => state.typed)
   const shown = useShowStore((state) => state.shown)
+  const tool = useShowStore((state) => state.tool)
 
   // The window is given back when the show ends, wherever it ended from: a
   // presentation that leaves the screen filled is one nobody can get out of.
@@ -134,8 +136,33 @@ export function Show() {
           case 'W':
             show.setBlank(show.blank === 'white' ? null : 'white')
             return true
+          case 'p':
+          case 'P':
+            // The letters PowerPoint uses, so a presenter's fingers already
+            // know them. Pressing the same one again puts the pointer back.
+            show.setTool(show.tool === 'pen' ? 'none' : 'pen')
+            return true
+          case 'i':
+          case 'I':
+            show.setTool(show.tool === 'highlighter' ? 'none' : 'highlighter')
+            return true
+          case 'l':
+          case 'L':
+            show.setTool(show.tool === 'laser' ? 'none' : 'laser')
+            return true
+          case 'e':
+          case 'E':
+            show.setTool(show.tool === 'eraser' ? 'none' : 'eraser')
+            return true
+          case 'a':
+          case 'A':
+            show.setTool('none')
+            return true
           case 'Escape':
-            show.end()
+            // A tool first, the show second: Escape out of the pen is what a
+            // presenter means far more often than Escape out of the talk.
+            if (show.tool !== 'none') show.setTool('none')
+            else show.end()
             return true
           default:
             return false
@@ -205,6 +232,10 @@ export function Show() {
       aria-label="Slide show"
       data-testid="show"
       onPointerDown={(event) => {
+        // A tool has the click; the ink layer takes it before this runs, and
+        // this is the case where the press landed beside the slide.
+        if (tool !== 'none') return
+
         // The right button goes back, which is what a presenter remote sends.
         if (event.button === 2) useShowStore.getState().previous()
         else useShowStore.getState().next()
@@ -243,20 +274,32 @@ export function Show() {
             style={morph === undefined ? styles?.arriving : undefined}
             className="absolute inset-0 flex items-center justify-center"
           >
-            <SlideView
-              deck={open.deck}
-              slide={slide}
-              themes={open.themes}
-              package={open.package}
-              playing
-              animation={animation}
-              morph={morph}
-              onFollowLink={follow}
-              // The slide keeps its shape, so one axis is filled and the other
-              // is letterboxed; stretching it would be showing a different one.
-              className="max-h-full max-w-full"
-              style={{ width: '100vw', maxHeight: '100vh' }}
-            />
+            {/* The ink has to sit exactly over the slide and not over the
+                letterboxing, so both are in one box of the slide's shape. */}
+            <div
+              className="relative max-h-full max-w-full"
+              style={{
+                width: '100vw',
+                maxHeight: '100vh',
+                aspectRatio: `${String(open.deck.slideSize.width)} / ${String(open.deck.slideSize.height)}`,
+              }}
+            >
+              <SlideView
+                deck={open.deck}
+                slide={slide}
+                themes={open.themes}
+                package={open.package}
+                playing
+                animation={animation}
+                morph={morph}
+                onFollowLink={follow}
+                // The slide keeps its shape, so one axis is filled and the
+                // other is letterboxed; stretching it would show a different
+                // slide from the one that was made.
+                style={{ width: '100%' }}
+              />
+              <InkLayer size={open.deck.slideSize} />
+            </div>
           </div>
         </>
       ) : (

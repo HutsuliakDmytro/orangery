@@ -9,6 +9,17 @@ import { create } from 'zustand'
  * were rather than where the show ended.
  */
 
+/** `laser` leaves nothing behind; the rest do. */
+export type ShowTool = 'none' | 'pen' | 'highlighter' | 'eraser' | 'laser'
+
+export interface Stroke {
+  /** In the slide's own units, so ink is where it was drawn at any zoom. */
+  points: { x: number; y: number }[]
+  color: string
+  width: number
+  highlight: boolean
+}
+
 interface ShowState {
   /** Null when no show is running. */
   at: number | null
@@ -70,6 +81,17 @@ interface ShowState {
    */
   rehearsing: boolean
   /**
+   * What a drag on the slide does.
+   *
+   * `none` is the pointer a show normally has, where a click advances. The
+   * others take the click: somebody drawing on a slide has not asked for the
+   * next one, and advancing under the pen is the one thing that would make a
+   * pen unusable.
+   */
+  tool: ShowTool
+  /** What has been drawn, by the slide it was drawn on. */
+  ink: Record<number, Stroke[]>
+  /**
    * How large the notes are drawn in the presenter view, as a multiple.
    *
    * The presenter is the one person reading from further away than anybody, and
@@ -88,6 +110,14 @@ interface ShowState {
   jump: () => boolean
   /** The times as they stand, with the slide showing counted up to now. */
   timings: () => number[]
+  setTool: (tool: ShowTool) => void
+  /** Starts a stroke on the slide showing, and returns nothing. */
+  beginStroke: (at: { x: number; y: number }) => void
+  extendStroke: (at: { x: number; y: number }) => void
+  /** Removes the stroke at `index` from the slide showing. */
+  eraseStroke: (index: number) => void
+  /** Whether anything has been drawn anywhere in this run. */
+  hasInk: () => boolean
 }
 
 /**
@@ -117,6 +147,8 @@ export const useShowStore = create<ShowState>((set, get) => ({
   spent: [],
   enteredAt: null,
   rehearsing: false,
+  tool: 'none',
+  ink: {},
   notesScale: 1,
 
   start: (at, count, steps = [], rehearsing = false) => {
@@ -132,6 +164,8 @@ export const useShowStore = create<ShowState>((set, get) => ({
       spent: Array.from({ length: count }, () => 0),
       enteredAt: count === 0 ? null : now,
       rehearsing,
+      tool: 'none',
+      ink: {},
     })
   },
 
@@ -203,6 +237,53 @@ export const useShowStore = create<ShowState>((set, get) => ({
     // key from growing a string forever.
     set((state) => ({ typed: (state.typed + digit).slice(-4) }))
   },
+
+  setTool: (tool) => {
+    set({ tool })
+  },
+
+  beginStroke: (at) => {
+    set((state) => {
+      // Only the two that leave a mark. A laser writes nothing and an eraser
+      // takes away, so neither has a stroke to begin.
+      if (state.at === null || (state.tool !== 'pen' && state.tool !== 'highlighter')) return {}
+
+      const highlight = state.tool === 'highlighter'
+      const stroke: Stroke = {
+        points: [at],
+        // A highlighter is yellow and wide; a pen is red and thin. Two
+        // decisions people would otherwise have to make before drawing a line.
+        color: highlight ? '#FFFF00' : '#FF0000',
+        width: highlight ? 152400 : 28575,
+        highlight,
+      }
+
+      return { ink: { ...state.ink, [state.at]: [...(state.ink[state.at] ?? []), stroke] } }
+    })
+  },
+
+  extendStroke: (at) => {
+    set((state) => {
+      if (state.at === null) return {}
+
+      const strokes = state.ink[state.at] ?? []
+      const last = strokes[strokes.length - 1]
+      if (last === undefined) return {}
+
+      const extended = { ...last, points: [...last.points, at] }
+      return { ink: { ...state.ink, [state.at]: [...strokes.slice(0, -1), extended] } }
+    })
+  },
+
+  eraseStroke: (index) => {
+    set((state) => {
+      if (state.at === null) return {}
+      const strokes = state.ink[state.at] ?? []
+      return { ink: { ...state.ink, [state.at]: strokes.filter((_, at) => at !== index) } }
+    })
+  },
+
+  hasInk: () => Object.values(get().ink).some((strokes) => strokes.length > 0),
 
   timings: () => {
     const state = get()

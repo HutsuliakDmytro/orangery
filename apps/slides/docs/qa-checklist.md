@@ -216,6 +216,14 @@ These are the ones that matter most. Take them seriously.
       slides that were never given a transition.
 - [ ] In the presenter view, the time on this slide resets at each slide and
       the time on the presentation does not.
+- [ ] Present, press `P`, draw on a slide. The line follows the pointer and the
+      slide does not advance. `E` rubs a line out; `L` is a laser that leaves
+      nothing; `A` puts the pointer back.
+- [ ] Draw, go to the next slide and back. The ink is on the slide it was drawn
+      on and not on the other.
+- [ ] End the show and keep the ink. Save, open in PowerPoint: the marks are
+      there as freeform shapes — **not as PowerPoint's own ink**, which is the
+      known difference.
 
 ## Getting a deck in
 

@@ -1,6 +1,7 @@
 import { attribute, children, findChild, setAttribute, tagName } from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import type { SlidePart } from './deck'
-import { flatten, parseShape } from './shape-tree'
+import { parseShape } from './shape-tree'
 import type { Shape, Transform } from './shape-tree'
 import { writeTransform } from './write-shape'
 
@@ -149,9 +150,25 @@ export function distributeShapes(
   return moved
 }
 
-/** The highest shape id in a part, so a new shape can take the next one. */
+/** Every `cNvPr` id in a subtree, whatever kind of shape carries it. */
+function idsIn(node: XmlNode): number[] {
+  return children(node).flatMap((child) => [
+    ...(tagName(child)?.endsWith('cNvPr') === true ? [Number(attribute(child, 'id'))] : []),
+    ...idsIn(child),
+  ])
+}
+
+/**
+ * The highest shape id in a part, so a new shape can take the next one.
+ *
+ * Read from the tree rather than from the parsed shapes. The parse is the
+ * reading the part was opened with, and a shape added a moment ago is not in
+ * it — so two shapes made in one edit would be given the same id, which is a
+ * file PowerPoint refuses. Every caller here adds shapes, and more than one of
+ * them adds two.
+ */
 export function nextShapeId(part: SlidePart): number {
-  const used = flatten(part.shapes).map((shape) => shape.id)
+  const used = idsIn(part.tree).filter((id) => Number.isFinite(id))
   return Math.max(0, ...used) + 1
 }
 

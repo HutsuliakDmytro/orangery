@@ -43,7 +43,14 @@ export { colorContextFor, readColorMap, readThemes, themeFor } from './theme-con
 export { buildThemeFile } from './theme-file'
 export { hiddenUntilAnimated, readAnimations } from './animations'
 export { addEffect, moveStep, removeEffect, setEffectTiming } from './write-animations'
-export { cellsOf, patchedWorkbook, writeChartCache, writeChartCategories } from './chart-data'
+export {
+  cellsOf,
+  patchedWorkbook,
+  patchedWorkbookRows,
+  writeChartCache,
+  writeChartCategories,
+  writeChartPoints,
+} from './chart-data'
 export type { ChartCategories, ChartValues } from './chart-data'
 export { applicable, applyChange, compareDecks, describeChange } from './compare'
 export type { Change, ShapeChange } from './compare'

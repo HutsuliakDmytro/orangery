@@ -296,3 +296,215 @@ export function writeChartCategories(
   if (changed) setPartText(pkg, part, withDeclaration(buildXml(found.roots)))
   return changed
 }
+
+/** `Sheet1!$B$2:$B$5` with its last row moved by `by`, or null for a single cell. */
+function shifted(formula: string, by: number): string | null {
+  const match = /^('?[^'!]+'?!)\$([A-Z]+)\$(\d+):\$([A-Z]+)\$(\d+)$/u.exec(formula.trim())
+  if (match === null) return null
+
+  const [, sheet, fromColumn, fromRow, toColumn, toRow] = match
+  if (sheet === undefined || toRow === undefined) return null
+
+  const last = Number(toRow) + by
+  // A range that would end before it starts is a chart with no points, which
+  // is not a chart anybody meant to make.
+  if (last < Number(fromRow)) return null
+
+  return `${sheet}$${String(fromColumn)}$${String(fromRow)}:$${String(toColumn)}$${String(last)}`
+}
+
+/** Puts a string into an element that holds its text as a child. */
+function setText(node: XmlNode, text: string): void {
+  const nodes = children(node)
+  nodes.length = 0
+  nodes.push({ '#text': text })
+}
+
+/**
+ * Adds or takes away a point, in every cache the chart carries.
+ *
+ * Every series and every reference: the categories, the values, and a
+ * scatter's own x. They are rows of one table, and a chart where one series
+ * had five points and another four is one PowerPoint draws with a gap nobody
+ * put there.
+ */
+function editPoints(space: XmlNode, at: number, insert: boolean): boolean {
+  let changed = false
+
+  for (const series of seriesNodes(space)) {
+    for (const holder of children(series)) {
+      const tag = tagName(holder) ?? ''
+      // `c:tx` names one cell, and a series name is not a point.
+      if (!['c:cat', 'c:val', 'c:xVal', 'c:yVal'].includes(tag)) continue
+
+      const cache = findDescendant(holder, 'c:numCache') ?? findDescendant(holder, 'c:strCache')
+      const formula = findDescendant(holder, 'c:f')
+      if (cache === undefined) continue
+
+      const points = children(cache).filter((child) => tagName(child) === 'c:pt')
+      const count = findChild(cache, 'c:ptCount')
+
+      if (insert) {
+        for (const point of points) {
+          const index = Number(attribute(point, 'idx'))
+          if (Number.isFinite(index) && index >= at) setAttribute(point, 'idx', String(index + 1))
+        }
+
+        const made = element('c:pt', { idx: String(at) }, [
+          element('c:v', {}, [{ '#text': tag === 'c:cat' ? 'New' : '0' }]),
+        ])
+        children(cache).push(made)
+      } else {
+        const nodes = children(cache)
+        const gone = nodes.findIndex(
+          (child) => tagName(child) === 'c:pt' && Number(attribute(child, 'idx')) === at,
+        )
+        if (gone !== -1) nodes.splice(gone, 1)
+
+        for (const point of nodes) {
+          const index = Number(attribute(point, 'idx'))
+          if (Number.isFinite(index) && index > at) setAttribute(point, 'idx', String(index - 1))
+        }
+      }
+
+      if (count !== undefined) {
+        const now = Number(attribute(count, 'val')) + (insert ? 1 : -1)
+        setAttribute(count, 'val', String(Math.max(now, 0)))
+      }
+
+      if (formula !== undefined) {
+        const moved = shifted(textOf(formula), insert ? 1 : -1)
+        if (moved !== null) setText(formula, moved)
+      }
+
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+/**
+ * Adds a point to a chart, or takes one away.
+ *
+ * `at` is the row, counting from zero as the caches do. The caches and the
+ * ranges move together: a range that still said five rows after a point went
+ * would be a chart PowerPoint rebuilds with an empty bar on the end.
+ */
+export function writeChartPoints(
+  pkg: OoxmlPackage,
+  part: string,
+  change: { at: number; insert: boolean },
+): boolean {
+  const found = chartSpace(pkg, part)
+  if (found === null || change.at < 0) return false
+
+  if (!editPoints(found.space, change.at, change.insert)) return false
+
+  setPartText(pkg, part, withDeclaration(buildXml(found.roots)))
+  return true
+}
+
+/** The column letters and the first row of a chart's data, from its categories. */
+function dataRange(space: XmlNode): { sheet: string; first: number; category: string } | null {
+  const series = seriesNodes(space)[0]
+  const holder = series === undefined ? undefined : findChild(series, 'c:cat')
+  const formula = holder === undefined ? undefined : findDescendant(holder, 'c:f')
+  if (formula === undefined) return null
+
+  const match = /^'?([^'!]+)'?!\$([A-Z]+)\$(\d+)/u.exec(textOf(formula).trim())
+  return match?.[1] === undefined || match[2] === undefined || match[3] === undefined
+    ? null
+    : { sheet: match[1], category: match[2], first: Number(match[3]) }
+}
+
+/** A cell reference with its row replaced. */
+const movedCell = (reference: string, row: number): string =>
+  reference.replace(/\d+$/u, String(row))
+
+/**
+ * The workbook with a row put in or taken out.
+ *
+ * Rows below are renumbered, and so is every cell in them: a sheet where two
+ * rows call themselves the fourth is one Excel offers to repair.
+ */
+export async function patchedWorkbookRows(
+  pkg: OoxmlPackage,
+  part: string,
+  change: { at: number; insert: boolean },
+): Promise<{ path: string; bytes: Uint8Array } | null> {
+  const found = chartSpace(pkg, part)
+  const range = found === null ? null : dataRange(found.space)
+  if (range === null) return null
+
+  const relationships = parseRelationships(getPartText(pkg, relsPartFor(part)) ?? '')
+  const embedded = [...relationships.values()].find((one) => one.type.endsWith('/package'))
+  if (embedded === undefined) return null
+
+  const path = resolveTarget(embedded.target, 'ppt/charts')
+  const bytes = pkg.parts.get(path)?.bytes
+  if (bytes === undefined) return null
+
+  const book = await readPackage(bytes)
+  const sheetPath = sheetPart(book, range.sheet)
+  if (sheetPath === null) return null
+
+  const roots = parseXml(getPartText(book, sheetPath) ?? '')
+  const sheet = roots.find((node) => tagName(node) === 'worksheet')
+  const data = sheet === undefined ? undefined : findChild(sheet, 'sheetData')
+  if (data === undefined) return null
+
+  const wanted = range.first + change.at
+  const rows = children(data)
+  const from = rows.findIndex((row) => Number(attribute(row, 'r')) === wanted)
+  if (from === -1) return null
+
+  if (change.insert) {
+    const template = rows[from]
+    if (template === undefined) return null
+
+    // Shaped like the row it is going in front of, and empty: the columns of a
+    // chart's table are the same all the way down, and a row with different
+    // ones would be a row Excel reads as a different table.
+    const made = element(
+      'row',
+      { r: String(wanted) },
+      children(template).flatMap((cell) => {
+        const reference = attribute(cell, 'r')
+        if (reference === undefined) return []
+
+        const column = reference.replace(/\d+$/u, '')
+        return [
+          column === range.category
+            ? element('c', { r: reference, t: 'inlineStr' }, [
+                element('is', {}, [element('t', {}, [{ '#text': 'New' }])]),
+              ])
+            : element('c', { r: reference, t: 'n' }, [element('v', {}, [{ '#text': '0' }])]),
+        ]
+      }),
+    )
+
+    rows.splice(from, 0, made)
+  } else {
+    rows.splice(from, 1)
+  }
+
+  // Everything from where it happened, renumbered.
+  for (const row of rows) {
+    const number = Number(attribute(row, 'r'))
+    if (!Number.isFinite(number) || number < wanted) continue
+
+    const now = change.insert ? number + 1 : number - 1
+    const already = rows.indexOf(row) === from && change.insert
+    const target = already ? wanted : now
+
+    setAttribute(row, 'r', String(target))
+    for (const cell of children(row)) {
+      const reference = attribute(cell, 'r')
+      if (reference !== undefined) setAttribute(cell, 'r', movedCell(reference, target))
+    }
+  }
+
+  setPartText(book, sheetPath, withDeclaration(buildXml(roots)))
+  return { path, bytes: await writePackage(book) }
+}

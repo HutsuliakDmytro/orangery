@@ -1,6 +1,11 @@
 import { allSeries, readChart } from '@orangery/ooxml-drawingml'
 import { getPartText } from '@orangery/ooxml-core'
-import { chartPartOf, editChartCategories, editChartValues } from '../document/chart-editing'
+import {
+  chartPartOf,
+  editChartCategories,
+  editChartPoints,
+  editChartValues,
+} from '../document/chart-editing'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 
 /**
@@ -10,9 +15,9 @@ import { currentSlide, useDeckStore } from '../store/deck-store'
  * change the data. PowerPoint opens Excel for this; here the numbers are in
  * the panel, because a spreadsheet is a large answer to "make that bar taller".
  *
- * The values and the names. Adding a point is not here: it moves every range
- * the chart names in `c:f`, which is a different operation from putting a new
- * value in a cell that already exists.
+ * Values, names, and how many points there are. The last of those moves every
+ * range the chart states in `c:f` and a row in the workbook behind it, which
+ * is why it is a button rather than a box you type in.
  */
 export function ChartDataPanel() {
   const open = useDeckStore((state) => state.open)
@@ -31,6 +36,12 @@ export function ChartDataPanel() {
   const series = allSeries(chart)
   if (series.length === 0) return null
 
+  // A scatter numbers its own bottom, so its rows are counted rather than named.
+  const rows =
+    chart.categories.length > 0
+      ? chart.categories
+      : (series[0]?.values ?? []).map((_, index) => `Point ${String(index + 1)}`)
+
   return (
     <section aria-label="Chart data" className="space-y-2 text-xs">
       <h2 className="uppercase tracking-wide text-muted">Chart data</h2>
@@ -47,10 +58,7 @@ export function ChartDataPanel() {
           </tr>
         </thead>
         <tbody>
-          {(chart.categories.length > 0
-            ? chart.categories
-            : (series[0]?.values ?? []).map((_, index) => `Point ${String(index + 1)}`)
-          ).map((category, row) => (
+          {rows.map((category, row) => (
             <tr key={row}>
               <td className="pr-1">
                 {chart.categories.length === 0 ? (
@@ -97,6 +105,32 @@ export function ChartDataPanel() {
           ))}
         </tbody>
       </table>
+
+      <div className="flex gap-1">
+        <button
+          type="button"
+          aria-label="Add a point"
+          onClick={() => {
+            void editChartPoints(part, { at: rows.length, insert: true })
+          }}
+          className="rounded border border-border px-1.5 py-0.5 text-text hover:border-accent"
+        >
+          Add point
+        </button>
+        <button
+          type="button"
+          aria-label="Remove the last point"
+          // A chart of one point is a chart of nothing; below that there is
+          // no picture left to look at.
+          disabled={rows.length <= 1}
+          onClick={() => {
+            void editChartPoints(part, { at: rows.length - 1, insert: false })
+          }}
+          className="rounded border border-border px-1.5 py-0.5 text-muted disabled:opacity-40"
+        >
+          Remove point
+        </button>
+      </div>
     </section>
   )
 }

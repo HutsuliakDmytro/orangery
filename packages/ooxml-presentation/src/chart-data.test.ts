@@ -4,7 +4,14 @@ import { describe, expect, it } from 'vitest'
 import { getPartText, readPackage } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { allSeries, readChart } from '@orangery/ooxml-drawingml'
-import { cellsOf, patchedWorkbook, writeChartCache, writeChartCategories } from './chart-data'
+import {
+  cellsOf,
+  patchedWorkbook,
+  patchedWorkbookRows,
+  writeChartCache,
+  writeChartCategories,
+  writeChartPoints,
+} from './chart-data'
 import { readPptxPackage } from './parts'
 import { saveDeck } from './save'
 
@@ -187,5 +194,95 @@ describe('the names along the bottom', () => {
   it('says nothing changed when the names are the ones already there', async () => {
     const pkg = await load()
     expect(writeChartCategories(pkg, PART, { categories: ['Q1', 'Q2', 'Q3', 'Q4'] })).toBe(false)
+  })
+})
+
+describe('adding and taking away a point', () => {
+  const countsOf = (pkg: OoxmlPackage) => {
+    const chart = readChart(getPartText(pkg, PART) ?? '')
+    return chart === null ? [] : allSeries(chart).map((series) => series.values.length)
+  }
+
+  const formulas = (pkg: OoxmlPackage) =>
+    [...(getPartText(pkg, PART) ?? '').matchAll(/<c:f>([^<]+)<\/c:f>/gu)].map((match) => match[1])
+
+  it('gives every series a point, not just one', async () => {
+    // They are rows of one table; a chart where one series had five and
+    // another four is one PowerPoint draws with a gap nobody put there.
+    const pkg = await load()
+    expect(writeChartPoints(pkg, PART, { at: 4, insert: true })).toBe(true)
+
+    expect(countsOf(pkg)).toEqual([5, 5])
+  })
+
+  it('moves the ranges with the caches', async () => {
+    const pkg = await load()
+    writeChartPoints(pkg, PART, { at: 4, insert: true })
+
+    // A range still saying five rows would be a chart PowerPoint rebuilds with
+    // an empty bar on the end.
+    expect(formulas(pkg)).toContain('Sheet1!$B$2:$B$6')
+    expect(formulas(pkg)).toContain('Sheet1!$A$2:$A$6')
+  })
+
+  it('leaves the series names alone, which name one cell', async () => {
+    const pkg = await load()
+    writeChartPoints(pkg, PART, { at: 4, insert: true })
+
+    expect(formulas(pkg)).toContain('Sheet1!$B$1')
+  })
+
+  it('takes a point out and closes the gap behind it', async () => {
+    const pkg = await load()
+    expect(writeChartPoints(pkg, PART, { at: 1, insert: false })).toBe(true)
+
+    const chart = readChart(getPartText(pkg, PART) ?? '')
+    expect(chart?.categories).toEqual(['Q1', 'Q3', 'Q4'])
+    expect(
+      allSeries(chart ?? { plots: [], categories: [], title: null, legend: null })[0]?.values,
+    ).toEqual([10.5, 9.8, 18.1])
+  })
+
+  it('survives a save and a reopen', async () => {
+    const pkg = await load()
+    writeChartPoints(pkg, PART, { at: 4, insert: true })
+
+    expect(countsOf(await readPptxPackage(await saveDeck(pkg)))).toEqual([5, 5])
+  })
+})
+
+describe('the workbook when a point comes or goes', () => {
+  const sheetAfter = async (change: { at: number; insert: boolean }) => {
+    const pkg = await load()
+    const patched = await patchedWorkbookRows(pkg, PART, change)
+    if (patched === null) throw new Error('nothing was patched')
+
+    pkg.parts.set(patched.path, { path: patched.path, bytes: patched.bytes, date: new Date() })
+    return sheetOf(pkg)
+  }
+
+  it('puts a row in, shaped like the ones around it', async () => {
+    const sheet = await sheetAfter({ at: 0, insert: true })
+
+    expect(sheet).toContain('t="inlineStr"')
+    expect(sheet).toContain('<t>New</t>')
+  })
+
+  it('renumbers everything below, rows and cells alike', async () => {
+    // A sheet where two rows call themselves the fourth is one Excel offers to
+    // repair.
+    const sheet = await sheetAfter({ at: 0, insert: true })
+    const rows = [...sheet.matchAll(/<row r="(\d+)"/gu)].map((match) => Number(match[1]))
+
+    expect(new Set(rows).size).toBe(rows.length)
+    expect(sheet).toContain('r="B6"')
+  })
+
+  it('takes a row out and closes the numbers up', async () => {
+    const sheet = await sheetAfter({ at: 1, insert: false })
+    const rows = [...sheet.matchAll(/<row r="(\d+)"/gu)].map((match) => Number(match[1]))
+
+    expect(rows).toEqual([1, 2, 3, 4])
+    expect(sheet).not.toContain('<v>14.2</v>')
   })
 })

@@ -1,8 +1,10 @@
 import {
   patchedWorkbook,
+  patchedWorkbookRows,
   relationshipTarget,
   writeChartCache,
   writeChartCategories,
+  writeChartPoints,
 } from '@orangery/ooxml-presentation'
 import type { ChartCategories, ChartValues, Shape } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
@@ -63,3 +65,33 @@ async function edit(part: string, change: ChartValues | ChartCategories): Promis
 export const editChartValues = (part: string, change: ChartValues) => edit(part, change)
 
 export const editChartCategories = (part: string, change: ChartCategories) => edit(part, change)
+
+/**
+ * Adds a point to a chart, or takes one away.
+ *
+ * The same two halves as any other change, and the same reason for doing them
+ * together — but this one moves the ranges as well, so the workbook's rows and
+ * the chart's caches have to agree about how many there are.
+ */
+export async function editChartPoints(
+  part: string,
+  change: { at: number; insert: boolean },
+): Promise<void> {
+  const { open } = useDeckStore.getState()
+  if (open === null) return
+
+  const workbook = await patchedWorkbookRows(open.package, part, change)
+
+  useDeckStore.getState().editPackage((deck) => {
+    const written = writeChartPoints(deck.package, part, change)
+    if (workbook !== null) {
+      deck.package.parts.set(workbook.path, {
+        path: workbook.path,
+        bytes: workbook.bytes,
+        date: new Date(),
+      })
+    }
+
+    return written || workbook !== null
+  })
+}

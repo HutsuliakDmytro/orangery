@@ -205,3 +205,71 @@ describe('changing a name', () => {
     expect(namesOf()).toEqual(['Q1', 'Q2', 'Q3', 'Q4'])
   })
 })
+
+describe('how many points there are', () => {
+  const rows = () => screen.getAllByRole('spinbutton', { name: /^Revenue, / }).length
+
+  it('adds one to every series at once', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+    const before = rows()
+
+    await user.click(screen.getByRole('button', { name: 'Add a point' }))
+
+    await waitFor(() => {
+      expect(rows()).toBe(before + 1)
+    })
+    expect(valuesOf()[0]).toHaveLength(before + 1)
+    expect(valuesOf()[1]).toHaveLength(before + 1)
+  })
+
+  it('takes one away from every series at once', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+    const before = rows()
+
+    await user.click(screen.getByRole('button', { name: 'Remove the last point' }))
+
+    await waitFor(() => {
+      expect(valuesOf()[0]).toHaveLength(before - 1)
+    })
+    expect(valuesOf()[1]).toHaveLength(before - 1)
+  })
+
+  it('moves the workbook’s rows with it', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+
+    await user.click(screen.getByRole('button', { name: 'Add a point' }))
+
+    // The cache and the workbook have to agree about how many rows there are,
+    // or PowerPoint rebuilds one from the other and the point disappears.
+    await waitFor(() => {
+      expect(valuesOf()[0]).toHaveLength(5)
+    })
+    const bytes = useDeckStore
+      .getState()
+      .open?.package.parts.get('ppt/embeddings/Microsoft_Excel_Sheet1.xlsx')?.bytes
+    expect(bytes).not.toBeUndefined()
+  })
+
+  it('is one step to undo', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pickChart()
+    const before = valuesOf()[0]?.length ?? 0
+
+    await user.click(screen.getByRole('button', { name: 'Add a point' }))
+    await waitFor(() => {
+      expect(valuesOf()[0]).toHaveLength(before + 1)
+    })
+
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+    expect(valuesOf()[0]).toHaveLength(before)
+  })
+})

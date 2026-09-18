@@ -51,6 +51,7 @@ import {
   saveDeckFile,
 } from '../document/file-operations'
 import { groupAfterEscape } from '../render/selection'
+import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
 import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { closeShowWindows, openShowWindows } from '../document/show-windows'
@@ -298,6 +299,42 @@ export const editCommands: readonly Command[] = [
       const { edit, selectShapes } = useDeckStore.getState()
       edit((slide) => deleteShapes(slide, selected(slide)))
       selectShapes([])
+    },
+  },
+  {
+    id: 'edit.copy',
+    label: 'Copy',
+    group: 'edit',
+    shortcut: 'Mod+c',
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      void copySelection()
+    },
+  },
+  {
+    id: 'edit.cut',
+    label: 'Cut',
+    group: 'edit',
+    shortcut: 'Mod+x',
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      void (async () => {
+        // Deleted only once the copy has landed: a cut that failed to copy and
+        // deleted anyway is the one way this command can lose work.
+        if (!(await copySelection())) return
+        useDeckStore.getState().edit((slide) => deleteShapes(slide, selected(slide)))
+        useDeckStore.getState().selectShapes([])
+      })()
+    },
+  },
+  {
+    id: 'edit.paste',
+    label: 'Paste',
+    group: 'edit',
+    shortcut: 'Mod+v',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      void pasteShapesHere()
     },
   },
   {

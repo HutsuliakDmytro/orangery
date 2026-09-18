@@ -208,6 +208,14 @@ These are the ones that matter most. Take them seriously.
       The shapes travel; the slide does not fade.
 - [ ] Do it on slides where two shapes share a name. Those two stay put rather
       than swapping places — refusing to guess is the intended behaviour.
+- [ ] Rehearse Timings, talk through a few slides, end. The summary shows each
+      slide's time and they add up to the run.
+- [ ] Keep them, save, open in PowerPoint. Slide Show → the timings are there
+      and nothing has started dissolving.
+- [ ] Open a deck somebody rehearsed in PowerPoint. It does not fade between
+      slides that were never given a transition.
+- [ ] In the presenter view, the time on this slide resets at each slide and
+      the time on the presentation does not.
 
 ## Getting a deck in
 

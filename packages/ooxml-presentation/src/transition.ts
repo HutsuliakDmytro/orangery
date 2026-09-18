@@ -1,4 +1,11 @@
-import { attribute, children, tagName } from '@orangery/ooxml-core'
+import {
+  attribute,
+  children,
+  element,
+  removeAttribute,
+  setAttribute,
+  tagName,
+} from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import type { SlidePart } from './deck'
 
@@ -26,6 +33,14 @@ export interface Transition {
   kind: TransitionKind
   /** Milliseconds. */
   duration: number
+  /**
+   * `advTm` — how long the slide stays up before the show moves on by itself.
+   *
+   * Null where the slide waits for a press, which is almost every slide. This
+   * is what rehearsing writes down, and a slide can carry one with no visual
+   * transition at all.
+   */
+  advanceAfter: number | null
   /** Null for a kind that does not travel. */
   direction: TransitionDirection | null
   /** What the file actually said, for anyone tracing why it looks like a fade. */
@@ -90,7 +105,16 @@ export function readTransition(part: SlidePart): Transition | null {
     ? Math.max(milliseconds, 0)
     : (SPEEDS[attribute(node, 'spd') ?? ''] ?? DEFAULT_DURATION)
 
-  if (effect === undefined) return { kind: 'fade', duration, direction: null, stated }
+  const advance = Number(attribute(node, 'advTm'))
+  const advanceAfter = Number.isFinite(advance) && advance >= 0 ? advance : null
+
+  // A `p:transition` with no effect in it states no effect. It is not something
+  // we cannot draw — it is a slide that carries a timing and nothing else,
+  // which is what rehearsing leaves behind, and fading it would invent a
+  // transition the file never asked for.
+  if (effect === undefined) {
+    return { kind: 'none', duration: 0, direction: null, advanceAfter, stated }
+  }
 
   // Anything we cannot draw is a fade: something was meant to happen here.
   const kind =
@@ -102,10 +126,56 @@ export function readTransition(part: SlidePart): Transition | null {
   return {
     kind,
     duration: kind === 'none' ? 0 : duration,
+    advanceAfter,
     direction:
       (kind === 'push' || kind === 'wipe') && DIRECTIONS.has(direction)
         ? (direction as TransitionDirection)
         : null,
     stated,
   }
+}
+
+/** `p:sld` in schema order, for putting a transition where it belongs. */
+const SLIDE_ORDER = ['p:cSld', 'p:clrMapOvr', 'p:transition', 'p:timing']
+
+/**
+ * Writes down how long a slide was up, which is what rehearsing produces.
+ *
+ * Only the timing: a slide that had no transition still has none afterwards.
+ * Rehearsing measures how long somebody talked, and a deck that started
+ * dissolving because it was rehearsed would be a deck changed by being
+ * practised.
+ *
+ * Null takes the timing off again, and takes the element with it when that is
+ * all it carried.
+ */
+export function setAdvanceTime(part: SlidePart, milliseconds: number | null): boolean {
+  const existing = transitionNode(part)
+
+  if (milliseconds === null) {
+    if (existing === undefined) return false
+
+    removeAttribute(existing, 'advTm')
+    if (children(existing).length === 0) {
+      const nodes = children(part.root)
+      const at = nodes.indexOf(existing)
+      if (at !== -1) nodes.splice(at, 1)
+    }
+    return true
+  }
+
+  const wanted = String(Math.max(Math.round(milliseconds), 0))
+  if (existing !== undefined) {
+    if (attribute(existing, 'advTm') === wanted) return false
+    setAttribute(existing, 'advTm', wanted)
+    return true
+  }
+
+  const made = element('p:transition', { advTm: wanted })
+  const nodes = children(part.root)
+  const at = nodes.findIndex((node) => SLIDE_ORDER.indexOf(tagName(node) ?? '') > 2)
+  if (at === -1) nodes.push(made)
+  else nodes.splice(at, 0, made)
+
+  return true
 }

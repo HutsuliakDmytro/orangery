@@ -53,13 +53,30 @@ interface ShowState {
    */
   startedAt: number | null
   /**
+   * How long each slide has been up, in milliseconds.
+   *
+   * Accumulated rather than stamped: a slide gone back to is a slide talked
+   * about twice, and the two together are how long it took.
+   */
+  spent: number[]
+  /** When the slide showing came up, for the part not yet added to `spent`. */
+  enteredAt: number | null
+  /**
+   * Whether this run is a rehearsal.
+   *
+   * Every run is timed — the presenter wants to know how long they have been on
+   * this slide either way. Only a rehearsal offers to keep the numbers, because
+   * only a rehearsal was started to produce them.
+   */
+  rehearsing: boolean
+  /**
    * How large the notes are drawn in the presenter view, as a multiple.
    *
    * The presenter is the one person reading from further away than anybody, and
    * the size that suits them has nothing to do with the deck.
    */
   notesScale: number
-  start: (at: number, count: number, steps?: readonly number[]) => void
+  start: (at: number, count: number, steps?: readonly number[], rehearsing?: boolean) => void
   end: () => void
   go: (to: number) => void
   next: () => void
@@ -69,6 +86,24 @@ interface ShowState {
   type: (digit: string) => void
   /** Jumps to the number typed so far, if it names a slide. Returns whether it did. */
   jump: () => boolean
+  /** The times as they stand, with the slide showing counted up to now. */
+  timings: () => number[]
+}
+
+/**
+ * Adds the time since the slide came up to its total, and restarts the clock.
+ *
+ * Every way out of a slide goes through this, which is the only way the numbers
+ * can be right: a run where one route forgot to stop the clock would blame the
+ * time on whatever slide came next.
+ */
+function counted(state: Pick<ShowState, 'at' | 'spent' | 'enteredAt'>) {
+  const now = Date.now()
+  if (state.at === null || state.enteredAt === null) return { spent: state.spent, enteredAt: now }
+
+  const spent = [...state.spent]
+  spent[state.at] = (spent[state.at] ?? 0) + (now - state.enteredAt)
+  return { spent, enteredAt: now }
 }
 
 export const useShowStore = create<ShowState>((set, get) => ({
@@ -79,9 +114,13 @@ export const useShowStore = create<ShowState>((set, get) => ({
   steps: [],
   shown: 0,
   startedAt: null,
+  spent: [],
+  enteredAt: null,
+  rehearsing: false,
   notesScale: 1,
 
-  start: (at, count, steps = []) => {
+  start: (at, count, steps = [], rehearsing = false) => {
+    const now = Date.now()
     set({
       at: count === 0 ? null : Math.min(Math.max(at, 0), count - 1),
       count,
@@ -89,12 +128,17 @@ export const useShowStore = create<ShowState>((set, get) => ({
       shown: 0,
       blank: null,
       typed: '',
-      startedAt: count === 0 ? null : Date.now(),
+      startedAt: count === 0 ? null : now,
+      spent: Array.from({ length: count }, () => 0),
+      enteredAt: count === 0 ? null : now,
+      rehearsing,
     })
   },
 
   end: () => {
-    set({ at: null, blank: null, typed: '', startedAt: null, shown: 0 })
+    // The slide on screen when the show ends counts too; a run that stopped
+    // the clock at the last change would lose the whole of the last slide.
+    set((state) => ({ ...counted(state), at: null, blank: null, typed: '', shown: 0 }))
   },
 
   go: (to) => {
@@ -103,6 +147,7 @@ export const useShowStore = create<ShowState>((set, get) => ({
       // Any move puts the screen back: a blanked show that then advanced
       // invisibly would leave the presenter talking about the wrong slide.
       return {
+        ...counted(state),
         at: Math.min(Math.max(to, 0), state.count - 1),
         blank: null,
         typed: '',
@@ -157,6 +202,11 @@ export const useShowStore = create<ShowState>((set, get) => ({
     // Four digits is more slides than anyone brings; the cap keeps a leaned-on
     // key from growing a string forever.
     set((state) => ({ typed: (state.typed + digit).slice(-4) }))
+  },
+
+  timings: () => {
+    const state = get()
+    return counted(state).spent
   },
 
   jump: () => {

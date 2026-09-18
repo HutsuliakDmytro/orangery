@@ -9,6 +9,7 @@ const transition = (values: Partial<Transition>): Transition => ({
   kind: 'fade',
   duration: 500,
   direction: null,
+  advanceAfter: null,
   stated: 'fade',
   ...values,
 })

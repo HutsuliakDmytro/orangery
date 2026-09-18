@@ -65,9 +65,13 @@ export function Presenter() {
   const open = useDeckStore((state) => state.open)
   const at = useShowStore((state) => state.at)
   const startedAt = useShowStore((state) => state.startedAt)
+  const enteredAt = useShowStore((state) => state.enteredAt)
   const notesScale = useShowStore((state) => state.notesScale)
 
   const elapsed = useElapsed(startedAt)
+  // The other number a presenter needs: not how long the talk has run, but how
+  // long they have been on this one slide.
+  const here = useElapsed(enteredAt)
   const clock = useClock()
 
   if (open === null || at === null) return null
@@ -95,6 +99,9 @@ export function Presenter() {
       <header className="flex items-baseline gap-4 text-sm">
         <span className="text-2xl tabular-nums" aria-label="Time on this presentation">
           {elapsed}
+        </span>
+        <span className="text-white/60 tabular-nums" aria-label="Time on this slide">
+          {here}
         </span>
         <span className="text-white/60 tabular-nums" aria-label="Clock">
           {clock}

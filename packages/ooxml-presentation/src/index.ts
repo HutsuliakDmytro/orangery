@@ -193,7 +193,7 @@ export {
 export type { SlideGuide } from './guides'
 export { insertIcon } from './insert-icon'
 export type { NewIcon } from './insert-icon'
-export { readTransition } from './transition'
+export { readTransition, setAdvanceTime } from './transition'
 export type { Transition, TransitionDirection, TransitionKind } from './transition'
 export type { Media } from './shape-tree'
 export { autoplayShapes } from './media-timing'

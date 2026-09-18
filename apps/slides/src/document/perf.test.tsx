@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { render } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   addSlide,
   createDeck,
@@ -10,6 +11,7 @@ import {
   setShapeText,
   writeSlidePart,
 } from '@orangery/ooxml-presentation'
+import { Filmstrip } from '../components/filmstrip'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -102,5 +104,64 @@ describe('three hundred slides', () => {
     // Twenty nudges and twenty undos: back where it started, and still a deck.
     expect(deck?.slides).toHaveLength(SLIDES)
     expect(shape?.transform).not.toBeUndefined()
+  })
+})
+
+/**
+ * An observer that says the first few elements are on screen and no others.
+ *
+ * jsdom has none, and without one every thumbnail draws — which is the right
+ * answer where nothing can be observed and the wrong one for measuring what
+ * observing saves.
+ */
+function stubObserver(visible: number): void {
+  let seen = 0
+
+  class Stub {
+    constructor(private readonly notify: (entries: { isIntersecting: boolean }[]) => void) {}
+
+    observe(): void {
+      const on = seen < visible
+      seen += 1
+      this.notify([{ isIntersecting: on }])
+    }
+
+    disconnect(): void {
+      // Nothing to stop: this one reports once and never changes its mind.
+    }
+  }
+
+  ;(globalThis as Record<string, unknown>)['IntersectionObserver'] = Stub
+}
+
+describe('the filmstrip of three hundred slides', () => {
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>)['IntersectionObserver']
+  })
+
+  it('draws the ones near the window and not the rest', () => {
+    // Measured before this was written: three hundred thumbnails came to six
+    // and a half thousand elements before anybody had scrolled.
+    stubObserver(12)
+    const { container } = render(<Filmstrip />)
+
+    expect(container.querySelectorAll('svg')).toHaveLength(12)
+    expect(container.querySelectorAll('*').length).toBeLessThan(3_000)
+  })
+
+  it('keeps a place for every slide, drawn or not', () => {
+    stubObserver(12)
+    const { container } = render(<Filmstrip />)
+
+    // Otherwise the strip would be a twelfth of its length and the scrollbar
+    // would jump under the pointer as thumbnails arrived.
+    expect(container.querySelectorAll('li')).toHaveLength(SLIDES)
+  })
+
+  it('draws every one where nothing can say what is on screen', () => {
+    // No observer: the choice is between drawing everything and drawing
+    // nothing, and only one of those shows a deck.
+    const { container } = render(<Filmstrip />)
+    expect(container.querySelectorAll('svg')).toHaveLength(SLIDES)
   })
 })

@@ -179,6 +179,11 @@ These are the ones that matter most. Take them seriously.
 - [ ] Open a deck somebody has commented on in a current PowerPoint. The banner
       says the comments are kept but not shown, and naming the slides they are
       on. Save and reopen in PowerPoint: the comments are still there.
+- [ ] Open a deck of three hundred slides with pictures on them. Scroll the
+      filmstrip from top to bottom. It keeps up, and the thumbnails are there
+      by the time you stop — this is the one that needs a real display.
+- [ ] Drag the scrollbar from top to bottom in one motion. Nothing jumps, and
+      the strip does not change length as it fills in.
 
 ## Getting a deck in
 

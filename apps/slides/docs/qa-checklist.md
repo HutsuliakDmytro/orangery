@@ -156,8 +156,11 @@ These are the ones that matter most. Take them seriously.
       named after, not as a rectangle.
 - [ ] Open a deck full of flowchart shapes beside PowerPoint. Compare shape by
       shape; note any that read wrong rather than merely differ in proportion.
-- [ ] Find a shape somebody has reshaped by its yellow handle. Ours draws it at
-      the default proportions — known, and written back untouched.
+- [ ] Find a shape somebody has reshaped by its yellow handle — a rounded
+      rectangle dragged square, an arrow with a big head. Ours draws it the way
+      PowerPoint does.
+- [ ] Stretch a rounded rectangle wide. The corners stay round rather than
+      turning oval.
 
 ## Getting a deck in
 

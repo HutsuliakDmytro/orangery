@@ -23,9 +23,41 @@ export interface Box {
   height: number
 }
 
-type PathOf = (box: Box) => string
+/**
+ * What a shape's handles say, read from `a:avLst`.
+ *
+ * Values are hundred-thousandths, and almost all of them are a fraction of the
+ * **shorter side** of the box — `ss` in the format's own formulas. A rounded
+ * rectangle's corner stays round rather than becoming an ellipse when the
+ * rectangle is stretched, and that is why: the radius is measured against the
+ * side that did not grow.
+ */
+export type Adjust = (name: string, fallback: number) => number
+
+type PathOf = (box: Box, adjust: Adjust) => string
 
 const n = (value: number): string => String(Math.round(value * 100) / 100)
+
+/** An `a:gd` holds a formula; the ones in `a:avLst` are a literal value. */
+function adjustments(list: ReadonlyMap<string, string> | undefined): Adjust {
+  return (name, fallback) => {
+    const formula = list?.get(name)
+    const match = formula === undefined ? null : /^val\s+(-?\d+)$/u.exec(formula.trim())
+    return match?.[1] === undefined ? fallback : Number(match[1])
+  }
+}
+
+/** A hundred-thousandths value as a plain fraction. */
+const share = (value: number): number => value / 100000
+
+/**
+ * Every handle at its default.
+ *
+ * For a shape drawn as part of another one: a callout's rounded body takes its
+ * corner from nowhere, because the callout's own handle means where the tail
+ * points and not how round the box is.
+ */
+const NO_ADJUST: Adjust = (_name, fallback) => fallback
 
 type Point = readonly [number, number]
 
@@ -53,22 +85,27 @@ type Corner = 'sharp' | 'round' | 'snip'
 /**
  * A rectangle whose four corners are each sharp, rounded or cut off.
  *
- * One generator for eight presets, because that is all that separates them:
+ * One generator for nine presets, because that is all that separates them:
  * `snip2DiagRect` and `round2DiagRect` differ by an arc, and writing each out
- * by hand would be writing the same rectangle eight times with one letter
+ * by hand would be writing the same rectangle nine times with one letter
  * changed. Corners are given clockwise from the top left, as the format lists
- * them.
+ * them, and each names the handle that sets its radius — two-cornered presets
+ * have a handle each, which is why the name is per corner rather than shared.
  */
 const cornered =
-  (kinds: readonly [Corner, Corner, Corner, Corner], ratio = 0.16): PathOf =>
-  ({ width, height }) => {
-    const radius = Math.min(width, height) * ratio
+  (
+    kinds: readonly [Corner, Corner, Corner, Corner],
+    handles: readonly [string, string, string, string] = ['adj', 'adj', 'adj', 'adj'],
+    fallback = 16667,
+  ): PathOf =>
+  ({ width, height }, adjust) => {
+    const shortest = Math.min(width, height)
 
     const corners = [
-      { at: [0, 0], into: [0, -1], out: [1, 0], kind: kinds[0] },
-      { at: [width, 0], into: [1, 0], out: [0, 1], kind: kinds[1] },
-      { at: [width, height], into: [0, 1], out: [-1, 0], kind: kinds[2] },
-      { at: [0, height], into: [-1, 0], out: [0, -1], kind: kinds[3] },
+      { at: [0, 0], into: [0, -1], out: [1, 0], kind: kinds[0], handle: handles[0] },
+      { at: [width, 0], into: [1, 0], out: [0, 1], kind: kinds[1], handle: handles[1] },
+      { at: [width, height], into: [0, 1], out: [-1, 0], kind: kinds[2], handle: handles[2] },
+      { at: [0, height], into: [-1, 0], out: [0, -1], kind: kinds[3], handle: handles[3] },
     ] as const
 
     const commands = corners.flatMap((corner, index) => {
@@ -76,6 +113,9 @@ const cornered =
       const [x, y] = corner.at
       if (corner.kind === 'sharp') return [`${move}${n(x)},${n(y)}`]
 
+      // Half the shorter side is as far as a corner can eat; beyond that the
+      // two corners of a side would cross and the path would fold over itself.
+      const radius = Math.min(share(adjust(corner.handle, fallback)) * shortest, shortest / 2)
       const entry = `${move}${n(x - corner.into[0] * radius)},${n(y - corner.into[1] * radius)}`
       const exitX = x + corner.out[0] * radius
       const exitY = y + corner.out[1] * radius
@@ -175,23 +215,41 @@ const turned = (points: readonly Point[], quarters: number): Point[] =>
 const scaled = (points: readonly Point[]): PathOf =>
   polygon(({ width, height }) => points.map(([x, y]) => [x * width, y * height] as Point))
 
-const blockArrow = (quarters: number, head = 0.4, shaft = 0.5): PathOf =>
-  scaled(turned(arrowPoints(head, shaft), quarters))
+/**
+ * A block arrow, at whatever proportions its handles state.
+ *
+ * `adj1` is how thick the tail is across the box; `adj2` is how long the head
+ * is, measured against the shorter side. That second one is why a wide arrow
+ * has a short head rather than one that grows with it — the head is a piece of
+ * the arrow, not a share of the slide.
+ */
+const blockArrow =
+  (quarters: number): PathOf =>
+  (box, adjust) => {
+    const along = quarters % 2 === 0 ? box.width : box.height
+    const shortest = Math.min(box.width, box.height)
+
+    const shaft = Math.min(share(adjust('adj1', 50000)), 1)
+    const head = Math.min((share(adjust('adj2', 50000)) * shortest) / along, 1)
+
+    return scaled(turned(arrowPoints(head, shaft), quarters))(box, adjust)
+  }
 
 const PRESETS: Readonly<Record<string, PathOf>> = {
   // Rectangles, and the eight ways their corners can be treated.
   rect: rectangle,
   roundRect: cornered(['round', 'round', 'round', 'round']),
   round1Rect: cornered(['sharp', 'round', 'sharp', 'sharp']),
-  round2SameRect: cornered(['round', 'round', 'sharp', 'sharp']),
-  round2DiagRect: cornered(['round', 'sharp', 'round', 'sharp']),
+  round2SameRect: cornered(['round', 'round', 'sharp', 'sharp'], ['adj1', 'adj1', 'adj2', 'adj2']),
+  round2DiagRect: cornered(['round', 'sharp', 'round', 'sharp'], ['adj1', 'adj1', 'adj2', 'adj2']),
   snip1Rect: cornered(['sharp', 'snip', 'sharp', 'sharp']),
-  snip2SameRect: cornered(['snip', 'snip', 'sharp', 'sharp']),
-  snip2DiagRect: cornered(['snip', 'sharp', 'snip', 'sharp']),
-  snipRoundRect: cornered(['snip', 'round', 'sharp', 'sharp']),
+  snip2SameRect: cornered(['snip', 'snip', 'sharp', 'sharp'], ['adj1', 'adj1', 'adj2', 'adj2']),
+  snip2DiagRect: cornered(['snip', 'sharp', 'snip', 'sharp'], ['adj1', 'adj1', 'adj2', 'adj2']),
+  // The snipped corner and the rounded one have a handle each.
+  snipRoundRect: cornered(['snip', 'round', 'sharp', 'sharp'], ['adj1', 'adj2', 'adj2', 'adj2']),
   // Not a regular eight-sided figure: in this format an octagon is a rectangle
   // with all four corners cut off, and it is drawn as one.
-  octagon: cornered(['snip', 'snip', 'snip', 'snip'], 0.29),
+  octagon: cornered(['snip', 'snip', 'snip', 'snip'], ['adj', 'adj', 'adj', 'adj'], 29289),
 
   ellipse,
   // A circle is an ellipse in a square box; PowerPoint has no separate preset.
@@ -215,18 +273,24 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     [width / 2, height],
     [0, height / 2],
   ]),
-  parallelogram: polygon(({ width, height }) => [
-    [width * 0.25, 0],
-    [width, 0],
-    [width * 0.75, height],
-    [0, height],
-  ]),
-  trapezoid: polygon(({ width, height }) => [
-    [width * 0.25, 0],
-    [width * 0.75, 0],
-    [width, height],
-    [0, height],
-  ]),
+  parallelogram: ({ width, height }, adjust) => {
+    const lean = Math.min(share(adjust('adj', 25000)) * Math.min(width, height), width)
+    return polygon(() => [
+      [lean, 0],
+      [width, 0],
+      [width - lean, height],
+      [0, height],
+    ])({ width, height }, adjust)
+  },
+  trapezoid: ({ width, height }, adjust) => {
+    const inset = Math.min(share(adjust('adj', 25000)) * Math.min(width, height), width / 2)
+    return polygon(() => [
+      [inset, 0],
+      [width - inset, 0],
+      [width, height],
+      [0, height],
+    ])({ width, height }, adjust)
+  },
   pentagon: regular(5),
   hexagon: polygon(({ width, height }) => [
     [width * 0.25, 0],
@@ -241,20 +305,23 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
   dodecagon: regular(12),
 
   /** A cross. `plus` is the shape; `mathPlus` below is the sign. */
-  plus: scaled([
-    [0.25, 0],
-    [0.75, 0],
-    [0.75, 0.25],
-    [1, 0.25],
-    [1, 0.75],
-    [0.75, 0.75],
-    [0.75, 1],
-    [0.25, 1],
-    [0.25, 0.75],
-    [0, 0.75],
-    [0, 0.25],
-    [0.25, 0.25],
-  ]),
+  plus: ({ width, height }, adjust) => {
+    const arm = Math.min(share(adjust('adj', 25000)) * Math.min(width, height), width / 2)
+    return polygon(() => [
+      [arm, 0],
+      [width - arm, 0],
+      [width - arm, arm],
+      [width, arm],
+      [width, height - arm],
+      [width - arm, height - arm],
+      [width - arm, height],
+      [arm, height],
+      [arm, height - arm],
+      [0, height - arm],
+      [0, arm],
+      [arm, arm],
+    ])({ width, height }, adjust)
+  },
   corner: scaled([
     [0, 0],
     [0.5, 0],
@@ -269,30 +336,36 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     [0.5, 0],
     [1, 0],
   ]),
-  homePlate: scaled([
-    [0, 0],
-    [0.75, 0],
-    [1, 0.5],
-    [0.75, 1],
-    [0, 1],
-  ]),
-  chevron: scaled([
-    [0, 0],
-    [0.75, 0],
-    [1, 0.5],
-    [0.75, 1],
-    [0, 1],
-    [0.25, 0.5],
-  ]),
-  bevel: ({ width, height }) => {
-    const inset = Math.min(width, height) * 0.12
-    return `${rectangle({ width, height })} M${n(inset)},${n(inset)} H${n(width - inset)} V${n(height - inset)} H${n(inset)} Z`
+  homePlate: ({ width, height }, adjust) => {
+    const point = Math.min(share(adjust('adj', 16667)) * Math.min(width, height), width)
+    return polygon(() => [
+      [0, 0],
+      [width - point, 0],
+      [width, height / 2],
+      [width - point, height],
+      [0, height],
+    ])({ width, height }, adjust)
   },
-  frame: ({ width, height }) => {
-    const inset = Math.min(width, height) * 0.13
+  chevron: ({ width, height }, adjust) => {
+    const point = Math.min(share(adjust('adj', 50000)) * Math.min(width, height), width / 2)
+    return polygon(() => [
+      [0, 0],
+      [width - point, 0],
+      [width, height / 2],
+      [width - point, height],
+      [0, height],
+      [point, height / 2],
+    ])({ width, height }, adjust)
+  },
+  bevel: ({ width, height }, adjust) => {
+    const inset = Math.min(share(adjust('adj', 12500)) * Math.min(width, height), width / 2)
+    return `${rectangle({ width, height }, adjust)} M${n(inset)},${n(inset)} H${n(width - inset)} V${n(height - inset)} H${n(inset)} Z`
+  },
+  frame: ({ width, height }, adjust) => {
+    const inset = Math.min(share(adjust('adj1', 12500)) * Math.min(width, height), width / 2)
     // The inner rectangle runs the other way, which is what leaves the hole.
     return (
-      `${rectangle({ width, height })} M${n(inset)},${n(inset)} V${n(height - inset)} ` +
+      `${rectangle({ width, height }, adjust)} M${n(inset)},${n(inset)} V${n(height - inset)} ` +
       `H${n(width - inset)} V${n(inset)} Z`
     )
   },
@@ -303,11 +376,12 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     [0.22, 0.22],
     [0.22, 1],
   ]),
-  donut: ({ width, height }) => {
+  donut: ({ width, height }, adjust) => {
     const [cx, cy] = [width / 2, height / 2]
-    return `${ring(cx, cy, cx, cy)} ${ring(cx, cy, cx * 0.5, cy * 0.5, false)}`
+    const thickness = Math.min(share(adjust('adj', 25000)) * Math.min(width, height), cx, cy)
+    return `${ring(cx, cy, cx, cy)} ${ring(cx, cy, cx - thickness, cy - thickness, false)}`
   },
-  noSmoking: ({ width, height }) => {
+  noSmoking: ({ width, height }, adjust) => {
     const [cx, cy] = [width / 2, height / 2]
     // The ring, and the bar across it as a separate shape drawn over it.
     return (
@@ -317,11 +391,11 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
         [width * 0.25, height * 0.14],
         [width * 0.86, height * 0.75],
         [width * 0.75, height * 0.86],
-      ])({ width, height })
+      ])({ width, height }, adjust)
     )
   },
-  can: ({ width, height }) => {
-    const ry = height * 0.14
+  can: ({ width, height }, adjust) => {
+    const ry = Math.min((share(adjust('adj', 25000)) * Math.min(width, height)) / 2, height / 2)
     const rx = width / 2
     return [
       `M0,${n(ry)}`,
@@ -503,7 +577,7 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     [0, 0.75],
     [0.15, 0.5],
   ]),
-  stripedRightArrow: ({ width, height }) => {
+  stripedRightArrow: ({ width, height }, adjust) => {
     const body = scaled([
       [0.16, 0.25],
       [0.6, 0.25],
@@ -512,7 +586,7 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
       [0.6, 1],
       [0.6, 0.75],
       [0.16, 0.75],
-    ])({ width, height })
+    ])({ width, height }, adjust)
     const stripes = [
       `M0,${n(height * 0.25)} H${n(width * 0.04)} V${n(height * 0.75)} H0 Z`,
       `M${n(width * 0.06)},${n(height * 0.25)} H${n(width * 0.13)} V${n(height * 0.75)} H${n(width * 0.06)} Z`,
@@ -727,15 +801,15 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     [width * 0.2, height],
     [0, height / 2],
   ]),
-  flowChartPredefinedProcess: ({ width, height }) =>
+  flowChartPredefinedProcess: ({ width, height }, adjust) =>
     [
-      rectangle({ width, height }),
+      rectangle({ width, height }, adjust),
       `M${n(width * 0.12)},0 V${n(height)}`,
       `M${n(width * 0.88)},0 V${n(height)}`,
     ].join(' '),
-  flowChartInternalStorage: ({ width, height }) =>
+  flowChartInternalStorage: ({ width, height }, adjust) =>
     [
-      rectangle({ width, height }),
+      rectangle({ width, height }, adjust),
       `M${n(width * 0.12)},0 V${n(height)}`,
       `M0,${n(height * 0.12)} H${n(width)}`,
     ].join(' '),
@@ -823,14 +897,14 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     [0, height],
     [width, height],
   ]),
-  flowChartSort: ({ width, height }) =>
+  flowChartSort: ({ width, height }, adjust) =>
     [
       polygon(() => [
         [width / 2, 0],
         [width, height / 2],
         [width / 2, height],
         [0, height / 2],
-      ])({ width, height }),
+      ])({ width, height }, adjust),
       `M0,${n(height / 2)} H${n(width)}`,
     ].join(' '),
   flowChartExtract: polygon(({ width, height }) => [
@@ -931,7 +1005,7 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     const body = height * 0.75
     const radius = Math.min(width, body) * 0.16
     return [
-      cornered(['round', 'round', 'round', 'round'])({ width, height: body }),
+      cornered(['round', 'round', 'round', 'round'])({ width, height: body }, NO_ADJUST),
       `M${n(width * 0.35)},${n(body - radius * 0.1)}`,
       `L${n(width * 0.2)},${n(height)}`,
       `L${n(width * 0.25)},${n(body - radius * 0.1)}`,
@@ -970,24 +1044,24 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
   },
   // The line callouts are a box and a line to what they point at. Which of the
   // three it is decides how many bends the line has, and nothing else.
-  borderCallout1: ({ width, height }) => {
+  borderCallout1: ({ width, height }, adjust) => {
     const body = height * 0.7
     return [
-      rectangle({ width, height: body }),
+      rectangle({ width, height: body }, adjust),
       `M${n(width * 0.15)},${n(body)} L0,${n(height)}`,
     ].join(' ')
   },
-  borderCallout2: ({ width, height }) => {
+  borderCallout2: ({ width, height }, adjust) => {
     const body = height * 0.65
     return [
-      rectangle({ width, height: body }),
+      rectangle({ width, height: body }, adjust),
       `M${n(width * 0.15)},${n(body)} L${n(width * 0.08)},${n(height * 0.85)} L0,${n(height)}`,
     ].join(' ')
   },
-  borderCallout3: ({ width, height }) => {
+  borderCallout3: ({ width, height }, adjust) => {
     const body = height * 0.6
     return [
-      rectangle({ width, height: body }),
+      rectangle({ width, height: body }, adjust),
       `M${n(width * 0.15)},${n(body)} L${n(width * 0.15)},${n(height * 0.8)} L${n(width * 0.05)},${n(height * 0.8)} L0,${n(height)}`,
     ].join(' ')
   },
@@ -1145,10 +1219,20 @@ export function isKnownPreset(preset: string | null): boolean {
   return preset !== null && preset in PRESETS
 }
 
-/** The SVG path for a preset, in a coordinate space starting at 0,0. */
-export function pathFor(preset: string | null, box: Box): string {
+/**
+ * The SVG path for a preset, in a coordinate space starting at 0,0.
+ *
+ * `a:avLst` is what the shape's handles say — the corner radius of a rounded
+ * rectangle, the head of an arrow. A shape that states none is drawn at the
+ * defaults the format states, which is what it looks like in PowerPoint too.
+ */
+export function pathFor(
+  preset: string | null,
+  box: Box,
+  handles?: ReadonlyMap<string, string>,
+): string {
   const path = preset === null ? undefined : PRESETS[preset]
-  return (path ?? rectangle)(box)
+  return (path ?? rectangle)(box, adjustments(handles))
 }
 
 /**

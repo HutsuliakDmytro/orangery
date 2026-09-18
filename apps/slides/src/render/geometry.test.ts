@@ -128,3 +128,83 @@ describe('a preset nobody here knows', () => {
     expect(pathFor('swooshArrow', BOX)).toBe(pathFor('rect', BOX))
   })
 })
+
+describe('the handles a shape states', () => {
+  const handles = (values: Record<string, number>) =>
+    new Map(Object.entries(values).map(([name, value]) => [name, `val ${String(value)}`]))
+
+  /** The numbers a path is made of, for comparing one drawing with another. */
+  const of = (preset: string, values?: Record<string, number>) =>
+    pathFor(preset, BOX, values === undefined ? undefined : handles(values))
+
+  /** The radii of every arc in a path, which is what a corner handle sets. */
+  const radiiIn = (path: string) =>
+    [...path.matchAll(/A(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/gu)].map(
+      (match) => [Number(match[1]), Number(match[2])] as const,
+    )
+
+  it('rounds a corner as far as it is dragged', () => {
+    // Dragged to nothing is a plain rectangle; dragged to the end is a stadium.
+    for (const [rx] of radiiIn(of('roundRect', { adj: 0 }))) expect(rx).toBe(0)
+    for (const [rx] of radiiIn(of('roundRect', { adj: 50000 }))) {
+      expect(rx).toBeCloseTo(BOX.height / 2, 0)
+    }
+    expect(of('roundRect')).not.toBe(of('roundRect', { adj: 0 }))
+  })
+
+  it('measures the corner against the shorter side, not each side', () => {
+    // Otherwise a stretched rectangle would have oval corners.
+    const radii = radiiIn(
+      pathFor('roundRect', { width: 800, height: 200 }, handles({ adj: 25000 })),
+    )
+
+    expect(radii).not.toHaveLength(0)
+    for (const [rx, ry] of radii) expect(rx).toBe(ry)
+  })
+
+  it('gives each corner of a two-cornered preset its own handle', () => {
+    const same = of('round2DiagRect', { adj1: 10000, adj2: 10000 })
+    const different = of('round2DiagRect', { adj1: 10000, adj2: 40000 })
+
+    expect(same).not.toBe(different)
+  })
+
+  it('keeps a corner from eating more than the side it is on', () => {
+    // Past half, the two corners of a side would cross and the path would fold
+    // over itself.
+    for (const [rx] of radiiIn(of('roundRect', { adj: 500000 }))) {
+      expect(rx).toBeLessThanOrEqual(Math.min(BOX.width, BOX.height) / 2)
+    }
+  })
+
+  it('shortens an arrow’s head as the arrow gets wider', () => {
+    const square = numbersIn(pathFor('rightArrow', { width: 300, height: 300 }))
+    const wide = numbersIn(pathFor('rightArrow', { width: 900, height: 300 }))
+
+    // The head is a piece of the arrow, not a share of the slide: at three
+    // times the width it is the same length and therefore a third as much of it.
+    expect(square[2]).toBeCloseTo(150, 0)
+    expect(wide[2]).toBeCloseTo(750, 0)
+  })
+
+  it('thickens an arrow’s tail when the handle says so', () => {
+    const thin = numbersIn(pathFor('rightArrow', BOX, handles({ adj1: 20000 })))
+    const thick = numbersIn(pathFor('rightArrow', BOX, handles({ adj1: 80000 })))
+
+    expect(thin[1]).toBeGreaterThan(thick[1] ?? 0)
+  })
+
+  it('leaves a shape alone when the file states nothing', () => {
+    // A deck nobody has reshaped must look exactly as it did before any of this.
+    for (const preset of PRESET_NAMES) {
+      expect(pathFor(preset, BOX, new Map()), preset).toBe(pathFor(preset, BOX))
+    }
+  })
+
+  it('ignores a formula it cannot read rather than drawing nothing', () => {
+    // `a:gd` can hold arithmetic; the ones in `a:avLst` are a literal value,
+    // and anything else falls back to the default rather than to NaN.
+    const odd = pathFor('roundRect', BOX, new Map([['adj', '*/ 100 w 200']]))
+    expect(odd).toBe(pathFor('roundRect', BOX))
+  })
+})

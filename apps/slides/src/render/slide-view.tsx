@@ -520,7 +520,11 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
   // draw, and falls back to the box it sits in rather than to three quarters
   // of itself.
   const path =
-    custom === null ? pathFor(preset, box) : custom.map((one) => toSvgPath(one, box)).join(' ')
+    custom === null
+      ? // The handles as well as the name: a rounded rectangle somebody dragged
+        // square is a different shape from one nobody touched.
+        pathFor(preset, box, shape.properties?.geometry?.adjustments)
+      : custom.map((one) => toSvgPath(one, box)).join(' ')
   /**
    * Only the geometry is placed. The words in a shape stay the way round they
    * were written — a mirrored sentence is not what anybody meant by "flip", and

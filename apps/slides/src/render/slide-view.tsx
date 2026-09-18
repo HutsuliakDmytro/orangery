@@ -1035,6 +1035,10 @@ export function SlideView({
                   />
                 )}
               </>
+            ) : drawing.shape.graphic !== null &&
+              drawing.shape.graphic.kind !== 'table' &&
+              drawing.shape.graphic.kind !== 'chart' ? (
+              <UnknownGraphic drawing={drawing} />
             ) : drawing.shape.graphic?.kind === 'chart' && pkg !== undefined ? (
               <ChartFrame drawing={drawing} pkg={pkg} part={slide.path} theme={theme} />
             ) : drawing.shape.graphic?.table != null ? (
@@ -1310,6 +1314,53 @@ function SelectionFrame({
           />
         )
       })}
+    </g>
+  )
+}
+
+/** What each kind of graphic frame is called, for the box that stands in for it. */
+const GRAPHIC_NAMES: Readonly<Record<string, string>> = {
+  diagram: 'SmartArt',
+  ole: 'Embedded object',
+  unknown: 'Graphic',
+}
+
+/**
+ * A graphic frame this app does not draw: a box, saying what it is.
+ *
+ * The rule (CLAUDE.md) is a bounding box **with a label**, and the label is the
+ * part that matters. A bare rectangle looks like a rectangle somebody drew, so
+ * the person moves it, wonders why it will not take a fill, and never learns
+ * that the deck has a SmartArt diagram in it — which is still in the file, and
+ * still opens in PowerPoint.
+ */
+function UnknownGraphic({ drawing }: { drawing: Drawing }) {
+  const { transform, shape } = drawing
+  const name = GRAPHIC_NAMES[shape.graphic?.kind ?? 'unknown'] ?? 'Graphic'
+
+  return (
+    <g>
+      <rect
+        x={transform.x}
+        y={transform.y}
+        width={transform.width}
+        height={transform.height}
+        fill="#F5F5F5"
+        stroke="#9A9A9A"
+        strokeWidth={12700}
+        strokeDasharray="76200 38100"
+      />
+      <text
+        x={transform.x + transform.width / 2}
+        y={transform.y + transform.height / 2}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill="#666666"
+        fontSize={14 * EMU_PER_POINT}
+        fontFamily="system-ui, sans-serif"
+      >
+        {`${name} — kept, not drawn`}
+      </text>
     </g>
   )
 }

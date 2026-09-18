@@ -38,6 +38,18 @@ pub fn run() {
             app.set_menu(menu::build_bootstrap(app.handle())?)?;
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // The frontend owns "is there anything unsaved?", so a close request
+            // is handed to it rather than answered here. It calls back through
+            // `confirm_close` once the user has chosen.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if document::close_is_confirmed(window.label()) {
+                    return;
+                }
+                api.prevent_close();
+                let _ = tauri::Emitter::emit(window, "window:close-requested", window.label());
+            }
+        })
         .on_menu_event(|app, event| {
             // Menu items are registry command ids — the frontend looks them up
             // and runs them, so the logic lives in exactly one place.

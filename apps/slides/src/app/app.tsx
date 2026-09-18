@@ -1,5 +1,10 @@
 import { useRef } from 'react'
-import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
+import {
+  CommandPalette,
+  CommandSourceProvider,
+  ConfirmDialog,
+  useNativeMenu,
+} from '@orangery/ui-kit'
 import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
 import { Outline } from '../components/outline'
@@ -15,6 +20,8 @@ import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { useAutosave } from '../document/use-autosave'
 import { useCrashRecovery } from '../document/use-crash-recovery'
+import { resolveUnsaved, unsavedDeckName, useGuardStore } from '../document/unsaved'
+import { useCloseGuard } from './use-close-guard'
 import { useDeckStore } from '../store/deck-store'
 import type { OpenDeck } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -40,7 +47,9 @@ function Shell() {
   useNativeMenu()
   useShortcuts()
   useAutosave()
+  useCloseGuard()
   const recovery = useCrashRecovery()
+  const prompting = useGuardStore((state) => state.pending) !== null
 
   const open = useDeckStore((state) => state.open)
   const current = useDeckStore((state) => state.current)
@@ -170,6 +179,38 @@ function Shell() {
           </>
         )}
       </div>
+
+      {prompting && (
+        <ConfirmDialog
+          title="Unsaved changes"
+          message={`Do you want to save the changes you made to ${unsavedDeckName()}? Your changes will be lost if you don't save them.`}
+          onCancel={() => {
+            void resolveUnsaved('cancel')
+          }}
+          choices={[
+            {
+              label: "Don't Save",
+              danger: true,
+              onChoose: () => {
+                void resolveUnsaved('discard')
+              },
+            },
+            {
+              label: 'Cancel',
+              onChoose: () => {
+                void resolveUnsaved('cancel')
+              },
+            },
+            {
+              label: 'Save',
+              primary: true,
+              onChoose: () => {
+                void resolveUnsaved('save')
+              },
+            },
+          ]}
+        />
+      )}
 
       <CommandPalette />
     </div>

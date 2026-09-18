@@ -4,6 +4,7 @@ import {
   flatten,
   readDeck,
   readPptxPackage,
+  readSlidePart,
   readThemes,
   writeSlidePart,
 } from '@orangery/ooxml-presentation'
@@ -223,6 +224,60 @@ function reread(open: OpenDeck): OpenDeck {
 }
 
 /**
+ * Re-reads only the parts that were written to.
+ *
+ * Re-reading the whole deck is correct and costs the whole deck: three hundred
+ * slides parsed again because one shape moved a point to the left. At that size
+ * it is the difference between an edit you feel and one you do not, and it is
+ * paid on every keystroke — so the narrow path is not an optimisation of a
+ * measurement, it is the difference between the app working and not.
+ *
+ * Falls back to the whole deck whenever the answer could be wrong: a part that
+ * will not parse, or a change that added or removed one. Getting this wrong
+ * shows up as a slide that stops updating, which is worse than slow.
+ */
+function rereadParts(open: OpenDeck, paths: readonly string[]): OpenDeck {
+  const fresh = new Map<string, SlidePart>()
+
+  for (const path of paths) {
+    const part = readSlidePart(open.package, path)
+    if (part === null) return reread(open)
+    fresh.set(path, part)
+  }
+
+  const swap = <T extends SlidePart>(part: T): T => {
+    const replacement = fresh.get(part.path)
+    return replacement === undefined ? part : { ...part, ...replacement }
+  }
+
+  return {
+    ...open,
+    deck: {
+      ...open.deck,
+      slides: open.deck.slides.map(swap),
+      layouts: new Map([...open.deck.layouts].map(([path, part]) => [path, swap(part)])),
+      masters: new Map([...open.deck.masters].map(([path, part]) => [path, swap(part)])),
+    },
+  }
+}
+
+/**
+ * Whether a set of changed parts is one the narrow path can handle.
+ *
+ * Only parts the deck already knows about: anything else means the shape of the
+ * deck changed — a slide added, a picture's media arriving — and the model has
+ * to be built again from the package rather than patched.
+ */
+function knownParts(open: OpenDeck, paths: readonly string[]): boolean {
+  return paths.every(
+    (path) =>
+      open.deck.layouts.has(path) ||
+      open.deck.masters.has(path) ||
+      open.deck.slides.some((slide) => slide.path === path),
+  )
+}
+
+/**
  * Keeps the shown slide and the filmstrip selection inside a deck that changed
  * size — deleting four slides or undoing the add of one both leave indexes
  * pointing past the end otherwise.
@@ -407,14 +462,39 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   },
 
   edit: (change) => {
-    const { editDeck } = get()
+    const { open } = get()
     const part = currentSlide(get())
-    if (part === null) return
+    if (open === null || part === null) return
 
-    editDeck((deck) => {
-      const here = shapeParts(deck).find((one) => one.path === part.path)
-      return here === undefined ? false : change(asSlide(here))
-    })
+    const before = getPartText(open.package, part.path) ?? ''
+    const texts = partTexts(open.package)
+    if (!change(part)) return
+
+    // One part written, not every part in the deck. `editDeck` rewrites them
+    // all because a change given the whole deck may have touched any of them;
+    // a change given one slide cannot have.
+    writeSlidePart(open.package, part)
+    const after = getPartText(open.package, part.path) ?? ''
+
+    const changed = changedSince(texts, open.package)
+    if (after === before && changed.length === 0) return
+
+    const parts = after === before ? [] : [{ path: part.path, before, after }]
+
+    set((state) => ({
+      // A change that reached beyond the deck's own parts — media arriving with
+      // a picture — has changed the shape of the package, and the model has to
+      // be built from it rather than patched.
+      open: knownParts(open, changed) ? rereadParts(open, changed) : reread(open),
+      undoStack:
+        parts.length === 0
+          ? state.undoStack
+          : [...state.undoStack, { parts }].slice(-HISTORY_LIMIT),
+      redoStack: parts.length === 0 ? state.redoStack : [],
+      saved: false,
+      ...withChanges(state, changed),
+      revision: state.revision + 1,
+    }))
   },
 
   editDeck: (change) => {
@@ -509,8 +589,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
     const texts = partTexts(open.package)
     for (const part of step.parts) setPartText(open.package, part.path, part.before)
+    const touched = step.parts.map((part) => part.path)
     set((state) => {
-      const reopened = reread(open)
+      const reopened = knownParts(open, touched) ? rereadParts(open, touched) : reread(open)
       return {
         open: reopened,
         ...withinDeck(reopened, state.current, state.slideSelection),
@@ -532,8 +613,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
     const texts = partTexts(open.package)
     for (const part of step.parts) setPartText(open.package, part.path, part.after)
+    const touched = step.parts.map((part) => part.path)
     set((state) => {
-      const reopened = reread(open)
+      const reopened = knownParts(open, touched) ? rereadParts(open, touched) : reread(open)
       return {
         open: reopened,
         ...withinDeck(reopened, state.current, state.slideSelection),

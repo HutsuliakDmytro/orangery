@@ -46,12 +46,13 @@ import type { GradientDefinition } from './paint'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
 import { useMarquee } from './use-marquee'
+import { connectorEnds } from '@orangery/ooxml-presentation'
 import { enclosedBy, groupToOpen, selectionTarget } from './selection'
 import type { Box } from './selection'
 import { boundsOf, correct, correctionBetween, NO_CORRECTION, snapRect } from './snap'
 import type { Correction, Guide } from './snap'
 import { TextEditor } from './text-editor'
-import type { DragState, Handle } from './use-drag'
+import type { DragState, Handle, SizingHandle } from './use-drag'
 
 /**
  * A slide, drawn.
@@ -1043,19 +1044,33 @@ export function SlideView({
             )}
           </Fragment>
         ))}
-        {selectedBoxes.map((drawing) => (
-          <SelectionFrame
-            key={`selected-${String(drawing.shape.id)}`}
-            transform={shown(drawing)}
-            onHandle={
-              onDrag === undefined
-                ? undefined
-                : (event, handle) => {
-                    drag.start(event, handle)
-                  }
-            }
-          />
-        ))}
+        {selectedBoxes.map((drawing) =>
+          drawing.shape.kind === 'cxnSp' ? (
+            <ConnectorEnds
+              key={`selected-${String(drawing.shape.id)}`}
+              transform={shown(drawing)}
+              onHandle={
+                onDrag === undefined
+                  ? undefined
+                  : (event, handle) => {
+                      drag.start(event, handle)
+                    }
+              }
+            />
+          ) : (
+            <SelectionFrame
+              key={`selected-${String(drawing.shape.id)}`}
+              transform={shown(drawing)}
+              onHandle={
+                onDrag === undefined
+                  ? undefined
+                  : (event, handle) => {
+                      drag.start(event, handle)
+                    }
+              }
+            />
+          ),
+        )}
       </svg>
     </div>
   )
@@ -1101,7 +1116,7 @@ function SelectionFrame({
   const middle = { x: x + width / 2, y: y + height / 2 }
 
   /** Where each handle sits: corners, then the middle of each edge. */
-  const places: Record<Exclude<Handle, 'rotate'>, { x: number; y: number }> = {
+  const places: Record<SizingHandle, { x: number; y: number }> = {
     nw: { x, y },
     n: { x: middle.x, y },
     ne: { x: x + width, y },
@@ -1164,7 +1179,7 @@ function SelectionFrame({
       )}
 
       {SIZING_HANDLES.map((corner) => {
-        const at = places[corner as Exclude<Handle, 'rotate'>]
+        const at = places[corner]
         return (
           <rect
             key={`handle-${corner}`}
@@ -1184,6 +1199,55 @@ function SelectionFrame({
           />
         )
       })}
+    </g>
+  )
+}
+
+/**
+ * A selected connector: a grip at each end, and no box.
+ *
+ * A connector has no area, so eight sizing handles around the rectangle it
+ * happens to span would offer eight ways to do the two things that mean
+ * anything — move this end, move that one.
+ */
+function ConnectorEnds({
+  transform,
+  onHandle,
+}: {
+  transform: Transform
+  onHandle?: (event: React.PointerEvent, handle: Handle) => void
+}) {
+  const grip = 76200
+  const ends = connectorEnds(transform)
+
+  return (
+    <g data-testid="selection-frame">
+      <line
+        x1={ends.start.x}
+        y1={ends.start.y}
+        x2={ends.end.x}
+        y2={ends.end.y}
+        stroke="#FF7A00"
+        strokeWidth={19050}
+        pointerEvents="none"
+      />
+      {(['start', 'end'] as const).map((which) => (
+        <circle
+          key={which}
+          cx={ends[which].x}
+          cy={ends[which].y}
+          r={grip / 1.6}
+          fill="#FFFFFF"
+          stroke="#FF7A00"
+          strokeWidth={19050}
+          role={onHandle === undefined ? undefined : 'button'}
+          aria-label={onHandle === undefined ? undefined : `Connector ${which}`}
+          pointerEvents={onHandle === undefined ? 'none' : undefined}
+          onPointerDown={(event) => {
+            onHandle?.(event, which === 'start' ? 'cxn-start' : 'cxn-end')
+          }}
+        />
+      ))}
     </g>
   )
 }

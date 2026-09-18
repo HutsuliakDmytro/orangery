@@ -1,7 +1,10 @@
 import {
   absoluteTransform,
+  connectorEnds,
   createShape,
+  flatten,
   intoGroupSpace,
+  moveConnectorEnd,
   withAncestors,
   writeTransform,
 } from '@orangery/ooxml-presentation'
@@ -104,6 +107,31 @@ export function Canvas() {
                   // coordinates, and the drag was measured on the slide. Writing
                   // one as the other moves a shape in a scaled group by the
                   // wrong amount, and the more the group was resized the wronger.
+                  if (drag.handle === 'cxn-start' || drag.handle === 'cxn-end') {
+                    const box = absoluteTransform(transform, ancestors)
+                    if (box === null) return []
+
+                    const which = drag.handle === 'cxn-start' ? 'start' : 'end'
+                    const at = connectorEnds(box)[which]
+                    const point = { x: at.x + drag.dx, y: at.y + drag.dy }
+
+                    // Whatever is under the end when it is let go, other than
+                    // the connector itself: a line attached to itself is not a
+                    // thing, and letting go over nothing means letting go.
+                    const onto = flatten(edited.shapes).find(
+                      (one) =>
+                        one.id !== shape.id &&
+                        one.kind !== 'cxnSp' &&
+                        one.transform !== null &&
+                        point.x >= one.transform.x &&
+                        point.y >= one.transform.y &&
+                        point.x <= one.transform.x + one.transform.width &&
+                        point.y <= one.transform.y + one.transform.height,
+                    )
+
+                    return [moveConnectorEnd(shape, which, { point, onto: onto ?? null })]
+                  }
+
                   if (drag.handle === 'rotate') {
                     // The angle is measured on the slide, so the box it is
                     // measured against has to be where the shape sits there.

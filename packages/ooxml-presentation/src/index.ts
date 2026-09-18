@@ -81,6 +81,8 @@ export { insertPicture, relsPartFor, UnsupportedPictureError } from './insert-pi
 export type { NewPicture } from './insert-picture'
 export { defaultTableStyle, insertTable } from './insert-table'
 export type { NewTable } from './insert-table'
+export { connectorEnds, moveConnectorEnd, nearestSite, sitePoint } from './connect'
+export type { ConnectorEnd, EndMove } from './connect'
 export { facingSites, insertConnector, SITES } from './insert-connector'
 export type { NewConnector, Site } from './insert-connector'
 export { findInDeck, replaceInDeck, replaceInSlide } from './find-replace'

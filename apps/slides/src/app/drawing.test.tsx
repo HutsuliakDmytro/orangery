@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCommand } from '@orangery/ui-kit'
+import { connectorEnds, flatten } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { isKnownPreset } from '../render/geometry'
 import { SHAPE_GROUPS } from '../render/shape-presets'
@@ -163,5 +164,70 @@ describe('drawing one out', () => {
 
     // Pressing to start drawing is not pressing to deselect.
     expect(useDeckStore.getState().selection).toHaveLength(1)
+  })
+})
+
+describe('a selected connector', () => {
+  /** Opens the deck that has one, and selects it. */
+  async function withConnector() {
+    const bytes = await readFile(join(FIXTURES, 'groups-and-connectors.pptx'))
+    await act(async () => {
+      await useDeckStore.getState().load(new Uint8Array(bytes), '/decks/connectors.pptx')
+    })
+
+    const connector = flatten(shapes()).find((shape) => shape.kind === 'cxnSp')
+    if (connector === undefined) throw new Error('fixture has no connector')
+
+    act(() => {
+      useDeckStore.getState().selectShapes([connector.id])
+    })
+    return connector
+  }
+
+  const found = (id: number) => flatten(shapes()).find((shape) => shape.id === id)
+
+  it('offers a grip at each end and no sizing handles', async () => {
+    await withConnector()
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: 'Connector start' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connector end' })).toBeInTheDocument()
+    // A line has no area, so eight ways to resize a rectangle it happens to
+    // span would be eight ways to do the two things that mean anything.
+    expect(screen.queryByRole('button', { name: 'Resize nw' })).not.toBeInTheDocument()
+  })
+
+  it('lets an end go when it is dropped on nothing', async () => {
+    const connector = await withConnector()
+    render(<App />)
+
+    const grip = screen.getByRole('button', { name: 'Connector end' })
+    fireEvent.pointerDown(grip, client({ x: 0, y: 0 }))
+    fireEvent.pointerMove(window, client({ x: 100_000, y: 4_000_000 }))
+    fireEvent.pointerUp(window, client({ x: 100_000, y: 4_000_000 }))
+
+    expect(found(connector.id)?.connection?.end).toBeNull()
+  })
+
+  it('pins an end to the shape it is dropped on', async () => {
+    const connector = await withConnector()
+    const target = flatten(shapes()).find(
+      (shape) => shape.kind === 'sp' && shape.transform !== null,
+    )
+    if (target?.transform == null) throw new Error('fixture has no shape to attach to')
+    render(<App />)
+
+    const start = connectorEnds(connector.transform as never).end
+    const middle = {
+      x: target.transform.x + target.transform.width / 2,
+      y: target.transform.y + target.transform.height / 2,
+    }
+
+    const grip = screen.getByRole('button', { name: 'Connector end' })
+    fireEvent.pointerDown(grip, client(start))
+    fireEvent.pointerMove(window, client(middle))
+    fireEvent.pointerUp(window, client(middle))
+
+    expect(found(connector.id)?.connection?.end?.shapeId).toBe(target.id)
   })
 })

@@ -24,9 +24,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * `nw` moves the top and the left, `n` moves only the top. `rotate` is not a
  * size at all and is kept out of that reading everywhere it would be wrong.
  */
-export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate'
+export type SizingHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
-export const SIZING_HANDLES: readonly Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
+/** Everything a pointer can take hold of: the eight sizes, the turn, the ends. */
+export type Handle = SizingHandle | 'rotate' | 'cxn-start' | 'cxn-end'
+
+export const SIZING_HANDLES: readonly SizingHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
 export interface DragState {
   /** How far the pointer has moved, in EMU. */
@@ -191,8 +194,9 @@ export function applyDrag(
     }
   }
 
-  // Turning is not sizing; it is applied to the angle, not to the rectangle.
-  if (drag.handle === 'rotate') return transform
+  // Turning is not sizing, and neither is dragging the end of a connector:
+  // both are applied somewhere other than to the rectangle.
+  if (drag.handle === 'rotate' || drag.handle.startsWith('cxn-')) return transform
 
   const west = drag.handle.includes('w')
   const east = drag.handle.includes('e')

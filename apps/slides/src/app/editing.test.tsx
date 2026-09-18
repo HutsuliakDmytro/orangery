@@ -857,3 +857,85 @@ describe('shadows', () => {
     expect(document.querySelector('feDropShadow')).not.toBeNull()
   })
 })
+
+describe('the gradient editor', () => {
+  const selectAndFill = async (user: ReturnType<typeof userEvent.setup>) => {
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill gradient' }))
+  }
+
+  it('appears only once the fill is a gradient', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    expect(screen.queryByRole('group', { name: 'Gradient' })).not.toBeInTheDocument()
+
+    await selectAndFill(user)
+    expect(screen.getByRole('group', { name: 'Gradient' })).toBeInTheDocument()
+  })
+
+  it('moves a stop along', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    fireEvent.change(screen.getByLabelText('Stop 1 position'), { target: { value: '30' } })
+
+    // Thousandths of a percent in the file, percent in the panel.
+    expect(partText()).toContain('pos="30000"')
+  })
+
+  it('turns the gradient round', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    await user.click(screen.getByRole('button', { name: 'Gradient 180 degrees' }))
+
+    expect(partText()).toContain('ang="10800000"')
+  })
+
+  it('adds a stop and takes it away again', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+    expect(screen.getAllByLabelText(/Stop \d position/u)).toHaveLength(2)
+
+    await user.click(screen.getByRole('button', { name: 'Add stop' }))
+    expect(screen.getAllByLabelText(/Stop \d position/u)).toHaveLength(3)
+
+    await user.click(screen.getByRole('button', { name: 'Remove stop 2' }))
+    expect(screen.getAllByLabelText(/Stop \d position/u)).toHaveLength(2)
+  })
+
+  it('will not take a gradient below two stops', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    // Two is the fewest that is still a gradient; below that it is a colour,
+    // and the panel above already does colours.
+    expect(screen.getByRole('button', { name: 'Remove stop 1' })).toBeDisabled()
+  })
+
+  it('gives a stop a theme colour, which follows the theme', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    await user.click(screen.getByRole('button', { name: 'Stop 1 Accent 3' }))
+
+    expect(partText()).toContain('schemeClr val="accent3"')
+  })
+})

@@ -13,6 +13,7 @@ import { SlideProperties } from './slide-properties'
 import { BoxProperties } from './box-properties'
 import { PictureProperties } from './picture-properties'
 import { ColorControl } from './color-control'
+import { GradientEditor } from './gradient-editor'
 import { TextProperties } from './text-properties'
 
 /**
@@ -72,6 +73,13 @@ export function PropertiesPanel() {
     return resolveColor(look.fill.color, lookContext(base, look))?.hex ?? null
   })()
 
+  /** The gradient in force, when the fill is one, so its stops can be edited. */
+  const gradient = (() => {
+    if (first === undefined) return null
+    const look = shapeLook(first, theme)
+    return look.fill?.kind === 'gradient' ? look.fill : null
+  })()
+
   /** The same for the outline, which had no colour control at all before. */
   const lineColour = (() => {
     if (first === undefined) return null
@@ -108,6 +116,16 @@ export function PropertiesPanel() {
             apply((shape) => writeFill(shape, { kind: 'none' }))
           }}
         />
+        {gradient !== null && (
+          <GradientEditor
+            fill={gradient}
+            context={base}
+            onChange={(next) => {
+              apply((shape) => writeFill(shape, next))
+            }}
+          />
+        )}
+
         <button
           type="button"
           aria-label="Fill gradient"

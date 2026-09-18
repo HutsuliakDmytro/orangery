@@ -68,3 +68,42 @@ body {
     clip-path: inset(0);
   }
 }
+
+/**
+ * Paper.
+ *
+ * The print view is in the tree all the time and takes no space until a print
+ * starts; everything else steps out of the way then. Keeping it mounted rather
+ * than building it on demand means what is printed is what was on screen a
+ * moment ago, drawn by the same renderer under different rules.
+ */
+.orangery-print {
+  display: none;
+}
+
+@media print {
+  body > *:not(.orangery-print-root),
+  .orangery-print-root > *:not(.orangery-print) {
+    display: none !important;
+  }
+
+  .orangery-print {
+    display: block;
+    background: white;
+    color: black;
+  }
+
+  .orangery-print-page {
+    /* One page each, and never a slide split across two. */
+    break-after: page;
+    break-inside: avoid;
+  }
+
+  .orangery-print-page:last-child {
+    break-after: auto;
+  }
+
+  .orangery-print [data-testid='print-slide'] {
+    break-inside: avoid;
+  }
+}

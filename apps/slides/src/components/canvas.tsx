@@ -35,7 +35,7 @@ export function Canvas() {
   if (open === null || slide === null) return <WelcomeScreen />
 
   return (
-    <div className="flex h-full items-center justify-center overflow-auto p-6">
+    <div data-testid="canvas" className="flex h-full items-center justify-center overflow-auto p-6">
       {/* At a set zoom the slide keeps that size and the canvas scrolls; fitted,
           it takes what the window gives it. */}
       <div

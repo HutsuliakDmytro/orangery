@@ -8,6 +8,7 @@ import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
 import { ResizeHandle } from '../components/resize-handle'
+import { PrintView } from '../components/print-view'
 import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
@@ -49,7 +50,7 @@ function Shell() {
   const middle = useRef<HTMLDivElement>(null)
 
   return (
-    <div className="flex h-full flex-col bg-bg text-text">
+    <div className="orangery-print-root flex h-full flex-col bg-bg text-text">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
         <span className="font-medium">{title(open?.path ?? null)}</span>
         {open !== null && (
@@ -72,6 +73,8 @@ function Shell() {
           }}
         />
       )}
+
+      <PrintView />
 
       <Show />
 

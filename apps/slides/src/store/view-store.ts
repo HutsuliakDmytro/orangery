@@ -2,6 +2,9 @@ import { create } from 'zustand'
 
 export type Theme = 'dark' | 'light' | 'system'
 
+/** One slide a page, one with its notes, or several on paper. */
+export type PrintLayout = 'slides' | 'notes' | 'handout-2' | 'handout-3' | 'handout-6'
+
 /** Which of the four panels around the canvas are showing. */
 export interface Panels {
   filmstrip: boolean
@@ -45,6 +48,14 @@ interface ViewState {
    * ProseMirror views over one text body, both of which would commit.
    */
   editingOutline: { slide: number; shape: number } | null
+  /**
+   * How the deck is laid out when it goes to paper or to a PDF.
+   *
+   * View state rather than document state: what somebody prints today says
+   * nothing about the deck, and two people printing the same file want
+   * different things from it.
+   */
+  printLayout: PrintLayout
   /** Whether the rulers and the guides dragged out of them are showing. */
   rulers: boolean
   /** Whether the left pane shows the slides or the words on them. */
@@ -67,6 +78,7 @@ interface ViewState {
   setRenamingSection: (id: string | null) => void
   setEditingOutline: (at: { slide: number; shape: number } | null) => void
   setRulers: (showing: boolean) => void
+  setPrintLayout: (layout: PrintLayout) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
   setContentFit: (fit: 'maximize' | 'fit') => void
   togglePanel: (panel: keyof Panels) => void
@@ -91,6 +103,7 @@ export const useViewStore = create<ViewState>((set) => ({
   renamingSection: null,
   editingOutline: null,
   rulers: false,
+  printLayout: 'slides',
   leftPane: 'filmstrip',
   contentFit: 'fit',
   panels: { filmstrip: true, properties: true, notes: true },
@@ -114,6 +127,10 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setRulers: (showing) => {
     set({ rulers: showing })
+  },
+
+  setPrintLayout: (layout) => {
+    set({ printLayout: layout })
   },
 
   setLeftPane: (pane) => {

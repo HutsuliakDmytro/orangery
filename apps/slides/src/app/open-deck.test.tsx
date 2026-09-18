@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -45,7 +45,10 @@ describe('with a deck open', () => {
     await loadFixture('placeholders')
     render(<App />)
 
-    expect(screen.getAllByRole('img', { name: 'Slide: Placeholder inheritance' }).length).toBe(2)
+    // The same slide is drawn in the filmstrip and on the page laid out for
+    // printing, so the question is about the canvas rather than about a count.
+    const canvas = within(screen.getByTestId('canvas'))
+    expect(canvas.getByRole('img', { name: 'Slide: Placeholder inheritance' })).toBeInTheDocument()
   })
 
   it('lists every slide in the filmstrip', async () => {

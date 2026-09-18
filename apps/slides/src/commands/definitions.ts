@@ -684,6 +684,36 @@ export const showCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * Putting the deck on paper, which is also how it becomes a PDF.
+ *
+ * One mechanism rather than two: the operating system's print dialog saves to
+ * PDF, and a PDF writer of our own would be a second way of drawing a slide and
+ * so a second way of drawing it wrongly.
+ */
+export const printCommands: readonly Command[] = (
+  [
+    ['slides', 'Print Slides', 'Mod+p'],
+    ['notes', 'Print Slides with Notes', undefined],
+    ['handout-2', 'Print Handout, 2 per Page', undefined],
+    ['handout-3', 'Print Handout, 3 per Page', undefined],
+    ['handout-6', 'Print Handout, 6 per Page', undefined],
+  ] as const
+).map(([layout, label, shortcut]) => ({
+  id: `print.${layout}`,
+  label,
+  group: 'file' as const,
+  ...(shortcut === undefined ? {} : { shortcut }),
+  isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+  run: () => {
+    useViewStore.getState().setPrintLayout(layout)
+    // A frame for the layout to reach the page before the dialog freezes it.
+    requestAnimationFrame(() => {
+      window.print()
+    })
+  },
+}))
+
 export const zoomCommands: readonly Command[] = [
   {
     id: 'view.master',
@@ -1097,6 +1127,7 @@ export function registerBuiltinCommands(): void {
   registerAll(paragraphCommands)
   registerAll(spacingCommands)
   registerAll(slideEditCommands)
+  registerAll(printCommands)
   registerAll(showCommands)
   registerAll(zoomCommands)
   registerAll(groupCommands)

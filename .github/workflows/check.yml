@@ -73,7 +73,10 @@ jobs:
       - name: Install LibreOffice and poppler
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libreoffice-writer poppler-utils
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer \
+            libreoffice-impress \
+            poppler-utils
 
       - uses: pnpm/action-setup@v4
 
@@ -89,11 +92,19 @@ jobs:
       # after a round-trip and compares the pages.
       - run: pnpm --filter docs test:render
 
+      # The same question of a deck, where the round-trip is harsher still:
+      # every part holding a shape tree is regenerated, because an ordinary save
+      # of an unedited deck is byte for byte the file it opened and rendering
+      # that twice would prove nothing.
+      - run: pnpm --filter slides test:render
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: render-diffs
-          path: apps/docs/test-results/render-diff
+          path: |
+            apps/docs/test-results/render-diff
+            apps/slides/test-results/render-diff
           if-no-files-found: ignore
 
   rust:

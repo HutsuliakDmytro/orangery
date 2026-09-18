@@ -150,6 +150,9 @@ importers:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0))
     devDependencies:
+      '@orangery/render-diff':
+        specifier: workspace:*
+        version: link:../../packages/render-diff
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
@@ -289,6 +292,9 @@ importers:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0))
     devDependencies:
+      '@orangery/render-diff':
+        specifier: workspace:*
+        version: link:../../packages/render-diff
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@7.3.6(@types/node@22.20.3)(jiti@2.7.0)(lightningcss@1.33.0))
@@ -337,6 +343,9 @@ importers:
       vite:
         specifier: ^7.1.0
         version: 7.3.6(@types/node@22.20.3)(jiti@2.7.0)(lightningcss@1.33.0)
+      vite-node:
+        specifier: ^6.0.0
+        version: 6.0.0(@types/node@22.20.3)(esbuild@0.28.2)(jiti@2.7.0)
       vitest:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@22.20.3)(@vitest/coverage-v8@5.0.1)(jsdom@30.0.1)(vite@7.3.6(@types/node@22.20.3)(jiti@2.7.0)(lightningcss@1.33.0))
@@ -443,6 +452,28 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@22.20.3)(@vitest/coverage-v8@5.0.1)(jsdom@30.0.1)(vite@8.3.0(@types/node@22.20.3)(esbuild@0.28.2)(jiti@2.7.0))
+
+  packages/render-diff:
+    dependencies:
+      pixelmatch:
+        specifier: ^7.2.0
+        version: 7.2.0
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
+    devDependencies:
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
+      eslint:
+        specifier: ^10.10.0
+        version: 10.10.0(jiti@2.7.0)
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

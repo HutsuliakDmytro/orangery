@@ -1,0 +1,26 @@
+{
+  "name": "@orangery/render-diff",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders a file before and after a round-trip and compares the pages.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

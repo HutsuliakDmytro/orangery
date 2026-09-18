@@ -58,6 +58,30 @@ describe('inspect', () => {
   })
 })
 
+describe('comments', () => {
+  it('says they are kept but not shown', async () => {
+    const deck = await deckOf('shapes')
+    // The comments are a part of their own, so the deck is told it has one
+    // rather than the slide being given anything.
+    const commented = {
+      ...deck,
+      map: {
+        ...deck.map,
+        slides: deck.map.slides.map((slide) => ({
+          ...slide,
+          comments: ['ppt/comments/comment1.xml'],
+        })),
+      },
+    }
+
+    expect(inspect(commented).map((warning) => warning.kind)).toEqual(['comments'])
+  })
+
+  it('says nothing about a deck nobody has commented on', async () => {
+    expect(inspect(await deckOf('shapes'))).toEqual([])
+  })
+})
+
 describe('describeSlides', () => {
   it('names one slide', () => {
     expect(describeSlides([3])).toBe('slide 3')

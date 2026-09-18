@@ -80,16 +80,31 @@ export function inspect(deck: Deck): Warning[] {
     const number = index + 1
     const shapes = flatten(slide.shapes).flatMap((shape) => findingsFor(shape, number))
 
-    return hasAnimations(slide)
-      ? [
-          ...shapes,
-          {
-            kind: 'animation',
-            message: 'Animations are kept in the file but do not play here',
-            slide: number,
-          },
-        ]
-      : shapes
+    // Comments are a part of their own, not something on the slide, so they are
+    // asked about the package rather than the shape tree.
+    const commented = (deck.map.slides[index]?.comments.length ?? 0) > 0
+
+    return [
+      ...shapes,
+      ...(hasAnimations(slide)
+        ? [
+            {
+              kind: 'animation',
+              message: 'Animations are kept in the file but do not play here',
+              slide: number,
+            },
+          ]
+        : []),
+      ...(commented
+        ? [
+            {
+              kind: 'comments',
+              message: 'Comments are kept in the file but are not shown here',
+              slide: number,
+            },
+          ]
+        : []),
+    ]
   })
 
   const grouped = new Map<string, Warning>()

@@ -176,6 +176,9 @@ These are the ones that matter most. Take them seriously.
       drawn, each numbered in its own units, and the gridlines are one set.
 - [ ] Open one with data labels. The numbers are there, and a chart without
       them shows none.
+- [ ] Open a deck somebody has commented on in a current PowerPoint. The banner
+      says the comments are kept but not shown, and naming the slides they are
+      on. Save and reopen in PowerPoint: the comments are still there.
 
 ## Getting a deck in
 

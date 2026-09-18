@@ -28,3 +28,26 @@ export const NOTES_SLIDE_RELATIONSHIP = `${RELATIONSHIP}notesSlide`
 export const NOTES_MASTER_RELATIONSHIP = `${RELATIONSHIP}notesMaster`
 export const HANDOUT_MASTER_RELATIONSHIP = `${RELATIONSHIP}handoutMaster`
 export const THEME_RELATIONSHIP = `${RELATIONSHIP}theme`
+export const COMMENT_AUTHORS_RELATIONSHIP = `${RELATIONSHIP}commentAuthors`
+export const COMMENTS_RELATIONSHIP = `${RELATIONSHIP}comments`
+
+/**
+ * Comments as PowerPoint has written them since 2018.
+ *
+ * A second, extension-namespaced relationship beside the old one, and the one
+ * a deck from a current PowerPoint actually uses. A map that knew only the
+ * standard name would report every modern deck as having no comments, which is
+ * worse than not looking.
+ */
+export const MODERN_COMMENTS_RELATIONSHIP =
+  'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/comments'
+export const MODERN_COMMENT_AUTHORS_RELATIONSHIP =
+  'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/authors'
+
+/** What a relationship to a picture, a film or a sound is called. */
+export const MEDIA_RELATIONSHIPS = [
+  `${RELATIONSHIP}image`,
+  `${RELATIONSHIP}audio`,
+  `${RELATIONSHIP}video`,
+  `${RELATIONSHIP}media`,
+]

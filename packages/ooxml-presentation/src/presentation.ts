@@ -11,6 +11,12 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, Relationship, XmlNode } from '@orangery/ooxml-core'
 import {
+  COMMENT_AUTHORS_RELATIONSHIP,
+  COMMENTS_RELATIONSHIP,
+  HANDOUT_MASTER_RELATIONSHIP,
+  MEDIA_RELATIONSHIPS,
+  MODERN_COMMENT_AUTHORS_RELATIONSHIP,
+  MODERN_COMMENTS_RELATIONSHIP,
   NOTES_MASTER_RELATIONSHIP,
   NOTES_SLIDE_RELATIONSHIP,
   PRESENTATION_PART,
@@ -41,6 +47,13 @@ export interface SlideParts {
   layout: string | null
   /** The notes page, when the slide has one. */
   notes: string | null
+  /**
+   * The comment parts on this slide, old and modern.
+   *
+   * Both, because a deck edited by two versions of PowerPoint has both, and a
+   * reader that knew only one would report half a conversation.
+   */
+  comments: string[]
 }
 
 export interface MasterParts {
@@ -55,6 +68,21 @@ export interface PresentationMap {
   slides: SlideParts[]
   masters: MasterParts[]
   notesMaster: string | null
+  /**
+   * The handout master, which decides what several slides on one page look
+   * like. Rare, and a deck that has one is a deck somebody meant to print.
+   */
+  handoutMaster: string | null
+  /** `commentAuthors.xml` — the people, which the whole deck shares. */
+  commentAuthors: string[]
+  /**
+   * Every picture, film and sound any part of the deck points at.
+   *
+   * Gathered by walking the parts rather than by listing the `ppt/media`
+   * directory: what is in that directory and what the deck uses are two
+   * different questions, and only the second one means anything.
+   */
+  media: string[]
   slideSize: SlideSize
   notesSize: SlideSize
   /**
@@ -158,6 +186,10 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
       path,
       layout: firstTargetOf(own, SLIDE_LAYOUT_RELATIONSHIP),
       notes: firstTargetOf(own, NOTES_SLIDE_RELATIONSHIP),
+      comments: [
+        ...targetsOf(own, COMMENTS_RELATIONSHIP),
+        ...targetsOf(own, MODERN_COMMENTS_RELATIONSHIP),
+      ],
     }
   })
 
@@ -172,10 +204,37 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
     },
   )
 
+  const notesMaster = firstTargetOf(relationships, NOTES_MASTER_RELATIONSHIP)
+  const handoutMaster = firstTargetOf(relationships, HANDOUT_MASTER_RELATIONSHIP)
+
+  // Every part that can point at a picture: the slides and what they inherit
+  // from, the notes and the two masters that are not slide masters.
+  const carriers = [
+    PRESENTATION_PART,
+    ...slides.flatMap((slide) => [slide.path, ...(slide.notes === null ? [] : [slide.notes])]),
+    ...masters.flatMap((master) => [master.path, ...master.layouts]),
+    ...(notesMaster === null ? [] : [notesMaster]),
+    ...(handoutMaster === null ? [] : [handoutMaster]),
+  ]
+
+  const media = new Set<string>()
+  for (const part of carriers) {
+    for (const relationship of relationshipsOf(pkg, part)) {
+      if (relationship.external) continue
+      if (MEDIA_RELATIONSHIPS.includes(relationship.type)) media.add(relationship.target)
+    }
+  }
+
   return {
     slides,
     masters,
-    notesMaster: firstTargetOf(relationships, NOTES_MASTER_RELATIONSHIP),
+    notesMaster,
+    handoutMaster,
+    commentAuthors: [
+      ...targetsOf(relationships, COMMENT_AUTHORS_RELATIONSHIP),
+      ...targetsOf(relationships, MODERN_COMMENT_AUTHORS_RELATIONSHIP),
+    ],
+    media: [...media].sort(),
     slideSize: sizeOf(root, 'p:sldSz', DEFAULT_SLIDE_SIZE),
     notesSize: sizeOf(root, 'p:notesSz', DEFAULT_NOTES_SIZE),
     firstSlideNum: numberOf(root === undefined ? undefined : attribute(root, 'firstSlideNum'), 1),
@@ -190,6 +249,7 @@ export function referencedParts(map: PresentationMap): string[] {
     parts.add(slide.path)
     if (slide.layout !== null) parts.add(slide.layout)
     if (slide.notes !== null) parts.add(slide.notes)
+    for (const comments of slide.comments) parts.add(comments)
   }
 
   for (const master of map.masters) {
@@ -199,6 +259,9 @@ export function referencedParts(map: PresentationMap): string[] {
   }
 
   if (map.notesMaster !== null) parts.add(map.notesMaster)
+  if (map.handoutMaster !== null) parts.add(map.handoutMaster)
+  for (const authors of map.commentAuthors) parts.add(authors)
+  for (const one of map.media) parts.add(one)
 
   return [...parts].sort()
 }

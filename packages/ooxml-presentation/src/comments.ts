@@ -4,12 +4,14 @@ import {
   buildXml,
   children,
   element,
+  ensureChild,
   ensureOverride,
   getPartText,
   isTextNode,
   parseRelationships,
   parseXml,
   serializeRelationships,
+  setAttribute,
   setPartText,
   tagName,
   textValue,
@@ -39,8 +41,13 @@ import { readPresentation } from './presentation'
  * lot of markup to get exactly right for a comment that reads the same either
  * way.
  *
- * So a comment made here is a comment PowerPoint shows, and a thread made in
- * PowerPoint is a thread this shows and does not pretend to be able to answer.
+ * A thread, though, is something the old format cannot say at all: it has no
+ * replies and no status. So those are patched where PowerPoint has already
+ * written them — a reply is one element appended beside the ones already
+ * there, and resolving is one attribute — while a new remark is still written
+ * in the old format. Everything written into the newer one is modelled on what
+ * is in the file next to it, rather than invented from a schema nobody
+ * publishes.
  */
 
 export interface CommentAuthor {
@@ -57,8 +64,17 @@ export interface Comment {
   created: string | null
   /** True for a thread somebody has marked as dealt with. */
   resolved: boolean
-  /** Whether this app can change it, which the newer format's are not. */
+  /** Whether this app can delete it, which the newer format's are not. */
   editable: boolean
+  /**
+   * What was said in answer.
+   *
+   * Always empty for the older format, which has no such thing: a conversation
+   * there is several remarks that happen to be about the same slide.
+   */
+  replies: Comment[]
+  /** Whether this app can add to it — true for a thread PowerPoint started. */
+  threaded: boolean
 }
 
 const COMMENTS_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.comments+xml'
@@ -118,6 +134,28 @@ function partsOf(pkg: OoxmlPackage, slide: Slide): string[] {
   return map.slides.find((one) => one.path === slide.path)?.comments ?? []
 }
 
+function readOne(
+  comment: XmlNode,
+  index: number,
+  modern: boolean,
+  authors: ReadonlyMap<string, CommentAuthor>,
+): Comment {
+  const id = attribute(comment, 'idx') ?? attribute(comment, 'id') ?? String(index)
+  const authorId = attribute(comment, 'authorId') ?? ''
+  const body = children(comment).find((child) => (tagName(child) ?? '').endsWith(':txBody'))
+
+  return {
+    id,
+    author: authors.get(authorId) ?? { name: 'Someone', initials: '' },
+    text: body === undefined ? textOf(named(comment, 'text')[0] ?? comment) : textOf(body),
+    created: attribute(comment, 'created') ?? attribute(comment, 'dt') ?? null,
+    resolved: attribute(comment, 'status') === 'resolved',
+    editable: !modern,
+    replies: named(comment, 'reply').map((reply, at) => readOne(reply, at, modern, authors)),
+    threaded: modern,
+  }
+}
+
 function readPart(
   pkg: OoxmlPackage,
   path: string,
@@ -126,27 +164,13 @@ function readPart(
   const root = rootOf(getPartText(pkg, path) ?? '')
   if (root === undefined) return []
 
-  // The newer format nests replies inside their comment; each is read as its
-  // own remark, because a list of what was said is what a person wants and a
-  // thread this app cannot answer is not worth drawing as one.
   const modern = (tagName(root) ?? '').startsWith('p188:')
 
-  return named(root, 'cm').map((comment, index) => {
-    // `idx` in the original format and `id` in the newer one; both are what
-    // the file calls this comment, and neither is ours to invent.
-    const id = attribute(comment, 'idx') ?? attribute(comment, 'id') ?? String(index)
-    const authorId = attribute(comment, 'authorId') ?? ''
-    const body = named(comment, 'txBody')[0]
-
-    return {
-      id,
-      author: authors.get(authorId) ?? { name: 'Someone', initials: '' },
-      text: body === undefined ? textOf(named(comment, 'text')[0] ?? comment) : textOf(body),
-      created: attribute(comment, 'created') ?? attribute(comment, 'dt') ?? null,
-      resolved: attribute(comment, 'status') === 'resolved',
-      editable: !modern,
-    }
-  })
+  // Only the remarks at the top of the part: a reply is inside the one it
+  // answers, and reading it twice would show the conversation twice.
+  return children(root)
+    .filter((child) => (tagName(child) ?? '').replace(/^[^:]*:/u, '') === 'cm')
+    .map((comment, index) => readOne(comment, index, modern, authors))
 }
 
 /** Everything said about a slide, from whichever formats the deck uses. */
@@ -295,4 +319,118 @@ export function removeComment(pkg: OoxmlPackage, slide: Slide, id: string): bool
 /** Whether the deck names a comment part at all, for a pane that has to decide. */
 export function hasComments(pkg: OoxmlPackage): boolean {
   return readPresentation(pkg).slides.some((slide) => slide.comments.length > 0)
+}
+
+/** The `p188:cm` with a given id, in whichever part of the slide holds it. */
+function findThread(
+  pkg: OoxmlPackage,
+  slide: Slide,
+  id: string,
+): { path: string; roots: XmlNode[]; comment: XmlNode } | null {
+  for (const path of partsOf(pkg, slide)) {
+    const roots = parseXml(getPartText(pkg, path) ?? '')
+    const root = roots.find((node) => !(tagName(node) ?? '?').startsWith('?'))
+    if (root === undefined || !(tagName(root) ?? '').startsWith('p188:')) continue
+
+    const comment = children(root).find(
+      (child) => tagName(child) === 'p188:cm' && attribute(child, 'id') === id,
+    )
+    if (comment !== undefined) return { path, roots, comment }
+  }
+
+  return null
+}
+
+/** A GUID in the braces the format writes them in. */
+const guid = (): string => `{${crypto.randomUUID().toUpperCase()}}`
+
+/**
+ * Makes sure the newer authors part names the person, and answers their id.
+ *
+ * Written beside the authors already there and shaped like them. The part is
+ * not made where there is none: a thread only exists because PowerPoint wrote
+ * one, and PowerPoint wrote the authors with it.
+ */
+function modernAuthorId(pkg: OoxmlPackage, author: CommentAuthor): string | null {
+  const map = readPresentation(pkg)
+
+  for (const path of map.commentAuthors) {
+    const roots = parseXml(getPartText(pkg, path) ?? '')
+    const root = roots.find((node) => (tagName(node) ?? '').startsWith('p188:'))
+    if (root === undefined) continue
+
+    const existing = children(root).find((one) => attribute(one, 'name') === author.name)
+    const found = existing === undefined ? undefined : attribute(existing, 'id')
+    if (found !== undefined) return found
+
+    const id = guid()
+    children(root).push(
+      element('p188:author', { id, name: author.name, initials: author.initials }),
+    )
+    setPartText(pkg, path, withDeclaration(buildXml(roots)))
+    return id
+  }
+
+  return null
+}
+
+/**
+ * Answers a thread PowerPoint started.
+ *
+ * Only a thread: the older format has no replies, so a remark there is
+ * answered by making another remark, which is what it already means.
+ */
+export function replyToComment(
+  pkg: OoxmlPackage,
+  slide: Slide,
+  id: string,
+  reply: NewComment,
+): boolean {
+  if (reply.text.trim() === '') return false
+
+  const found = findThread(pkg, slide, id)
+  const author = found === null ? null : modernAuthorId(pkg, reply.author)
+  if (found === null || author === null) return false
+
+  const list = ensureChild(found.comment, 'p188:replyLst', [
+    'p188:pos',
+    'p188:txBody',
+    'p188:replyLst',
+  ])
+
+  children(list).push(
+    element('p188:reply', { id: guid(), authorId: author, created: new Date().toISOString() }, [
+      element('p188:txBody', {}, [
+        element('a:bodyPr'),
+        element('a:p', {}, [element('a:r', {}, [element('a:t', {}, [{ '#text': reply.text }])])]),
+      ]),
+    ]),
+  )
+
+  setPartText(pkg, found.path, withDeclaration(buildXml(found.roots)))
+  return true
+}
+
+/**
+ * Marks a thread as dealt with, or takes the mark off.
+ *
+ * One attribute, on a comment PowerPoint wrote. `active` rather than removing
+ * the attribute: a thread that stated nothing is not the same as one somebody
+ * reopened, and PowerPoint writes the word.
+ */
+export function resolveComment(
+  pkg: OoxmlPackage,
+  slide: Slide,
+  id: string,
+  resolved: boolean,
+): boolean {
+  const found = findThread(pkg, slide, id)
+  if (found === null) return false
+
+  const wanted = resolved ? 'resolved' : 'active'
+  if (attribute(found.comment, 'status') === wanted) return false
+
+  setAttribute(found.comment, 'status', wanted)
+  setPartText(pkg, found.path, withDeclaration(buildXml(found.roots)))
+  return true
 }

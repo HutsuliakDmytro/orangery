@@ -9,7 +9,7 @@ import {
   setPartText,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
-import { addComment, readComments, removeComment } from './comments'
+import { addComment, readComments, removeComment, replyToComment, resolveComment } from './comments'
 import { readDeck } from './deck'
 import type { Slide } from './deck'
 import { COMMENTS_RELATIONSHIP, MODERN_COMMENTS_RELATIONSHIP, readPptxPackage } from './parts'
@@ -182,5 +182,83 @@ describe('taking one away', () => {
     const pkg = await withComments(['modern'])
     expect(removeComment(pkg, firstSlide(pkg), '{C1}')).toBe(false)
     expect(readComments(pkg, firstSlide(pkg))).toHaveLength(1)
+  })
+})
+
+describe('a thread PowerPoint started', () => {
+  const threaded = async () => {
+    const pkg = await withComments(['modern'])
+    return { pkg, slide: firstSlide(pkg) }
+  }
+
+  it('is read as one remark with its answers under it', async () => {
+    const pkg = await withComments(['modern'])
+    setPartText(
+      pkg,
+      'ppt/comments/modernComment_1.xml',
+      MODERN_COMMENTS.replace(
+        '</p188:cm>',
+        '<p188:replyLst><p188:reply id="{R1}" authorId="{A1}">' +
+          '<p188:txBody><a:bodyPr/><a:p><a:r><a:t>Agreed</a:t></a:r></a:p></p188:txBody>' +
+          '</p188:reply></p188:replyLst></p188:cm>',
+      ),
+    )
+
+    const comments = readComments(pkg, firstSlide(pkg))
+    expect(comments).toHaveLength(1)
+    expect(comments[0]?.replies.map((one) => one.text)).toEqual(['Agreed'])
+  })
+
+  it('takes an answer, beside the ones already there', async () => {
+    const { pkg, slide } = await threaded()
+    expect(
+      replyToComment(pkg, slide, '{C1}', {
+        author: { name: 'Petro', initials: 'P' },
+        text: 'Thanks',
+      }),
+    ).toBe(true)
+
+    const comments = readComments(pkg, slide)
+    expect(comments[0]?.replies[0]).toMatchObject({ text: 'Thanks', author: { name: 'Petro' } })
+  })
+
+  it('names a new person in the authors part beside the others', async () => {
+    const { pkg, slide } = await threaded()
+    replyToComment(pkg, slide, '{C1}', { author: { name: 'Dmytro', initials: 'D' }, text: 'Mine' })
+
+    expect(getPartText(pkg, 'ppt/authors.xml')).toContain('Dmytro')
+    expect(readComments(pkg, slide)[0]?.replies[0]?.author.name).toBe('Dmytro')
+  })
+
+  it('marks it dealt with, and lets it be reopened', async () => {
+    const { pkg, slide } = await threaded()
+    expect(resolveComment(pkg, slide, '{C1}', false)).toBe(true)
+    expect(readComments(pkg, slide)[0]?.resolved).toBe(false)
+
+    expect(resolveComment(pkg, slide, '{C1}', true)).toBe(true)
+    expect(readComments(pkg, slide)[0]?.resolved).toBe(true)
+  })
+
+  it('says nothing changed when it already says that', async () => {
+    const { pkg, slide } = await threaded()
+    expect(resolveComment(pkg, slide, '{C1}', true)).toBe(false)
+  })
+
+  it('refuses to answer a remark in the older format', async () => {
+    // There are no replies there; another remark is what answering means.
+    const pkg = await withComments(['old'])
+    const slide = firstSlide(pkg)
+
+    expect(
+      replyToComment(pkg, slide, '1', { author: { name: 'Me', initials: 'M' }, text: 'No' }),
+    ).toBe(false)
+    expect(readComments(pkg, slide)[0]?.threaded).toBe(false)
+  })
+
+  it('refuses an answer with nothing in it', async () => {
+    const { pkg, slide } = await threaded()
+    expect(
+      replyToComment(pkg, slide, '{C1}', { author: { name: 'P', initials: 'P' }, text: ' ' }),
+    ).toBe(false)
   })
 })

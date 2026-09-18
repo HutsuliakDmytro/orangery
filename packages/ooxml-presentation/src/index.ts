@@ -60,6 +60,8 @@ export {
   readCommentAuthors,
   readComments,
   removeComment,
+  replyToComment,
+  resolveComment,
 } from './comments'
 export type { Comment, CommentAuthor, NewComment } from './comments'
 export { addInkStroke } from './ink'

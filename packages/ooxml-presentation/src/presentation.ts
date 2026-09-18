@@ -16,7 +16,7 @@ import {
   HANDOUT_MASTER_RELATIONSHIP,
   MEDIA_RELATIONSHIPS,
   MODERN_COMMENT_AUTHORS_RELATIONSHIP,
-  MODERN_COMMENTS_RELATIONSHIP,
+  MODERN_COMMENTS_RELATIONSHIPS,
   NOTES_MASTER_RELATIONSHIP,
   NOTES_SLIDE_RELATIONSHIP,
   PRESENTATION_PART,
@@ -188,7 +188,7 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
       notes: firstTargetOf(own, NOTES_SLIDE_RELATIONSHIP),
       comments: [
         ...targetsOf(own, COMMENTS_RELATIONSHIP),
-        ...targetsOf(own, MODERN_COMMENTS_RELATIONSHIP),
+        ...MODERN_COMMENTS_RELATIONSHIPS.flatMap((type) => targetsOf(own, type)),
       ],
     }
   })

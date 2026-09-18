@@ -24,6 +24,8 @@ from pptx.dml.color import RGBColor
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.opc.package import Part
+from pptx.opc.packuri import PackURI
 from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
@@ -484,6 +486,102 @@ def links() -> Presentation:
     return prs
 
 
+NS_P188 = "http://schemas.microsoft.com/office/powerpoint/2018/8/main"
+
+OLD_COMMENT_RT = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"
+)
+OLD_AUTHORS_RT = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/commentAuthors"
+)
+NEW_COMMENT_RT = (
+    "http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/comment"
+)
+NEW_AUTHORS_RT = (
+    "http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/authors"
+)
+
+
+def attach(source, partname: str, content_type: str, reltype: str, xml: str) -> None:
+    """Puts a part python-pptx has no model for into the package."""
+    package = source.package
+    part = Part(
+        PackURI(partname),
+        content_type,
+        package,
+        ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n' + xml).encode("utf-8"),
+    )
+    source.relate_to(part, reltype)
+
+
+def comments() -> Presentation:
+    """Both comment formats at once, which is what a deck two versions old has.
+
+    The original is a flat list with the authors kept once for the deck; the one
+    PowerPoint has written since 2018 is another namespace with GUIDs, a status
+    and replies nested under the remark they answer. A reader that knew only one
+    of them would report half a conversation, so the corpus carries both — on
+    the same slide, as PowerPoint leaves them.
+    """
+    prs = Presentation()
+    slide = prs.slides.add_slide(title_only(prs))
+    slide.shapes.title.text = "Reviewed twice"
+
+    attach(
+        prs.part,
+        "/ppt/commentAuthors.xml",
+        "application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml",
+        OLD_AUTHORS_RT,
+        '<p:cmAuthorLst xmlns:p="%s">'
+        '<p:cmAuthor id="1" name="Olena" initials="O" lastIdx="1" clrIdx="0"/>'
+        "</p:cmAuthorLst>" % NS_P,
+    )
+    attach(
+        slide.part,
+        "/ppt/comments/comment1.xml",
+        "application/vnd.openxmlformats-officedocument.presentationml.comments+xml",
+        OLD_COMMENT_RT,
+        '<p:cmLst xmlns:p="%s">'
+        '<p:cm authorId="1" dt="2019-03-04T11:20:00" idx="1">'
+        '<p:pos x="1200" y="800"/><p:text>Tighten this up</p:text>'
+        "</p:cm></p:cmLst>" % NS_P,
+    )
+
+    attach(
+        prs.part,
+        "/ppt/authors.xml",
+        "application/vnd.ms-powerpoint.authors+xml",
+        NEW_AUTHORS_RT,
+        '<p188:authorLst xmlns:p188="%s">'
+        '<p188:author id="{6A9C2E4F-1B33-4E19-9B2C-8F0D5A1C7E22}" name="Petro"'
+        ' initials="P" userId="Petro" providerId="None"/>'
+        "</p188:authorLst>" % NS_P188,
+    )
+    attach(
+        slide.part,
+        "/ppt/comments/modernComment_1.xml",
+        "application/vnd.ms-powerpoint.comments+xml",
+        NEW_COMMENT_RT,
+        '<p188:cmLst xmlns:a="%s" xmlns:p188="%s">'
+        '<p188:cm id="{3D6B1F08-9A44-4C71-B0E5-2C7F4A8D9E10}"'
+        ' authorId="{6A9C2E4F-1B33-4E19-9B2C-8F0D5A1C7E22}"'
+        ' created="2023-02-02T10:00:00.000" status="active">'
+        '<p188:pos x="2400" y="1600"/>'
+        "<p188:txBody><a:bodyPr/><a:lstStyle/>"
+        "<a:p><a:r><a:t>Does this slide still belong here?</a:t></a:r></a:p>"
+        "</p188:txBody>"
+        '<p188:replyLst><p188:reply id="{B1C0A7D2-5E38-4F6A-9C11-7D2E3F4A5B60}"'
+        ' authorId="{6A9C2E4F-1B33-4E19-9B2C-8F0D5A1C7E22}"'
+        ' created="2023-02-02T11:00:00.000">'
+        "<p188:txBody><a:bodyPr/><a:lstStyle/>"
+        "<a:p><a:r><a:t>It does, after the rewrite.</a:t></a:r></a:p>"
+        "</p188:txBody></p188:reply></p188:replyLst>"
+        "</p188:cm></p188:cmLst>" % (NS_A, NS_P188),
+    )
+
+    return prs
+
+
 DECKS = {
     "empty": empty,
     "placeholders": placeholders,
@@ -500,6 +598,7 @@ DECKS = {
     "animations": animations,
     "media": media,
     "links": links,
+    "comments": comments,
 }
 
 

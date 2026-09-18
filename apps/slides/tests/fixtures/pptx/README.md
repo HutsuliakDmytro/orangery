@@ -26,6 +26,7 @@ python3 apps/slides/tests/fixtures/pptx/generate-synthetic.py
 | `notes` | a `notesSlide`, its own part with its own master |
 | `many-slides` | eight slides, so ordering through `sldIdLst` is worth asserting |
 | `sixteen-by-nine` | a slide size that is not the template's |
+| `comments` | both comment formats on one slide, the newer one with a reply |
 
 Two quirks of the generator worth knowing, because they make the fixtures
 *better* rather than worse:

@@ -127,3 +127,97 @@ describe('saying something', () => {
     expect(commentPart()).not.toContain('Undo me')
   })
 })
+
+/**
+ * A thread PowerPoint started.
+ *
+ * The fixture carries both formats on one slide, as a deck edited by two
+ * versions does. The assertions read the newer part: an answer shown in the
+ * pane and missing from the file is the failure worth catching, and this is the
+ * one format where a reply is a real element rather than another remark.
+ */
+describe('a thread from a newer PowerPoint', () => {
+  const threadPart = () => {
+    const { open: deck } = useDeckStore.getState()
+    return (
+      getPartText(deck?.package ?? { parts: new Map() }, 'ppt/comments/modernComment_1.xml') ?? ''
+    )
+  }
+
+  beforeEach(async () => {
+    const bytes = await readFile(join(FIXTURES, 'comments.pptx'))
+    await act(async () => {
+      await useDeckStore.getState().load(new Uint8Array(bytes), '/decks/comments.pptx')
+    })
+  })
+
+  it('shows the remark with its answers under it', () => {
+    render(<App />)
+    open()
+
+    expect(screen.getByText('Does this slide still belong here?')).toBeInTheDocument()
+    expect(screen.getByText('It does, after the rewrite.')).toBeInTheDocument()
+    // The older format's remark is on the same slide and is shown beside it.
+    expect(screen.getByText('Tighten this up')).toBeInTheDocument()
+  })
+
+  it('answers it, beside the reply already there', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    open()
+
+    await user.click(screen.getByRole('button', { name: 'Reply' }))
+    await user.type(screen.getByLabelText('Reply to Petro'), 'Then it stays')
+    await user.click(screen.getByRole('button', { name: 'Send reply' }))
+
+    expect(threadPart()).toContain('Then it stays')
+    expect(screen.getByText('Then it stays')).toBeInTheDocument()
+    expect(screen.getByText('It does, after the rewrite.')).toBeInTheDocument()
+  })
+
+  it('will not send an empty answer', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    open()
+
+    await user.click(screen.getByRole('button', { name: 'Reply' }))
+    expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled()
+  })
+
+  it('marks it dealt with, and takes the mark off again', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    open()
+
+    await user.click(screen.getByRole('button', { name: 'Resolve' }))
+    expect(threadPart()).toContain('status="resolved"')
+    expect(screen.getByText('— resolved')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Reopen' }))
+    expect(threadPart()).toContain('status="active"')
+    expect(screen.queryByText('— resolved')).not.toBeInTheDocument()
+  })
+
+  it('offers neither on a remark in the older format', () => {
+    render(<App />)
+    open()
+
+    // One thread on the slide, so one of each — the older remark has no reply
+    // structure and no status to set.
+    expect(screen.getAllByRole('button', { name: 'Reply' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Resolve' })).toHaveLength(1)
+  })
+
+  it('is one step to undo', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    open()
+
+    await user.click(screen.getByRole('button', { name: 'Resolve' }))
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+
+    expect(threadPart()).toContain('status="active"')
+  })
+})

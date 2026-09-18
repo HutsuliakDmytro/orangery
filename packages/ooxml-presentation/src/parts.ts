@@ -41,6 +41,20 @@ export const COMMENTS_RELATIONSHIP = `${RELATIONSHIP}comments`
  */
 export const MODERN_COMMENTS_RELATIONSHIP =
   'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/comments'
+
+/**
+ * Both spellings of it.
+ *
+ * The extension namespace is not a published standard, and the name appears
+ * singular in decks and plural in what documentation there is. With no
+ * PowerPoint-authored deck in the corpus to pin it with, guessing one would be
+ * guessing which half of the decks to read. Reading both costs a comparison and
+ * cannot be wrong: a deck carries whichever it carries.
+ */
+export const MODERN_COMMENTS_RELATIONSHIPS = [
+  MODERN_COMMENTS_RELATIONSHIP,
+  'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/comment',
+]
 export const MODERN_COMMENT_AUTHORS_RELATIONSHIP =
   'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/authors'
 

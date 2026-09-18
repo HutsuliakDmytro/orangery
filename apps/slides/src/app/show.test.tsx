@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
@@ -484,5 +485,74 @@ describe('film and sound', () => {
 
     fireEvent.pointerDown(screen.getByTestId('show'))
     expect(useShowStore.getState().at).toBe(1)
+  })
+})
+
+describe('links in a show', () => {
+  it('has none to click in the editor', async () => {
+    // A link that stole the click would make a button impossible to move.
+    await openDeck('links')
+    render(<App />)
+
+    expect(screen.queryByTestId('shape-link')).toBeNull()
+  })
+
+  it('goes to the slide a button points at', async () => {
+    await openDeck('links')
+    render(<App />)
+    await start()
+
+    const targets = screen.getAllByTestId('shape-link')
+    const button = targets.at(-1)
+    if (button === undefined) throw new Error('no link on the slide')
+
+    fireEvent.pointerDown(button)
+    expect(useShowStore.getState().at).toBe(2)
+  })
+
+  it('takes the jump that names no target', async () => {
+    await openDeck('links')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    fireEvent.pointerDown(screen.getAllByTestId('shape-link')[0] as HTMLElement)
+    expect(useShowStore.getState().at).toBe(2)
+  })
+
+  it('opens a web address away from the show', async () => {
+    // A presentation that navigates away from itself has ended.
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null)
+
+    try {
+      await openDeck('links')
+      render(<App />)
+      await start()
+
+      // The filmstrip draws the same words behind the show.
+      await userEvent.click(within(screen.getByTestId('show')).getByText('orangery.example'))
+
+      expect(opened).toHaveBeenCalledWith(
+        'https://orangery.example/deck',
+        '_blank',
+        'noopener,noreferrer',
+      )
+    } finally {
+      opened.mockRestore()
+    }
+  })
+
+  it('does not advance the slide when a link is clicked', async () => {
+    await openDeck('links')
+    render(<App />)
+    await start()
+
+    const targets = screen.getAllByTestId('shape-link')
+    fireEvent.pointerDown(targets[0] as HTMLElement)
+
+    // It went where the link pointed, not one slide on.
+    expect(useShowStore.getState().at).not.toBe(1)
   })
 })

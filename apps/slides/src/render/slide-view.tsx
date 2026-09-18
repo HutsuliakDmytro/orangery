@@ -3,6 +3,7 @@ import {
   absoluteTransform,
   autoplayShapes,
   backgroundOf,
+  resolveHyperlink,
   colorContextFor,
   flatten,
   listStyleChain,
@@ -17,7 +18,14 @@ import {
   relationshipTarget,
   withAncestors,
 } from '@orangery/ooxml-presentation'
-import type { Deck, Shape, Slide, SlidePart, Transform } from '@orangery/ooxml-presentation'
+import type {
+  Deck,
+  Hyperlink,
+  Shape,
+  Slide,
+  SlidePart,
+  Transform,
+} from '@orangery/ooxml-presentation'
 import { getPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
@@ -227,6 +235,51 @@ function ShapeImage({ drawing, pkg, part }: { drawing: Drawing; pkg: OoxmlPackag
 }
 
 /**
+ * A click target over a shape that links somewhere.
+ *
+ * Only while a show is running: in the editor a click on a shape selects it,
+ * and a link that stole that would make a button impossible to move.
+ *
+ * Transparent and over the shape rather than a handler on the shape itself, so
+ * the whole rectangle is clickable — including the parts of it a thin outline
+ * leaves empty, which is where people actually click.
+ */
+function ShapeLink({
+  drawing,
+  pkg,
+  deck,
+  part,
+  onFollow,
+}: {
+  drawing: Drawing
+  pkg: OoxmlPackage
+  deck: Deck
+  part: string
+  onFollow?: (link: Hyperlink) => void
+}) {
+  const { shape, transform } = drawing
+  const link = resolveHyperlink(pkg, deck, part, shape.link)
+  if (link === null || onFollow === undefined) return null
+
+  return (
+    <rect
+      data-testid="shape-link"
+      x={transform.x}
+      y={transform.y}
+      width={transform.width}
+      height={transform.height}
+      fill="transparent"
+      style={{ cursor: 'pointer' }}
+      onPointerDown={(event) => {
+        // A click anywhere in a show advances it; this one means the link.
+        event.stopPropagation()
+        onFollow(link)
+      }}
+    />
+  )
+}
+
+/**
  * A film or a sound, where there is somewhere to play it.
  *
  * The poster frame is drawn underneath by the ordinary picture path — it is a
@@ -383,16 +436,22 @@ function ShapeText({
   deck,
   slide,
   theme,
+  pkg,
+  playing = false,
   editing,
   onCommitText,
+  onFollowLink,
   onLeave,
 }: {
   drawing: Drawing
   deck: Deck
   slide: Slide
   theme: Theme | undefined
+  pkg?: OoxmlPackage
+  playing?: boolean
   editing?: boolean
   onCommitText?: (id: number, doc: PmNode) => void
+  onFollowLink?: (link: Hyperlink) => void
   onLeave?: () => void
 }) {
   const { shape, transform, context } = drawing
@@ -503,7 +562,17 @@ function ShapeText({
 
                   if (run.kind === 'break') return <br key={runIndex} />
 
-                  return (
+                  // A link on a run is a relationship id and nothing else; what
+                  // it points at is a question about the package.
+                  const link =
+                    pkg === undefined || !playing
+                      ? null
+                      : resolveHyperlink(pkg, deck, slide.path, {
+                          relationshipId: resolved?.hyperlink ?? null,
+                          action: null,
+                        })
+
+                  const drawn = (
                     <span
                       key={runIndex}
                       style={{
@@ -525,6 +594,28 @@ function ShapeText({
                     >
                       {run.text}
                     </span>
+                  )
+
+                  return link === null ? (
+                    drawn
+                  ) : (
+                    <a
+                      key={runIndex}
+                      href={link.kind === 'url' ? link.url : undefined}
+                      style={{ cursor: 'pointer' }}
+                      onClick={(event) => {
+                        // The browser would follow an href into this window,
+                        // and a presentation that navigates away has ended.
+                        event.preventDefault()
+                        event.stopPropagation()
+                        onFollowLink?.(link)
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation()
+                      }}
+                    >
+                      {drawn}
+                    </a>
                   )
                 })}
               </p>
@@ -548,6 +639,7 @@ export function SlideView({
   onEdit,
   onCommitText,
   playing = false,
+  onFollowLink,
   className,
   style,
 }: {
@@ -575,6 +667,8 @@ export function SlideView({
    * competing with selecting and moving the thing it sits on.
    */
   playing?: boolean
+  /** Called when a link on the slide is clicked, which only a show does. */
+  onFollowLink?: (link: Hyperlink) => void
   className?: string
   style?: React.CSSProperties
 }) {
@@ -696,6 +790,15 @@ export function SlideView({
         )}
         {drawings.map((drawing) => (
           <Fragment key={drawing.key}>
+            {playing && pkg !== undefined && (
+              <ShapeLink
+                drawing={drawing}
+                pkg={pkg}
+                deck={deck}
+                part={slide.path}
+                onFollow={onFollowLink}
+              />
+            )}
             {drawing.shape.kind === 'pic' && pkg !== undefined ? (
               <>
                 <ShapeImage drawing={drawing} pkg={pkg} part={slide.path} />
@@ -725,8 +828,11 @@ export function SlideView({
               deck={deck}
               slide={slide}
               theme={theme}
+              pkg={pkg}
+              playing={playing}
               editing={editing === drawing.shape.id}
               onCommitText={onCommitText}
+              onFollowLink={onFollowLink}
               onLeave={() => {
                 onEdit?.(null)
               }}

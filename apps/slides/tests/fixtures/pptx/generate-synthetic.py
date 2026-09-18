@@ -434,6 +434,56 @@ def media() -> Presentation:
     return prs
 
 
+
+def links() -> Presentation:
+    """Every way a slide says "click here and go somewhere".
+
+    Three spellings of the same element: a relationship with an external target,
+    a relationship to another slide's part, and an action with no target at all
+    because there is nothing in the package called "the next slide".
+    """
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Emu(9144000), Emu(6858000)
+
+    first = prs.slides.add_slide(title_only(prs))
+    first.shapes.title.text = "Links"
+
+    box = first.shapes.add_textbox(Inches(1), Inches(3), Inches(6), Inches(1))
+    run = box.text_frame.paragraphs[0].add_run()
+    run.text = "orangery.example"
+    run.hyperlink.address = "https://orangery.example/deck"
+
+    button = first.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(4.5), Inches(2), Inches(1)
+    )
+    button.text_frame.text = "To the end"
+
+    onwards = prs.slides.add_slide(title_only(prs))
+    onwards.shapes.title.text = "Onwards"
+    next_button = onwards.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(3), Inches(2), Inches(1)
+    )
+    next_button.text_frame.text = "Next"
+
+    # python-pptx can point a click at a slide and at a URL, and has no setter
+    # for the jumps that have no target — which are the ones worth having in a
+    # corpus, since nothing else in the file says where they go.
+    next_button._element.nvSpPr.cNvPr.append(
+        parse_xml(
+            '<a:hlinkClick xmlns:a="%s" xmlns:r="%s" r:id=""'
+            ' action="ppaction://hlinkshowjump?jump=nextslide"/>' % (NS_A, NS_R)
+        )
+    )
+
+    last = prs.slides.add_slide(title_only(prs))
+    last.shapes.title.text = "The end"
+
+    # Set after the slide exists, since it is the slide being pointed at.
+    button.click_action.target_slide = last
+
+    return prs
+
+
 DECKS = {
     "empty": empty,
     "placeholders": placeholders,
@@ -449,6 +499,7 @@ DECKS = {
     "transitions": transitions,
     "animations": animations,
     "media": media,
+    "links": links,
 }
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { readTransition } from '@orangery/ooxml-presentation'
-import type { Transition } from '@orangery/ooxml-presentation'
+import type { Hyperlink, Transition } from '@orangery/ooxml-presentation'
 import { leaveFullScreen } from '../commands/definitions'
 import { transitionStyles } from '../render/transition-style'
 import { SlideView } from '../render/slide-view'
@@ -159,6 +159,24 @@ export function Show() {
   const slide = open.deck.slides[at]
   if (slide === undefined) return null
 
+  /**
+   * Following a link, which is the one click in a show that is not "next".
+   *
+   * A URL goes to the browser rather than into this window: a presentation that
+   * navigated away from itself would be a presentation that ended.
+   */
+  const follow = (link: Hyperlink) => {
+    const show = useShowStore.getState()
+
+    if (link.kind === 'slide') show.go(link.index)
+    else if (link.kind === 'url') window.open(link.url, '_blank', 'noopener,noreferrer')
+    else if (link.jump === 'next') show.next()
+    else if (link.jump === 'previous') show.previous()
+    else if (link.jump === 'first') show.go(0)
+    else if (link.jump === 'last') show.go(show.count - 1)
+    else show.end()
+  }
+
   const previous = leaving === null ? undefined : open.deck.slides[leaving.index]
   const styles = leaving === null ? null : transitionStyles(leaving.transition)
 
@@ -210,6 +228,7 @@ export function Show() {
               themes={open.themes}
               package={open.package}
               playing
+              onFollowLink={follow}
               // The slide keeps its shape, so one axis is filled and the other
               // is letterboxed; stretching it would be showing a different one.
               className="max-h-full max-w-full"

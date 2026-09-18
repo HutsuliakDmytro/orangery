@@ -115,6 +115,14 @@ export interface Shape {
   /** The image, for a `p:pic`. Null for everything else. */
   picture: BlipFill | null
   /**
+   * `p:cNvPr/a:hlinkClick` — where a click on the whole shape goes.
+   *
+   * Unresolved on purpose: what the relationship points at is a question about
+   * the package, not about the shape, and a shape does not know how many slides
+   * the deck has.
+   */
+  link: LinkTarget | null
+  /**
    * The film or the sound a `p:pic` stands for, when it stands for one.
    *
    * A video on a slide is a picture of its first frame with a relationship to
@@ -219,6 +227,24 @@ function parsePlaceholder(nonVisual: XmlNode | undefined): Placeholder | null {
   }
 }
 
+export interface LinkTarget {
+  /** The relationship, where the link is one. */
+  relationshipId: string | null
+  /** `ppaction://…`, which is how the format spells the links with no target. */
+  action: string | null
+}
+
+/** Reads `a:hlinkClick`, wherever it hangs. */
+export function readLinkTarget(node: XmlNode | undefined): LinkTarget | null {
+  const link = node === undefined ? undefined : findChild(node, 'a:hlinkClick')
+  if (link === undefined) return null
+
+  return {
+    relationshipId: attribute(link, 'r:id') ?? null,
+    action: attribute(link, 'action') ?? null,
+  }
+}
+
 export interface Media {
   kind: 'video' | 'audio'
   /**
@@ -277,6 +303,7 @@ export function parseShape(node: XmlNode): Shape {
     style: styleNode === undefined ? null : readShapeStyle(styleNode),
     text: textNode === undefined ? null : readTextBody(textNode),
     picture: pictureNode === undefined ? null : readBlipFill(pictureNode),
+    link: readLinkTarget(identity),
     media: kind === 'pic' ? parseMedia(node) : null,
     connection: kind === 'cxnSp' ? readConnection(nonVisual) : null,
     graphic: kind === 'graphicFrame' ? readGraphicContent(node) : null,

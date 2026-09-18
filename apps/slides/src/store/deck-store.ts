@@ -1,5 +1,12 @@
 import { create } from 'zustand'
-import { readDeck, readPptxPackage, readThemes, writeSlidePart } from '@orangery/ooxml-presentation'
+import {
+  ensureTextBody,
+  flatten,
+  readDeck,
+  readPptxPackage,
+  readThemes,
+  writeSlidePart,
+} from '@orangery/ooxml-presentation'
 import type { Deck, Slide, SlidePart } from '@orangery/ooxml-presentation'
 import { getPartText, setPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
@@ -220,6 +227,17 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   },
 
   setEditing: (id) => {
+    // A shape drawn elsewhere may state no text body at all, and entering it
+    // has to make one first. Here rather than in the canvas because there is
+    // more than one way in — a double click, a command, the outline — and the
+    // one that was not wired up is the one that loses what was typed.
+    if (id !== null) {
+      get().edit((slide) => {
+        const shape = flatten(slide.shapes).find((one) => one.id === id)
+        return shape === undefined ? false : ensureTextBody(shape)
+      })
+    }
+
     set({ editing: id, ...(id === null ? {} : { selection: [id] }) })
   },
 

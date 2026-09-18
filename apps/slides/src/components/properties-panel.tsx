@@ -3,6 +3,7 @@ import { resolveColor } from '@orangery/ooxml-drawingml'
 import { colorContextFor, lookContext, shapeLook } from '@orangery/ooxml-presentation'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { SlideProperties } from './slide-properties'
+import { BoxProperties } from './box-properties'
 import { TextProperties } from './text-properties'
 
 /**
@@ -107,6 +108,8 @@ export function PropertiesPanel() {
           </button>
         </div>
       </section>
+
+      <BoxProperties shapes={shapes} />
 
       <TextProperties />
 

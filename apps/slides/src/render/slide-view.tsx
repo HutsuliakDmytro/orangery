@@ -573,7 +573,11 @@ export function SlideView({
                   drag.start(event, null)
                 }}
                 onDoubleClick={() => {
-                  if (drawing.shape.text !== null) onEdit?.(drawing.shape.id)
+                  // A shape with no text body can still be given one; a picture
+                  // or a chart cannot hold text at all.
+                  if (drawing.shape.kind === 'sp' || drawing.shape.kind === 'cxnSp') {
+                    onEdit?.(drawing.shape.id)
+                  }
                 }}
               />
             )}

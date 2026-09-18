@@ -110,3 +110,36 @@ export function moveShape(shape: Shape, by: { x: number; y: number }): boolean {
     y: shape.transform.y + by.y,
   })
 }
+
+/** `p:sp` in schema order; the text body comes last. */
+const SHAPE = ['p:nvSpPr', 'p:spPr', 'p:style', 'p:txBody']
+
+/** `p:cxnSp` has the same shape with its own non-visual element. */
+const CONNECTOR = ['p:nvCxnSpPr', 'p:spPr', 'p:style', 'p:txBody']
+
+/**
+ * Gives a shape somewhere to put text, if it can hold any.
+ *
+ * A `p:sp` may state no text body at all, and one drawn elsewhere often does.
+ * Entering it has to make one first — an empty `a:p` and nothing else, so the
+ * shape inherits every bit of its styling from the placeholder or the theme
+ * rather than freezing today's answer into the file.
+ *
+ * A picture and a graphic frame are left alone: PowerPoint will not put text in
+ * them either, and a text body there is a file that does not open.
+ */
+export function ensureTextBody(shape: Shape): boolean {
+  if (shape.text !== null) return false
+  if (shape.kind !== 'sp' && shape.kind !== 'cxnSp') return false
+
+  upsertChild(
+    shape.node,
+    element('p:txBody', {}, [
+      element('a:bodyPr', { rtlCol: '0' }),
+      element('a:lstStyle'),
+      element('a:p'),
+    ]),
+    shape.kind === 'sp' ? SHAPE : CONNECTOR,
+  )
+  return true
+}

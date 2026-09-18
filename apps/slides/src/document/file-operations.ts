@@ -5,7 +5,19 @@ import { useDeckStore } from '../store/deck-store'
 import { noteRecent } from '../store/recent-store'
 import { compressIfAsked } from './pictures-offer'
 import { buildTemplate, templateById } from './templates'
-import { nameOf, pickDeckPath, pickSavePath, readDeckFile, writeDeckFile } from './file'
+import {
+  nameOf,
+  pickDeckPath,
+  pickExportPath,
+  pickSavePath,
+  readDeckFile,
+  writeDeckFile,
+  writeFileBytes,
+} from './file'
+import { deckFromOdp } from './converters/odp-import'
+import { readOdp } from './converters/odp-read'
+import { writeOdp } from './converters/odp-write'
+import { useImportStore } from './import-note'
 
 /**
  * The four things that can happen to a deck as a file.
@@ -56,6 +68,7 @@ export async function saveDeckFile(askWhere: boolean): Promise<void> {
  * and a conversion is where things are lost.
  */
 export async function newDeck(): Promise<void> {
+  useImportStore.getState().set(null)
   await useDeckStore.getState().load(await createDeck(), null)
   document.title = 'Untitled Presentation — Orangery Slides'
 }
@@ -66,6 +79,9 @@ export async function openDeck(path?: string): Promise<void> {
   const target = path ?? (await pickDeckPath())
   if (target === null) return
 
+  if (/\.odp$/iu.test(target)) return openOdp(target)
+
+  useImportStore.getState().set(null)
   await useDeckStore.getState().load(await readDeckFile(target), target)
 
   // Only a deck that actually opened is worth offering again. A file that threw
@@ -74,6 +90,42 @@ export async function openDeck(path?: string): Promise<void> {
 
   document.title = `${nameOf(target)} — Orangery Slides`
   await noteRecent(target)
+}
+
+/**
+ * An OpenDocument presentation, converted on the way in.
+ *
+ * The deck it becomes belongs to no file. Writing our conversion back over
+ * somebody's `.odp` would replace a document we only partly understood with
+ * one we only partly wrote, and the first time that mattered it would have
+ * eaten a deck. Saving asks where, and offers a `.pptx`.
+ */
+async function openOdp(path: string): Promise<void> {
+  const imported = await deckFromOdp(await readOdp(await readDeckFile(path)))
+
+  await useDeckStore.getState().load(imported.bytes, null)
+  document.title = `${nameOf(path)} — Orangery Slides`
+
+  useImportStore
+    .getState()
+    .set(
+      imported.skipped === 0
+        ? `${nameOf(path)} was converted from OpenDocument. Saving will write a .pptx.`
+        : `${nameOf(path)} was converted from OpenDocument; ${String(imported.skipped)} ${imported.skipped === 1 ? 'item' : 'items'} could not be brought across. Saving will write a .pptx.`,
+    )
+}
+
+/** Writes the deck out as an OpenDocument presentation, for somebody who asked. */
+export async function exportOdp(): Promise<void> {
+  const { open } = useDeckStore.getState()
+  if (open === null) return
+
+  const suggested = nameOf(open.path ?? 'Presentation.pptx').replace(/\.[^.]+$/u, '.odp')
+  const path = await pickExportPath(suggested, 'odp')
+  if (path === null) return
+
+  const written = await writeOdp(open.package, open.deck)
+  await writeFileBytes(path, written.bytes)
 }
 
 /**

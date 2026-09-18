@@ -54,6 +54,13 @@
         "description": "Microsoft PowerPoint Presentation",
         "role": "Editor",
         "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      },
+      {
+        "ext": ["odp"],
+        "name": "OpenDocument Presentation",
+        "description": "OpenDocument Presentation",
+        "role": "Editor",
+        "mimeType": "application/vnd.oasis.opendocument.presentation"
       }
     ]
   }

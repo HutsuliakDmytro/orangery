@@ -22,7 +22,9 @@ export async function pickDeckPath(): Promise<string | null> {
   const selected = await openDialog({
     multiple: false,
     directory: false,
-    filters: [{ name: 'Presentation', extensions: ['pptx'] }],
+    // OpenDocument as well: it is not the native format, but a person with one
+    // in front of them is trying to open a presentation.
+    filters: [{ name: 'Presentation', extensions: ['pptx', 'odp'] }],
   })
 
   return typeof selected === 'string' ? selected : null

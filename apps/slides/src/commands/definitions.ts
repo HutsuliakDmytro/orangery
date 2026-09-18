@@ -42,6 +42,7 @@ import type { RasterType } from '../document/export-image'
 import { ICON_SIZE, ICONS } from '../document/icons'
 import {
   closeDeck,
+  exportOdp,
   newDeck,
   openDeck,
   openInNewWindow,
@@ -769,6 +770,15 @@ export const printCommands: readonly Command[] = (
  * blank picture.
  */
 export const exportCommands: readonly Command[] = [
+  {
+    id: 'export.odp',
+    label: 'Export as OpenDocument\u2026',
+    group: 'file',
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void exportOdp()
+    },
+  },
   {
     id: 'export.svg',
     label: 'Export Slide as SVG…',

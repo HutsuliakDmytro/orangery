@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { describeSlides, inspect } from '../document/warnings'
+import { useImportStore } from '../document/import-note'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -12,8 +13,10 @@ export function WarningsBanner() {
   const open = useDeckStore((state) => state.open)
   const [dismissed, setDismissed] = useState<string | null>(null)
 
+  const note = useImportStore((state) => state.note)
+
   const warnings = useMemo(() => (open === null ? [] : inspect(open.deck)), [open])
-  if (warnings.length === 0 || dismissed === open?.path) return null
+  if ((warnings.length === 0 && note === null) || dismissed === open?.path) return null
 
   return (
     <div
@@ -21,6 +24,7 @@ export function WarningsBanner() {
       className="flex items-start gap-3 border-b border-border bg-surface-2 px-4 py-2 text-xs"
     >
       <ul className="flex-1 space-y-0.5 text-muted">
+        {note !== null && <li>{note}</li>}
         {warnings.map((warning) => (
           <li key={warning.message}>
             {warning.message} — {describeSlides(warning.slides)}.

@@ -22,7 +22,7 @@ export function useExternalOpen(): void {
     const openFirstDeck = (paths: readonly string[]) => {
       // Several files can be dropped at once, and only decks mean anything
       // here. The first one wins rather than all of them: there is one window.
-      const deck = paths.find((path) => /\.pptx$/iu.test(path))
+      const deck = paths.find((path) => /\.(pptx|odp)$/iu.test(path))
       if (deck === undefined) return
 
       if (!useDeckStore.getState().saved) {

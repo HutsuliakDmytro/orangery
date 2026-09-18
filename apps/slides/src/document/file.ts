@@ -96,3 +96,33 @@ export async function writeDeckFile(
 
   return { path: result.path, backupPath: result.backup_path }
 }
+
+/** A directory to put a deck's worth of pictures in. */
+export async function pickDirectory(): Promise<string | null> {
+  if (!isTauri()) return null
+
+  const selected = await openDialog({ directory: true, multiple: false })
+  return typeof selected === 'string' ? selected : null
+}
+
+/** Somewhere to put one exported file, with the extension already suggested. */
+export async function pickExportPath(suggestedName: string, extension: string) {
+  if (!isTauri()) return null
+
+  const selected = await saveDialog({
+    defaultPath: suggestedName,
+    filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+  })
+
+  return selected ?? null
+}
+
+/**
+ * Writes bytes that are not a deck.
+ *
+ * No backup: a picture being exported has no previous version worth keeping,
+ * and a `.png.bak` beside every slide would be a directory nobody wants.
+ */
+export async function writeFileBytes(path: string, bytes: Uint8Array): Promise<void> {
+  await invoke('write_document', { path, bytes: [...bytes], keepBackup: false })
+}

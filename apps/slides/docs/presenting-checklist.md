@@ -51,3 +51,24 @@ Run it on macOS before a release, with a real projector or a second monitor.
 Anything that needed a second try, and anything that took longer than a second
 to respond. A presentation that works and hesitates is a presentation nobody
 wants to give.
+
+---
+
+# Exporting pictures — the other manual check
+
+A slide's text is HTML inside a `foreignObject`, and whether an engine will
+rasterise that out of an `<img>` is a question about the engine. WebKit has been
+inconsistent about it for years, and WebKit is what the app runs in on macOS.
+The SVG path has no such question; the PNG and JPEG ones do.
+
+1. Open a deck with text, a picture, a table and a chart on one slide.
+2. **Export Slide as SVG.** Open the file in a browser: everything is there. Open
+   it in Inkscape or Illustrator: the shapes are there and the text may be laid
+   out differently, because the fonts are named and not embedded.
+3. **Export Slide as PNG.** Open it. The text must be there. A picture with the
+   shapes and no words is the failure this check exists for.
+4. **Export Slide as JPEG.** Same, and the background is white rather than black.
+5. **Export Every Slide as PNG** into an empty directory. One file per slide,
+   named so the directory sorts in the order the deck runs.
+6. Try a deck of forty slides. It should finish, and it should not freeze the
+   window while it does.

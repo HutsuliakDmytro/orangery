@@ -5,10 +5,13 @@ import {
   nameOf,
   pickDeckPath,
   pickPicturePath,
+  pickDirectory,
+  pickExportPath,
   pickSavePath,
   readDeckFile,
   readFileBytes,
   writeDeckFile,
+  writeFileBytes,
 } from '../document/file'
 import {
   addSection,
@@ -38,8 +41,10 @@ import {
   writePart,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
+import { pictureName, rasterise, slideSvg } from '../document/export-image'
+import type { RasterType } from '../document/export-image'
 import { ICON_SIZE, ICONS } from '../document/icons'
-import { useDeckStore } from '../store/deck-store'
+import { currentSlide, useDeckStore } from '../store/deck-store'
 import { closeShowWindows, openShowWindows } from '../document/show-windows'
 import { useShowStore } from '../store/show-store'
 import { useEditorStore } from '../store/editor-store'
@@ -758,6 +763,123 @@ export const printCommands: readonly Command[] = (
   },
 }))
 
+/**
+ * The deck as pictures.
+ *
+ * SVG is what the app draws, written out; PNG and JPEG are that put through the
+ * browser's own rasteriser. Whether an engine will rasterise the HTML inside a
+ * `foreignObject` — which is where a slide's text lives — is a question about
+ * the engine, so a failure is said out loud rather than written to disk as a
+ * blank picture.
+ */
+export const exportCommands: readonly Command[] = [
+  {
+    id: 'export.svg',
+    label: 'Export Slide as SVG…',
+    group: 'file',
+    isEnabled: () => isTauri() && currentSlide(useDeckStore.getState()) !== null,
+    run: () => {
+      void exportCurrent('svg')
+    },
+  },
+  {
+    id: 'export.png',
+    label: 'Export Slide as PNG…',
+    group: 'file',
+    isEnabled: () => isTauri() && currentSlide(useDeckStore.getState()) !== null,
+    run: () => {
+      void exportCurrent('png')
+    },
+  },
+  {
+    id: 'export.jpeg',
+    label: 'Export Slide as JPEG…',
+    group: 'file',
+    isEnabled: () => isTauri() && currentSlide(useDeckStore.getState()) !== null,
+    run: () => {
+      void exportCurrent('jpeg')
+    },
+  },
+  {
+    id: 'export.png-all',
+    label: 'Export Every Slide as PNG…',
+    group: 'file',
+    isEnabled: () => isTauri() && (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      void exportEvery('png')
+    },
+  },
+  {
+    id: 'export.jpeg-all',
+    label: 'Export Every Slide as JPEG…',
+    group: 'file',
+    isEnabled: () => isTauri() && (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      void exportEvery('jpeg')
+    },
+  },
+]
+
+type Picture = 'svg' | 'png' | 'jpeg'
+
+const MIME: Record<'png' | 'jpeg', RasterType> = {
+  png: 'image/png',
+  jpeg: 'image/jpeg',
+}
+
+/** The bytes of one slide in one format. */
+async function pictureOf(slide: Slide, kind: Picture): Promise<Uint8Array> {
+  const { open } = useDeckStore.getState()
+  if (open === null) throw new Error('nothing is open')
+
+  const markup = slideSvg(open.deck, slide, open.themes, open.package)
+  if (kind === 'svg') return new TextEncoder().encode(markup)
+
+  // Twice the slide's own size in points, which is about 144 dpi: a slide is
+  // usually looked at on a screen, and a picture of one that is soft is worse
+  // than one that is large.
+  const size = {
+    width: open.deck.slideSize.width / 12700,
+    height: open.deck.slideSize.height / 12700,
+  }
+  return rasterise(markup, size, MIME[kind], 2)
+}
+
+async function exportCurrent(kind: Picture): Promise<void> {
+  const slide = currentSlide(useDeckStore.getState())
+  const { open } = useDeckStore.getState()
+  if (slide === null || open === null) return
+
+  const suggested = pictureName(nameOf(open.path ?? 'Presentation.pptx'), 0, 1, kind)
+  const path = await pickExportPath(suggested, kind)
+  if (path === null) return
+
+  try {
+    await writeFileBytes(path, await pictureOf(slide, kind))
+  } catch (cause) {
+    useDeckStore.setState({ error: cause instanceof Error ? cause.message : 'the export failed' })
+  }
+}
+
+async function exportEvery(kind: 'png' | 'jpeg'): Promise<void> {
+  const { open } = useDeckStore.getState()
+  if (open === null) return
+
+  const directory = await pickDirectory()
+  if (directory === null) return
+
+  const name = nameOf(open.path ?? 'Presentation.pptx')
+
+  try {
+    for (const [index, slide] of open.deck.slides.entries()) {
+      const file = pictureName(name, index, open.deck.slides.length, kind)
+      await writeFileBytes(`${directory}/${file}`, await pictureOf(slide, kind))
+    }
+  } catch (cause) {
+    useDeckStore.setState({ error: cause instanceof Error ? cause.message : 'the export failed' })
+  }
+}
+
 export const zoomCommands: readonly Command[] = [
   {
     id: 'view.master',
@@ -1171,6 +1293,7 @@ export function registerBuiltinCommands(): void {
   registerAll(paragraphCommands)
   registerAll(spacingCommands)
   registerAll(slideEditCommands)
+  registerAll(exportCommands)
   registerAll(printCommands)
   registerAll(showCommands)
   registerAll(zoomCommands)

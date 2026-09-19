@@ -45,7 +45,7 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { browserName: 'webkit' },
-      testMatch: /(raster|opening)\.spec\.ts/u,
+      testMatch: /(raster|opening|printing)\.spec\.ts/u,
     },
   ],
 

@@ -82,7 +82,33 @@ body {
 }
 
 @media print {
-  body > *:not(.orangery-print-root),
+  /* The app is mounted inside `#root`, so the print view is a grandchild of the
+     body rather than a child of it. Hiding every child of the body that is not
+     the app's own root therefore hid `#root` — and with it the thing being
+     printed: every page came out blank, and a PDF of a seven-slide deck was one
+     empty sheet. What has to step aside is the app's chrome, not the element
+     the app lives in. */
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  /* Anything else the body holds — a portal, a dialog — has nothing to do with
+     paper; the one that contains the print view stays. */
+  body > *:not(:has(.orangery-print)) {
+    display: none !important;
+  }
+
+  .orangery-print-root {
+    /* A column the height of the window on screen; on paper it is as long as
+       the deck, and the printer does the paginating. */
+    display: block !important;
+    height: auto !important;
+  }
+
   .orangery-print-root > *:not(.orangery-print) {
     display: none !important;
   }

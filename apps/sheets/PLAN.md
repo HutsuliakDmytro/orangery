@@ -50,7 +50,7 @@
 Мета: відкрити чужу книгу, побачити її правильно (значення з кешу), зберегти без змін — Excel не помічає різниці.
 
 ### 1.1 Пакет
-- [ ] ADR `0002-xlsx-roundtrip.md`: що моделюємо, що passthrough (pivotCache/pivotTable, slicers, queryTables, connections, vbaProject, customXml, externalLinks, metadata, richData)
+- [x] ADR `0002-xlsx-roundtrip.md`: що моделюємо, що passthrough (pivotCache/pivotTable, slicers, queryTables, connections, vbaProject, customXml, externalLinks, metadata, richData)
 - [ ] `ooxml-spreadsheet`: `workbook.xml` (sheets, definedNames, calcPr, workbookPr/date1904, bookViews), `worksheets/*` (dimension, sheetViews, cols, sheetData, mergeCells, conditionalFormatting, dataValidations, hyperlinks, pageSetup, autoFilter, drawing/legacyDrawing rels), `sharedStrings`, `styles` (numFmts, fonts, fills, borders, cellXfs, cellStyles, dxfs), `theme`, `calcChain`, `tables/*`, `comments`/`threadedComments`/`persons`, `vmlDrawing`
 - [ ] Стрімінговий парсер `sheetData` (SAX-режим fast-xml-parser або власний) — файл на 500k рядків не повинен вантажити DOM XML
 - [ ] Модель: sparse cells, row/col metadata, style index → resolved style кеш, merged ranges, freeze/split panes, zoom

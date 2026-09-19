@@ -1,6 +1,7 @@
 import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import '../context'
 import { appearanceCommands } from './appearance'
+import { chartCommands } from './chart'
 import { editCommands } from './edit'
 import { fileCommands } from './file'
 import { formatCommands } from './format'
@@ -24,6 +25,7 @@ export function registerBuiltinCommands(): void {
   registerAll(appearanceCommands)
   registerAll(insertCommands)
   registerAll(imageCommands)
+  registerAll(chartCommands)
   registerAll(searchCommandDefinitions)
   registerAll(tableCommands)
   registerAll(viewCommands)

@@ -20,6 +20,7 @@ import type { XmlNode } from '@orangery/ooxml-core'
 import type { ProseMirrorMarkJson, ProseMirrorNodeJson } from './prosemirror-json'
 import { resolveThemeFont } from '@orangery/ooxml-drawingml'
 import { imageNode, parseDrawing } from './image'
+import { chartNode, parseChartDrawing } from './chart'
 import { listBuilder } from './list-nesting'
 import { isBulletList } from './numbering'
 import type { NumberingCatalogue } from './numbering'
@@ -388,7 +389,7 @@ function parseRun(
   run: XmlNode,
   warnings: ParseWarning[],
   theme: ThemeFonts,
-  resolveImage?: (relationshipId: string) => string | null,
+  drawings: Drawings,
   footnoteText?: (id: number) => string,
 ): ProseMirrorNodeJson[] {
   const { marks, preserved, original } = parseRunProperties(findChild(run, 'w:rPr'), theme)
@@ -458,6 +459,20 @@ function parseRun(
         break
       }
       case 'w:drawing': {
+        // A chart is a drawing too, and one whose graphic holds a relationship
+        // id rather than a picture. Tried first: it would otherwise fall
+        // through to the passthrough below and render as nothing.
+        const chart = parseChartDrawing(child)
+        if (chart !== null) {
+          const node = chartNode(
+            chart,
+            drawings.resolveChart?.(chart.relationshipId) ?? null,
+            drawings.themeColors,
+          )
+          nodes.push(allMarks.length > 0 ? { ...node, marks: allMarks } : node)
+          break
+        }
+
         const image = parseDrawing(child)
         if (image === null) {
           // A floating or anchored drawing: preserved rather than flattened into
@@ -476,7 +491,7 @@ function parseRun(
         }
         // The run's properties belong to the picture's run; without them the
         // rebuilt `w:r` would lose whatever the source declared on it.
-        const node = imageNode(image, resolveImage?.(image.relationshipId) ?? '')
+        const node = imageNode(image, drawings.resolveImage?.(image.relationshipId) ?? '')
         nodes.push(allMarks.length > 0 ? { ...node, marks: allMarks } : node)
         break
       }
@@ -515,7 +530,7 @@ function parseParagraph(
   paragraph: XmlNode,
   warnings: ParseWarning[],
   theme: ThemeFonts,
-  resolveImage?: (relationshipId: string) => string | null,
+  drawings: Drawings,
   footnoteText?: (id: number) => string,
 ): ProseMirrorNodeJson {
   const properties = parseParagraphProperties(findChild(paragraph, 'w:pPr'))
@@ -543,7 +558,7 @@ function parseParagraph(
         for (const inner of children(child)) {
           if (tagName(inner) !== 'w:r') continue
 
-          const runs = parseRun(inner, warnings, theme, resolveImage, footnoteText)
+          const runs = parseRun(inner, warnings, theme, drawings, footnoteText)
           const marks = commentMarks()
 
           for (const node of runs) node.marks = [...(node.marks ?? []), ...marks, revision]
@@ -562,7 +577,7 @@ function parseParagraph(
         break
       }
       case 'w:r': {
-        const runs = parseRun(child, warnings, theme, resolveImage, footnoteText)
+        const runs = parseRun(child, warnings, theme, drawings, footnoteText)
         const marks = commentMarks()
 
         // The run that only carries the reference is the marker itself, not
@@ -581,7 +596,7 @@ function parseParagraph(
         const relationshipId = attribute(child, 'r:id')
         const anchor = attribute(child, 'w:anchor')
         const inner = children(child).flatMap((run) =>
-          tagName(run) === 'w:r' ? parseRun(run, warnings, theme, resolveImage, footnoteText) : [],
+          tagName(run) === 'w:r' ? parseRun(run, warnings, theme, drawings, footnoteText) : [],
         )
         const href = relationshipId ?? (anchor !== undefined ? `#${anchor}` : null)
         for (const node of inner) {
@@ -669,6 +684,13 @@ function parseParagraph(
   }
 }
 
+/** What the drawings in a document need from the package they came out of. */
+interface Drawings {
+  resolveImage?: (relationshipId: string) => string | null
+  resolveChart?: (relationshipId: string) => string | null
+  themeColors: readonly (readonly [string, string])[]
+}
+
 export interface ParseContext {
   /** Theme fonts from `word/theme/theme1.xml`, for resolving `w:*Theme` slots. */
   theme?: ThemeFonts
@@ -678,6 +700,16 @@ export interface ParseContext {
    * round-trip, they just do not render.
    */
   resolveImage?: (relationshipId: string) => string | null
+  /**
+   * Turns a relationship id into the text of the chart part it points at.
+   * Without it a chart still round-trips; it draws an empty frame.
+   */
+  resolveChart?: (relationshipId: string) => string | null
+  /**
+   * The document theme's colour slots resolved to hexes — `accent1` to
+   * `#4472C4` and so on — which is what a chart naming no colours is drawn in.
+   */
+  themeColors?: readonly (readonly [string, string])[]
   /** Note text by footnote id, from `word/footnotes.xml`. */
   footnoteText?: (id: number) => string
   /**
@@ -736,7 +768,7 @@ function parseTableBlock(
   table: XmlNode,
   warnings: ParseWarning[],
   theme: ThemeFonts,
-  resolveImage?: (relationshipId: string) => string | null,
+  drawings: Drawings,
   footnoteText?: (id: number) => string,
 ): ProseMirrorNodeJson {
   return parseTable(table, (cell) =>
@@ -744,10 +776,10 @@ function parseTableBlock(
       const tag = tagName(node)
 
       if (tag === 'w:p') {
-        return [parseParagraph(node, warnings, theme, resolveImage, footnoteText)]
+        return [parseParagraph(node, warnings, theme, drawings, footnoteText)]
       }
       if (tag === 'w:tbl') {
-        return [parseTableBlock(node, warnings, theme, resolveImage, footnoteText)]
+        return [parseTableBlock(node, warnings, theme, drawings, footnoteText)]
       }
       if (tag === null || tag === 'w:tcPr' || isTextNode(node)) return []
 
@@ -759,7 +791,11 @@ function parseTableBlock(
 
 export function parseDocument(xml: string, context: ParseContext = {}): ParsedDocument {
   const theme = context.theme ?? NO_THEME
-  const resolveImage = context.resolveImage
+  const drawings: Drawings = {
+    resolveImage: context.resolveImage,
+    resolveChart: context.resolveChart,
+    themeColors: context.themeColors ?? [],
+  }
   const footnoteText = context.footnoteText
   runKeyCounter = 0
   openComments = []
@@ -786,7 +822,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
 
     switch (tag) {
       case 'w:p': {
-        const paragraph = parseParagraph(child, warnings, theme, resolveImage, footnoteText)
+        const paragraph = parseParagraph(child, warnings, theme, drawings, footnoteText)
         const sectPr = paragraph.attrs?.['sectionBreak']
 
         if (typeof sectPr !== 'string') {
@@ -803,7 +839,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
         break
       }
       case 'w:tbl':
-        blocks.push(parseTableBlock(child, warnings, theme, resolveImage, footnoteText))
+        blocks.push(parseTableBlock(child, warnings, theme, drawings, footnoteText))
         break
       case 'w:sectPr':
         sectionProperties = serializeNode(child)

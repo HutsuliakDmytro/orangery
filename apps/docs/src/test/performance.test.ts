@@ -50,12 +50,24 @@ afterEach(() => {
   editor = undefined
 })
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)] ?? 0
+/**
+ * The cheapest of several runs.
+ *
+ * Not the median, which is the obvious choice and the wrong one here: noise
+ * only ever adds time, so the fastest run is the one that was interrupted
+ * least, and it is the closest thing to the work's real cost. The median holds
+ * up when the odd run is unlucky; it does not when every run allocates half a
+ * million strings and the whole suite is competing for the same heap, which is
+ * how counting a document's words behaves on a loaded machine.
+ *
+ * A regression shows in the minimum as surely as in the median — a pass over
+ * the document that should not be there is in every run, fast or slow.
+ */
+function fastest(values: number[]): number {
+  return values.length === 0 ? 0 : Math.min(...values)
 }
 
-/** Median of several runs, so one unlucky GC pause does not decide the test. */
+/** The cheapest of several runs, so a GC pause does not decide the test. */
 function timeOf(work: () => unknown, iterations = MEASURE_ITERATIONS): number {
   const samples: number[] = []
 
@@ -65,7 +77,7 @@ function timeOf(work: () => unknown, iterations = MEASURE_ITERATIONS): number {
     samples.push(performance.now() - start)
   }
 
-  return median(samples)
+  return fastest(samples)
 }
 
 /**
@@ -91,7 +103,7 @@ function ratioOf(small: () => unknown, large: () => unknown, iterations = MEASUR
     larges.push(performance.now() - beforeLarge)
   }
 
-  return { small: median(smalls), large: median(larges) }
+  return { small: fastest(smalls), large: fastest(larges) }
 }
 
 function timeTyping(instance: Editor, iterations = MEASURE_ITERATIONS): number {

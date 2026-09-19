@@ -21,5 +21,24 @@ export { readSharedStrings, readWorkbook, sheetPath, textOf } from './workbook'
 export type { SheetEntry, Workbook } from './workbook'
 export { newWorkbook } from './new-workbook'
 export type { NewSheet } from './new-workbook'
+export {
+  cellAt,
+  cellsOfRow,
+  emptySheet,
+  extentOf,
+  positionOf,
+  putCell,
+  rowsWithCells,
+} from './cells'
+export type { Cell, CellType, Formula, FormulaKind, RowProperties, SheetCells } from './cells'
+export {
+  decodeText,
+  encodeText,
+  readSheetData,
+  replaceSheetData,
+  scanSheetData,
+  writeSheetData,
+} from './sheet-data'
+export type { SheetDataHandlers } from './sheet-data'
 export { clearCell, insertRow, openSheet, readCell, removeRow, saveSheet, writeCell } from './sheet'
 export type { CellValue, Sheet } from './sheet'

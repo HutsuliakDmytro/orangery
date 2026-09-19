@@ -52,6 +52,22 @@ describe('reading the styles a deck writes out', () => {
     expect(styles.get('{A}')?.firstRow?.bold).toBe(true)
   })
 
+  it('reads the colour a header row states for its words', () => {
+    // The point of a header row: solid accent behind white text. Unread, the
+    // words fall back to the theme's text colour and come out black on blue.
+    const styles = readTableStyles(
+      packageWith(
+        `<a:tblStyleLst ${NS}><a:tblStyle styleId="{A}"><a:firstRow><a:tcTxStyle b="on">` +
+          '<a:solidFill><a:schemeClr val="lt1"/></a:solidFill>' +
+          '</a:tcTxStyle></a:firstRow></a:tblStyle></a:tblStyleLst>',
+      ),
+    )
+
+    expect(styles.get('{A}')?.firstRow?.color).toMatchObject({
+      source: { kind: 'scheme', name: 'lt1' },
+    })
+  })
+
   it('finds nothing in the file PowerPoint actually writes', () => {
     // A GUID and no definition, which is what a deck from PowerPoint contains.
     const styles = readTableStyles(packageWith(`<a:tblStyleLst ${NS} def="{5C22}"/>`))
@@ -82,6 +98,17 @@ describe('choosing a style', () => {
 
   it('paints nothing at all for a table that names no style', () => {
     expect(styleFor(new Map(), null).firstRow).toBeNull()
+  })
+})
+
+describe('the stand-in for a style the deck does not contain', () => {
+  it('writes the header row in the theme’s light colour, not in the app’s', () => {
+    // "Medium Style 2" is a solid accent header with white bold text. `lt1`
+    // rather than white, because on a deck whose light colour is not white the
+    // header text is that colour.
+    expect(builtInApproximation().firstRow?.color).toMatchObject({
+      source: { kind: 'scheme', name: 'lt1' },
+    })
   })
 })
 

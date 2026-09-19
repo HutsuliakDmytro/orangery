@@ -48,7 +48,7 @@ import {
   textOfBody,
 } from '@orangery/ooxml-drawingml'
 import type { ColorContext, PmNode, Theme } from '@orangery/ooxml-drawingml'
-import { fillPaint, linePaint } from './paint'
+import { fillPaint, linePaint, textPaint } from './paint'
 import { mediaUrl } from './media'
 import { TableView } from './table-view'
 import { ChartView } from './chart-view'
@@ -767,171 +767,171 @@ function ShapeText({
   const fields = { number: slideNumberOf(deck, slide), now: new Date() }
 
   return (
-    <foreignObject
-      x={transform.x}
-      y={transform.y}
-      width={transform.width}
-      height={transform.height}
-    >
-      {/* React puts the XHTML namespace on children of a foreignObject itself,
-          so the div needs nothing beyond being inside one.
+    /* The box is stated in pixels and the group scales it back into EMU.
 
-          Laid out in CSS pixels and scaled back into EMU, rather than laid out
-          in EMU. Text is the one thing in a drawing the browser measures for
-          us, and it measures in pixels: a 44-point title is 558800 EMU, and
-          Blink clamps `font-size` at ten thousand, so text in EMU is drawn at a
-          fiftieth of its size in Chromium — invisible — and not at all by a
-          rasteriser. It is also what the editor already assumes: Tiptap writes
-          its sizes in points, which only means the same thing as the text
-          beside it in a box measured in pixels. */}
-      <div
-        ref={box}
-        style={{
-          width: pixels(transform.width),
-          height: pixels(transform.height),
-          transform: `scale(${String(EMU_PER_PIXEL)})`,
-          transformOrigin: '0 0',
-          // PowerPoint's defaults when the shape states none.
-          paddingLeft: pixels(insets?.left ?? 91440),
-          paddingRight: pixels(insets?.right ?? 91440),
-          paddingTop: pixels(insets?.top ?? 45720),
-          paddingBottom: pixels(insets?.bottom ?? 45720),
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: anchor === 'ctr' ? 'center' : anchor === 'b' ? 'flex-end' : 'flex-start',
-          overflow: 'hidden',
-        }}
+       Text is the one thing in a drawing the browser measures for us, and it
+       measures in CSS pixels: a 44-point title is 558800 EMU, and Blink clamps
+       `font-size` at ten thousand, so text laid out in EMU is drawn at a
+       fiftieth of its size in Chromium — invisible — and not at all by a
+       rasteriser. It is also what the editor already assumes: Tiptap writes its
+       sizes in points.
+
+       The scale is on the group and not in CSS on the div, which is the obvious
+       place for it and the wrong one: WebKit does not apply a CSS transform to
+       the contents of a `foreignObject`, so that spelling fixes Chromium by
+       blanking macOS. An SVG transform is how a `foreignObject` is placed at
+       all, and both engines do apply it. */
+    <g transform={`scale(${String(EMU_PER_PIXEL)})`}>
+      <foreignObject
+        x={pixels(transform.x)}
+        y={pixels(transform.y)}
+        width={pixels(transform.width)}
+        height={pixels(transform.height)}
       >
-        {/* One block holding the paragraphs, so their own height can be read
+        {/* React puts the XHTML namespace on children of a foreignObject itself,
+          so the div needs nothing beyond being inside one. */}
+        <div
+          ref={box}
+          style={{
+            width: '100%',
+            height: '100%',
+            // PowerPoint's defaults when the shape states none.
+            paddingLeft: pixels(insets?.left ?? 91440),
+            paddingRight: pixels(insets?.right ?? 91440),
+            paddingTop: pixels(insets?.top ?? 45720),
+            paddingBottom: pixels(insets?.bottom ?? 45720),
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent:
+              anchor === 'ctr' ? 'center' : anchor === 'b' ? 'flex-end' : 'flex-start',
+            overflow: 'hidden',
+          }}
+        >
+          {/* One block holding the paragraphs, so their own height can be read
             without the box it sits in rounding it up to itself. */}
-        <div ref={words}>
-          {prompt !== null ? (
-            <p style={{ margin: 0, opacity: 0.45 }}>{prompt}</p>
-          ) : editing === true ? (
-            <TextEditor
-              doc={textBodyToDoc(shape.text, {
-                field: (type, cached) => fieldValue(type, cached, fields),
-              })}
-              onCommit={(edited) => {
-                onCommitText?.(shape.id, edited)
-              }}
-              onCancel={() => {
-                onLeave?.()
-              }}
-            />
-          ) : (
-            shape.text.paragraphs.map((paragraph, index) => {
-              const properties = resolveParagraphProperties(paragraph.properties, chain)
-              const align = properties.align
+          <div ref={words}>
+            {prompt !== null ? (
+              <p style={{ margin: 0, opacity: 0.45 }}>{prompt}</p>
+            ) : editing === true ? (
+              <TextEditor
+                doc={textBodyToDoc(shape.text, {
+                  field: (type, cached) => fieldValue(type, cached, fields),
+                })}
+                onCommit={(edited) => {
+                  onCommitText?.(shape.id, edited)
+                }}
+                onCancel={() => {
+                  onLeave?.()
+                }}
+              />
+            ) : (
+              shape.text.paragraphs.map((paragraph, index) => {
+                const properties = resolveParagraphProperties(paragraph.properties, chain)
+                const align = properties.align
 
-              return (
-                <p
-                  key={index}
-                  style={{
-                    margin: 0,
-                    marginLeft: pixels(properties.marginLeft ?? 0),
-                    textIndent: pixels(properties.indent ?? 0),
-                    textAlign:
-                      align === 'ctr'
-                        ? 'center'
-                        : align === 'r'
-                          ? 'right'
-                          : align === 'just'
-                            ? 'justify'
-                            : 'left',
-                    lineHeight:
-                      (properties.lineSpacing?.kind === 'percent'
-                        ? properties.lineSpacing.value
-                        : 1.2) *
-                      (1 - lineReduction),
-                  }}
-                >
-                  {paragraph.runs.map((run, runIndex) => {
-                    const resolved = resolveRunProperties(run.properties, properties)
-                    const family = resolveThemeFont(
-                      theme?.fonts ?? { major: null, minor: null },
-                      resolved?.font ?? undefined,
-                    )
-                    const named = resolved?.font?.startsWith('+') === true ? family : resolved?.font
+                return (
+                  <p
+                    key={index}
+                    style={{
+                      margin: 0,
+                      marginLeft: pixels(properties.marginLeft ?? 0),
+                      textIndent: pixels(properties.indent ?? 0),
+                      textAlign:
+                        align === 'ctr'
+                          ? 'center'
+                          : align === 'r'
+                            ? 'right'
+                            : align === 'just'
+                              ? 'justify'
+                              : 'left',
+                      lineHeight:
+                        (properties.lineSpacing?.kind === 'percent'
+                          ? properties.lineSpacing.value
+                          : 1.2) *
+                        (1 - lineReduction),
+                    }}
+                  >
+                    {paragraph.runs.map((run, runIndex) => {
+                      const resolved = resolveRunProperties(run.properties, properties)
+                      const family = resolveThemeFont(
+                        theme?.fonts ?? { major: null, minor: null },
+                        resolved?.font ?? undefined,
+                      )
+                      const named =
+                        resolved?.font?.startsWith('+') === true ? family : resolved?.font
 
-                    if (run.kind === 'break') return <br key={runIndex} />
+                      if (run.kind === 'break') return <br key={runIndex} />
 
-                    // A field shows what it stands for; its text is only the
-                    // answer whatever saved the file last happened to write.
-                    const shown =
-                      run.kind === 'field' ? fieldValue(run.fieldType, run.text, fields) : run.text
+                      // A field shows what it stands for; its text is only the
+                      // answer whatever saved the file last happened to write.
+                      const shown =
+                        run.kind === 'field'
+                          ? fieldValue(run.fieldType, run.text, fields)
+                          : run.text
 
-                    // A link on a run is a relationship id and nothing else; what
-                    // it points at is a question about the package.
-                    const link =
-                      pkg === undefined || !playing
-                        ? null
-                        : resolveHyperlink(pkg, deck, slide.path, {
-                            relationshipId: resolved?.hyperlink ?? null,
-                            action: null,
-                          })
+                      // A link on a run is a relationship id and nothing else; what
+                      // it points at is a question about the package.
+                      const link =
+                        pkg === undefined || !playing
+                          ? null
+                          : resolveHyperlink(pkg, deck, slide.path, {
+                              relationshipId: resolved?.hyperlink ?? null,
+                              action: null,
+                            })
 
-                    const drawn = (
-                      <span
-                        key={runIndex}
-                        style={{
-                          // In points, which is what the file states and what
-                          // the editor writes: one number, one meaning, and CSS
-                          // does the conversion.
-                          fontSize: `${String((resolved?.size ?? 18) * scale)}pt`,
-                          fontWeight: resolved?.bold === true ? 700 : 400,
-                          fontStyle: resolved?.italic === true ? 'italic' : 'normal',
-                          textDecoration:
-                            resolved?.underline != null && resolved.underline !== 'none'
-                              ? 'underline'
-                              : undefined,
-                          fontFamily: named == null ? undefined : fontStackFor(named),
-                          color: (() => {
-                            const colour = resolved?.color
-                            if (colour == null) return undefined
-                            const paint = fillPaint(
-                              { kind: 'solid', color: colour },
-                              context,
-                              'text',
-                            )
-                            return paint.paint === 'none' ? undefined : paint.paint
-                          })(),
-                        }}
-                      >
-                        {shown}
-                      </span>
-                    )
+                      const drawn = (
+                        <span
+                          key={runIndex}
+                          style={{
+                            // In points, which is what the file states and what
+                            // the editor writes: one number, one meaning, and CSS
+                            // does the conversion.
+                            fontSize: `${String((resolved?.size ?? 18) * scale)}pt`,
+                            fontWeight: resolved?.bold === true ? 700 : 400,
+                            fontStyle: resolved?.italic === true ? 'italic' : 'normal',
+                            textDecoration:
+                              resolved?.underline != null && resolved.underline !== 'none'
+                                ? 'underline'
+                                : undefined,
+                            fontFamily: named == null ? undefined : fontStackFor(named),
+                            color: textPaint(resolved?.color ?? null, context),
+                          }}
+                        >
+                          {shown}
+                        </span>
+                      )
 
-                    return link === null ? (
-                      drawn
-                    ) : (
-                      <a
-                        key={runIndex}
-                        href={link.kind === 'url' ? link.url : undefined}
-                        style={{ cursor: 'pointer' }}
-                        onClick={(event) => {
-                          // The browser would follow an href into this window,
-                          // and a presentation that navigates away has ended.
-                          event.preventDefault()
-                          event.stopPropagation()
-                          onFollowLink?.(link)
-                        }}
-                        onPointerDown={(event) => {
-                          event.stopPropagation()
-                        }}
-                      >
-                        {drawn}
-                      </a>
-                    )
-                  })}
-                </p>
-              )
-            })
-          )}
+                      return link === null ? (
+                        drawn
+                      ) : (
+                        <a
+                          key={runIndex}
+                          href={link.kind === 'url' ? link.url : undefined}
+                          style={{ cursor: 'pointer' }}
+                          onClick={(event) => {
+                            // The browser would follow an href into this window,
+                            // and a presentation that navigates away has ended.
+                            event.preventDefault()
+                            event.stopPropagation()
+                            onFollowLink?.(link)
+                          }}
+                          onPointerDown={(event) => {
+                            event.stopPropagation()
+                          }}
+                        >
+                          {drawn}
+                        </a>
+                      )
+                    })}
+                  </p>
+                )
+              })
+            )}
+          </div>
         </div>
-      </div>
-    </foreignObject>
+      </foreignObject>
+    </g>
   )
 }
 

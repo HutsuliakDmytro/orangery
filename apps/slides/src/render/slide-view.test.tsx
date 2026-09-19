@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { cleanup, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { EMU_PER_PIXEL } from '@orangery/ooxml-drawingml'
 import {
   applyFooters,
   moveSlide,
@@ -120,6 +121,26 @@ describe('text', () => {
     expect(screen.getByText('bold')).toHaveStyle({ fontWeight: '700' })
     expect(screen.getByText('italic')).toHaveStyle({ fontStyle: 'italic' })
     expect(screen.getByText('orange')).toHaveStyle({ color: 'rgb(255, 122, 0)' })
+  })
+
+  it('states the colour of a run that states none, rather than inheriting one', async () => {
+    // Left to inherit, a slide's words take the colour of the app's chrome —
+    // on the dark theme, near-white on a white slide. The fallback is the
+    // theme's `tx1`, which is what PowerPoint falls back to.
+    await draw('text-formatting')
+
+    expect(screen.getByText('Plain').style.color).toBe('rgb(0, 0, 0)')
+  })
+
+  it('lays text out in pixels, inside a group that scales it back to EMU', async () => {
+    // A 44-point title is 558800 EMU, and Blink clamps `font-size` at ten
+    // thousand pixels: laid out in EMU, the text of every slide is invisible in
+    // Chromium and absent from every exported picture.
+    const { container } = await draw('placeholders')
+    const frame = container.querySelector('foreignObject')
+
+    expect(frame?.parentElement?.getAttribute('transform')).toBe(`scale(${String(EMU_PER_PIXEL)})`)
+    expect(Number(frame?.getAttribute('width'))).toBeLessThan(2000)
   })
 
   it('gives a placeholder the size it inherits rather than a default', async () => {

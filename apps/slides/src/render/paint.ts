@@ -118,3 +118,25 @@ export function linePaint(
       : { strokeLinecap: line.cap === 'flat' ? ('butt' as const) : line.cap }),
   }
 }
+
+/**
+ * The colour a piece of text is drawn in.
+ *
+ * A run that states no colour does not mean "whatever colour the window is".
+ * Left to inherit, a slide's words take the colour of the app's chrome — on the
+ * dark theme, near-white on a white slide, which is a deck rendered invisible
+ * by a preference about the app (`CLAUDE.md`: the slide renders in its own
+ * theme's colours, never tinted by the app's).
+ *
+ * What it means instead is `tx1`, the theme's text colour, which is what
+ * PowerPoint falls back to and reaches through the master's colour map. Black
+ * where even that is missing: a deck with no theme is still a deck with words
+ * in it.
+ */
+export function textPaint(color: Color | null, context: ColorContext): string {
+  const stated = solidOf(color, context)
+  if (stated.paint !== 'none') return stated.paint
+
+  const themed = solidOf({ source: { kind: 'scheme', name: 'tx1' }, transforms: [] }, context)
+  return themed.paint === 'none' ? '#000000' : themed.paint
+}

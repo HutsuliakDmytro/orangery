@@ -7,7 +7,7 @@ import {
   tagName,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
-import { readFill } from '@orangery/ooxml-drawingml'
+import { readColorChild, readFill } from '@orangery/ooxml-drawingml'
 import type { Color, Fill } from '@orangery/ooxml-drawingml'
 import { TABLE_STYLES_PART } from './parts'
 import type { TableProperties } from '@orangery/ooxml-drawingml'
@@ -66,8 +66,13 @@ function readPart(node: XmlNode | undefined): TablePart | null {
 
   const text = findChild(node, 'a:tcTxStyle')
   const bold = text === undefined ? null : attribute(text, 'b') === 'on'
+  // The colour the style states for its words, which is a header row's whole
+  // point: solid accent behind white text. Left unread it falls back to the
+  // theme's text colour, and a white-on-accent header comes out black.
+  const solid = text === undefined ? undefined : findChild(text, 'a:solidFill')
+  const color = solid === undefined ? null : readColorChild(solid)
 
-  return { fill, bold, color: null }
+  return { fill, bold, color }
 }
 
 function fillOf(holder: XmlNode): Fill | null {
@@ -122,7 +127,14 @@ export function builtInApproximation(): TableStyle {
 
   return {
     wholeTable: null,
-    firstRow: { fill: accent(1), bold: true, color: null },
+    firstRow: {
+      fill: accent(1),
+      bold: true,
+      // `lt1` rather than white: on a deck whose light colour is not white, the
+      // header text is that colour, which is what "white bold text" means once
+      // the theme has a say.
+      color: { source: { kind: 'scheme', name: 'lt1' }, transforms: [] },
+    },
     lastRow: null,
     firstColumn: null,
     bandedRow: { fill: accent(0.2), bold: null, color: null },

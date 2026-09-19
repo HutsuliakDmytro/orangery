@@ -2,7 +2,7 @@ import { EMU_PER_PIXEL, textOfBody, visibleCells } from '@orangery/ooxml-drawing
 import type { ColorContext, Table, TableCell } from '@orangery/ooxml-drawingml'
 import { partsFor } from '@orangery/ooxml-presentation'
 import type { TableStyle } from '@orangery/ooxml-presentation'
-import { fillPaint, linePaint } from './paint'
+import { fillPaint, linePaint, textPaint } from './paint'
 
 /**
  * A table on a slide.
@@ -125,14 +125,21 @@ export function TableView({
           `cell-${placed.key}`,
         )
 
-        const bold =
+        const parts =
           style === undefined
-            ? false
+            ? []
             : partsFor(style, table.properties, {
                 row: placed.row,
                 column: placed.column,
                 rows: table.rows.length,
-              }).some((part) => part.bold === true)
+              })
+
+        const bold = parts.some((part) => part.bold === true)
+        const colour =
+          parts
+            .map((part) => part.color)
+            .filter((one) => one !== null)
+            .at(-1) ?? null
         const border = linePaint(placed.cell.properties?.borders.top ?? null, context, (emu) => emu)
 
         return (
@@ -150,33 +157,44 @@ export function TableView({
                   { stroke: '#D9D9D9', strokeWidth: 9525 }
                 : border)}
             />
-            <foreignObject x={placed.x} y={placed.y} width={placed.width} height={placed.height}>
-              {/* Laid out in pixels and scaled back, for the reason the text of
-                  a shape is: a cell's words are text, and text in EMU is past
-                  what Blink will lay out. */}
-              <div
-                style={{
-                  width: placed.width / EMU_PER_PIXEL,
-                  height: placed.height / EMU_PER_PIXEL,
-                  transform: `scale(${String(EMU_PER_PIXEL)})`,
-                  transformOrigin: '0 0',
-                  padding: 45720 / EMU_PER_PIXEL,
-                  boxSizing: 'border-box',
-                  display: 'flex',
-                  alignItems:
-                    placed.cell.properties?.anchor === 'ctr'
-                      ? 'center'
-                      : placed.cell.properties?.anchor === 'b'
-                        ? 'flex-end'
-                        : 'flex-start',
-                  fontSize: '18pt',
-                  fontWeight: bold ? 700 : undefined,
-                  overflow: 'hidden',
-                }}
+            {/* Stated in pixels and scaled back by the group, for the reason
+                the text of a shape is: a cell's words are text, and text in EMU
+                is past what Blink will lay out. The scale is on the group
+                because WebKit does not apply a CSS transform to the contents of
+                a `foreignObject`. */}
+            <g transform={`scale(${String(EMU_PER_PIXEL)})`}>
+              <foreignObject
+                x={placed.x / EMU_PER_PIXEL}
+                y={placed.y / EMU_PER_PIXEL}
+                width={placed.width / EMU_PER_PIXEL}
+                height={placed.height / EMU_PER_PIXEL}
               >
-                {placed.cell.text === null ? '' : textOfBody(placed.cell.text)}
-              </div>
-            </foreignObject>
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    padding: 45720 / EMU_PER_PIXEL,
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems:
+                      placed.cell.properties?.anchor === 'ctr'
+                        ? 'center'
+                        : placed.cell.properties?.anchor === 'b'
+                          ? 'flex-end'
+                          : 'flex-start',
+                    fontSize: '18pt',
+                    fontWeight: bold ? 700 : undefined,
+                    // Stated rather than inherited: what a cell inherits is the
+                    // colour of the app's chrome, which on the dark theme is
+                    // white text on a white cell.
+                    color: textPaint(colour, context),
+                    overflow: 'hidden',
+                  }}
+                >
+                  {placed.cell.text === null ? '' : textOfBody(placed.cell.text)}
+                </div>
+              </foreignObject>
+            </g>
             {onPickCell !== undefined && (
               <rect
                 x={placed.x}

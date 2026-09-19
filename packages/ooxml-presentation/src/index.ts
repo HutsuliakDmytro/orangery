@@ -44,15 +44,6 @@ export { buildThemeFile } from './theme-file'
 export { hiddenUntilAnimated, readAnimations } from './animations'
 export { addEffect, moveStep, removeEffect, setEffectTiming } from './write-animations'
 export {
-  cellsOf,
-  patchedWorkbook,
-  patchedWorkbookRows,
-  writeChartCache,
-  writeChartCategories,
-  writeChartPoints,
-} from './chart-data'
-export type { ChartCategories, ChartValues } from './chart-data'
-export {
   applyChange,
   applySlideChange,
   compareDecks,
@@ -156,6 +147,8 @@ export type { GeometryPoint } from './geometry-points'
 export type { NewShape } from './create-shape'
 export { insertPicture, relsPartFor, UnsupportedPictureError } from './insert-picture'
 export type { NewPicture } from './insert-picture'
+export { insertChart } from './insert-chart'
+export type { NewChart } from './insert-chart'
 export { defaultTableStyle, insertTable } from './insert-table'
 export { builtInApproximation, partsFor, readTableStyles, styleFor } from './table-styles'
 export type { TablePart, TableStyle } from './table-styles'

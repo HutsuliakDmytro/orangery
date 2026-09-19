@@ -75,8 +75,6 @@ export {
 export type { FormatScheme } from './format-scheme'
 export { readCellProperties, readTable, visibleCells } from './table'
 export type { CellProperties, Table, TableCell, TableProperties, TableRow } from './table'
-export { allSeries, chartKind, readChart } from './chart'
-export type { Chart, ChartKind, ChartPlot, ChartSeries, DataLabels } from './chart'
 export { docToParagraphs, textBodyToDoc, writeTextBody } from './text-prosemirror'
 export type { PmMark, PmNode } from './text-prosemirror'
 export {

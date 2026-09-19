@@ -1,14 +1,22 @@
-import { readPackage } from '@orangery/ooxml-core'
+import { parseRelationships, partDirectory, readPackage, resolveTarget } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
+  drawingRelationshipId,
   paletteOf,
   readSharedStrings,
   readSheetData,
+  readSheetDrawings,
   readStyles,
   readWorkbook,
   readWorksheet,
 } from '@orangery/ooxml-spreadsheet'
-import type { SheetCells, Styles, Workbook, Worksheet } from '@orangery/ooxml-spreadsheet'
+import type {
+  SheetCells,
+  SheetDrawing,
+  Styles,
+  Workbook,
+  Worksheet,
+} from '@orangery/ooxml-spreadsheet'
 import type { ColorPalette } from '@orangery/ooxml-spreadsheet'
 import { parseTheme } from '@orangery/ooxml-drawingml'
 import { getPartText } from '@orangery/ooxml-core'
@@ -26,6 +34,19 @@ import { getPartText } from '@orangery/ooxml-core'
  * (`apps/sheets/docs/adr/0002-xlsx-roundtrip.md`).
  */
 
+/** A drawing on a sheet, with the part it points at found in the package. */
+export interface AnchoredDrawing {
+  drawing: SheetDrawing
+  /**
+   * The chart part or the image, as a path into the package.
+   *
+   * Resolved on open because it takes two relationship files to find — the
+   * sheet's, then the drawing's — and null where either is missing, which is
+   * a file that refers to something it does not carry.
+   */
+  path: string | null
+}
+
 export interface OpenSheet {
   name: string
   path: string
@@ -33,6 +54,8 @@ export interface OpenSheet {
   hidden: boolean
   sheet: Worksheet
   cells: SheetCells
+  /** Charts and pictures, which sit on the sheet rather than in a cell. */
+  drawings: AnchoredDrawing[]
 }
 
 export interface OpenWorkbook {
@@ -70,6 +93,7 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
       hidden: entry.state !== 'visible',
       sheet: readWorksheet(text) ?? EMPTY_SHEET,
       cells: readSheetData(text),
+      drawings: drawingsOf(pkg, entry.path, text),
     }
   })
 
@@ -87,6 +111,45 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
     strings: readSharedStrings(pkg),
     palette,
   }
+}
+
+/** Where a part keeps its relationships, which is beside it and under `_rels`. */
+const relationshipsOf = (path: string): string => {
+  const directory = partDirectory(path)
+  const name = path.slice(directory.length + 1)
+  return `${directory}/_rels/${name}.rels`
+}
+
+/**
+ * The drawings on a sheet, and what each one points at.
+ *
+ * Two hops. The sheet names a drawing part by relationship id; the drawing
+ * part names a chart or an image the same way. Neither hop is a path — a
+ * relationship target is relative to the part that states it — which is why
+ * this is done here rather than guessed at from a file name.
+ */
+function drawingsOf(pkg: OoxmlPackage, sheetPath: string, sheetXml: string): AnchoredDrawing[] {
+  const id = drawingRelationshipId(sheetXml)
+  if (id === null) return []
+
+  const sheetRelationships = parseRelationships(getPartText(pkg, relationshipsOf(sheetPath)) ?? '')
+  const target = sheetRelationships.get(id)?.target
+  if (target === undefined) return []
+
+  const path = resolveTarget(target, partDirectory(sheetPath))
+  const xml = getPartText(pkg, path)
+  if (xml === undefined) return []
+
+  const relationships = parseRelationships(getPartText(pkg, relationshipsOf(path)) ?? '')
+  const directory = partDirectory(path)
+
+  return readSheetDrawings(xml).map((drawing) => {
+    const content = drawing.content
+    const to =
+      content.kind === 'other' ? undefined : relationships.get(content.relationshipId)?.target
+
+    return { drawing, path: to === undefined ? null : resolveTarget(to, directory) }
+  })
 }
 
 /** A theme colour as six hex digits, which is all the palette needs of it. */

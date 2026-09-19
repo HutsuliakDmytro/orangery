@@ -38,6 +38,8 @@ export type {
   StyleColor,
   Styles,
 } from './styles'
+export { EMU_PER_POINT, drawingRelationshipId, readSheetDrawings } from './drawing'
+export type { AnchorPoint, DrawingAnchor, DrawingContent, SheetDrawing } from './drawing'
 export { readConditionalFormats, rangeCovers } from './conditional'
 export type {
   ColorScale,

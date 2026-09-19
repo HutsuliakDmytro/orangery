@@ -24,6 +24,7 @@ import type {
 } from '@orangery/ooxml-spreadsheet'
 import { formatValue } from '@orangery/numfmt'
 import { iconOf } from './icon-sets'
+import { SheetDrawings } from './sheet-drawings'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
 /**
@@ -317,6 +318,20 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       metrics={metrics}
       frozen={frozen}
       zoom={zoom}
+      overlay={
+        sheet.drawings.length === 0
+          ? undefined
+          : (view) => (
+              <SheetDrawings
+                open={open}
+                sheet={sheet}
+                metrics={view.metrics}
+                scrollX={view.scrollX}
+                scrollY={view.scrollY}
+                zoom={zoom}
+              />
+            )
+      }
       columnHeader={(column) => indexToColumn(column)}
       rowHeader={(row) => String(row + 1)}
       valueAt={valueAt}

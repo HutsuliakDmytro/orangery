@@ -1,4 +1,4 @@
-import { contentTypeFor } from '@orangery/ooxml-drawingml'
+import { dataUrlFrom } from '@orangery/ooxml-drawingml'
 
 /**
  * Pictures as data URLs.
@@ -41,12 +41,11 @@ export function extensionFor(subtype: string): string {
   return subtype
 }
 
-/** A data URL for picture bytes, or null when no document format can hold them. */
-export function dataUrlFrom(bytes: Uint8Array, fileName: string): string | null {
-  const contentType = contentTypeFor(fileName)
-  if (contentType === null) return null
-
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return `data:${contentType};base64,${btoa(binary)}`
-}
+/**
+ * A data URL for picture bytes, or null when no document format can hold them.
+ *
+ * Kept here as a name because half this module is the other direction, and a
+ * caller reading a picture in and out wants both from one place. The work is
+ * in `ooxml-drawingml`, beside the content types it depends on.
+ */
+export { dataUrlFrom }

@@ -60,6 +60,16 @@ export interface DataGridProps {
   /** Rows and columns held still at the top and left. */
   frozen?: FrozenPanes | null
   /**
+   * What is drawn over the cells rather than in them.
+   *
+   * A chart or a picture on a sheet is anchored to cells and belongs to none
+   * of them, and it is a real element rather than paint — an SVG chart and an
+   * `<img>` are things the platform already knows how to draw well. The grid
+   * owns the scroll, so it is the grid that has to say where the layer sits;
+   * what goes in it is the caller's.
+   */
+  overlay?: (view: { scrollX: number; scrollY: number; metrics: GridMetrics }) => React.ReactNode
+  /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
    * Folded into the measurements rather than applied to the canvas, so that
@@ -122,6 +132,8 @@ function drawBorders(
   }
 }
 
+export { zoomed as zoomedMetrics }
+
 /**
  * Every measurement larger or smaller by the same factor.
  *
@@ -173,6 +185,7 @@ export function DataGrid({
   mergeAt,
   frozen = null,
   zoom = 1,
+  overlay,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -557,6 +570,26 @@ export function DataGrid({
             display: 'block',
           }}
         />
+
+        {overlay !== undefined && (
+          <div
+            // Pinned like the canvas and over it, and deaf to the pointer: a
+            // chart sitting on a sheet must not stop a click reaching the cell
+            // it is drawn across.
+            style={{
+              position: 'sticky',
+              top: 0,
+              left: 0,
+              width,
+              height,
+              marginTop: -height,
+              overflow: 'hidden',
+              pointerEvents: 'none',
+            }}
+          >
+            {overlay({ scrollX: scroll.x, scrollY: scroll.y, metrics })}
+          </div>
+        )}
       </div>
 
       {editing !== null && editor !== null && (

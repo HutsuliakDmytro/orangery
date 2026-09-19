@@ -172,3 +172,38 @@ describe('the ways a sheet writes in a cell', () => {
     expect(recorded.texts.find((one) => one.text === 'Sideways')?.angle).toBeCloseTo(-Math.PI / 2)
   })
 })
+
+describe('what sits on the sheet rather than in it', () => {
+  it('puts the chart the drawing part points at over the cells', () => {
+    drawn()
+
+    const chart = screen.getByLabelText('Spending by month')
+    expect(chart).toHaveAttribute('data-drawing', 'chart')
+    expect(chart.querySelector('svg')).not.toBeNull()
+  })
+
+  it('shows the picture, from the bytes in the package', () => {
+    drawn()
+
+    const picture = screen.getByLabelText('Logo').querySelector('img')
+    expect(picture?.getAttribute('src')).toMatch(/^data:image\/png;base64,/u)
+  })
+
+  it('sizes a two-cell anchor from the cells it spans', () => {
+    drawn()
+
+    // B5 to D13: two columns of the default width, which the sheet gives as
+    // 8.43 characters of seven points, and eight rows of twenty.
+    const chart = screen.getByLabelText('Spending by month')
+    expect(chart.style.width).toBe('118px')
+    expect(chart.style.height).toBe('160px')
+  })
+
+  it('sizes a one-cell anchor from the size it states, not from the cells', () => {
+    drawn()
+
+    // 914400 EMU is an inch, which is seventy-two points.
+    const picture = screen.getByLabelText('Logo')
+    expect(picture.style.width).toBe('72px')
+  })
+})

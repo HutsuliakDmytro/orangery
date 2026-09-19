@@ -3,7 +3,7 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
   drawingRelationshipId,
   paletteOf,
-  readSharedStrings,
+  readRichStrings,
   readSheetComments,
   readSheetData,
   readSheetDrawings,
@@ -12,6 +12,7 @@ import {
   readWorksheet,
 } from '@orangery/ooxml-spreadsheet'
 import type {
+  RichText,
   SheetCells,
   SheetComments,
   SheetDrawing,
@@ -67,8 +68,13 @@ export interface OpenWorkbook {
   workbook: Workbook
   sheets: OpenSheet[]
   styles: Styles | null
-  /** The shared string table, which most text cells are an index into. */
-  strings: string[]
+  /**
+   * The shared string table, which most text cells are an index into.
+   *
+   * Read with the formatting each entry carries: a cell has one style and
+   * cannot be half bold, so a cell that is gets it from the string.
+   */
+  strings: RichText[]
   palette: ColorPalette
 }
 
@@ -113,7 +119,7 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
     },
     sheets,
     styles: readStyles(getPartText(pkg, 'xl/styles.xml') ?? ''),
-    strings: readSharedStrings(pkg),
+    strings: readRichStrings(pkg),
     palette,
   }
 }

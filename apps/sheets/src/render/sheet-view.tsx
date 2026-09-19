@@ -20,7 +20,9 @@ import type {
   Font,
   HighlightValue,
   ResolvedStyle,
+  RichText,
   Styles,
+  TextRun,
 } from '@orangery/ooxml-spreadsheet'
 import { formatValue } from '@orangery/numfmt'
 import { iconOf } from './icon-sets'
@@ -147,7 +149,7 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
 
       if (cell.type === 's') {
         const index = Number(cell.value)
-        return strings[index] ?? ''
+        return strings[index]?.text ?? ''
       }
       if (cell.type === 'inlineStr' || cell.type === 'str') return cell.value
       if (cell.type === 'e') return cell.value
@@ -209,13 +211,29 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       const background = ruled?.fill == null && scale !== null ? `#${scale}` : painted
 
       const font = style.font
-      const size = font?.size ?? 11
-      const family = font?.name ?? 'Calibri'
+
+      /**
+       * The pieces of a value that do not all look alike.
+       *
+       * A shared string carries them for most cells and an inline one for the
+       * rest; either way they lie over the cell's own font, so a run that only
+       * reddens its words keeps the size and the family of the cell it is in.
+       */
+      const pieces = runsOf(cell, strings)
+      const runs =
+        pieces === null
+          ? undefined
+          : pieces.map((run) => ({
+              text: run.text,
+              font: fontShorthand({ ...font, ...run.font }),
+              color: hex(run.font.color ?? font?.color ?? null),
+            }))
 
       return {
-        font: `${font?.italic === true ? 'italic ' : ''}${font?.bold === true ? 'bold ' : ''}${String(size)}px ${family}`,
+        font: fontShorthand(font),
         color: hex(font?.color ?? null),
         background,
+        runs,
         bar:
           marks?.bar === null || marks?.bar === undefined
             ? undefined
@@ -256,7 +274,7 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
         },
       }
     },
-    [cellFor, highlight, notes, palette, styleOf, styles],
+    [cellFor, highlight, notes, palette, strings, styleOf, styles],
   )
 
   const merged = useCallback(
@@ -376,6 +394,32 @@ function rowHeights(sheet: OpenSheet): number[] {
   })
 }
 
+/**
+ * A font as a canvas takes one.
+ *
+ * Weight and slant and nothing else: a canvas shorthand has no room for an
+ * underline or a strikethrough, which are lines the renderer would have to
+ * draw itself and does not yet.
+ */
+function fontShorthand(font: Partial<Font> | null | undefined): string {
+  const size = font?.size ?? 11
+  const family = font?.name ?? 'Calibri'
+
+  return (
+    (font?.italic === true ? 'italic ' : '') +
+    (font?.bold === true ? 'bold ' : '') +
+    `${String(size)}px ${family}`
+  )
+}
+
+/** The runs a cell's value is made of, or null where it is all one piece. */
+function runsOf(cell: Cell | null, strings: readonly RichText[]): TextRun[] | null {
+  if (cell === null) return null
+  if (cell.type === 's') return strings[Number(cell.value)]?.runs ?? null
+
+  return cell.type === 'inlineStr' ? (cell.rich?.runs ?? null) : null
+}
+
 /** The colour of the mark on a cell with something said about it. */
 function cornerOf(note: ReturnType<ReturnType<typeof notesOf>['at']>): string | undefined {
   if (note === null) return undefined
@@ -410,11 +454,11 @@ function turnOf(rotation: number | null): number | 'stacked' | undefined {
  * whatever it is: the file states the answer, and a rule about that column
  * means the answers rather than the formulas.
  */
-function valueOfCell(cell: Cell | null, strings: readonly string[]): HighlightValue | null {
+function valueOfCell(cell: Cell | null, strings: readonly RichText[]): HighlightValue | null {
   if (cell === null || cell.value === null) return null
 
   if (cell.type === 's') {
-    const text = strings[Number(cell.value)] ?? ''
+    const text = strings[Number(cell.value)]?.text ?? ''
     return text === '' ? null : { number: null, text, error: false }
   }
   if (cell.type === 'inlineStr' || cell.type === 'str') {

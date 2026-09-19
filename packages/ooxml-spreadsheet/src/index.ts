@@ -25,7 +25,9 @@ export { readTable, readTables, tableAt } from './tables'
 export type { Table, TableColumn, TableStyle } from './tables'
 export { applyTint, paletteOf, resolveColor } from './colors'
 export type { ColorPalette } from './colors'
-export { formatCodeOf, isDateFormat, readStyles, resolveStyle } from './styles'
+export { formatCodeOf, isDateFormat, readPartialFont, readStyles, resolveStyle } from './styles'
+export { plainText, readRichStrings, readRichText } from './rich-text'
+export type { RichText, TextRun } from './rich-text'
 export type {
   Alignment,
   Border,

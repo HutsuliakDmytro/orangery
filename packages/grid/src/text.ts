@@ -1,5 +1,5 @@
 import { defaultAlign } from './cell-style'
-import type { CellStyle } from './cell-style'
+import type { CellStyle, StyledRun } from './cell-style'
 import type { Rectangle } from './layout'
 
 /**
@@ -49,8 +49,15 @@ export function drawCellText(
   context.font = style?.font ?? options.font
   context.fillStyle = style?.color ?? options.color
 
+  const runs = style?.runs ?? null
+
   if (style?.rotation !== undefined && style.rotation !== 0) {
+    // Turned text is drawn as one piece. A rotated cell whose words change
+    // font half way through is a case nobody has yet had, and inventing an
+    // answer for it would be inventing the case as well.
     turned(context, text, rect, style)
+  } else if (runs !== null && runs.length > 0) {
+    inPieces(context, runs, rect, style, options)
   } else if (style?.wrap === true) {
     wrapped(context, text, rect, style, options)
   } else {
@@ -248,4 +255,100 @@ function broken(context: CanvasRenderingContext2D, line: string, width: number):
 
   if (piece !== '') pieces.push(piece)
   return pieces
+}
+
+/**
+ * A value whose pieces do not all look alike.
+ *
+ * Laid out rather than written: each piece is measured in its own font, the
+ * pieces are packed into lines, and every line is placed by the same
+ * alignment rules a plain value follows. Without wrapping there is one line,
+ * however long it is — the clip is what stops it.
+ */
+function inPieces(
+  context: CanvasRenderingContext2D,
+  runs: readonly StyledRun[],
+  rect: Rectangle,
+  style: CellStyle | null,
+  options: TextOptions,
+): void {
+  const base = style?.font ?? options.font
+  const indent = (style?.indent ?? 0) * INDENT
+  const room = rect.width - PADDING * 2 - indent - options.gutter
+
+  const lines =
+    style?.wrap === true ? flowed(context, runs, room, base) : [[...runs].filter(notEmpty)]
+
+  const step = lineHeightOf(base)
+  const middle = downOf(rect, style)
+  const first = middle - (step * lines.length) / 2 + step / 2
+
+  // Drawn from the left of each line, so the pieces join up; where the line
+  // sits is decided by measuring it whole.
+  context.textAlign = 'left'
+
+  for (const [index, line] of lines.entries()) {
+    const width = line.reduce((total, run) => total + widthOf(context, run, base), 0)
+    const { align } = acrossOf(line.map((run) => run.text).join(''), rect, style, options.gutter)
+
+    let x =
+      align === 'right'
+        ? rect.x + rect.width - PADDING - indent - width
+        : align === 'center'
+          ? rect.x + options.gutter + (rect.width - options.gutter - width) / 2
+          : rect.x + PADDING + indent + options.gutter
+
+    for (const run of line) {
+      context.font = run.font ?? base
+      context.fillStyle = run.color ?? style?.color ?? options.color
+      context.fillText(run.text, x, first + index * step)
+      x += context.measureText(run.text).width
+    }
+  }
+}
+
+const notEmpty = (run: StyledRun): boolean => run.text !== ''
+
+function widthOf(context: CanvasRenderingContext2D, run: StyledRun, base: string): number {
+  context.font = run.font ?? base
+  return context.measureText(run.text).width
+}
+
+/**
+ * The pieces packed into lines that fit a width.
+ *
+ * Broken at spaces, wherever the space happens to fall — a word can start in
+ * one piece and finish in the next, because whoever made half of it bold was
+ * not thinking about where the lines would go.
+ */
+function flowed(
+  context: CanvasRenderingContext2D,
+  runs: readonly StyledRun[],
+  width: number,
+  base: string,
+): StyledRun[][] {
+  const lines: StyledRun[][] = []
+  let line: StyledRun[] = []
+  let used = 0
+
+  const wrap = () => {
+    lines.push(line)
+    line = []
+    used = 0
+  }
+
+  for (const run of runs) {
+    // The separators are kept, so "a b" does not come back as "ab" on a line
+    // that had room for both.
+    for (const piece of run.text.split(/(\s+)/u).filter((one) => one !== '')) {
+      const size = widthOf(context, { ...run, text: piece }, base)
+
+      if (used + size > width && used > 0 && piece.trim() !== '') wrap()
+      line.push({ ...run, text: piece })
+      used += size
+    }
+  }
+
+  if (line.length > 0) lines.push(line)
+  return lines.length === 0 ? [[]] : lines
 }

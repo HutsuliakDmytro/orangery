@@ -1,8 +1,11 @@
+import { parseXml, tagName } from '@orangery/ooxml-core'
 import { columnToIndex, formatReference } from './reference'
 import { emptySheet, putCell } from './cells'
 import type { Cell, CellType, Formula, RowProperties, SheetCells } from './cells'
 import { collapsedFormula, expandFormulas, sharedMasters } from './formulas'
 import type { SharedMaster } from './formulas'
+import { readRichText } from './rich-text'
+import type { RichText } from './rich-text'
 
 /**
  * `sheetData`, read without building a tree.
@@ -105,6 +108,25 @@ function textOfAll(fragment: string, tag: string): string | null {
   return found
 }
 
+/**
+ * The runs of an inline string, where it has any.
+ *
+ * Only when there is an `<r>` in the cell: parsing every `<is>` would be a
+ * tree per text cell in a file of a million of them, for an answer that is
+ * "one plain run" every time. The markup is kept beside the runs so the cell
+ * is written back exactly as it arrived.
+ */
+function richFrom(fragment: string): RichText | null {
+  if (!fragment.includes('<r')) return null
+
+  const match = /<is(?:\s[^>]*)?>([\s\S]*?)<\/is>/u.exec(fragment)
+  const inside = match?.[1]
+  if (inside === undefined || !/<r(?:\s|>)/u.test(inside)) return null
+
+  const root = parseXml(`<is>${inside}</is>`).find((node) => tagName(node) === 'is')
+  return root === undefined ? null : readRichText(root, inside)
+}
+
 function formulaFrom(fragment: string): Formula | null {
   const match = /<f(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/f>)/u.exec(fragment)
   if (match === null) return null
@@ -185,6 +207,7 @@ export function scanSheetData(xml: string, handlers: SheetDataHandlers): void {
         value: type === 'inlineStr' ? textOfAll(fragment, 't') : textOfAll(fragment, 'v'),
         style: numberOr(own['s'], null),
         formula: formulaFrom(fragment),
+        rich: type === 'inlineStr' ? richFrom(fragment) : null,
         carried: carriedFrom(own, MODELLED_CELL),
       })
     }
@@ -256,12 +279,18 @@ function cellXml(cell: Cell, masters: Map<number, SharedMaster>): string {
         attribute('si', written.shared) +
         (written.text === '' ? '/>' : `>${encodeText(written.text)}</f>`)
 
+  // A rich string goes back as the markup it came from: rebuilding an `<rPr>`
+  // would rebuild only the parts of it this understands.
+  const source = cell.rich?.source ?? null
+
   const value =
-    cell.value === null
-      ? ''
-      : cell.type === 'inlineStr'
-        ? `<is><t>${encodeText(cell.value)}</t></is>`
-        : `<v>${encodeText(cell.value)}</v>`
+    source !== null
+      ? `<is>${source}</is>`
+      : cell.value === null
+        ? ''
+        : cell.type === 'inlineStr'
+          ? `<is><t>${encodeText(cell.value)}</t></is>`
+          : `<v>${encodeText(cell.value)}</v>`
 
   const body = `${formula}${value}`
   return body === '' ? `${head}/>` : `${head}>${body}</c>`

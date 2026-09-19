@@ -64,6 +64,19 @@ export interface CellIcon {
   steps?: number
 }
 
+/**
+ * A stretch of a value that looks different from the rest of it.
+ *
+ * A cell has one style, so a cell cannot be half bold; what can be is the
+ * string in it. Resolved by the caller into the same shorthand the rest of a
+ * cell's look uses, because a run's formatting is a question about the file.
+ */
+export interface StyledRun {
+  text: string
+  font?: string
+  color?: string
+}
+
 export interface CellStyle {
   /** A CSS font shorthand, because that is what a canvas takes. */
   font?: string
@@ -85,6 +98,13 @@ export interface CellStyle {
   bar?: CellBar
   /** Drawn at the left, with the text moved along to make room. */
   icon?: CellIcon
+  /**
+   * The value in pieces, where the pieces are not all alike.
+   *
+   * The grid still asks `valueAt` for the words — a screen reader and a
+   * keyboard need them — and draws these instead when they are here.
+   */
+  runs?: StyledRun[]
   /**
    * A small mark in the top-right corner, in this colour.
    *

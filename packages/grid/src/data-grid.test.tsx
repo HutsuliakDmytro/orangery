@@ -577,3 +577,53 @@ describe('the cell under the pointer', () => {
     expect(hovered).toHaveBeenLastCalledWith(null)
   })
 })
+
+describe('a value whose pieces do not all look alike', () => {
+  const pieces = [
+    { text: 'Total: ', font: '11px Calibri' },
+    { text: '1 234', font: 'bold 11px Calibri', color: '#C00000' },
+  ]
+
+  it('draws each piece in its own font and colour', () => {
+    grid({ valueAt: () => 'Total: 1 234', styleAt: () => ({ runs: pieces }) })
+
+    expect(recorded.texts.find((one) => one.text === 'Total: ')?.font).toBe('11px Calibri')
+    expect(recorded.texts.find((one) => one.text === '1 234')?.font).toBe('bold 11px Calibri')
+  })
+
+  it('joins them up, so the second starts where the first ended', () => {
+    grid({ valueAt: () => 'Total: 1 234', styleAt: () => ({ runs: pieces }) })
+
+    const first = recorded.texts.find((one) => one.text === 'Total: ')
+    const second = recorded.texts.find((one) => one.text === '1 234')
+
+    // The fake canvas measures seven points a character, so seven characters
+    // put the second piece forty-nine along from the first.
+    expect((second?.x ?? 0) - (first?.x ?? 0)).toBeCloseTo(49)
+  })
+
+  it('still hands the whole value to a screen reader', () => {
+    // What is drawn is pieces; what the cell holds is a string.
+    grid({ valueAt: () => 'Total: 1 234', styleAt: () => ({ runs: pieces }) })
+
+    expect(screen.getByRole('grid').textContent).toContain('Total: 1 234')
+  })
+
+  it('wraps across the pieces, breaking wherever the space falls', () => {
+    grid({
+      valueAt: () => 'one two three four five',
+      styleAt: () => ({
+        wrap: true,
+        runs: [
+          { text: 'one two ', font: '11px Calibri' },
+          { text: 'three four five', font: 'bold 11px Calibri' },
+        ],
+      }),
+    })
+
+    const drawnLines = new Set(
+      recorded.texts.filter((one) => one.text.length > 2).map((one) => one.y),
+    )
+    expect(drawnLines.size).toBeGreaterThan(1)
+  })
+})

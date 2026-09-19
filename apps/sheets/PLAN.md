@@ -55,7 +55,7 @@
 - [x] Стрімінговий парсер `sheetData` (власний сканер) — файл на 500k рядків не будує DOM; тест на 100k комірок
 - [~] Модель: sparse cells ✔, row metadata ✔, column metadata ✔, merged ranges ✔, freeze/split panes ✔, zoom ✔; style index → resolved style ✔ (`resolveStyle`; кешує викликач — грид питає це на кожну видиму комірку)
 - [x] Shared/array formulas розгортаються при читанні; при незмінності — згортаються назад (`formulas.ts`: `shiftFormula` пересуває відносні посилання текстом — рядки, `Table1[...]`, `_xlfn.XLOOKUP`, `LOG10(` не чіпає; за край аркуша → `#REF!`). Комірка, яку відредагували, виходить із групи і пишеться власною формулою, як в Excel
-- [ ] Rich text у комірках (`<r>` runs у sharedStrings/inlineStr)
+- [x] Rich text у комірках (`<r>` runs у sharedStrings ✔ та inlineStr ✔): `rich-text.ts` — прогони з частковим шрифтом (`<rPr>` каже лише те, що змінює); грид малює по прогонах, з переносом через їхні межі. Inline-рядок пишеться назад тією ж розміткою, з якої прочитаний — `<rPr>` не перезбирається
 - [ ] Серіалізатор: `sheetData` регенерується; стилі дедупляться у `cellXfs`; `calcChain` перебудовується або видаляється (Excel відновлює); невідомі частини verbatim
 - [ ] `tests/fixtures/xlsx/` — 30+ реальних книг: Excel mac/win, Google Sheets export, LibreOffice, з pivot, макросами (`.xlsm`), умовним форматуванням, таблицями, діаграмами, defined names, зовнішніми посиланнями
 - [ ] Round-trip: open → save → XML diff; CI LibreOffice render-diff

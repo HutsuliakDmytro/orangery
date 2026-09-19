@@ -1,5 +1,6 @@
 import { parseReference } from './reference'
 import type { CellPosition } from './reference'
+import type { RichText } from './rich-text'
 
 /**
  * What a cell is, in the model the whole app hangs off.
@@ -46,6 +47,14 @@ export interface Cell {
   /** Into `cellXfs`; null for a cell that states none, which means the first. */
   style: number | null
   formula: Formula | null
+  /**
+   * The runs of an inline string whose words are not all alike.
+   *
+   * Null for the ordinary cell, which is nearly all of them: a cell has one
+   * style and needs no runs to say so. A cell that is half bold is one where
+   * the string itself carries the formatting (`rich-text.ts`).
+   */
+  rich: RichText | null
   /** Attributes this does not model, kept so they survive a save. */
   carried: Record<string, string> | null
 }

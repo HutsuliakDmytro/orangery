@@ -7,7 +7,7 @@
  */
 
 export { defaultAlign } from './cell-style'
-export type { CellBar, CellBorders, CellIcon, CellStyle, IconShape } from './cell-style'
+export type { CellBar, CellBorders, CellIcon, CellStyle, IconShape, StyledRun } from './cell-style'
 export { ICON_GUTTER, ICON_SIZE, drawIcon } from './icon'
 export { drawCellText, lineHeightOf, wrapText } from './text'
 export type { TextOptions } from './text'

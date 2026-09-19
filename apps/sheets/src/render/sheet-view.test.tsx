@@ -256,3 +256,25 @@ describe('what has been said about a cell', () => {
     expect(screen.queryByRole('note')).toBeNull()
   })
 })
+
+describe('a cell whose words are not all alike', () => {
+  it('draws each piece of a shared string in its own font', () => {
+    drawn()
+
+    // "Spent so far": the second half is bold and red, and the cell itself is
+    // neither — a cell has one style, so this can only come from the string.
+    expect(recorded.texts.find((one) => one.text === 'Spent ')?.font).not.toContain('bold')
+    expect(recorded.texts.find((one) => one.text === 'so far')?.font).toContain('bold')
+  })
+
+  it('does the same for a string written inside the cell', () => {
+    drawn()
+
+    expect(recorded.texts.find((one) => one.text === 'total')?.font).toContain('italic')
+    expect(recorded.texts.find((one) => one.text === 'Net ')?.font).not.toContain('italic')
+  })
+
+  it('still says the whole thing to a screen reader', () => {
+    expect(drawn().textContent).toContain('A, row 1: Month')
+  })
+})

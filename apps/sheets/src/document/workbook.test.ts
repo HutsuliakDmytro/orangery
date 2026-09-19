@@ -47,9 +47,9 @@ describe('opening a workbook', () => {
     expect(budget?.sheet.columns[0]?.width).toBe(20)
   })
 
-  it('reads the shared strings every text cell points into', async () => {
+  it('reads the shared strings every text cell points into, formatting and all', async () => {
     const workbook = await open()
-    expect(workbook.strings).toContain('January')
+    expect(workbook.strings.map((one) => one.text)).toContain('January')
   })
 
   it('reads the styles and the theme the colours come from', async () => {

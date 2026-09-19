@@ -300,8 +300,11 @@ const listOf = <T>(
  *
  * `<b val="0"/>` is a rule that takes bold away and belongs in the answer;
  * no `<b>` at all is a rule with no opinion about bold and does not.
+ *
+ * The same shape serves a `dxf` and an `<rPr>`: a conditional format and a run
+ * of text both say only what they change, over whatever is already there.
  */
-function readPartialFont(node: XmlNode): Partial<Font> {
+export function readPartialFont(node: XmlNode): Partial<Font> {
   const named = findChild(node, 'name') ?? findChild(node, 'rFont')
   const underline = findChild(node, 'u')
   const size = findChild(node, 'sz')

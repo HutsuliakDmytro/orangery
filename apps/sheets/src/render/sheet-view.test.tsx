@@ -133,3 +133,42 @@ describe('what a rule does to a cell', () => {
     expect(recorded.texts.some((one) => one.text === '16%')).toBe(true)
   })
 })
+
+describe('the ways a sheet writes in a cell', () => {
+  /**
+   * The second sheet of the fixture is where the awkward cells live: it is
+   * left at 150 %, one cell wraps across a tall row, and one is turned on its
+   * side. Keeping them off the first sheet means the plain cases stay plain.
+   */
+  const notes = () => {
+    const sheet = workbook.sheets[1]
+    if (sheet === undefined) throw new Error('the fixture has no second sheet')
+
+    render(<SheetView open={workbook} sheet={sheet} width={800} height={400} />)
+    return screen.getByRole('grid', { name: 'Notes' })
+  }
+
+  it('opens the sheet at the zoom it was left at', () => {
+    notes()
+
+    // 12 points at 150 % is 18; a sheet opened at 100 % is a different sheet
+    // from the one somebody put away.
+    expect(recorded.texts.find((one) => one.text === 'A')?.font).toContain('18px')
+  })
+
+  it('breaks a wrapped value across the lines the row has room for', () => {
+    notes()
+
+    const words = recorded.texts.filter((one) => one.text.startsWith('Everything'))
+    expect(words).toHaveLength(1)
+    expect(words[0]?.text).not.toBe('Everything in this column is written across several lines')
+  })
+
+  it('turns a cell the file says is turned', () => {
+    notes()
+
+    // 90 in the file is a quarter turn anticlockwise, which on a canvas — where
+    // y points down — is a quarter turn the other way.
+    expect(recorded.texts.find((one) => one.text === 'Sideways')?.angle).toBeCloseTo(-Math.PI / 2)
+  })
+})

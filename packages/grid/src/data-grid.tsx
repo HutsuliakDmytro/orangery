@@ -12,9 +12,9 @@ import {
   widthOfColumn,
 } from './layout'
 import type { CellAddress, FrozenPanes, GridMetrics, Viewport } from './layout'
-import { defaultAlign } from './cell-style'
 import type { CellBorders, CellStyle } from './cell-style'
 import { ICON_GUTTER, drawIcon } from './icon'
+import { drawCellText } from './text'
 
 /**
  * A grid of cells, drawn rather than built.
@@ -59,6 +59,15 @@ export interface DataGridProps {
   mergeAt?: (cell: CellAddress) => { cell: CellAddress; rows: number; columns: number } | null
   /** Rows and columns held still at the top and left. */
   frozen?: FrozenPanes | null
+  /**
+   * How much larger everything is drawn; 1 is unzoomed.
+   *
+   * Folded into the measurements rather than applied to the canvas, so that
+   * the arithmetic the grid does about where a click landed and how far there
+   * is to scroll is done in the same units it paints in. A canvas transform
+   * would have made the painting right and every other answer wrong.
+   */
+  zoom?: number
   width: number
   height: number
   label: string
@@ -113,6 +122,31 @@ function drawBorders(
   }
 }
 
+/**
+ * Every measurement larger or smaller by the same factor.
+ *
+ * Including the headers: a zoomed sheet whose row numbers stayed the old size
+ * would have them creeping under the cells beside them.
+ */
+function zoomed(metrics: GridMetrics, zoom: number): GridMetrics {
+  if (zoom === 1) return metrics
+
+  return {
+    rowHeight: metrics.rowHeight * zoom,
+    columnWidth: metrics.columnWidth * zoom,
+    columnWidths: metrics.columnWidths?.map((width) => width * zoom),
+    rowHeights: metrics.rowHeights?.map((height) => height * zoom),
+    headerWidth: metrics.headerWidth * zoom,
+    headerHeight: metrics.headerHeight * zoom,
+  }
+}
+
+/** A CSS font shorthand with its size scaled, which is all a zoom does to it. */
+const resized = (font: string, zoom: number): string =>
+  zoom === 1
+    ? font
+    : font.replace(/(\d*\.?\d+)px/u, (_, size: string) => `${String(Number(size) * zoom)}px`)
+
 /** A, B, … Z, AA — the names a spreadsheet gives its columns. */
 export function columnName(index: number): string {
   const letters: string[] = []
@@ -138,8 +172,12 @@ export function DataGrid({
   styleAt,
   mergeAt,
   frozen = null,
+  zoom = 1,
 }: DataGridProps) {
-  const metrics = useMemo<GridMetrics>(() => ({ ...DEFAULTS, ...overrides }), [overrides])
+  const metrics = useMemo<GridMetrics>(
+    () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
+    [overrides, zoom],
+  )
 
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const surface = useRef<HTMLDivElement | null>(null)
@@ -166,7 +204,7 @@ export function DataGrid({
     }
 
     const held = frozen ?? { rows: 0, columns: 0 }
-    const DEFAULT_FONT = '12px -apple-system, system-ui, sans-serif'
+    const DEFAULT_FONT = resized('12px -apple-system, system-ui, sans-serif', zoom)
 
     context.font = DEFAULT_FONT
     context.textBaseline = 'middle'
@@ -250,50 +288,26 @@ export function DataGrid({
         }
 
         if (style?.icon !== undefined) {
-          drawIcon(context, style.icon, rect.x + 3, rect.y + rect.height / 2)
+          drawIcon(context, style.icon, rect.x + 3 * zoom, rect.y + rect.height / 2, zoom)
         }
 
         const text = valueAt(cell)
 
         if (text !== null && text !== '') {
-          context.save()
-          context.beginPath()
-          context.rect(rect.x, rect.y, rect.width, rect.height)
-          context.clip()
-
-          context.font = style?.font ?? DEFAULT_FONT
-          context.fillStyle = style?.color ?? COLORS.text
-
-          // Numbers right, text left, unless the file says otherwise: the oldest
-          // convention in spreadsheets, and what makes a column of figures
-          // readable — the digits line up under each other.
-          const align = style?.align ?? defaultAlign(text)
-          const indent = (style?.indent ?? 0) * 9
-          const padding = 4
-
           // An icon sits in the cell rather than beside it, so the text starts
           // after it. A right-aligned number is untouched: the icon is at the
           // other end, and moving the digits would break the column.
-          const gutter = style?.icon === undefined ? 0 : ICON_GUTTER
-
-          const x =
-            align === 'right'
-              ? rect.x + rect.width - padding - indent
-              : align === 'center'
-                ? rect.x + gutter + (rect.width - gutter) / 2
-                : rect.x + padding + indent + gutter
-
-          const y =
-            style?.verticalAlign === 'top'
-              ? rect.y + rect.height / 4
-              : style?.verticalAlign === 'bottom'
-                ? rect.y + (rect.height * 3) / 4
-                : rect.y + rect.height / 2
-
-          context.textAlign = align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'
-          context.fillText(text, x, y)
-          context.textAlign = 'left'
-          context.restore()
+          drawCellText(
+            context,
+            text,
+            rect,
+            style === null ? null : { ...style, font: resized(style.font ?? DEFAULT_FONT, zoom) },
+            {
+              font: DEFAULT_FONT,
+              color: COLORS.text,
+              gutter: style?.icon === undefined ? 0 : ICON_GUTTER * zoom,
+            },
+          )
         }
 
         // Outside the text, because a bordered cell with nothing in it is
@@ -382,6 +396,7 @@ export function DataGrid({
     styleAt,
     valueAt,
     width,
+    zoom,
   ])
 
   useLayoutEffect(() => {
@@ -584,7 +599,7 @@ export function DataGrid({
             top: editor.y,
             width: widthOfColumn(metrics, editing.cell.column),
             height: heightOfRow(metrics, editing.cell.row),
-            font: '12px -apple-system, system-ui, sans-serif',
+            font: resized('12px -apple-system, system-ui, sans-serif', zoom),
             border: `2px solid ${COLORS.selection}`,
             padding: '0 2px',
             outline: 'none',

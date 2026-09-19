@@ -17,6 +17,10 @@ export interface DrawnText {
   y: number
   align?: string
   font?: string
+  /** Where the pen was moved to before the text, for anything turned. */
+  origin?: [number, number]
+  /** Radians, clockwise on a canvas; 0 for the text that is simply level. */
+  angle?: number
 }
 
 export interface FilledRect {
@@ -61,8 +65,14 @@ export const recorded: RecordedCanvas = {
     recorded.paths = []
     path = []
     curved = false
+    origin = [0, 0]
+    angle = 0
+    stack.length = 0
   },
 }
+
+/** What `save` put away, for `restore` to take back. */
+const stack: [[number, number], number][] = []
 
 /** Where the last `moveTo` put the pen, so a `lineTo` can be recorded as a line. */
 let pen: [number, number] = [0, 0]
@@ -70,6 +80,16 @@ let pen: [number, number] = [0, 0]
 /** The path being built, which becomes a shape when something fills it. */
 let path: [number, number][] = []
 let curved = false
+
+/**
+ * The transform, as much of it as anything here asks about.
+ *
+ * Turned text is drawn at the origin with the canvas moved and rotated under
+ * it, so a recorder that kept only the co-ordinates would report every
+ * rotated value as being at nought, nought.
+ */
+let origin: [number, number] = [0, 0]
+let angle = 0
 
 const context = {
   canvas: null,
@@ -79,13 +99,28 @@ const context = {
   fillStyle: '',
   strokeStyle: '',
   lineWidth: 1,
-  setTransform: () => undefined,
+  setTransform: () => {
+    origin = [0, 0]
+    angle = 0
+  },
+  translate: (x: number, y: number) => {
+    origin = [origin[0] + x, origin[1] + y]
+  },
+  rotate: (radians: number) => {
+    angle += radians
+  },
+  measureText: (text: string) => ({ width: text.length * 7 }),
   clearRect: () => undefined,
   fillRect: (x: number, y: number, width: number, height: number) => {
     recorded.fills.push({ x, y, width, height, style: context.fillStyle })
   },
-  save: () => undefined,
-  restore: () => undefined,
+  save: () => {
+    stack.push([origin, angle])
+  },
+  restore: () => {
+    const held = stack.pop()
+    if (held !== undefined) [origin, angle] = held
+  },
   beginPath: () => {
     path = []
     curved = false
@@ -113,7 +148,15 @@ const context = {
   },
   stroke: () => undefined,
   fillText: (text: string, x: number, y: number) => {
-    recorded.texts.push({ text, x, y, align: context.textAlign, font: context.font })
+    recorded.texts.push({
+      text,
+      x,
+      y,
+      align: context.textAlign,
+      font: context.font,
+      origin: [...origin],
+      angle,
+    })
   },
   strokeRect: (x: number, y: number, width: number, height: number) => {
     recorded.strokedRects.push({ x, y, width, height })

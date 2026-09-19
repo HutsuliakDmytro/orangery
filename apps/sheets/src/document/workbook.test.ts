@@ -55,7 +55,9 @@ describe('opening a workbook', () => {
   it('reads the styles and the theme the colours come from', async () => {
     const workbook = await open()
 
-    expect(workbook.styles?.cellFormats).toHaveLength(5)
+    // What a style has to answer, rather than how many of them there are: the
+    // count changes whenever the fixture grows a cell, and says nothing.
+    expect(workbook.styles?.cellFormats[1]).toMatchObject({ font: 1, fill: 2 })
     expect(workbook.palette.scheme.get('accent1')).toBe('4472C4')
   })
 

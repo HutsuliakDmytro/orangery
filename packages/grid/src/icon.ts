@@ -42,15 +42,24 @@ const SPENT = '#D4D4D4'
  * An icon, centred in the space left for it at the left of a cell.
  *
  * `x` is where that space begins and `y` is the middle of the cell, which is
- * what the caller already has in hand when it is placing the text.
+ * what the caller already has in hand when it is placing the text. `zoom` is
+ * the sheet's, because an icon that stayed eleven pixels on a sheet drawn at
+ * double size would look like a speck beside the words.
  */
-export function drawIcon(context: CanvasRenderingContext2D, icon: CellIcon, x: number, y: number) {
-  const box: Box = { x: x + ICON_SIZE / 2, y, size: ICON_SIZE }
+export function drawIcon(
+  context: CanvasRenderingContext2D,
+  icon: CellIcon,
+  x: number,
+  y: number,
+  zoom = 1,
+) {
+  const size = ICON_SIZE * zoom
+  const box: Box = { x: x + size / 2, y, size }
 
   context.save()
   context.fillStyle = icon.color
   context.strokeStyle = icon.color
-  context.lineWidth = 2
+  context.lineWidth = 2 * zoom
 
   switch (icon.shape) {
     case 'arrow':

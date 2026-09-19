@@ -76,6 +76,11 @@ export interface CellStyle {
   /** In characters, each about three spaces wide, as a spreadsheet counts. */
   indent?: number
   wrap?: boolean
+  /**
+   * Degrees anticlockwise from level, or `stacked` for letters one under
+   * another — which is a different thing from turning the words by ninety.
+   */
+  rotation?: number | 'stacked'
   /** Drawn over the background and under the text. */
   bar?: CellBar
   /** Drawn at the left, with the text moved along to make room. */

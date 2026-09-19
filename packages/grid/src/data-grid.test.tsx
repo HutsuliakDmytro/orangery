@@ -464,3 +464,79 @@ describe('rows and columns held still', () => {
     expect(recorded.lines.some((line) => line.style === '#666666')).toBe(true)
   })
 })
+
+describe('a value that does not fit on one line', () => {
+  const long = 'Total expenditure for the quarter'
+
+  it('breaks it into lines that fit the cell', () => {
+    grid({ valueAt: () => long, styleAt: () => ({ wrap: true }) })
+
+    const lines = recorded.texts.filter((one) => long.startsWith(one.text.split(' ')[0] ?? '#'))
+    expect(lines.length).toBeGreaterThan(1)
+  })
+
+  it('leaves it on one line when the cell does not ask for wrapping', () => {
+    grid({ valueAt: () => long })
+
+    expect(recorded.texts.some((one) => one.text === long)).toBe(true)
+  })
+
+  it('keeps the lines around the middle of the cell, not below it', () => {
+    // One wrapped cell in a row should not sit lower than its neighbours.
+    grid({ rows: 1, columns: 1, valueAt: () => long, styleAt: () => ({ wrap: true }) })
+
+    const lines = recorded.texts.filter((one) => one.text !== 'A' && one.text !== '1')
+    const middle = lines.reduce((sum, one) => sum + one.y, 0) / lines.length
+
+    // The first row's box runs from 22 to 44; its middle is 33.
+    expect(middle).toBeCloseTo(33, 0)
+  })
+})
+
+describe('a value turned on its side', () => {
+  it('turns the canvas under it rather than the letters in it', () => {
+    grid({ valueAt: () => 'Q1', styleAt: () => ({ rotation: 90 }) })
+
+    const drawnCell = recorded.texts.find((one) => one.text === 'Q1')
+    // Anticlockwise in the file is clockwise on a canvas, where y points down.
+    expect(drawnCell?.angle).toBeCloseTo(-Math.PI / 2)
+  })
+
+  it('stands the letters on end for a stacked cell, each the right way up', () => {
+    grid({ valueAt: () => 'Q1', styleAt: () => ({ rotation: 'stacked' }) })
+
+    expect(recorded.texts.some((one) => one.text === 'Q')).toBe(true)
+    expect(recorded.texts.some((one) => one.text === '1')).toBe(true)
+    expect(recorded.texts.find((one) => one.text === 'Q')?.angle).toBe(0)
+  })
+
+  it('leaves a cell with no rotation alone', () => {
+    grid()
+    expect(recorded.texts.find((one) => one.text === 'Q1')?.angle).toBe(0)
+  })
+})
+
+describe('a sheet drawn larger', () => {
+  it('makes the cells bigger by the same factor', () => {
+    grid({ zoom: 2, styleAt: () => ({ background: '#DDEEFF' }) })
+
+    // A column is 84 unzoomed, and the header 44.
+    const fill = recorded.fills.find((one) => one.style === '#DDEEFF')
+    expect(fill?.width).toBe(168)
+    expect(fill?.x).toBe(88)
+  })
+
+  it('makes the words bigger with them', () => {
+    grid({ zoom: 2, styleAt: () => ({ font: '11px Calibri' }) })
+
+    expect(recorded.texts.find((one) => one.text === 'Q1')?.font).toContain('22px')
+  })
+
+  it('scrolls as far as the zoomed sheet is long', () => {
+    const { container } = grid({ zoom: 2 })
+    const content = container.querySelector<HTMLElement>('[role="grid"] > div')
+
+    // Three rows of 22 and a header of 22, all doubled.
+    expect(content?.style.height).toBe('176px')
+  })
+})

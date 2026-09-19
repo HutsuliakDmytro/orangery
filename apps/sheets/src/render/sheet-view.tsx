@@ -231,6 +231,7 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
               : undefined,
         indent: style.alignment?.indent ?? 0,
         wrap: style.alignment?.wrapText ?? false,
+        rotation: turnOf(style.alignment?.textRotation ?? null),
         borders: {
           left:
             hex(style.border.left.color) ?? (style.border.left.style === null ? null : '#B2B2B2'),
@@ -287,6 +288,18 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
     }
   }, [extent.columns, sheet])
 
+  /**
+   * The sheet's own zoom, as a factor.
+   *
+   * A workbook remembers the zoom each sheet was left at, and opening one at
+   * 100 % when it was saved at 60 % shows a different sheet from the one
+   * somebody put away.
+   */
+  const zoom = useMemo(() => {
+    const stated = sheet.sheet.view.zoom
+    return stated > 0 ? stated / 100 : 1
+  }, [sheet.sheet.view.zoom])
+
   const frozen = useMemo(() => {
     const panes = sheet.sheet.view.panes
     // A split moves both panes and is not a freeze; nothing here holds rows
@@ -303,6 +316,7 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       height={height}
       metrics={metrics}
       frozen={frozen}
+      zoom={zoom}
       columnHeader={(column) => indexToColumn(column)}
       rowHeader={(row) => String(row + 1)}
       valueAt={valueAt}
@@ -324,6 +338,22 @@ function rowHeights(sheet: OpenSheet): number[] {
     const height = sheet.cells.properties.get(index)?.height
     return height === null || height === undefined ? fallback : Math.round(height) + 5
   })
+}
+
+/**
+ * How far a cell's text is turned, in the grid's terms.
+ *
+ * The file counts in one direction up to ninety and then starts again in the
+ * other: 1 to 90 is anticlockwise, and 91 to 180 is one to ninety degrees
+ * clockwise with ninety added. 255 is not an angle at all — it is Excel's word
+ * for letters stood one under another, each still the right way up.
+ */
+function turnOf(rotation: number | null): number | 'stacked' | undefined {
+  if (rotation === null || rotation === 0) return undefined
+  if (rotation === 255) return 'stacked'
+  if (rotation > 90 && rotation <= 180) return -(rotation - 90)
+
+  return rotation
 }
 
 /**

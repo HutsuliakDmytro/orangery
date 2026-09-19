@@ -67,8 +67,8 @@
 - [~] Тестова матриця (значення, код) → рядок: 107 пар у `matrix.test.ts`, згруповані за темами. До 300+ і до звірки з живим Excel — разом із корпусом реальних книг
 
 ### 1.3 Read-only рендер (grid v1)
-- [~] Canvas-grid: віртуалізація ✔, headers ✔, gridlines ✔, freeze panes ✔, таби аркушів ✔ (`packages/grid` + каркас аппа). Zoom — ще ні
-- [~] Рендер значень із кешу через `numfmt` ✔, вирівнювання за типом ✔, стилі (шрифт, колір, fill, borders, merge, indent) ✔. Wrap і rotation — ще ні
+- [x] Canvas-grid: віртуалізація ✔, headers ✔, gridlines ✔, freeze panes ✔, таби аркушів ✔ (`packages/grid` + каркас аппа), zoom ✔ (із `sheetView/@zoomScale`; множник заходить у метрики, а не в canvas transform, інакше hit-test і скрол міряють не в тих одиницях)
+- [x] Рендер значень із кешу через `numfmt` ✔, вирівнювання за типом ✔, стилі (шрифт, колір, fill, borders, merge, indent) ✔, wrap ✔ (розбиття по словах, у межах висоти рядка з файлу — auto-fit висоти це фаза 2), rotation ✔ (1–90 проти годинникової, 91–180 за нею, 255 — літери стовпчиком)
 - [~] Умовне форматування read-only: `cellIs` ✔, `containsText`/`beginsWith`/`endsWith`/blanks/errors ✔, `colorScale` ✔, `dataBar` ✔, `iconSet` ✔ (+ `top10`, `aboveAverage`, `duplicateValues`/`uniqueValues` — падають з тієї ж статистики діапазону). Рахується для видимої комірки, статистика діапазону — раз на блок, діапазон обрізається до реального extent (правило на `A:A` не коштує мільйона комірок). Лишилось: `expression` і `cellIs` з посиланням у формулі (чекають на движок, фаза 3), `timePeriod`, x14-розширення (від'ємні data bars, кастомні іконки)
 - [ ] Діаграми через `packages/charts`, картинки через drawingml
 - [ ] Коментарі — індикатор + hover

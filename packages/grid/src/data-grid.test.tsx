@@ -627,3 +627,188 @@ describe('a value whose pieces do not all look alike', () => {
     expect(drawnLines.size).toBeGreaterThan(1)
   })
 })
+
+describe('selecting with the pointer', () => {
+  /** The surface the pointer events land on, under the scrolling container. */
+  const surfaceOf = (container: HTMLElement) => {
+    const surface = container.querySelector('[role="grid"] > div')
+    if (surface === null) throw new Error('the grid has no surface')
+    return surface
+  }
+
+  const at = (column: number, row: number) => ({
+    // Headers are 44 across and 22 down; a cell is 84 by 22.
+    clientX: 44 + column * 84 + 10,
+    clientY: 22 + row * 22 + 10,
+  })
+
+  it('reports a click as one cell', () => {
+    const chosen = vi.fn()
+    const { container } = grid({ onSelectionChange: chosen })
+
+    fireEvent.pointerDown(surfaceOf(container), at(1, 1))
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({ active: { row: 1, column: 1 } }),
+    )
+  })
+
+  it('drags a range out, keeping the corner it started from', () => {
+    const chosen = vi.fn()
+    const { container } = grid({ onSelectionChange: chosen })
+    const surface = surfaceOf(container)
+
+    fireEvent.pointerDown(surface, at(0, 0))
+    fireEvent.pointerMove(surface, at(2, 2))
+    fireEvent.pointerUp(surface, at(2, 2))
+
+    const last = chosen.mock.calls.at(-1)?.[0] as { ranges: { anchor: unknown; focus: unknown }[] }
+    expect(last.ranges[0]).toEqual({
+      anchor: { row: 0, column: 0 },
+      focus: { row: 2, column: 2 },
+    })
+  })
+
+  it('leaves the cursor at the corner a drag started from', () => {
+    // It is where a typed value would land; dragging picks a range, it does
+    // not move the cell being typed into.
+    const chosen = vi.fn()
+    const { container } = grid({ onSelectionChange: chosen })
+    const surface = surfaceOf(container)
+
+    fireEvent.pointerDown(surface, at(0, 0))
+    fireEvent.pointerMove(surface, at(2, 2))
+
+    expect((chosen.mock.calls.at(-1)?.[0] as { active: unknown }).active).toEqual({
+      row: 0,
+      column: 0,
+    })
+  })
+
+  it('adds a second range when Mod is held', () => {
+    const chosen = vi.fn()
+    const { container } = grid({ onSelectionChange: chosen })
+    const surface = surfaceOf(container)
+
+    fireEvent.pointerDown(surface, at(0, 0))
+    fireEvent.pointerDown(surface, { ...at(2, 2), metaKey: true })
+
+    expect((chosen.mock.calls.at(-1)?.[0] as { ranges: unknown[] }).ranges).toHaveLength(2)
+  })
+
+  it('takes a whole column from its letter, and a whole row from its number', () => {
+    const chosen = vi.fn()
+    const { container } = grid({ rows: 3, columns: 3, onSelectionChange: chosen })
+    const surface = surfaceOf(container)
+
+    fireEvent.pointerDown(surface, { clientX: 44 + 84 + 10, clientY: 10 })
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ranges: [{ anchor: { row: 0, column: 1 }, focus: { row: 2, column: 1 } }],
+      }),
+    )
+
+    fireEvent.pointerDown(surface, { clientX: 10, clientY: 22 + 22 + 10 })
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ranges: [{ anchor: { row: 1, column: 0 }, focus: { row: 1, column: 2 } }],
+      }),
+    )
+  })
+
+  it('takes everything from the corner box', () => {
+    const chosen = vi.fn()
+    const { container } = grid({ rows: 3, columns: 3, onSelectionChange: chosen })
+
+    fireEvent.pointerDown(surfaceOf(container), { clientX: 10, clientY: 10 })
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ranges: [{ anchor: { row: 0, column: 0 }, focus: { row: 2, column: 2 } }],
+      }),
+    )
+  })
+})
+
+describe('selecting with the keyboard', () => {
+  const press = (key: string, modifiers: Record<string, boolean> = {}) => {
+    fireEvent.keyDown(screen.getByRole('grid'), { key, ...modifiers })
+  }
+
+  it('extends with Shift and an arrow, without moving the cursor', () => {
+    const chosen = vi.fn()
+    grid({ onSelectionChange: chosen })
+
+    press('ArrowDown', { shiftKey: true })
+    press('ArrowRight', { shiftKey: true })
+
+    const last = chosen.mock.calls.at(-1)?.[0] as {
+      active: unknown
+      ranges: { focus: unknown }[]
+    }
+    expect(last.active).toEqual({ row: 0, column: 0 })
+    expect(last.ranges[0]?.focus).toEqual({ row: 1, column: 1 })
+  })
+
+  it('collapses the range when an arrow is pressed on its own', () => {
+    const chosen = vi.fn()
+    grid({ onSelectionChange: chosen })
+
+    press('ArrowDown', { shiftKey: true })
+    press('ArrowDown')
+
+    expect((chosen.mock.calls.at(-1)?.[0] as { ranges: unknown[] }).ranges).toHaveLength(1)
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({ active: { row: 1, column: 0 } }),
+    )
+  })
+
+  it('jumps to the end of the values with Mod and an arrow', () => {
+    const chosen = vi.fn()
+    // Three rows of values and nothing after them.
+    grid({ rows: 20, onSelectionChange: chosen })
+
+    press('ArrowDown', { metaKey: true })
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({ active: { row: 2, column: 0 } }),
+    )
+  })
+
+  it('takes everything with Mod and A', () => {
+    const chosen = vi.fn()
+    grid({ rows: 3, columns: 3, onSelectionChange: chosen })
+
+    press('a', { metaKey: true })
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ranges: [{ anchor: { row: 0, column: 0 }, focus: { row: 2, column: 2 } }],
+      }),
+    )
+  })
+
+  it('says how much is selected, for somebody who cannot see it', () => {
+    grid()
+
+    press('ArrowDown', { shiftKey: true })
+    press('ArrowRight', { shiftKey: true })
+
+    expect(screen.getByRole('grid').textContent).toContain('4 cells selected')
+  })
+})
+
+describe('a selection the caller owns', () => {
+  it('shows what it is given rather than what it chose', () => {
+    grid({
+      selection: {
+        ranges: [{ anchor: { row: 1, column: 1 }, focus: { row: 2, column: 2 } }],
+        active: { row: 1, column: 1 },
+      },
+    })
+
+    // Nine cells of wash under the four selected, drawn in the selection's
+    // own translucent orange.
+    expect(recorded.fills.some((one) => one.style === 'rgba(255, 122, 0, 0.12)')).toBe(true)
+  })
+})

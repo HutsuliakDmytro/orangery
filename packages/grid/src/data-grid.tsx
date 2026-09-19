@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   cellAtPoint,
   frozenSize,
+  headerAtPoint,
   heightOfRow,
   rectangleOfCell,
   scrollToCell,
@@ -12,6 +13,22 @@ import {
   widthOfColumn,
 } from './layout'
 import type { CellAddress, FrozenPanes, GridMetrics, Viewport } from './layout'
+import {
+  boundsOf,
+  coversColumn,
+  coversRow,
+  edgeFrom,
+  everything,
+  extendedTo,
+  lastRange,
+  singleCell,
+  stepFrom,
+  selectedCount,
+  wholeColumns,
+  wholeRows,
+  withRange,
+} from './selection'
+import type { Direction, GridSelection } from './selection'
 import type { CellBorders, CellStyle } from './cell-style'
 import { ICON_GUTTER, drawIcon } from './icon'
 import { drawCellText } from './text'
@@ -78,6 +95,15 @@ export interface DataGridProps {
    */
   onHoverCell?: (cell: CellAddress | null) => void
   /**
+   * What is selected, when the caller wants to say.
+   *
+   * Left out, the grid keeps its own and reports every change. Given, the
+   * caller decides — which is what a name box needs, since typing `B12` into
+   * one has to move a selection the grid did not move itself.
+   */
+  selection?: GridSelection
+  onSelectionChange?: (selection: GridSelection) => void
+  /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
    * Folded into the measurements rather than applied to the canvas, so that
@@ -105,6 +131,11 @@ const COLORS = {
   headerText: '#666666',
   text: '#111111',
   selection: '#FF7A00',
+  /** Over the cells, so what is under a selection stays readable. */
+  selectionFill: 'rgba(255, 122, 0, 0.12)',
+  /** A header whose row or column is selected, and one merely touched by it. */
+  headerSelected: '#FFE2C6',
+  headerTouched: '#E4E4E4',
   background: '#FFFFFF',
 }
 
@@ -167,6 +198,22 @@ const resized = (font: string, zoom: number): string =>
     ? font
     : font.replace(/(\d*\.?\d+)px/u, (_, size: string) => `${String(Number(size) * zoom)}px`)
 
+/**
+ * Keeps the pointer's events coming to this element while a drag is on.
+ *
+ * Guarded, because not every environment has it — jsdom does not, and a
+ * webview without it still drags; the range simply stops growing once the
+ * pointer leaves the grid, which is the behaviour capture exists to improve
+ * rather than to enable.
+ */
+function holdPointer(element: Element, pointerId: number, hold: boolean): void {
+  const target = element as Partial<Element>
+  if (typeof target.setPointerCapture !== 'function') return
+
+  if (hold) target.setPointerCapture(pointerId)
+  else if (target.hasPointerCapture?.(pointerId) === true) target.releasePointerCapture?.(pointerId)
+}
+
 /** A, B, … Z, AA — the names a spreadsheet gives its columns. */
 export function columnName(index: number): string {
   const letters: string[] = []
@@ -195,6 +242,8 @@ export function DataGrid({
   zoom = 1,
   overlay,
   onHoverCell,
+  selection: given,
+  onSelectionChange,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -204,7 +253,14 @@ export function DataGrid({
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const surface = useRef<HTMLDivElement | null>(null)
   const [scroll, setScroll] = useState({ x: 0, y: 0 })
-  const [selected, setSelected] = useState<CellAddress>({ row: 0, column: 0 })
+  const [own, setOwn] = useState<GridSelection>(() => singleCell({ row: 0, column: 0 }))
+  const selection = given ?? own
+  const selected = selection.active
+
+  /** Whether the pointer is dragging a range out. */
+  const dragging = useRef(false)
+
+  const selectedCells = useMemo(() => selectedCount(selection), [selection])
   const [editing, setEditing] = useState<{ cell: CellAddress; text: string } | null>(null)
 
   const viewport: Viewport = { scrollX: scroll.x, scrollY: scroll.y, width, height }
@@ -375,19 +431,130 @@ export function DataGrid({
 
     context.stroke()
 
+    /**
+     * What is selected, over the cells and under the headers.
+     *
+     * A wash rather than a solid: a selected cell has to stay readable, since
+     * the reason anybody selects a column of figures is to look at it.
+     */
+    for (const range of selection.ranges) {
+      const bounds = boundsOf(range)
+      const first = rectangleOfCell(
+        metrics,
+        view,
+        { row: Math.max(bounds.top, 0), column: Math.max(bounds.left, 0) },
+        frozen,
+      )
+      const last = rectangleOfCell(
+        metrics,
+        view,
+        { row: Math.min(bounds.bottom, rows - 1), column: Math.min(bounds.right, columns - 1) },
+        frozen,
+      )
+
+      context.fillStyle = COLORS.selectionFill
+      context.fillRect(
+        first.x,
+        first.y,
+        last.x + last.width - first.x,
+        last.y + last.height - first.y,
+      )
+
+      // One cell, and it is the cursor: the outline below is already drawing
+      // it, and a second one over the top would be a heavier line than any
+      // other selection gets.
+      const alone =
+        bounds.top === bounds.bottom &&
+        bounds.left === bounds.right &&
+        bounds.top === selected.row &&
+        bounds.left === selected.column
+      if (alone) continue
+
+      context.strokeStyle = COLORS.selection
+      context.lineWidth = 1
+      context.strokeRect(
+        first.x,
+        first.y,
+        last.x + last.width - first.x,
+        last.y + last.height - first.y,
+      )
+    }
+
+    // The active cell is left unwashed: it is where a typed value would land,
+    // and a person has to be able to tell it from the rest of the range.
+    const activeRect = rectangleOfCell(metrics, view, selected, frozen)
+    if (selectedCells > 1) {
+      context.fillStyle = COLORS.background
+      context.fillRect(
+        activeRect.x + 1,
+        activeRect.y + 1,
+        activeRect.width - 1,
+        activeRect.height - 1,
+      )
+
+      const style = styleAt?.(selected) ?? null
+      if (style?.background !== undefined) {
+        context.fillStyle = style.background
+        context.fillRect(
+          activeRect.x + 1,
+          activeRect.y + 1,
+          activeRect.width - 1,
+          activeRect.height - 1,
+        )
+      }
+
+      const text = valueAt(selected)
+      if (text !== null && text !== '') {
+        drawCellText(
+          context,
+          text,
+          activeRect,
+          style === null ? null : { ...style, font: resized(style.font ?? DEFAULT_FONT, zoom) },
+          { font: DEFAULT_FONT, color: COLORS.text, gutter: 0 },
+        )
+      }
+    }
+
     // Headers.
     context.fillStyle = COLORS.header
     context.fillRect(0, 0, width, metrics.headerHeight)
     context.fillRect(0, 0, metrics.headerWidth, height)
-    context.fillStyle = COLORS.headerText
 
     for (const column of columnsOnScreen) {
       const rect = rectangleOfCell(metrics, view, { row: 0, column }, frozen)
+      const whole = coversColumn(selection, column, rows)
+      const touched =
+        whole ||
+        selection.ranges.some((range) => {
+          const bounds = boundsOf(range)
+          return column >= bounds.left && column <= bounds.right
+        })
+
+      if (touched) {
+        context.fillStyle = whole ? COLORS.headerSelected : COLORS.headerTouched
+        context.fillRect(rect.x, 0, rect.width, metrics.headerHeight)
+      }
+
+      context.fillStyle = COLORS.headerText
       context.fillText(columnHeader(column), rect.x + 4, metrics.headerHeight / 2)
     }
 
     for (const row of rowsOnScreen) {
       const rect = rectangleOfCell(metrics, view, { row, column: 0 }, frozen)
+      const whole = coversRow(selection, row, columns)
+      const touched =
+        whole ||
+        selection.ranges.some((range) => {
+          const bounds = boundsOf(range)
+          return row >= bounds.top && row <= bounds.bottom
+        })
+
+      if (touched) {
+        context.fillStyle = whole ? COLORS.headerSelected : COLORS.headerTouched
+        context.fillRect(0, rect.y, metrics.headerWidth, rect.height)
+      }
+
+      context.fillStyle = COLORS.headerText
       context.fillText(rowHeader(row), 4, rect.y + rect.height / 2)
     }
 
@@ -411,11 +578,10 @@ export function DataGrid({
       context.stroke()
     }
 
-    // The selection last, so nothing draws over it.
-    const rect = rectangleOfCell(metrics, view, selected, frozen)
+    // The active cell's outline last, so nothing draws over it.
     context.strokeStyle = COLORS.selection
     context.lineWidth = 2
-    context.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    context.strokeRect(activeRect.x, activeRect.y, activeRect.width, activeRect.height)
   }, [
     columnHeader,
     columns,
@@ -428,11 +594,34 @@ export function DataGrid({
     scroll.x,
     scroll.y,
     selected,
+    selectedCells,
+    selection,
     styleAt,
     valueAt,
     width,
     zoom,
   ])
+
+  /**
+   * Follows a selection the caller moved.
+   *
+   * Typing `Z900` into a name box has to scroll there, and the grid never saw
+   * the gesture that asked for it — only the answer.
+   */
+  useEffect(() => {
+    if (given === undefined) return
+
+    setScroll((was) => {
+      const to = scrollToCell(
+        metrics,
+        { ...was, scrollX: was.x, scrollY: was.y, width, height },
+        given.active,
+      )
+      return to.scrollX === was.x && to.scrollY === was.y ? was : { x: to.scrollX, y: to.scrollY }
+    })
+    // Only when the cell moves: a selection extended by dragging has already
+    // scrolled itself, and re-running on every range would fight the drag.
+  }, [given?.active.row, given?.active.column, height, metrics, width])
 
   useLayoutEffect(() => {
     const element = canvas.current
@@ -451,20 +640,43 @@ export function DataGrid({
     [editable, onChange],
   )
 
-  const move = useCallback(
-    (cell: CellAddress) => {
-      const wanted = {
-        row: Math.max(0, Math.min(cell.row, rows - 1)),
-        column: Math.max(0, Math.min(cell.column, columns - 1)),
-      }
+  /** Announced and kept, so a caller that controls the selection still hears. */
+  const choose = useCallback(
+    (next: GridSelection, showing: CellAddress = next.active) => {
+      setOwn(next)
+      onSelectionChange?.(next)
 
-      setSelected(wanted)
-      const to = scrollToCell(metrics, { ...viewport }, wanted)
+      const to = scrollToCell(metrics, { ...viewport }, showing)
       setScroll({ x: to.scrollX, y: to.scrollY })
     },
     // The viewport is rebuilt on each render from scroll and size, which are
     // already dependencies of what this reads.
-    [columns, metrics, rows, viewport],
+    [metrics, onSelectionChange, viewport],
+  )
+
+  const inside = useCallback(
+    (cell: CellAddress): CellAddress => ({
+      row: Math.max(0, Math.min(cell.row, rows - 1)),
+      column: Math.max(0, Math.min(cell.column, columns - 1)),
+    }),
+    [columns, rows],
+  )
+
+  /** Moving the cursor, which throws away whatever was selected. */
+  const move = useCallback(
+    (cell: CellAddress) => {
+      choose(singleCell(inside(cell)))
+    },
+    [choose, inside],
+  )
+
+  /** Whether a cell holds anything, which is what `Mod` and an arrow follow. */
+  const filled = useCallback(
+    (cell: CellAddress) => {
+      const text = valueAt(cell)
+      return text !== null && text !== ''
+    },
+    [valueAt],
   )
 
   const commit = useCallback(
@@ -496,19 +708,51 @@ export function DataGrid({
     surface.current?.focus()
   }, [])
 
+  const ARROWS: Record<string, Direction> = {
+    ArrowDown: 'down',
+    ArrowUp: 'up',
+    ArrowRight: 'right',
+    ArrowLeft: 'left',
+  }
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (editing !== null) return
 
-    const step: Record<string, CellAddress> = {
-      ArrowDown: { row: selected.row + 1, column: selected.column },
-      ArrowUp: { row: selected.row - 1, column: selected.column },
-      ArrowRight: { row: selected.row, column: selected.column + 1 },
-      ArrowLeft: { row: selected.row, column: selected.column - 1 },
+    const counts = { rows, columns }
+    const jumping = event.metaKey || event.ctrlKey
+
+    // Everything. Excel's own `Mod+A` grows from the block outwards first;
+    // that needs a notion of "the block", which arrives with the fill handle
+    // and the sorting that depend on the same idea.
+    if (jumping && event.key.toLowerCase() === 'a') {
+      event.preventDefault()
+      choose(everything(rows, columns), selected)
+      return
+    }
+
+    const direction = ARROWS[event.key]
+    if (direction !== undefined) {
+      event.preventDefault()
+
+      // `Shift` moves the far corner of the range and leaves the near one —
+      // and the active cell — where they are; without it the whole selection
+      // collapses to wherever the cursor landed.
+      const from = event.shiftKey ? lastRange(selection).focus : selected
+      const to = jumping
+        ? edgeFrom(from, direction, counts, filled)
+        : stepFrom(from, direction, counts)
+
+      if (event.shiftKey) choose(extendedTo(selection, to), to)
+      else move(to)
+      return
+    }
+
+    const along: Record<string, CellAddress> = {
       Enter: { row: selected.row + 1, column: selected.column },
       Tab: { row: selected.row, column: selected.column + (event.shiftKey ? -1 : 1) },
     }
 
-    const wanted = step[event.key]
+    const wanted = along[event.key]
     if (wanted !== undefined) {
       event.preventDefault()
       move(wanted)
@@ -566,35 +810,78 @@ export function DataGrid({
           const box = event.currentTarget.parentElement?.getBoundingClientRect()
           if (box === undefined) return
 
-          const cell = cellAtPoint(
-            metrics,
-            viewport,
-            { x: event.clientX - box.left, y: event.clientY - box.top },
-            { rows, columns },
-            frozen,
-          )
-          if (cell !== null) move(cell)
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+          const counts = { rows, columns }
+          const adding = event.metaKey || event.ctrlKey
+
+          const header = headerAtPoint(metrics, viewport, point, counts, frozen)
+          if (header !== null) {
+            if (header.kind === 'corner') {
+              choose(everything(rows, columns), selected)
+              return
+            }
+
+            const range =
+              header.kind === 'column'
+                ? wholeColumns(header.index, header.index, rows)
+                : wholeRows(header.index, header.index, columns)
+
+            // Dragging across the headers picks a run of them, the same
+            // gesture as dragging across cells.
+            dragging.current = true
+            holdPointer(event.currentTarget, event.pointerId, true)
+
+            if (event.shiftKey) choose(extendedTo(selection, range.focus), range.focus)
+            else if (adding) choose(withRange(selection, range), range.anchor)
+            else choose({ ranges: [range], active: range.anchor }, range.anchor)
+            return
+          }
+
+          const cell = cellAtPoint(metrics, viewport, point, counts, frozen)
+          if (cell === null) return
+
+          dragging.current = true
+          holdPointer(event.currentTarget, event.pointerId, true)
+
+          if (event.shiftKey) choose(extendedTo(selection, cell), cell)
+          else if (adding) choose(withRange(selection, { anchor: cell, focus: cell }), cell)
+          else move(cell)
+        }}
+        onPointerUp={(event) => {
+          dragging.current = false
+          holdPointer(event.currentTarget, event.pointerId, false)
         }}
         onDoubleClick={() => {
           if (canEdit(selected)) setEditing({ cell: selected, text: valueAt(selected) ?? '' })
         }}
         onPointerMove={(event) => {
-          if (onHoverCell === undefined) return
-
           const box = event.currentTarget.parentElement?.getBoundingClientRect()
           if (box === undefined) return
 
-          onHoverCell(
-            cellAtPoint(
-              metrics,
-              viewport,
-              { x: event.clientX - box.left, y: event.clientY - box.top },
-              { rows, columns },
-              frozen,
-            ),
-          )
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+          const cell = cellAtPoint(metrics, viewport, point, { rows, columns }, frozen)
+
+          if (dragging.current) {
+            // Dragging past the edge of the cells keeps hold of the last one
+            // it was over, rather than letting go of the range.
+            const header = headerAtPoint(metrics, viewport, point, { rows, columns }, frozen)
+            const to =
+              cell ??
+              (header?.kind === 'column'
+                ? { row: rows - 1, column: header.index }
+                : header?.kind === 'row'
+                  ? { row: header.index, column: columns - 1 }
+                  : null)
+
+            if (to !== null) choose(extendedTo(selection, to), to)
+            return
+          }
+
+          onHoverCell?.(cell)
         }}
-        onPointerLeave={() => onHoverCell?.(null)}
+        onPointerLeave={() => {
+          if (!dragging.current) onHoverCell?.(null)
+        }}
       >
         <canvas
           ref={canvas}
@@ -694,7 +981,7 @@ export function DataGrid({
       >
         {`${columnHeader(selected.column)}, row ${rowHeader(selected.row)}: ${
           valueAt(selected) ?? 'empty'
-        }`}
+        }${selectedCells > 1 ? `, ${String(selectedCells)} cells selected` : ''}`}
       </span>
     </div>
   )

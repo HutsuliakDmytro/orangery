@@ -149,3 +149,66 @@ describe('a file that will not open', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('the box that says where you are', () => {
+  it('shows the cell the cursor is on', async () => {
+    render(<App />)
+    await load()
+
+    expect(await screen.findByLabelText('Name box')).toHaveValue('A1')
+  })
+
+  it('takes you where you type', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await user.clear(box)
+    await user.type(box, 'C7{Enter}')
+
+    expect(useWorkbookStore.getState().selection.active).toEqual({ row: 6, column: 2 })
+  })
+
+  it('selects a range when given one', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await user.clear(box)
+    await user.type(box, 'B2:D5{Enter}')
+
+    await waitFor(() => {
+      expect(screen.getByText('12 cells')).toBeInTheDocument()
+    })
+  })
+
+  it('puts back the old address rather than keeping a wrong one', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await user.clear(box)
+    await user.type(box, 'nowhere{Enter}')
+
+    expect(box).toHaveValue('A1')
+    expect(useWorkbookStore.getState().selection.active).toEqual({ row: 0, column: 0 })
+  })
+
+  it('starts again on the first cell when the sheet changes', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await user.clear(box)
+    await user.type(box, 'C7{Enter}')
+
+    await user.click(screen.getByRole('button', { name: 'Notes' }))
+
+    // A selection belongs to the sheet it was made on.
+    expect(await screen.findByLabelText('Name box')).toHaveValue('A1')
+  })
+})

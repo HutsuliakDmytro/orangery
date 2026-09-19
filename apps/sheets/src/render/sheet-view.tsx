@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DataGrid } from '@orangery/grid'
-import type { CellAddress, CellStyle } from '@orangery/grid'
+import type { CellAddress, CellStyle, GridSelection } from '@orangery/grid'
 import {
   cellAt,
   extentOf,
@@ -55,9 +55,19 @@ export interface SheetViewProps {
   sheet: OpenSheet
   width: number
   height: number
+  /** What is selected, which the name box outside the grid shows too. */
+  selection?: GridSelection
+  onSelectionChange?: (selection: GridSelection) => void
 }
 
-export function SheetView({ open, sheet, width, height }: SheetViewProps) {
+export function SheetView({
+  open,
+  sheet,
+  width,
+  height,
+  selection,
+  onSelectionChange,
+}: SheetViewProps) {
   const { styles, strings, palette } = open
 
   /**
@@ -291,7 +301,14 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
     [sheet.sheet],
   )
 
-  /** As far as the cells reach, with room to scroll past them as Excel has. */
+  /**
+   * As far as the cells reach, with room to scroll past them as Excel has —
+   * and as far as the selection reaches, which can be further.
+   *
+   * A reference typed into the name box names a cell the sheet may never have
+   * had, and a grid that stopped short of it would refuse to go where it had
+   * just been told to go.
+   */
   const extent = useMemo(() => {
     const rows = Math.max(...[...sheet.cells.rows.keys()].map((row) => row + 1), 0)
     const columns = Math.max(
@@ -299,8 +316,19 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       0,
     )
 
-    return { rows: Math.max(rows + 50, 100), columns: Math.max(columns + 5, 26) }
-  }, [sheet.cells])
+    const reach = (selection?.ranges ?? []).reduce(
+      (far, range) => ({
+        rows: Math.max(far.rows, range.anchor.row + 1, range.focus.row + 1),
+        columns: Math.max(far.columns, range.anchor.column + 1, range.focus.column + 1),
+      }),
+      { rows: 0, columns: 0 },
+    )
+
+    return {
+      rows: Math.max(rows + 50, 100, reach.rows),
+      columns: Math.max(columns + 5, 26, reach.columns),
+    }
+  }, [selection, sheet.cells])
 
   const metrics = useMemo(() => {
     const widths = Array.from({ length: extent.columns }, (_, column) => {
@@ -347,6 +375,8 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       metrics={metrics}
       frozen={frozen}
       zoom={zoom}
+      {...(selection === undefined ? {} : { selection })}
+      {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any

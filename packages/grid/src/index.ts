@@ -17,6 +17,7 @@ export {
   cellAtPoint,
   columnAtOffset,
   frozenSize,
+  headerAtPoint,
   heightOfRow,
   offsetOfColumn,
   offsetOfRow,
@@ -29,4 +30,28 @@ export {
   visibleRows,
   widthOfColumn,
 } from './layout'
-export type { CellAddress, FrozenPanes, GridMetrics, Rectangle, Viewport } from './layout'
+export type {
+  CellAddress,
+  FrozenPanes,
+  GridMetrics,
+  HeaderHit,
+  Rectangle,
+  Viewport,
+} from './layout'
+export {
+  boundsOf,
+  coversCell,
+  coversColumn,
+  coversRow,
+  edgeFrom,
+  everything,
+  extendedTo,
+  lastRange,
+  selectedCount,
+  singleCell,
+  stepFrom,
+  wholeColumns,
+  wholeRows,
+  withRange,
+} from './selection'
+export type { Bounds, Direction, GridRange, GridSelection } from './selection'

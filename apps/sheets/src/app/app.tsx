@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
+import { selectedCount } from '@orangery/grid'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog } from '../document/file'
+import { ReferenceBox } from '../render/reference-box'
 import { SheetView } from '../render/sheet-view'
 import { useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
 import { useCommandSource } from './command-source'
@@ -17,9 +19,9 @@ registerBuiltinCommands()
  * The window.
  *
  * A spreadsheet is one big surface and a strip of tabs, and almost everything a
- * person does happens on the surface. What goes around it — the toolbar, the
- * formula bar, the name box — comes with the editing phases; until then the
- * window is what a reader needs, which is the sheet itself.
+ * person does happens on the surface. Around it, so far, is the one thing a
+ * surface cannot say for itself: which cell the cursor is on when four hundred
+ * are selected. The toolbar and the formula bar come with editing.
  */
 function Shell() {
   useNativeMenu()
@@ -32,6 +34,8 @@ function Shell() {
   const problem = useWorkbookStore((state) => state.problem)
   const dismiss = useWorkbookStore((state) => state.dismiss)
   const select = useWorkbookStore((state) => state.select)
+  const selection = useWorkbookStore((state) => state.selection)
+  const choose = useWorkbookStore((state) => state.choose)
   const size = useWindowSize()
 
   useEffect(() => {
@@ -41,6 +45,8 @@ function Shell() {
   const sheets = open === null ? [] : visibleSheetsOf(open)
   const sheet = sheets[current] ?? null
   const tabsHeight = sheets.length > 0 ? 32 : 0
+  const barHeight = sheet === null ? 0 : 33
+  const selected = selectedCount(selection)
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
@@ -56,6 +62,19 @@ function Shell() {
         </div>
       )}
 
+      {sheet !== null && (
+        <div className="flex h-8 items-center gap-3 border-b border-border px-2">
+          <ReferenceBox
+            selection={selection}
+            extent={{ rows: 1_048_576, columns: 16_384 }}
+            onGo={choose}
+          />
+          {selected > 1 && (
+            <span className="text-xs text-muted">{`${String(selected)} cells`}</span>
+          )}
+        </div>
+      )}
+
       <main className="min-h-0 flex-1">
         {sheet === null || open === null ? (
           <Welcome />
@@ -64,7 +83,12 @@ function Shell() {
             open={open}
             sheet={sheet}
             width={size.width}
-            height={Math.max(size.height - tabsHeight - (problem === null ? 0 : 34), 120)}
+            height={Math.max(
+              size.height - tabsHeight - barHeight - (problem === null ? 0 : 34),
+              120,
+            )}
+            selection={selection}
+            onSelectionChange={choose}
           />
         )}
       </main>

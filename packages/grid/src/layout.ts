@@ -235,6 +235,46 @@ export function cellAtPoint(
   return { row, column }
 }
 
+/** Which strip of headers a point landed in, or null for the cells. */
+export type HeaderHit =
+  | { kind: 'column'; index: number }
+  | { kind: 'row'; index: number }
+  /** The box above the row numbers and left of the letters: everything. */
+  | { kind: 'corner' }
+
+/**
+ * The header under a point.
+ *
+ * The companion to `cellAtPoint`, and the reason that one returns null over a
+ * header rather than the nearest cell: clicking a letter is a different
+ * gesture from clicking a cell, and it selects a different thing.
+ */
+export function headerAtPoint(
+  metrics: GridMetrics,
+  viewport: Viewport,
+  point: { x: number; y: number },
+  counts: { rows: number; columns: number },
+  frozen: FrozenPanes | null = null,
+): HeaderHit | null {
+  const overRows = point.x < metrics.headerWidth
+  const overColumns = point.y < metrics.headerHeight
+
+  if (overRows && overColumns) return { kind: 'corner' }
+  if (!overRows && !overColumns) return null
+
+  const size = frozenSize(metrics, frozen)
+
+  if (overColumns) {
+    const acrossFrozen = point.x - metrics.headerWidth < size.width
+    const x = point.x - metrics.headerWidth + (acrossFrozen ? 0 : viewport.scrollX)
+    return { kind: 'column', index: columnAtOffset(metrics, x, counts.columns) }
+  }
+
+  const downFrozen = point.y - metrics.headerHeight < size.height
+  const y = point.y - metrics.headerHeight + (downFrozen ? 0 : viewport.scrollY)
+  return { kind: 'row', index: rowAtOffset(metrics, y, counts.rows) }
+}
+
 /**
  * The scroll position that brings a cell into view, moving as little as it can.
  *

@@ -45,7 +45,7 @@ Rule: **nothing OS-specific outside `packages/platform/`, nothing Docs-specific 
 | Charts | `c:chart` parts: own SVG renderer for bar/line/pie/doughnut/scatter/area, combination charts and a secondary axis. Editing changes the numbers — both the cache and the embedded workbook, or PowerPoint rebuilds the cache and loses the edit. Categories and the number of points are editable too; the ranges in `c:f` and the workbook's rows move together. |
 | Media | video/audio via `<video>`/`<audio>` from media parts; playback in slideshow |
 | Other formats | ODP import/export (own layer, same approach), PDF export, PNG/JPEG per slide, `.thmx` theme export, video via canvas capture (real time, engine's container, narration mixed in), Keynote `.key` — no |
-| Tests | Vitest, Playwright, cargo test; round-trip corpus + LibreOffice render-diff in CI |
+| Tests | Vitest, Playwright, cargo test; round-trip corpus, package health after edits (`problemsIn`), LibreOffice render-diff in CI |
 
 ## Design system
 

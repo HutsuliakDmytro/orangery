@@ -42,5 +42,8 @@ export {
   setAttribute,
   upsertChild,
 } from './edit'
+export { describeProblems, problemsIn } from './validate'
+export type { PackageProblem } from './validate'
+
 export { addMedia, contentTypeOf, ensureContentType, ensureOverride, nextMediaName } from './media'
 export type { AddedMedia, MediaRequest } from './media'

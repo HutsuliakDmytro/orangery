@@ -13,6 +13,7 @@ import {
   withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { VIEW_PROPS_PART } from './parts'
 
 /**
  * The guides a person drags out of the rulers.
@@ -25,8 +26,6 @@ import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
  * format that is neither EMU nor a percentage. Everything here speaks EMU and
  * converts at the edge.
  */
-
-const VIEW_PROPERTIES_PART = 'ppt/viewProps.xml'
 
 /** An eighth of a point, in EMU. */
 const UNIT = 12700 / 8
@@ -51,7 +50,7 @@ export interface SlideGuide {
 }
 
 function viewRoot(pkg: OoxmlPackage): { roots: XmlNode[]; root: XmlNode } | null {
-  const text = getPartText(pkg, VIEW_PROPERTIES_PART)
+  const text = getPartText(pkg, VIEW_PROPS_PART)
   if (text === undefined) return null
 
   const roots = parseXml(text)
@@ -134,7 +133,7 @@ export function writeGuides(pkg: OoxmlPackage, guides: readonly SlideGuide[]): b
     if (common === undefined) return false
 
     removeChild(common, 'p:guideLst')
-    setPartText(pkg, VIEW_PROPERTIES_PART, withDeclaration(buildXml(found.roots)))
+    setPartText(pkg, VIEW_PROPS_PART, withDeclaration(buildXml(found.roots)))
     return true
   }
 
@@ -149,7 +148,7 @@ export function writeGuides(pkg: OoxmlPackage, guides: readonly SlideGuide[]): b
   )
 
   children(list).splice(0, children(list).length, ...written)
-  setPartText(pkg, VIEW_PROPERTIES_PART, withDeclaration(buildXml(found.roots)))
+  setPartText(pkg, VIEW_PROPS_PART, withDeclaration(buildXml(found.roots)))
   return true
 }
 
@@ -221,6 +220,6 @@ export function writeGridSpacing(pkg: OoxmlPackage, spacing: number): boolean {
 
   setAttribute(node, 'cx', clamped)
   setAttribute(node, 'cy', clamped)
-  setPartText(pkg, VIEW_PROPERTIES_PART, withDeclaration(buildXml(found.roots)))
+  setPartText(pkg, VIEW_PROPS_PART, withDeclaration(buildXml(found.roots)))
   return true
 }

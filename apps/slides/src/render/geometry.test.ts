@@ -11,6 +11,204 @@ import { isKnownPreset, isLinePreset, pathFor, PRESET_NAMES } from './geometry'
 
 const BOX = { width: 400, height: 300 }
 
+/**
+ * Every name `ST_ShapeType` has, all 187 of them.
+ *
+ * Written out rather than derived from what the table happens to hold: a list
+ * taken from the code would pass whatever the code did, and the question this
+ * asks is whether a shape somebody can draw in PowerPoint arrives here as
+ * itself or as a rectangle.
+ */
+const EVERY_PRESET = [
+  'line',
+  'lineInv',
+  'triangle',
+  'rtTriangle',
+  'rect',
+  'diamond',
+  'parallelogram',
+  'trapezoid',
+  'nonIsoscelesTrapezoid',
+  'pentagon',
+  'hexagon',
+  'heptagon',
+  'octagon',
+  'decagon',
+  'dodecagon',
+  'star4',
+  'star5',
+  'star6',
+  'star7',
+  'star8',
+  'star10',
+  'star12',
+  'star16',
+  'star24',
+  'star32',
+  'roundRect',
+  'round1Rect',
+  'round2SameRect',
+  'round2DiagRect',
+  'snipRoundRect',
+  'snip1Rect',
+  'snip2SameRect',
+  'snip2DiagRect',
+  'plaque',
+  'ellipse',
+  'teardrop',
+  'homePlate',
+  'chevron',
+  'pieWedge',
+  'pie',
+  'blockArc',
+  'donut',
+  'noSmoking',
+  'rightArrow',
+  'leftArrow',
+  'upArrow',
+  'downArrow',
+  'stripedRightArrow',
+  'notchedRightArrow',
+  'bentUpArrow',
+  'leftRightArrow',
+  'upDownArrow',
+  'leftUpArrow',
+  'leftRightUpArrow',
+  'quadArrow',
+  'leftArrowCallout',
+  'rightArrowCallout',
+  'upArrowCallout',
+  'downArrowCallout',
+  'leftRightArrowCallout',
+  'upDownArrowCallout',
+  'quadArrowCallout',
+  'bentArrow',
+  'uturnArrow',
+  'circularArrow',
+  'leftCircularArrow',
+  'leftRightCircularArrow',
+  'curvedRightArrow',
+  'curvedLeftArrow',
+  'curvedUpArrow',
+  'curvedDownArrow',
+  'swooshArrow',
+  'cube',
+  'can',
+  'lightningBolt',
+  'heart',
+  'sun',
+  'moon',
+  'smileyFace',
+  'irregularSeal1',
+  'irregularSeal2',
+  'foldedCorner',
+  'bevel',
+  'frame',
+  'halfFrame',
+  'corner',
+  'diagStripe',
+  'chord',
+  'arc',
+  'leftBracket',
+  'rightBracket',
+  'leftBrace',
+  'rightBrace',
+  'bracketPair',
+  'bracePair',
+  'straightConnector1',
+  'bentConnector2',
+  'bentConnector3',
+  'bentConnector4',
+  'bentConnector5',
+  'curvedConnector2',
+  'curvedConnector3',
+  'curvedConnector4',
+  'curvedConnector5',
+  'callout1',
+  'callout2',
+  'callout3',
+  'accentCallout1',
+  'accentCallout2',
+  'accentCallout3',
+  'borderCallout1',
+  'borderCallout2',
+  'borderCallout3',
+  'accentBorderCallout1',
+  'accentBorderCallout2',
+  'accentBorderCallout3',
+  'wedgeRectCallout',
+  'wedgeRoundRectCallout',
+  'wedgeEllipseCallout',
+  'cloudCallout',
+  'cloud',
+  'ribbon',
+  'ribbon2',
+  'ellipseRibbon',
+  'ellipseRibbon2',
+  'leftRightRibbon',
+  'verticalScroll',
+  'horizontalScroll',
+  'wave',
+  'doubleWave',
+  'plus',
+  'flowChartProcess',
+  'flowChartDecision',
+  'flowChartInputOutput',
+  'flowChartPredefinedProcess',
+  'flowChartInternalStorage',
+  'flowChartDocument',
+  'flowChartMultidocument',
+  'flowChartTerminator',
+  'flowChartPreparation',
+  'flowChartManualInput',
+  'flowChartManualOperation',
+  'flowChartConnector',
+  'flowChartPunchedCard',
+  'flowChartPunchedTape',
+  'flowChartSummingJunction',
+  'flowChartOr',
+  'flowChartCollate',
+  'flowChartSort',
+  'flowChartExtract',
+  'flowChartMerge',
+  'flowChartOfflineStorage',
+  'flowChartOnlineStorage',
+  'flowChartMagneticTape',
+  'flowChartMagneticDisk',
+  'flowChartMagneticDrum',
+  'flowChartDisplay',
+  'flowChartDelay',
+  'flowChartAlternateProcess',
+  'flowChartOffpageConnector',
+  'actionButtonBlank',
+  'actionButtonHome',
+  'actionButtonHelp',
+  'actionButtonInformation',
+  'actionButtonForwardNext',
+  'actionButtonBackPrevious',
+  'actionButtonEnd',
+  'actionButtonBeginning',
+  'actionButtonReturn',
+  'actionButtonDocument',
+  'actionButtonSound',
+  'actionButtonMovie',
+  'gear6',
+  'gear9',
+  'funnel',
+  'mathPlus',
+  'mathMinus',
+  'mathMultiply',
+  'mathDivide',
+  'mathEqual',
+  'mathNotEqual',
+  'cornerTabs',
+  'squareTabs',
+  'plaqueTabs',
+  'chartX',
+  'chartStar',
+  'chartPlus',
+]
+
 /** Every number in a path, whatever command it belongs to. */
 const numbersIn = (path: string): number[] =>
   [...path.matchAll(/-?\d+(?:\.\d+)?/gu)].map((match) => Number(match[0]))
@@ -43,7 +241,7 @@ function lengthsIn(path: string): number[] {
 
 describe('every preset', () => {
   it('draws something', () => {
-    expect(PRESET_NAMES.length).toBeGreaterThan(120)
+    expect(PRESET_NAMES.length).toBe(EVERY_PRESET.length)
   })
 
   it('starts by moving somewhere', () => {
@@ -120,12 +318,27 @@ describe('a closed shape', () => {
   })
 })
 
+describe('every shape the format has a name for', () => {
+  it('is drawn as itself', () => {
+    const missing = EVERY_PRESET.filter((preset) => !isKnownPreset(preset))
+    expect(missing).toEqual([])
+  })
+
+  it('is the whole of what this app knows, and nothing invented', () => {
+    // A name here that the format does not have would be a shape no file can
+    // ask for, kept alive by nothing but this table.
+    expect(PRESET_NAMES.filter((preset) => !EVERY_PRESET.includes(preset))).toEqual([])
+  })
+})
+
 describe('a preset nobody here knows', () => {
   it('falls back to the box it occupies', () => {
-    // In the right place at the right size with the right fill, which is close
-    // enough to read a slide by — and it is never written back.
-    expect(isKnownPreset('swooshArrow')).toBe(false)
-    expect(pathFor('swooshArrow', BOX)).toBe(pathFor('rect', BOX))
+    // Nothing in the format is called this. A file from something newer than
+    // this app is the case: in the right place at the right size with the right
+    // fill, which is close enough to read a slide by — and it is never written
+    // back.
+    expect(isKnownPreset('quantumRhombus')).toBe(false)
+    expect(pathFor('quantumRhombus', BOX)).toBe(pathFor('rect', BOX))
   })
 })
 

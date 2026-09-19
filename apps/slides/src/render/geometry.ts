@@ -235,6 +235,183 @@ const blockArrow =
     return scaled(turned(arrowPoints(head, shaft), quarters))(box, adjust)
   }
 
+/** The same points mirrored left to right, for the shape that is the other way round. */
+const flippedX = (points: readonly Point[]): Point[] => points.map(([x, y]) => [1 - x, y] as Point)
+
+/**
+ * Points along an elliptical arc, in unit coordinates.
+ *
+ * Enough segments to read as a curve. A band that bends needs two arcs and a
+ * head between them, and as points they can be turned and mirrored like every
+ * other shape here — as `A` commands they could not.
+ */
+const along = (centre: Point, radius: number, from: number, to: number, steps = 16): Point[] =>
+  Array.from({ length: steps + 1 }, (_, index) => {
+    const angle = ((from + ((to - from) * index) / steps) * Math.PI) / 180
+    return [centre[0] + Math.cos(angle) * radius, centre[1] + Math.sin(angle) * radius] as Point
+  })
+
+/** The three points of a head across the end of a ring-shaped band. */
+const arrowHead = (
+  centre: Point,
+  degrees: number,
+  outer: number,
+  inner: number,
+  overhang = 0.09,
+  reach = 26,
+): Point[] => {
+  const at = (radius: number, angle: number): Point => {
+    const radians = (angle * Math.PI) / 180
+    return [centre[0] + Math.cos(radians) * radius, centre[1] + Math.sin(radians) * radius]
+  }
+  const forward = outer > inner ? reach : -reach
+
+  return [
+    at(Math.max(outer, inner) + overhang, degrees),
+    at((outer + inner) / 2, degrees + forward),
+    at(Math.min(outer, inner) - overhang, degrees),
+  ]
+}
+
+/**
+ * An arrow whose body is a quarter of a ring.
+ *
+ * Drawn pointing right — the band rises from the bottom left and turns over —
+ * and the other three are that one turned, the same trick the block arrows use.
+ */
+const curvedArrow = (quarters: number): PathOf => {
+  const centre: Point = [0, 1]
+  const points = [
+    ...along(centre, 0.98, -90, -22),
+    ...arrowHead(centre, -22, 0.98, 0.62),
+    ...along(centre, 0.62, -22, -90),
+  ]
+
+  return scaled(turned(points, quarters))
+}
+
+/** A banner curved as a piece of an ellipse, with a notch cut out of each end. */
+const ellipseRibbon =
+  (downwards: boolean): PathOf =>
+  (box, adjust) => {
+    const points: Point[] = [
+      [0, 0.1],
+      ...along([0.5, 0.45], 0.5, 200, 340).map(([x, y]) => [x, y - 0.2] as Point),
+      [1, 0.1],
+      [0.88, 0.28],
+      [1, 0.46],
+      [0.84, 0.46],
+      ...along([0.5, 0.45], 0.36, 340, 200).map(([x, y]) => [x, y + 0.06] as Point),
+      [0.16, 0.46],
+      [0, 0.46],
+      [0.12, 0.28],
+    ]
+
+    return scaled(downwards ? points.map(([x, y]) => [x, 1 - y] as Point) : points)(box, adjust)
+  }
+
+/** A cogwheel: `teeth` trapezoids around a ring, with the hole in the middle. */
+const gear =
+  (teeth: number): PathOf =>
+  (box, adjust) => {
+    const half = 180 / teeth
+    const points = Array.from({ length: teeth }, (_, index) => {
+      const at = index * 2 * half
+      return [
+        ...along([0.5, 0.5], 0.34, at - half * 0.8, at - half * 0.35, 2),
+        ...along([0.5, 0.5], 0.48, at - half * 0.3, at + half * 0.3, 2),
+        ...along([0.5, 0.5], 0.34, at + half * 0.35, at + half * 0.8, 2),
+      ]
+    }).flat()
+
+    return [
+      scaled(points)(box, adjust),
+      ring(box.width / 2, box.height / 2, box.width * 0.16, box.height * 0.16, false),
+    ].join(' ')
+  }
+
+/**
+ * A callout: the box, and the leader with one, two or three segments.
+ *
+ * The accent is the bar down the inside edge, which is the only thing the
+ * accent families add to the bordered ones.
+ */
+const leaderCallout =
+  (segments: number, accent: boolean): PathOf =>
+  ({ width, height }, adjust) => {
+    const body = height * (segments === 1 ? 0.7 : segments === 2 ? 0.65 : 0.6)
+    const leader =
+      segments === 1
+        ? `M${n(width * 0.15)},${n(body)} L0,${n(height)}`
+        : segments === 2
+          ? `M${n(width * 0.15)},${n(body)} L${n(width * 0.08)},${n(height * 0.85)} L0,${n(height)}`
+          : `M${n(width * 0.15)},${n(body)} L${n(width * 0.15)},${n(height * 0.8)} L${n(width * 0.05)},${n(height * 0.8)} L0,${n(height)}`
+
+    return [
+      rectangle({ width, height: body }, adjust),
+      ...(accent ? [`M${n(width * 0.08)},0 L${n(width * 0.08)},${n(body)}`] : []),
+      leader,
+    ].join(' ')
+  }
+
+/** A box with an arrow out of one side, turned a quarter at a time. */
+const arrowCallout = (quarters: number): PathOf =>
+  scaled(
+    turned(
+      [
+        [0, 0],
+        [0.7, 0],
+        [0.7, 0.375],
+        [0.8, 0.375],
+        [0.8, 0.25],
+        [1, 0.5],
+        [0.8, 0.75],
+        [0.8, 0.625],
+        [0.7, 0.625],
+        [0.7, 1],
+        [0, 1],
+      ],
+      quarters,
+    ),
+  )
+
+/**
+ * One mark in each corner of the box.
+ *
+ * The mark is written once, in a square of its own, and each corner gets it
+ * turned a further quarter — four hand-written marks would be four chances to
+ * mistype one. Turning happens inside that square and the square is then put in
+ * its corner, which is the order that matters: turned in the box's own
+ * coordinates, three of the four would land outside it.
+ */
+const corners =
+  (mark: readonly Point[]): PathOf =>
+  (box, adjust) => {
+    const size = 0.22
+    const places: [number, number, number][] = [
+      [0, 0, 0],
+      [1, 0, 1],
+      [1, 1, 2],
+      [0, 1, 3],
+    ]
+
+    return places
+      .map(([x, y, quarters]) =>
+        scaled(
+          turned(mark, quarters).map(
+            ([px, py]) => [x * (1 - size) + px * size, y * (1 - size) + py * size] as Point,
+          ),
+        )(box, adjust),
+      )
+      .join(' ')
+  }
+
+/** An action button: the face, and the mark that says what it does. */
+const withGlyph =
+  (glyph: readonly Point[]): PathOf =>
+  (box, adjust) =>
+    [rectangle(box, adjust), scaled(glyph)(box, NO_ADJUST)].join(' ')
+
 const PRESETS: Readonly<Record<string, PathOf>> = {
   // Rectangles, and the eight ways their corners can be treated.
   rect: rectangle,
@@ -1162,6 +1339,406 @@ const PRESETS: Readonly<Record<string, PathOf>> = {
     ].join(' ')
   },
 
+  // The rest of `ST_ShapeType`: the families PowerPoint's gallery offers that
+  // nothing above draws. Same rule as everything here — the shape at the
+  // proportions the format defaults to, in unit coordinates scaled onto the
+  // box, so a curve that bends is a curve made of enough segments to look like
+  // one rather than an arc whose flags have to be reasoned about.
+  lineInv: polyline(({ width, height }) => [
+    [0, height],
+    [width, 0],
+  ]),
+  nonIsoscelesTrapezoid: scaled([
+    [0.2, 0],
+    [0.7, 0],
+    [1, 1],
+    [0, 1],
+  ]),
+  pieWedge: ({ width, height }) =>
+    `M0,${n(height)} L${n(width)},${n(height)} A${n(width)},${n(height)} 0 0 0 0,0 Z`,
+  leftUpArrow: scaled([
+    [0, 0.65],
+    [0.25, 0.45],
+    [0.25, 0.55],
+    [0.55, 0.55],
+    [0.55, 0.25],
+    [0.45, 0.25],
+    [0.65, 0],
+    [0.85, 0.25],
+    [0.75, 0.25],
+    [0.75, 0.75],
+    [0.25, 0.75],
+    [0.25, 0.85],
+  ]),
+  // A triangle with the line across it that says the storage is off this page.
+  flowChartOfflineStorage: ({ width, height }) =>
+    [
+      scaled([
+        [0, 0],
+        [1, 0],
+        [0.5, 1],
+      ])({ width, height }, NO_ADJUST),
+      `M${n(width * 0.15)},${n(height * 0.3)} L${n(width * 0.85)},${n(height * 0.3)}`,
+    ].join(' '),
+
+  // Callouts that are a box with an arrow out of one side. The body keeps the
+  // whole box less the arrow, because a callout's text sits in the body and a
+  // body that shrank with the arrow would be a box the words no longer fit.
+  rightArrowCallout: arrowCallout(0),
+  downArrowCallout: arrowCallout(1),
+  leftArrowCallout: arrowCallout(2),
+  upArrowCallout: arrowCallout(3),
+  leftRightArrowCallout: scaled([
+    [0.2, 0],
+    [0.8, 0],
+    [0.8, 0.375],
+    [0.85, 0.375],
+    [0.85, 0.25],
+    [1, 0.5],
+    [0.85, 0.75],
+    [0.85, 0.625],
+    [0.8, 0.625],
+    [0.8, 1],
+    [0.2, 1],
+    [0.2, 0.625],
+    [0.15, 0.625],
+    [0.15, 0.75],
+    [0, 0.5],
+    [0.15, 0.25],
+    [0.15, 0.375],
+    [0.2, 0.375],
+  ]),
+  upDownArrowCallout: scaled(
+    turned(
+      [
+        [0.2, 0],
+        [0.8, 0],
+        [0.8, 0.375],
+        [0.85, 0.375],
+        [0.85, 0.25],
+        [1, 0.5],
+        [0.85, 0.75],
+        [0.85, 0.625],
+        [0.8, 0.625],
+        [0.8, 1],
+        [0.2, 1],
+        [0.2, 0.625],
+        [0.15, 0.625],
+        [0.15, 0.75],
+        [0, 0.5],
+        [0.15, 0.25],
+        [0.15, 0.375],
+        [0.2, 0.375],
+      ],
+      1,
+    ),
+  ),
+  quadArrowCallout: scaled([
+    [0.5, 0],
+    [0.65, 0.15],
+    [0.575, 0.15],
+    [0.575, 0.2],
+    [0.8, 0.2],
+    [0.8, 0.425],
+    [0.85, 0.425],
+    [0.85, 0.35],
+    [1, 0.5],
+    [0.85, 0.65],
+    [0.85, 0.575],
+    [0.8, 0.575],
+    [0.8, 0.8],
+    [0.575, 0.8],
+    [0.575, 0.85],
+    [0.65, 0.85],
+    [0.5, 1],
+    [0.35, 0.85],
+    [0.425, 0.85],
+    [0.425, 0.8],
+    [0.2, 0.8],
+    [0.2, 0.575],
+    [0.15, 0.575],
+    [0.15, 0.65],
+    [0, 0.5],
+    [0.15, 0.35],
+    [0.15, 0.425],
+    [0.2, 0.425],
+    [0.2, 0.2],
+    [0.425, 0.2],
+    [0.425, 0.15],
+    [0.35, 0.15],
+  ]),
+
+  // The line callouts. `callout1` and `borderCallout1` are the same geometry:
+  // what separates the families is which subpath carries a line, and a single
+  // path has no way to say that one of its pieces is stroked and another is
+  // not. The accent ones add the bar the accent is.
+  callout1: leaderCallout(1, false),
+  callout2: leaderCallout(2, false),
+  callout3: leaderCallout(3, false),
+  accentCallout1: leaderCallout(1, true),
+  accentCallout2: leaderCallout(2, true),
+  accentCallout3: leaderCallout(3, true),
+  accentBorderCallout1: leaderCallout(1, true),
+  accentBorderCallout2: leaderCallout(2, true),
+  accentBorderCallout3: leaderCallout(3, true),
+
+  // Arrows whose body is a piece of a ring.
+  curvedRightArrow: curvedArrow(0),
+  curvedDownArrow: curvedArrow(1),
+  curvedLeftArrow: curvedArrow(2),
+  curvedUpArrow: curvedArrow(3),
+  circularArrow: scaled([
+    ...along([0.5, 0.5], 0.5, 120, 380),
+    ...arrowHead([0.5, 0.5], 380, 0.5, 0.31),
+    ...along([0.5, 0.5], 0.31, 380, 120),
+  ]),
+  leftCircularArrow: scaled(
+    flippedX([
+      ...along([0.5, 0.5], 0.5, 120, 380),
+      ...arrowHead([0.5, 0.5], 380, 0.5, 0.31),
+      ...along([0.5, 0.5], 0.31, 380, 120),
+    ]),
+  ),
+  leftRightCircularArrow: scaled([
+    ...arrowHead([0.5, 0.5], 140, 0.31, 0.5),
+    ...along([0.5, 0.5], 0.5, 140, 400),
+    ...arrowHead([0.5, 0.5], 400, 0.5, 0.31),
+    ...along([0.5, 0.5], 0.31, 400, 140),
+  ]),
+  // A tapering arrow: the tail is a line and the head is the whole width.
+  swooshArrow: ({ width, height }) =>
+    [
+      `M0,${n(height)}`,
+      `Q${n(width * 0.45)},${n(height * 0.95)} ${n(width * 0.78)},${n(height * 0.22)}`,
+      `L${n(width * 0.6)},${n(height * 0.2)}`,
+      `L${n(width)},0`,
+      `L${n(width * 0.92)},${n(height * 0.42)}`,
+      `L${n(width * 0.86)},${n(height * 0.26)}`,
+      `Q${n(width * 0.5)},${n(height * 0.82)} 0,${n(height)}`,
+      'Z',
+    ].join(' '),
+
+  // Banners. The ribbon above is the folded kind; these two are the curved
+  // ones, and the third is a banner with an arrow at each end.
+  ellipseRibbon: ellipseRibbon(false),
+  ellipseRibbon2: ellipseRibbon(true),
+  leftRightRibbon: scaled([
+    [0, 0.5],
+    [0.16, 0.2],
+    [0.16, 0.35],
+    [0.84, 0.35],
+    [0.84, 0.2],
+    [1, 0.5],
+    [0.84, 0.8],
+    [0.84, 0.65],
+    [0.16, 0.65],
+    [0.16, 0.8],
+  ]),
+
+  // Scrolls: a sheet with a rolled edge, which is the roll drawn as a disc
+  // beside the sheet rather than a curl the path could only fake.
+  verticalScroll: ({ width, height }) =>
+    [
+      scaled([
+        [0.15, 0],
+        [0.85, 0],
+        [0.85, 1],
+        [0.15, 1],
+      ])({ width, height }, NO_ADJUST),
+      ring(width * 0.15, height * 0.12, width * 0.15, height * 0.12),
+      ring(width * 0.85, height * 0.88, width * 0.15, height * 0.12),
+    ].join(' '),
+  horizontalScroll: ({ width, height }) =>
+    [
+      scaled([
+        [0, 0.15],
+        [1, 0.15],
+        [1, 0.85],
+        [0, 0.85],
+      ])({ width, height }, NO_ADJUST),
+      ring(width * 0.12, height * 0.15, width * 0.12, height * 0.15),
+      ring(width * 0.88, height * 0.85, width * 0.12, height * 0.15),
+    ].join(' '),
+
+  gear6: gear(6),
+  gear9: gear(9),
+  // A mouth, a cone and a spout: three pieces of one silhouette.
+  funnel: ({ width, height }) =>
+    [
+      ring(width / 2, height * 0.12, width / 2, height * 0.12),
+      scaled([
+        [0, 0.12],
+        [1, 0.12],
+        [0.6, 0.72],
+        [0.6, 1],
+        [0.4, 1],
+        [0.4, 0.72],
+      ])({ width, height }, NO_ADJUST),
+    ].join(' '),
+
+  // Tabs: four marks in the corners, which is all these three are.
+  cornerTabs: corners([
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ]),
+  squareTabs: corners([
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [0, 1],
+  ]),
+  // The bite out of a plaque's corner, which is the same arc turned four ways.
+  plaqueTabs: corners([[0, 0], [1, 0], ...along([1, 1], 1, -90, -180, 8)]),
+
+  // The three chart marks, which are lines rather than areas.
+  chartX: ({ width, height }) => `M0,0 L${n(width)},${n(height)} M${n(width)},0 L0,${n(height)}`,
+  chartPlus: ({ width, height }) =>
+    `M${n(width / 2)},0 L${n(width / 2)},${n(height)} M0,${n(height / 2)} L${n(width)},${n(height / 2)}`,
+  chartStar: ({ width, height }) =>
+    [
+      `M0,0 L${n(width)},${n(height)}`,
+      `M${n(width)},0 L0,${n(height)}`,
+      `M${n(width / 2)},0 L${n(width / 2)},${n(height)}`,
+    ].join(' '),
+
+  // The action buttons. Each is the same rectangle with a different mark on
+  // it; the bevelled edge PowerPoint draws is three fills of one shape, which
+  // one path cannot carry, so what is here is the face and the symbol.
+  actionButtonBlank: rectangle,
+  actionButtonHome: withGlyph([
+    [0.5, 0.25],
+    [0.75, 0.47],
+    [0.68, 0.47],
+    [0.68, 0.72],
+    [0.57, 0.72],
+    [0.57, 0.57],
+    [0.43, 0.57],
+    [0.43, 0.72],
+    [0.32, 0.72],
+    [0.32, 0.47],
+    [0.25, 0.47],
+  ]),
+  actionButtonHelp: ({ width, height }) =>
+    [
+      rectangle({ width, height }, NO_ADJUST),
+      // The hook of a question mark: up the left, over the top, down the right
+      // and into the stem. The band is two arcs of the same circle, the outer
+      // one going over and the inner one coming back.
+      scaled([
+        ...along([0.5, 0.36], 0.14, 200, 370, 14),
+        [0.6, 0.47],
+        [0.545, 0.53],
+        [0.545, 0.6],
+        [0.455, 0.6],
+        [0.455, 0.52],
+        [0.51, 0.45],
+        ...along([0.5, 0.36], 0.07, 370, 200, 14),
+      ])({ width, height }, NO_ADJUST),
+      scaled([
+        [0.455, 0.66],
+        [0.545, 0.66],
+        [0.545, 0.74],
+        [0.455, 0.74],
+      ])({ width, height }, NO_ADJUST),
+    ].join(' '),
+  actionButtonInformation: ({ width, height }) =>
+    [
+      rectangle({ width, height }, NO_ADJUST),
+      scaled([
+        [0.46, 0.26],
+        [0.54, 0.26],
+        [0.54, 0.34],
+        [0.46, 0.34],
+      ])({ width, height }, NO_ADJUST),
+      scaled([
+        [0.46, 0.4],
+        [0.54, 0.4],
+        [0.54, 0.74],
+        [0.46, 0.74],
+      ])({ width, height }, NO_ADJUST),
+    ].join(' '),
+  actionButtonForwardNext: withGlyph([
+    [0.35, 0.28],
+    [0.72, 0.5],
+    [0.35, 0.72],
+  ]),
+  actionButtonBackPrevious: withGlyph([
+    [0.65, 0.28],
+    [0.28, 0.5],
+    [0.65, 0.72],
+  ]),
+  actionButtonEnd: ({ width, height }) =>
+    [
+      rectangle({ width, height }, NO_ADJUST),
+      scaled([
+        [0.3, 0.28],
+        [0.62, 0.5],
+        [0.3, 0.72],
+      ])({ width, height }, NO_ADJUST),
+      scaled([
+        [0.64, 0.28],
+        [0.72, 0.28],
+        [0.72, 0.72],
+        [0.64, 0.72],
+      ])({ width, height }, NO_ADJUST),
+    ].join(' '),
+  actionButtonBeginning: ({ width, height }) =>
+    [
+      rectangle({ width, height }, NO_ADJUST),
+      scaled([
+        [0.7, 0.28],
+        [0.38, 0.5],
+        [0.7, 0.72],
+      ])({ width, height }, NO_ADJUST),
+      scaled([
+        [0.28, 0.28],
+        [0.36, 0.28],
+        [0.36, 0.72],
+        [0.28, 0.72],
+      ])({ width, height }, NO_ADJUST),
+    ].join(' '),
+  actionButtonReturn: withGlyph([
+    [0.3, 0.72],
+    [0.3, 0.45],
+    [0.45, 0.45],
+    [0.45, 0.58],
+    [0.58, 0.58],
+    [0.58, 0.38],
+    [0.48, 0.38],
+    [0.62, 0.24],
+    [0.76, 0.38],
+    [0.66, 0.38],
+    [0.66, 0.66],
+    [0.4, 0.66],
+    [0.4, 0.72],
+  ]),
+  actionButtonDocument: withGlyph([
+    [0.35, 0.26],
+    [0.58, 0.26],
+    [0.68, 0.36],
+    [0.68, 0.74],
+    [0.35, 0.74],
+  ]),
+  actionButtonSound: withGlyph([
+    [0.3, 0.42],
+    [0.42, 0.42],
+    [0.55, 0.28],
+    [0.55, 0.72],
+    [0.42, 0.58],
+    [0.3, 0.58],
+  ]),
+  actionButtonMovie: withGlyph([
+    [0.28, 0.35],
+    [0.6, 0.35],
+    [0.6, 0.45],
+    [0.72, 0.36],
+    [0.72, 0.64],
+    [0.6, 0.55],
+    [0.6, 0.65],
+    [0.28, 0.65],
+  ]),
+
   // Lines and connectors. A connector states the box it spans, and the path is
   // how it gets from one corner of it to the other.
   line: polyline(({ width, height }) => [
@@ -1244,6 +1821,9 @@ export function pathFor(
  */
 const STROKE_ONLY = new Set([
   'arc',
+  'chartX',
+  'chartPlus',
+  'chartStar',
   'bracketPair',
   'bracePair',
   'leftBracket',

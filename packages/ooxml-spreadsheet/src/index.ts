@@ -38,6 +38,8 @@ export type {
   StyleColor,
   Styles,
 } from './styles'
+export { collapsedFormula, expandFormulas, sharedMasters, shiftFormula } from './formulas'
+export type { SharedMaster } from './formulas'
 export { EMU_PER_POINT, drawingRelationshipId, readSheetDrawings } from './drawing'
 export type { AnchorPoint, DrawingAnchor, DrawingContent, SheetDrawing } from './drawing'
 export { readConditionalFormats, rangeCovers } from './conditional'

@@ -1,6 +1,8 @@
 import { columnToIndex, formatReference } from './reference'
 import { emptySheet, putCell } from './cells'
 import type { Cell, CellType, Formula, RowProperties, SheetCells } from './cells'
+import { collapsedFormula, expandFormulas, sharedMasters } from './formulas'
+import type { SharedMaster } from './formulas'
 
 /**
  * `sheetData`, read without building a tree.
@@ -189,7 +191,13 @@ export function scanSheetData(xml: string, handlers: SheetDataHandlers): void {
   }
 }
 
-/** The whole of `sheetData` as the sparse model. */
+/**
+ * The whole of `sheetData` as the sparse model.
+ *
+ * With the shared and array formulas expanded, so that a cell can be asked
+ * what it computes without anybody above here knowing that the answer may be
+ * written on a different cell (`formulas.ts`).
+ */
 export function readSheetData(xml: string): SheetCells {
   const sheet = emptySheet()
 
@@ -204,6 +212,7 @@ export function readSheetData(xml: string): SheetCells {
     },
   })
 
+  expandFormulas(sheet)
   return sheet
 }
 
@@ -227,7 +236,7 @@ const carriedAttributes = (carried: Record<string, string> | null): string =>
         .map(([name, value]) => attribute(name, value))
         .join('')
 
-function cellXml(cell: Cell): string {
+function cellXml(cell: Cell, masters: Map<number, SharedMaster>): string {
   const reference = formatReference({ row: cell.row, column: cell.column })
   const head =
     `<c r="${reference}"` +
@@ -235,13 +244,17 @@ function cellXml(cell: Cell): string {
     (cell.type === 'n' ? '' : ` t="${cell.type}"`) +
     carriedAttributes(cell.carried)
 
+  // Collapsed back to what the file had: one text for a shared group and one
+  // for an array, rather than the copy every cell was given on the way in.
+  const written = collapsedFormula(cell, masters)
+
   const formula =
-    cell.formula === null
+    written === null
       ? ''
-      : `<f${cell.formula.kind === 'normal' ? '' : ` t="${cell.formula.kind}"`}` +
-        attribute('ref', cell.formula.ref) +
-        attribute('si', cell.formula.shared) +
-        (cell.formula.text === '' ? '/>' : `>${encodeText(cell.formula.text)}</f>`)
+      : `<f${written.kind === 'normal' ? '' : ` t="${written.kind}"`}` +
+        attribute('ref', written.ref) +
+        attribute('si', written.shared) +
+        (written.text === '' ? '/>' : `>${encodeText(written.text)}</f>`)
 
   const value =
     cell.value === null
@@ -254,7 +267,12 @@ function cellXml(cell: Cell): string {
   return body === '' ? `${head}/>` : `${head}>${body}</c>`
 }
 
-function rowXml(row: RowProperties | undefined, index: number, cells: readonly Cell[]): string {
+function rowXml(
+  row: RowProperties | undefined,
+  index: number,
+  cells: readonly Cell[],
+  masters: Map<number, SharedMaster>,
+): string {
   const head =
     `<row r="${String(index + 1)}"` +
     (row === undefined
@@ -267,7 +285,7 @@ function rowXml(row: RowProperties | undefined, index: number, cells: readonly C
         (row.collapsed ? ' collapsed="1"' : '') +
         carriedAttributes(row.carried))
 
-  const body = cells.map((cell) => cellXml(cell)).join('')
+  const body = cells.map((cell) => cellXml(cell, masters)).join('')
   return body === '' ? `${head}/>` : `${head}>${body}</row>`
 }
 
@@ -282,13 +300,14 @@ function rowXml(row: RowProperties | undefined, index: number, cells: readonly C
 export function writeSheetData(sheet: SheetCells): string {
   const indexes = new Set([...sheet.rows.keys(), ...sheet.properties.keys()])
   const ordered = [...indexes].sort((a, b) => a - b)
+  const masters = sharedMasters(sheet)
 
   const rows = ordered
     .map((index) => {
       const cells = [...(sheet.rows.get(index) ?? new Map<number, Cell>()).values()].sort(
         (a, b) => a.column - b.column,
       )
-      return rowXml(sheet.properties.get(index), index, cells)
+      return rowXml(sheet.properties.get(index), index, cells, masters)
     })
     .join('')
 

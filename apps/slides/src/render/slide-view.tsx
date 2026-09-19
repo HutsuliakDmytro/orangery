@@ -811,6 +811,12 @@ function ShapeText({
             justifyContent:
               anchor === 'ctr' ? 'center' : anchor === 'b' ? 'flex-end' : 'flex-start',
             overflow: 'hidden',
+            // What the box falls back to, which the editor and the placeholder
+            // prompt inherit. Each run states its own colour on top of this;
+            // what it is for is everything that does not — while text is being
+            // typed it is the editor's markup on screen, and left to inherit it
+            // takes the colour of the app's chrome rather than the deck's.
+            color: textPaint(null, context),
           }}
         >
           {/* One block holding the paragraphs, so their own height can be read

@@ -22,14 +22,32 @@ const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
 /** How much taller than its box the stood-in measurement says the text is. */
 let overflow = 1
 
+/**
+ * The measurement, stood in for — as the browser would make it.
+ *
+ * Two elements, not one: the padded box, which is the shape, and the block of
+ * paragraphs inside it, which is the words. Giving both the same height makes
+ * the arithmetic degenerate and the test agree with whatever the code does —
+ * it said for a while that a shape shrinks to its words, which no browser has
+ * ever made it do. The box is the one that hides its overflow.
+ */
+const isBox = (element: HTMLElement) => element.style.overflow === 'hidden'
+
+/** The first shape of `shapes.pptx` is an inch and a half tall, in pixels. */
+const BOX = 1371600 / EMU_PER_PIXEL
+
 beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     configurable: true,
-    get: () => 100,
+    get(this: HTMLElement) {
+      return isBox(this) ? BOX : Math.round(BOX * overflow)
+    },
   })
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
     configurable: true,
-    get: () => Math.round(100 * overflow),
+    get(this: HTMLElement) {
+      return isBox(this) ? BOX : Math.round(BOX * overflow)
+    },
   })
 
   overflow = 1
@@ -156,7 +174,7 @@ describe('a shape that grows to its text', () => {
   it('takes the height its words need', async () => {
     await openGrowing()
     const before = firstHeight()
-    // The stood-in measurement says the words are 150 tall in a box of 100.
+    // The stood-in measurement says the words are half again as tall as the box.
     overflow = 1.5
 
     await act(async () => {
@@ -168,11 +186,12 @@ describe('a shape that grows to its text', () => {
     // In EMU, because that is what a shape's height is. The measurement is in
     // the pixels the text is laid out in, and writing one into the other
     // collapses the box to nothing.
-    expect(firstHeight()).toBe(150 * EMU_PER_PIXEL)
+    expect(firstHeight()).toBe(Math.round(BOX * 1.5) * EMU_PER_PIXEL)
   })
 
-  it('shrinks the shape when the words are taken away', async () => {
+  it('leaves a shape whose words already fit', async () => {
     await openGrowing()
+    const before = firstHeight()
     overflow = 0.4
 
     await act(async () => {
@@ -180,9 +199,11 @@ describe('a shape that grows to its text', () => {
       await Promise.resolve()
     })
 
-    // The shape gives in both directions; that is what makes it autofit rather
-    // than a minimum.
-    expect(firstHeight()).toBe(40 * EMU_PER_PIXEL)
+    // It grows and does not shrink, and the asymmetry is deliberate: shrinking
+    // would fire on every deck with a roomy text box the moment it was opened,
+    // and rewrite the geometry of a file nobody had touched. Growing only ever
+    // follows words that stopped fitting, which is somebody's typing.
+    expect(firstHeight()).toBe(before)
   })
 
   it('settles instead of nudging itself for ever', async () => {

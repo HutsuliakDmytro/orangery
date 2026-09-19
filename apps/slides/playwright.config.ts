@@ -36,14 +36,16 @@ export default defineConfig({
   // disagree with the modifier Playwright actually sends.
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
-    // WebKit runs one spec: whether the engine turns a slide into pixels. That
-    // is the half of exporting a picture which is the engine's answer rather
-    // than this code's, and WebKit is what the app runs in on macOS. The rest
-    // of the suite is about the app and does not get faster by being run twice.
+    // WebKit runs the two specs that are about what an engine does rather than
+    // about what this app does: whether it turns a slide into pixels, and what
+    // it measures a slide's text to be. WebKit is what the app runs in on
+    // macOS and Chromium is what it runs in on Windows, and they disagree. The
+    // rest of the suite is about the app and does not get faster by being run
+    // twice.
     {
       name: 'webkit',
       use: { browserName: 'webkit' },
-      testMatch: /raster\.spec\.ts/u,
+      testMatch: /(raster|opening)\.spec\.ts/u,
     },
   ],
 

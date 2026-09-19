@@ -4,7 +4,7 @@ import { render } from '@testing-library/react'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getPartText, parseXml } from '@orangery/ooxml-core'
-import { writeBodyProperties } from '@orangery/ooxml-drawingml'
+import { EMU_PER_PIXEL, writeBodyProperties } from '@orangery/ooxml-drawingml'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -165,7 +165,10 @@ describe('a shape that grows to its text', () => {
     })
 
     expect(firstHeight()).not.toBe(before)
-    expect(firstHeight()).toBe(150)
+    // In EMU, because that is what a shape's height is. The measurement is in
+    // the pixels the text is laid out in, and writing one into the other
+    // collapses the box to nothing.
+    expect(firstHeight()).toBe(150 * EMU_PER_PIXEL)
   })
 
   it('shrinks the shape when the words are taken away', async () => {
@@ -179,7 +182,7 @@ describe('a shape that grows to its text', () => {
 
     // The shape gives in both directions; that is what makes it autofit rather
     // than a minimum.
-    expect(firstHeight()).toBe(40)
+    expect(firstHeight()).toBe(40 * EMU_PER_PIXEL)
   })
 
   it('settles instead of nudging itself for ever', async () => {

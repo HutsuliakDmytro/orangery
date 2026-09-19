@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-declare function loaded(name: string): string
-
 /** As much of the open deck as this spec has to name. */
 interface OpenDeckLike {
   deck: { slides: unknown[] }

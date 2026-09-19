@@ -731,9 +731,14 @@ function ShapeText({
     // The other way round: the shape gives instead of the text. The height a
     // shape needs is its words plus the space it keeps around them, and the
     // padding is already in the outer box's measurement.
+    //
+    // Back into EMU on the way out. The measurement is in the pixels the text
+    // is laid out in and the shape's height is in the file's own unit; writing
+    // the one into the other collapses the box to nothing the moment the deck
+    // is opened — and marks it edited on the way.
     if (autofit.kind === 'shape' && onAutofitHeight !== undefined) {
       const padding = outer.clientHeight - inner.clientHeight
-      const wanted = inner.scrollHeight + Math.max(padding, 0)
+      const wanted = (inner.scrollHeight + Math.max(padding, 0)) * EMU_PER_PIXEL
       if (Math.abs(wanted - transform.height) > TOLERANCE) onAutofitHeight(shape.id, wanted)
     }
   })

@@ -32,7 +32,6 @@ const MODELLED_ROW = new Set([
   's',
   'customFormat',
   'collapsed',
-  'spans',
 ])
 
 const TYPES = new Set<CellType>(['n', 's', 'str', 'b', 'e', 'inlineStr', 'd'])

@@ -40,6 +40,8 @@ export type {
   StyleColor,
   Styles,
 } from './styles'
+export { removeCalcChain, writeWorkbook } from './save'
+export type { SaveOptions, SheetToWrite } from './save'
 export { collapsedFormula, expandFormulas, sharedMasters, shiftFormula } from './formulas'
 export type { SharedMaster } from './formulas'
 export { EMU_PER_POINT, drawingRelationshipId, readSheetDrawings } from './drawing'

@@ -56,9 +56,9 @@
 - [~] Модель: sparse cells ✔, row metadata ✔, column metadata ✔, merged ranges ✔, freeze/split panes ✔, zoom ✔; style index → resolved style ✔ (`resolveStyle`; кешує викликач — грид питає це на кожну видиму комірку)
 - [x] Shared/array formulas розгортаються при читанні; при незмінності — згортаються назад (`formulas.ts`: `shiftFormula` пересуває відносні посилання текстом — рядки, `Table1[...]`, `_xlfn.XLOOKUP`, `LOG10(` не чіпає; за край аркуша → `#REF!`). Комірка, яку відредагували, виходить із групи і пишеться власною формулою, як в Excel
 - [x] Rich text у комірках (`<r>` runs у sharedStrings ✔ та inlineStr ✔): `rich-text.ts` — прогони з частковим шрифтом (`<rPr>` каже лише те, що змінює); грид малює по прогонах, з переносом через їхні межі. Inline-рядок пишеться назад тією ж розміткою, з якої прочитаний — `<rPr>` не перезбирається
-- [ ] Серіалізатор: `sheetData` регенерується; стилі дедупляться у `cellXfs`; `calcChain` перебудовується або видаляється (Excel відновлює); невідомі частини verbatim
+- [~] Серіалізатор: `sheetData` регенерується ✔, решта аркуша патчиться текстом ✔, `calcChain` видаляється (тільки коли щось правили — незмінений файл зберігає його) ✔, невідомі частини verbatim ✔. `save.ts` в пакеті + `document/save.ts` в аппі (atomic write через `write_document`, `.bak`). Дедуплікація стилів у `cellXfs` — разом з фазою 2, коли з'явиться, що створює стилі
 - [ ] `tests/fixtures/xlsx/` — 30+ реальних книг: Excel mac/win, Google Sheets export, LibreOffice, з pivot, макросами (`.xlsm`), умовним форматуванням, таблицями, діаграмами, defined names, зовнішніми посиланнями
-- [ ] Round-trip: open → save → XML diff; CI LibreOffice render-diff
+- [~] Round-trip: open → save → XML diff ✔ (`apps/sheets/src/document/save.test.ts` — структурний діф `compareXml` на `budget.xlsx`: 0 різниць; діаграма, drawing, коментарі, картинка — байт у байт). CI LibreOffice render-diff — з корпусом
 
 ### 1.2 Формати чисел (`packages/numfmt`)
 - [x] Парсер format-кодів: секції `;`, умови `[>100]`, кольори `[Red]`, локаль `[$-409]`, `#,##0.00`, `0.00E+00`, `# ?/?`, `[h]:mm:ss`, `@`, escape/literal, `*` fill, `_` pad

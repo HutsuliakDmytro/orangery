@@ -69,6 +69,10 @@ export interface RowProperties {
   /** A style for the whole row, which cells inherit when they state none. */
   style: number | null
   collapsed: boolean
+  /**
+   * `spans` is carried rather than modelled: it says which columns a row
+   * holds, which the cells already say, and Excel recomputes it.
+   */
   carried: Record<string, string> | null
 }
 

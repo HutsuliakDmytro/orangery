@@ -1,0 +1,126 @@
+import { readPackage } from '@orangery/ooxml-core'
+import type { OoxmlPackage } from '@orangery/ooxml-core'
+import {
+  paletteOf,
+  readSharedStrings,
+  readSheetData,
+  readStyles,
+  readWorkbook,
+  readWorksheet,
+} from '@orangery/ooxml-spreadsheet'
+import type { SheetCells, Styles, Workbook, Worksheet } from '@orangery/ooxml-spreadsheet'
+import type { ColorPalette } from '@orangery/ooxml-spreadsheet'
+import { parseTheme } from '@orangery/ooxml-drawingml'
+import { getPartText } from '@orangery/ooxml-core'
+
+/**
+ * A workbook, opened.
+ *
+ * Everything the window needs in one place and nothing computed that a cell
+ * might never be looked at: the cells are read because they are what a sheet
+ * is, and the styles are read because every cell points into them, but a
+ * cell's colour and its text are worked out when it is drawn.
+ *
+ * The package is kept as it was read. Saving rewrites the parts we model and
+ * leaves the rest byte for byte, which is the promise the round-trip ADR makes
+ * (`apps/sheets/docs/adr/0002-xlsx-roundtrip.md`).
+ */
+
+export interface OpenSheet {
+  name: string
+  path: string
+  /** `hidden` and `veryHidden` sheets are in the file and not in the tabs. */
+  hidden: boolean
+  sheet: Worksheet
+  cells: SheetCells
+}
+
+export interface OpenWorkbook {
+  pkg: OoxmlPackage
+  workbook: Workbook
+  sheets: OpenSheet[]
+  styles: Styles | null
+  /** The shared string table, which most text cells are an index into. */
+  strings: string[]
+  palette: ColorPalette
+}
+
+const THEME_PART = 'xl/theme/theme1.xml'
+
+export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
+  // The part that must be there: a zip without it is not a workbook, and
+  // failing here says so rather than three layers deeper.
+  const pkg = await readPackage(bytes, 'xl/workbook.xml')
+  const workbook = readWorkbook(pkg)
+
+  const theme = parseTheme(getPartText(pkg, THEME_PART) ?? '')
+  const palette = paletteOf(
+    { colors: new Map([...theme.colors].map(([slot, color]) => [slot, colorHex(color)])) },
+    // What the system's own foreground and background are, which is what the
+    // 1997 palette's last two indexes mean.
+    { foreground: '000000', background: 'FFFFFF' },
+  )
+
+  const sheets = (workbook?.sheets ?? []).map((entry) => {
+    const text = getPartText(pkg, entry.path) ?? ''
+
+    return {
+      name: entry.name,
+      path: entry.path,
+      hidden: entry.state !== 'visible',
+      sheet: readWorksheet(text) ?? EMPTY_SHEET,
+      cells: readSheetData(text),
+    }
+  })
+
+  return {
+    pkg,
+    workbook: workbook ?? {
+      sheets: [],
+      date1904: false,
+      definedNames: [],
+      activeSheet: 0,
+      fullCalcOnLoad: false,
+    },
+    sheets,
+    styles: readStyles(getPartText(pkg, 'xl/styles.xml') ?? ''),
+    strings: readSharedStrings(pkg),
+    palette,
+  }
+}
+
+/** A theme colour as six hex digits, which is all the palette needs of it. */
+function colorHex(color: {
+  source: { kind: string; hex?: string; lastHex?: string | null }
+}): string {
+  if (color.source.kind === 'srgb' && typeof color.source.hex === 'string') {
+    return color.source.hex.replace(/^#/u, '')
+  }
+
+  // A system colour states what the host computed last; anything else the
+  // theme cannot resolve on its own is left black, which is what Excel shows
+  // for a slot it cannot find either.
+  return (color.source.lastHex ?? '000000').replace(/^#/u, '')
+}
+
+const EMPTY_SHEET: Worksheet = {
+  dimension: null,
+  view: {
+    zoom: 100,
+    showGridLines: true,
+    showRowColHeaders: true,
+    rightToLeft: false,
+    active: false,
+    panes: null,
+    selection: null,
+  },
+  columns: [],
+  merges: [],
+  format: { defaultRowHeight: null, defaultColumnWidth: null, customHeight: false },
+  tabColor: null,
+  autoFilter: null,
+}
+
+/** The sheets a person sees, which is not all of them. */
+export const visibleSheets = (open: OpenWorkbook): OpenSheet[] =>
+  open.sheets.filter((sheet) => !sheet.hidden)

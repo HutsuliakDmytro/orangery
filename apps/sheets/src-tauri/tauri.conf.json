@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Orangery Sheets",
+  "version": "0.1.0",
+  "identifier": "com.orangery.sheets",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1440",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Orangery Sheets",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 860,
+        "minHeight": 560,
+        "resizable": true,
+        "fullscreen": false,
+        "theme": "Dark",
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "nsis", "deb", "appimage"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": null,
+      "entitlements": null
+    },
+    "category": "Productivity",
+    "shortDescription": "Desktop spreadsheet with .xlsx as its native format",
+    "longDescription": "Orangery Sheets opens, shows and saves .xlsx workbooks without converting them to a format of its own.",
+    "copyright": "\u00a9 Dmytro Hutsuliak",
+    "publisher": "Dmytro Hutsuliak",
+    "fileAssociations": [
+      {
+        "ext": ["xlsx", "xlsm"],
+        "name": "Excel Workbook",
+        "description": "Excel workbook",
+        "role": "Editor",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      },
+      {
+        "ext": ["ods"],
+        "name": "OpenDocument Spreadsheet",
+        "description": "OpenDocument spreadsheet",
+        "role": "Editor",
+        "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+      }
+    ]
+  }
+}

@@ -67,8 +67,8 @@
 - [~] Тестова матриця (значення, код) → рядок: 107 пар у `matrix.test.ts`, згруповані за темами. До 300+ і до звірки з живим Excel — разом із корпусом реальних книг
 
 ### 1.3 Read-only рендер (grid v1)
-- [ ] Canvas-grid: віртуалізація рядків і стовпців, headers, gridlines, freeze panes, zoom, кілька аркушів (таби)
-- [ ] Рендер значень із кешу через `numfmt`, вирівнювання за типом, стилі (шрифт, колір, fill, borders, wrap, merge, indent, rotation базово)
+- [~] Canvas-grid: віртуалізація ✔, headers ✔, gridlines ✔, freeze panes ✔, таби аркушів ✔ (`packages/grid` + каркас аппа). Zoom — ще ні
+- [~] Рендер значень із кешу через `numfmt` ✔, вирівнювання за типом ✔, стилі (шрифт, колір, fill, borders, merge, indent) ✔. Wrap і rotation — ще ні
 - [ ] Умовне форматування read-only: `cellIs`, `containsText`, `colorScale`, `dataBar`, `iconSet` — обчислюється тільки для видимого діапазону
 - [ ] Діаграми через `packages/charts`, картинки через drawingml
 - [ ] Коментарі — індикатор + hover

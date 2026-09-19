@@ -19,6 +19,19 @@ export {
 export type { CellPosition, CellRange } from './reference'
 export { readSharedStrings, readWorkbook, sheetPath, textOf } from './workbook'
 export type { DefinedName, SheetEntry, Workbook } from './workbook'
+export { formatCodeOf, isDateFormat, readStyles, resolveStyle } from './styles'
+export type {
+  Alignment,
+  Border,
+  BorderEdge,
+  CellFormat,
+  DifferentialFormat,
+  Fill,
+  Font,
+  ResolvedStyle,
+  StyleColor,
+  Styles,
+} from './styles'
 export { isColumnHidden, mergeAt, readWorksheet, widthOfColumn } from './worksheet'
 export type { ColumnRange, FrozenPanes, SheetFormat, SheetView, Worksheet } from './worksheet'
 export { newWorkbook } from './new-workbook'

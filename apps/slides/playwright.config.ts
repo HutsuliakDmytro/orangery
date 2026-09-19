@@ -34,7 +34,18 @@ export default defineConfig({
   // user agent, and the app reads the platform from the user agent to decide
   // whether `Mod` means Cmd or Ctrl. A faked UA makes every shortcut test
   // disagree with the modifier Playwright actually sends.
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    // WebKit runs one spec: whether the engine turns a slide into pixels. That
+    // is the half of exporting a picture which is the engine's answer rather
+    // than this code's, and WebKit is what the app runs in on macOS. The rest
+    // of the suite is about the app and does not get faster by being run twice.
+    {
+      name: 'webkit',
+      use: { browserName: 'webkit' },
+      testMatch: /raster\.spec\.ts/u,
+    },
+  ],
 
   webServer: {
     command: 'pnpm dev',

@@ -127,7 +127,10 @@ describe('text', () => {
     await draw('placeholders')
     const title = screen.getByText('Placeholder inheritance')
 
-    expect(title).toHaveStyle({ fontSize: `${String(44 * 12700)}px` })
+    // In points, which is what the file says and what the browser is asked
+    // for: the text of a slide is laid out in pixels and scaled back into EMU,
+    // because a font size in EMU is past what an engine will lay out.
+    expect(title.style.fontSize).toBe('44pt')
   })
 
   it('wraps text in a foreignObject, since SVG text cannot wrap', async () => {
@@ -221,7 +224,7 @@ describe('autofit', () => {
     // already decided it should not.
     await withAutofit('<a:bodyPr><a:normAutofit fontScale="50000"/></a:bodyPr>')
 
-    expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700 * 0.5)}px` })
+    expect(screen.getByText('large').style.fontSize).toBe('16pt')
   })
 
   it('tightens the lines by what was recorded with it', async () => {
@@ -249,7 +252,7 @@ describe('autofit', () => {
 
   it('leaves text alone where autofit is off', async () => {
     await withAutofit('<a:bodyPr><a:noAutofit/></a:bodyPr>')
-    expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700)}px` })
+    expect(screen.getByText('large').style.fontSize).toBe('32pt')
   })
 })
 

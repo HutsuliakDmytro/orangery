@@ -37,7 +37,7 @@ import type {
 import { getPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
-  EMU_PER_POINT,
+  EMU_PER_PIXEL,
   fontStackFor,
   toSvgPath,
   readChart,
@@ -636,6 +636,9 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
   )
 }
 
+/** A length in EMU as the CSS pixels the text of a shape is laid out in. */
+const pixels = (emu: number): number => emu / EMU_PER_PIXEL
+
 /**
  * The text of a shape, in HTML inside the SVG so it wraps.
  *
@@ -771,17 +774,28 @@ function ShapeText({
       height={transform.height}
     >
       {/* React puts the XHTML namespace on children of a foreignObject itself,
-          so the div needs nothing beyond being inside one. */}
+          so the div needs nothing beyond being inside one.
+
+          Laid out in CSS pixels and scaled back into EMU, rather than laid out
+          in EMU. Text is the one thing in a drawing the browser measures for
+          us, and it measures in pixels: a 44-point title is 558800 EMU, and
+          Blink clamps `font-size` at ten thousand, so text in EMU is drawn at a
+          fiftieth of its size in Chromium — invisible — and not at all by a
+          rasteriser. It is also what the editor already assumes: Tiptap writes
+          its sizes in points, which only means the same thing as the text
+          beside it in a box measured in pixels. */}
       <div
         ref={box}
         style={{
-          width: '100%',
-          height: '100%',
+          width: pixels(transform.width),
+          height: pixels(transform.height),
+          transform: `scale(${String(EMU_PER_PIXEL)})`,
+          transformOrigin: '0 0',
           // PowerPoint's defaults when the shape states none.
-          paddingLeft: insets?.left ?? 91440,
-          paddingRight: insets?.right ?? 91440,
-          paddingTop: insets?.top ?? 45720,
-          paddingBottom: insets?.bottom ?? 45720,
+          paddingLeft: pixels(insets?.left ?? 91440),
+          paddingRight: pixels(insets?.right ?? 91440),
+          paddingTop: pixels(insets?.top ?? 45720),
+          paddingBottom: pixels(insets?.bottom ?? 45720),
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
@@ -816,8 +830,8 @@ function ShapeText({
                   key={index}
                   style={{
                     margin: 0,
-                    marginLeft: properties.marginLeft ?? 0,
-                    textIndent: properties.indent ?? 0,
+                    marginLeft: pixels(properties.marginLeft ?? 0),
+                    textIndent: pixels(properties.indent ?? 0),
                     textAlign:
                       align === 'ctr'
                         ? 'center'
@@ -862,7 +876,10 @@ function ShapeText({
                       <span
                         key={runIndex}
                         style={{
-                          fontSize: (resolved?.size ?? 18) * EMU_PER_POINT * scale,
+                          // In points, which is what the file states and what
+                          // the editor writes: one number, one meaning, and CSS
+                          // does the conversion.
+                          fontSize: `${String((resolved?.size ?? 18) * scale)}pt`,
                           fontWeight: resolved?.bold === true ? 700 : 400,
                           fontStyle: resolved?.italic === true ? 'italic' : 'normal',
                           textDecoration:
@@ -1636,17 +1653,24 @@ function UnknownGraphic({ drawing }: { drawing: Drawing }) {
         strokeWidth={12700}
         strokeDasharray="76200 38100"
       />
-      <text
-        x={transform.x + transform.width / 2}
-        y={transform.y + transform.height / 2}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="#666666"
-        fontSize={14 * EMU_PER_POINT}
-        fontFamily="system-ui, sans-serif"
+      {/* Drawn in pixels and scaled, like every other piece of text here: a
+          font size in EMU is past what Blink will lay out, and the label is the
+          part of this box that matters. */}
+      <g
+        transform={`translate(${String(transform.x + transform.width / 2)} ${String(
+          transform.y + transform.height / 2,
+        )}) scale(${String(EMU_PER_PIXEL)})`}
       >
-        {`${name} — kept, not drawn`}
-      </text>
+        <text
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#666666"
+          fontSize="14pt"
+          fontFamily="system-ui, sans-serif"
+        >
+          {`${name} — kept, not drawn`}
+        </text>
+      </g>
     </g>
   )
 }

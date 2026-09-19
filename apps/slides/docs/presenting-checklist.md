@@ -61,6 +61,22 @@ rasterise that out of an `<img>` is a question about the engine. WebKit has been
 inconsistent about it for years, and WebKit is what the app runs in on macOS.
 The SVG path has no such question; the PNG and JPEG ones do.
 
+**Most of this is now automatic.** `tests/e2e/raster.spec.ts` exports the open
+slide through the app's own code in both Chromium and WebKit and counts the
+pixels, which is how the two bugs below were found at all. What stays here is
+what a browser Playwright downloads cannot answer for: the packaged app's
+WKWebView is a different build of WebKit, and a real file opened in a real
+viewer is a different question from bytes measured in a canvas.
+
+Two failures worth recognising, because both saved without complaining:
+
+- A picture with the shapes and **no words**. The text of a slide is laid out in
+  CSS pixels and scaled back into EMU — laid out in EMU it is past what an
+  engine will do, and Blink drops it entirely.
+- A picture that is **blank white**. The exported SVG has to carry the XHTML
+  namespace on the content of every `foreignObject`; without it a `div` is a
+  `div` in the SVG namespace, which nothing draws.
+
 1. Open a deck with text, a picture, a table and a chart on one slide.
 2. **Export Slide as SVG.** Open the file in a browser: everything is there. Open
    it in Inkscape or Illustrator: the shapes are there and the text may be laid

@@ -1,4 +1,4 @@
-import { textOfBody, visibleCells } from '@orangery/ooxml-drawingml'
+import { EMU_PER_PIXEL, textOfBody, visibleCells } from '@orangery/ooxml-drawingml'
 import type { ColorContext, Table, TableCell } from '@orangery/ooxml-drawingml'
 import { partsFor } from '@orangery/ooxml-presentation'
 import type { TableStyle } from '@orangery/ooxml-presentation'
@@ -151,11 +151,16 @@ export function TableView({
                 : border)}
             />
             <foreignObject x={placed.x} y={placed.y} width={placed.width} height={placed.height}>
+              {/* Laid out in pixels and scaled back, for the reason the text of
+                  a shape is: a cell's words are text, and text in EMU is past
+                  what Blink will lay out. */}
               <div
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  padding: 45720,
+                  width: placed.width / EMU_PER_PIXEL,
+                  height: placed.height / EMU_PER_PIXEL,
+                  transform: `scale(${String(EMU_PER_PIXEL)})`,
+                  transformOrigin: '0 0',
+                  padding: 45720 / EMU_PER_PIXEL,
                   boxSizing: 'border-box',
                   display: 'flex',
                   alignItems:
@@ -164,7 +169,7 @@ export function TableView({
                       : placed.cell.properties?.anchor === 'b'
                         ? 'flex-end'
                         : 'flex-start',
-                  fontSize: 18 * 12700,
+                  fontSize: '18pt',
                   fontWeight: bold ? 700 : undefined,
                   overflow: 'hidden',
                 }}

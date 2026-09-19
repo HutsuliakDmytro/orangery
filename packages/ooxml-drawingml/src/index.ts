@@ -10,6 +10,7 @@
 export {
   EMU_PER_CENTIMETRE,
   EMU_PER_INCH,
+  EMU_PER_PIXEL,
   EMU_PER_POINT,
   emuToPoints,
   fitWithin,

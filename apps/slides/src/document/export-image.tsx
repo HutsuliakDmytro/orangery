@@ -21,6 +21,7 @@ import { SlideView } from '../render/slide-view'
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
 const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink'
+const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
 
 /** Renders one slide and gives back the SVG markup, standing alone. */
 export function slideSvg(
@@ -44,6 +45,16 @@ export function slideSvg(
     // A file has to carry the namespaces the document around it was giving it.
     svg.setAttribute('xmlns', SVG_NAMESPACE)
     svg.setAttribute('xmlns:xlink', XLINK_NAMESPACE)
+
+    // Including the one the text is in. A slide's words are HTML inside a
+    // `foreignObject`, and in a page the parser knows that without being told —
+    // in a file it does not: a `div` with no namespace is a `div` in the SVG
+    // namespace, which is an element nothing has ever heard of and nothing
+    // draws. The whole of a slide's text disappears, and the picture saves
+    // without complaining.
+    for (const child of svg.querySelectorAll('foreignObject > *')) {
+      child.setAttribute('xmlns', XHTML_NAMESPACE)
+    }
     svg.setAttribute('width', String(deck.slideSize.width))
     svg.setAttribute('height', String(deck.slideSize.height))
 

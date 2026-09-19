@@ -51,7 +51,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter ${{ matrix.app }} exec playwright install chromium --with-deps
+      # WebKit as well as Chromium: the two engines disagree about the one
+      # thing a slide is made of. Blink clamps `font-size`, WebKit does not,
+      # and the app runs in one of them on macOS and the other on Windows.
+      - run: pnpm --filter ${{ matrix.app }} exec playwright install chromium webkit --with-deps
 
       # These run against the Vite dev server. `tauri-driver` supports Linux and
       # Windows only — macOS is a TODO in its own README — so the shell-level

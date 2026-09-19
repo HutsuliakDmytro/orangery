@@ -179,3 +179,52 @@ describe('a cell with nothing in it', () => {
     expect(shown(null, null)).toBe('')
   })
 })
+
+describe('fractions', () => {
+  it('shows a whole part beside the fraction where the format asks', () => {
+    expect(shown(1.25, '# ?/?')).toBe('1 1/4')
+    expect(shown(2.5, '# ?/?')).toBe('2 1/2')
+  })
+
+  it('finds the nearest fraction the denominator allows', () => {
+    // One digit cannot say a third of a third; two can.
+    expect(shown(1.3333, '# ?/?')).toBe('1 1/3')
+    expect(shown(0.3333, '# ??/??')).toBe('1/3')
+  })
+
+  it('carries the whole number in the fraction where there is no whole part', () => {
+    expect(shown(1.25, '?/?')).toBe('5/4')
+  })
+
+  it('uses the denominator the format states', () => {
+    expect(shown(0.3125, '# ?/16')).toBe('5/16')
+    expect(shown(2.5, '# ?/8')).toBe('2 4/8')
+  })
+
+  it('shows a whole number without a fraction beside it', () => {
+    expect(shown(3, '# ?/?')).toBe('3')
+  })
+
+  it('keeps the sign outside the fraction', () => {
+    expect(shown(-1.5, '# ?/?')).toBe('-1 1/2')
+  })
+})
+
+describe('scientific notation', () => {
+  it('writes the mantissa to the places the format asks', () => {
+    expect(shown(1234.5, '0.00E+00')).toBe('1.23E+03')
+    expect(shown(0.00012, '0.00E+00')).toBe('1.20E-04')
+  })
+
+  it('writes the sign of a positive exponent where the format asks for one', () => {
+    expect(shown(1234.5, '0.00E-00')).toBe('1.23E03')
+  })
+
+  it('pads the exponent to the width the format states', () => {
+    expect(shown(1e100, '0E+000')).toBe('1E+100')
+  })
+
+  it('keeps the sign of the number itself', () => {
+    expect(shown(-1234.5, '0.00E+00')).toBe('-1.23E+03')
+  })
+})

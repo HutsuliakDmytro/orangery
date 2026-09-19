@@ -124,11 +124,17 @@ function matches(condition: Section['condition'], value: number): boolean {
 /** How many digits a section asks for on each side of the point. */
 function digitCounts(tokens: readonly Token[]): {
   integer: number
+  /** How many of the integer places must show a digit even when there is none. */
+  minimumInteger: number
+  /** How many must show a space instead, to line the column up. */
+  paddedInteger: number
   decimals: number
   minimumDecimals: number
   grouped: boolean
 } {
   let integer = 0
+  let minimumInteger = 0
+  let paddedInteger = 0
   let decimals = 0
   let minimumDecimals = 0
   let afterPoint = false
@@ -150,10 +156,12 @@ function digitCounts(tokens: readonly Token[]): {
       if (token.placeholder === '0') minimumDecimals = decimals
     } else {
       integer += 1
+      if (token.placeholder === '0') minimumInteger += 1
+      if (token.placeholder === '?') paddedInteger += 1
     }
   }
 
-  return { integer, decimals, minimumDecimals, grouped }
+  return { integer, minimumInteger, paddedInteger, decimals, minimumDecimals, grouped }
 }
 
 const groupThousands = (digits: string): string => digits.replace(/\B(?=(?:\d{3})+(?!\d))/gu, ',')
@@ -412,7 +420,7 @@ function formatNumber(value: number, section: Section, signed: boolean): string 
   const scaled = (value * 100 ** percent) / scale
 
   const exponent = tokens.find((token) => token.kind === 'exponent')
-  if (exponent !== undefined) return scientific(scaled, section, counts.decimals)
+  if (exponent !== undefined) return scientific(scaled, section)
 
   const fraction = tokens.find((token) => token.kind === 'fraction')
   if (fraction !== undefined) return fractional(scaled, section)
@@ -427,10 +435,20 @@ function formatNumber(value: number, section: Section, signed: boolean): string 
   const trimmed = places.replace(/0+$/u, '')
   const kept = places.slice(0, Math.max(counts.minimumDecimals, trimmed.length))
 
-  const digits = counts.grouped ? groupThousands(whole) : whole
+  // `#` means a digit if there is one, `0` means one whether or not, and `?`
+  // means a space where there is none. So `#.##` on a half is `.5` while
+  // `0.##` is `0.5` — the difference every spreadsheet person knows by sight
+  // and nobody can explain from the code alone.
+  const required = whole === '0' && counts.minimumInteger === 0 ? '' : whole
+  const filled = required.padStart(counts.minimumInteger, '0')
+  const spaced = filled.padStart(
+    Math.max(counts.minimumInteger + counts.paddedInteger, filled.length),
+    ' ',
+  )
+
   // A number with more digits than the format has room for keeps them all:
   // `0` on 1234 is 1234, not 4.
-  const body = counts.integer === 0 && whole === '0' ? '' : digits
+  const body = spaced === '' ? '' : counts.grouped ? groupThousands(spaced) : spaced
 
   // The sign belongs to whoever chose the section: a negative section was
   // handed the value without one, because the section is what the sign looks
@@ -438,40 +456,93 @@ function formatNumber(value: number, section: Section, signed: boolean): string 
   return assemble(tokens, { whole: body, decimals: kept, negative: scaled < 0 && !signed })
 }
 
-function scientific(value: number, section: Section, decimals: number): string {
-  const exponentToken = section.tokens.find((token) => token.kind === 'exponent')
-  const digits = section.tokens.filter((token) => token.kind === 'digit')
-  const after = digits.length - digitCounts(section.tokens).integer
+/**
+ * A number in the shape `0.00E+00` asks for.
+ *
+ * Two widths, both counted from the format rather than from the number: how
+ * many places the mantissa shows, and how many digits the exponent is padded
+ * to. `E+` writes the sign of a positive exponent and `E-` leaves it off,
+ * which is the only difference between them.
+ */
+function scientific(value: number, section: Section): string {
+  const tokens = section.tokens
+  const at = tokens.findIndex((token) => token.kind === 'exponent')
+  const exponentToken = tokens[at]
 
-  const text = Math.abs(value).toExponential(Math.max(decimals, 0))
+  const point = tokens.findIndex((token) => token.kind === 'decimal')
+  const mantissaDecimals =
+    point === -1 || point > at
+      ? 0
+      : tokens.slice(point + 1, at).filter((token) => token.kind === 'digit').length
+
+  const width = tokens.slice(at + 1).filter((token) => token.kind === 'digit').length
+
+  const text = Math.abs(value).toExponential(mantissaDecimals)
   const [mantissa = '0', power = '+0'] = text.split('e')
-  const size = Math.max(after > 0 ? after : 2, 2)
-  const sign = power.startsWith('-')
+  const negativePower = power.startsWith('-')
+  const sign = negativePower
     ? '-'
     : exponentToken?.kind === 'exponent' && exponentToken.sign === '+'
       ? '+'
       : ''
 
-  return `${value < 0 ? '-' : ''}${mantissa}E${sign}${padded(Math.abs(Number(power)), size)}`
+  return `${value < 0 ? '-' : ''}${mantissa}E${sign}${padded(Math.abs(Number(power)), Math.max(width, 1))}`
 }
 
+/**
+ * A number as a fraction, the way a format asks for one.
+ *
+ * Three shapes, and they mean different things:
+ *
+ * - `# ?/?` — a whole part and a fraction beside it: 1.25 is `1 1/4`;
+ * - `?/?` — no whole part, so the fraction carries all of it: 1.25 is `5/4`;
+ * - `?/16` — the denominator is stated, and the numerator is whatever comes
+ *   nearest: 0.3 is `5/16`.
+ *
+ * Which one it is falls out of where the digits are. Anything before the
+ * separator that precedes the numerator is the whole part; a run of literal
+ * digits after the stroke is a denominator somebody chose.
+ */
 function fractional(value: number, section: Section): string {
-  const digitsAfter = section.tokens
-    .slice(section.tokens.findIndex((token) => token.kind === 'fraction'))
-    .filter((token) => token.kind === 'digit')
+  const tokens = section.tokens
+  const stroke = tokens.findIndex((token) => token.kind === 'fraction')
 
-  const fixedDigits = digitsAfter.filter((token) => token.placeholder === '0')
-  const fixed = fixedDigits.length === digitsAfter.length && digitsAfter.length > 0 ? null : null
+  const before = tokens.slice(0, stroke)
+  const after = tokens.slice(stroke + 1)
 
+  // The numerator's placeholders are the run of digits right before the
+  // stroke; anything further left, past a space or another literal, is the
+  // whole part.
+  const separator = before.map((token) => token.kind).lastIndexOf('literal')
+  const wholePlaceholders =
+    separator === -1 ? [] : before.slice(0, separator).filter((token) => token.kind === 'digit')
+
+  const stated = after
+    .filter((token) => token.kind === 'literal')
+    .map((token) => token.text)
+    .join('')
+  const fixed = /^\d+$/u.test(stated) ? Number(stated) : null
+
+  const denominatorDigits = after.filter((token) => token.kind === 'digit').length
   const { whole, numerator, denominator } = fractionOf(
-    value,
-    Math.max(digitsAfter.length, 1),
+    wholePlaceholders.length > 0 ? value : 0 + value,
+    Math.max(denominatorDigits, 1),
     fixed,
   )
+
   const sign = value < 0 ? '-' : ''
+  const showsWhole = wholePlaceholders.length > 0
+
+  if (!showsWhole) {
+    // No whole part: the fraction carries the lot, so 1.25 is five quarters.
+    const improper = fixed ?? denominator
+    return `${sign}${String(Math.round(Math.abs(value) * improper))}/${String(improper)}`
+  }
 
   if (numerator === 0) return `${sign}${String(Math.abs(whole))}`
-  return `${sign}${whole === 0 ? '' : `${String(Math.abs(whole))} `}${String(numerator)}/${String(denominator)}`
+
+  const head = whole === 0 ? '' : `${String(Math.abs(whole))} `
+  return `${sign}${head}${String(numerator)}/${String(denominator)}`
 }
 
 /** Puts the digits back among the literals the format states. */

@@ -61,10 +61,10 @@
 - [ ] Round-trip: open → save → XML diff; CI LibreOffice render-diff
 
 ### 1.2 Формати чисел (`packages/numfmt`)
-- [ ] Парсер format-кодів: секції `;`, умови `[>100]`, кольори `[Red]`, локаль `[$-409]`, `#,##0.00`, `0.00E+00`, `# ?/?`, `[h]:mm:ss`, `@`, escape/literal, `*` fill, `_` pad
-- [ ] Вбудовані `numFmtId` 0–49 як в Excel
-- [ ] Дати: серійні → дати з `date1904`, формати `d/m/yyyy`, `mmm`, `dddd`, `AM/PM`, elapsed
-- [ ] Тестова матриця 300+ пар (значення, код) → рядок, звірена з Excel
+- [x] Парсер format-кодів: секції `;`, умови `[>100]`, кольори `[Red]`, локаль `[$-409]`, `#,##0.00`, `0.00E+00`, `# ?/?`, `[h]:mm:ss`, `@`, escape/literal, `*` fill, `_` pad
+- [x] Вбудовані `numFmtId` 0–49 як в Excel (у `ooxml-spreadsheet`, `formatCodeOf`)
+- [x] Дати: серійні → дати з `date1904` (з багом 1900-го), формати `d/m/yyyy`, `mmm`, `dddd`, `AM/PM`, elapsed
+- [~] Тестова матриця (значення, код) → рядок: 107 пар у `matrix.test.ts`, згруповані за темами. До 300+ і до звірки з живим Excel — разом із корпусом реальних книг
 
 ### 1.3 Read-only рендер (grid v1)
 - [ ] Canvas-grid: віртуалізація рядків і стовпців, headers, gridlines, freeze panes, zoom, кілька аркушів (таби)

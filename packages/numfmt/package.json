@@ -1,0 +1,21 @@
+{
+  "name": "@orangery/numfmt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Excel number format codes: what a cell shows for what it holds.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

@@ -168,20 +168,35 @@ describe('derived views', () => {
     expect(large).toBeLessThan(allowanceFrom(small))
   })
 
+  /**
+   * Counting words is measured against half of itself rather than against a
+   * tenth.
+   *
+   * A tenth of this work takes about six milliseconds, and six milliseconds on
+   * a machine running a dozen test workers is mostly scheduling: the small
+   * measurement barely moves under load while the large one triples, and the
+   * ratio between them says more about the machine than about the code. Two
+   * sizes of the same order are slowed by the same amount, so the load
+   * cancels and what is left is the shape of the curve.
+   *
+   * Half the pages should cost half the time. Twice that is room for a busy
+   * machine; a pass over the document hiding inside the per-word work would
+   * show as four.
+   */
   it('counts words of a 200-page document in step with its size', () => {
     editor = createTestEditor('<p></p>')
 
-    editor.commands.setContent(buildLargeDocument(20))
-    const smallText = editor.getText({ blockSeparator: '\n' })
+    editor.commands.setContent(buildLargeDocument(100))
+    const halfText = editor.getText({ blockSeparator: '\n' })
     editor.commands.setContent(buildLargeDocument(200))
-    const largeText = editor.getText({ blockSeparator: '\n' })
+    const wholeText = editor.getText({ blockSeparator: '\n' })
 
-    const { small, large } = ratioOf(
-      () => computeStatistics(smallText),
-      () => computeStatistics(largeText),
+    const { small: half, large: whole } = ratioOf(
+      () => computeStatistics(halfText),
+      () => computeStatistics(wholeText),
     )
 
-    expect(computeStatistics(largeText).words).toBeGreaterThan(90_000)
-    expect(large).toBeLessThan(allowanceFrom(small))
+    expect(computeStatistics(wholeText).words).toBeGreaterThan(90_000)
+    expect(whole).toBeLessThan(Math.max(half * 4, NOISE_FLOOR_MS))
   })
 })

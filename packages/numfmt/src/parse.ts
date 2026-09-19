@@ -111,6 +111,29 @@ function looksLikeDate(body: string): boolean {
   return DATE_LETTERS.test(bare) || /\[(?:h+|m+|s+)\]/iu.test(bare)
 }
 
+/**
+ * A replacement that leaves quoted runs alone.
+ *
+ * Everything in this language can appear inside quotes and mean itself, so a
+ * scan that ignores them reads `"[" @ "]"` as a bracketed annotation and
+ * deletes the text format.
+ */
+function replaceOutsideQuotes(
+  body: string,
+  pattern: RegExp,
+  replace: (whole: string, inside: string) => string,
+): string {
+  const parts = body.split(/("[^"]*")/u)
+
+  return parts
+    .map((part) =>
+      part.startsWith('"')
+        ? part
+        : part.replace(pattern, (whole, inside: string) => replace(whole, inside)),
+    )
+    .join('')
+}
+
 /** The condition, colour and currency a section states in brackets. */
 function readBrackets(body: string): {
   rest: string
@@ -122,7 +145,9 @@ function readBrackets(body: string): {
   let condition: Condition | null = null
   let currency: string | null = null
 
-  const rest = body.replace(/\[([^\]]*)\]/gu, (whole, inside: string) => {
+  // Quoted runs are stepped over: `"[" @ "]"` is a text format with square
+  // brackets in it, not a colour and a condition.
+  const rest = replaceOutsideQuotes(body, /\[([^\]]*)\]/gu, (whole, inside) => {
     const lower = inside.toLowerCase()
 
     // An elapsed unit is a token rather than an annotation, so it stays.
@@ -213,7 +238,12 @@ function tokenise(body: string, kind: Section['kind'], currency: string | null):
     }
 
     if (char === '.') {
-      push({ kind: 'decimal' })
+      // A date's dot separates — `dd.mm.yy` — unless it is the point before a
+      // fraction of a second, which is decided by what follows it.
+      const fractionOfSecond = kind === 'date' && /^\.0+/u.test(body.slice(at))
+      push(
+        kind === 'date' && !fractionOfSecond ? { kind: 'literal', text: '.' } : { kind: 'decimal' },
+      )
       continue
     }
 
@@ -234,10 +264,10 @@ function tokenise(body: string, kind: Section['kind'], currency: string | null):
     }
 
     if (char === ',') {
-      // A comma after the last digit divides by a thousand for each one; one
-      // between digits groups them. Which it is depends on what follows, so
+      // In a date a comma is punctuation — `mmm d, yyyy`. In a number it is
+      // either grouping or scaling, and which one depends on what follows, so
       // the scaling ones are folded together afterwards.
-      push({ kind: 'group' })
+      push(kind === 'date' ? { kind: 'literal', text: ',' } : { kind: 'group' })
       continue
     }
 

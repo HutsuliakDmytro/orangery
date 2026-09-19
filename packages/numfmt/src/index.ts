@@ -9,5 +9,7 @@
 
 export { dateToSerial, elapsedOf, serialToDate } from './serial'
 export type { DateParts, Elapsed } from './serial'
+export { formatGeneral, formatValue } from './format'
+export type { Formatted, FormatOptions, Names } from './format'
 export { isTwelveHour, parseFormat } from './parse'
 export type { Condition, NumberFormat, Section, Token } from './parse'

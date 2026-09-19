@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { baseName, isTauri } from '@orangery/platform'
 import { useWorkbookStore } from '../store/workbook-store'
+import { saveWorkbookTo } from './save'
 
 /**
  * Getting a workbook off the disk.
@@ -63,4 +64,41 @@ export async function openWorkbookAt(path: string): Promise<boolean> {
 export async function openWorkbookFromDialog(): Promise<boolean> {
   const path = await pickWorkbookPath()
   return path === null ? false : openWorkbookAt(path)
+}
+
+/**
+ * Writes the workbook back where it came from.
+ *
+ * A workbook opened from a path saves to that path; one that came from
+ * nowhere — which nothing can produce yet — is asked about. The failure is
+ * reported the same way an open's is, because it is the same kind of news.
+ */
+export async function saveWorkbook(): Promise<boolean> {
+  const { open, path } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const to = path ?? (await pickSavePath())
+  if (to === null) return false
+
+  try {
+    await saveWorkbookTo(open, to, { edited: true })
+    useWorkbookStore.getState().saved(to)
+    return true
+  } catch (error) {
+    useWorkbookStore
+      .getState()
+      .fail(error instanceof Error ? error.message : `Could not save ${baseName(to)}.`)
+    return false
+  }
+}
+
+async function pickSavePath(): Promise<string | null> {
+  if (!isTauri()) return null
+
+  const chosen = await saveDialog({
+    defaultPath: 'Workbook.xlsx',
+    filters: [{ name: 'Workbook', extensions: ['xlsx'] }],
+  })
+
+  return typeof chosen === 'string' ? chosen : null
 }

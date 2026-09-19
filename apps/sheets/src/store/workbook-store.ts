@@ -24,6 +24,8 @@ export interface WorkbookState {
   dismiss: () => void
   close: () => void
   select: (index: number) => void
+  /** A workbook that has just been written, and now belongs to that path. */
+  saved: (path: string) => void
 }
 
 export const useWorkbookStore = create<WorkbookState>((set) => ({
@@ -60,6 +62,10 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
 
   select: (index) => {
     set({ current: index })
+  },
+
+  saved: (path) => {
+    set({ path, problem: null })
   },
 }))
 

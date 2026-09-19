@@ -1,7 +1,7 @@
 import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
-import { openWorkbookFromDialog } from '../document/file'
+import { openWorkbookFromDialog, saveWorkbook } from '../document/file'
 import { useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
@@ -12,8 +12,9 @@ import { visibleSheets } from '../document/workbook'
  * exists once and works from all three — the rule the other two apps follow
  * (`apps/docs/docs/adr/0002-command-registry.md`).
  *
- * What a reader can do is all there is so far: open a workbook, close it, and
- * move between its sheets. Editing brings its own commands with it.
+ * What a reader can do is all there is so far: open a workbook, save it back,
+ * close it, and move between its sheets. Editing brings its own commands with
+ * it.
  */
 
 const hasWorkbook = () => useWorkbookStore.getState().open !== null
@@ -36,6 +37,17 @@ export const fileCommands: readonly Command[] = [
     isEnabled: () => isTauri(),
     run: () => {
       void openWorkbookFromDialog()
+    },
+  },
+  {
+    id: 'file.save',
+    label: 'Save',
+    group: 'file',
+    shortcut: 'Mod+S',
+    keywords: ['write', 'xlsx'],
+    isEnabled: () => isTauri() && hasWorkbook(),
+    run: () => {
+      void saveWorkbook()
     },
   },
   {

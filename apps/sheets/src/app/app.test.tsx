@@ -48,6 +48,11 @@ describe('a window with nothing in it', () => {
     render(<App />)
     expect(getCommand('file.open')?.isEnabled?.({})).toBe(false)
   })
+
+  it('cannot save what is not open', () => {
+    render(<App />)
+    expect(getCommand('file.save')?.isEnabled?.({})).toBe(false)
+  })
 })
 
 describe('a window with a workbook', () => {

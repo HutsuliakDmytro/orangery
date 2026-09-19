@@ -51,7 +51,7 @@
 
 ### 1.1 Пакет
 - [x] ADR `0002-xlsx-roundtrip.md`: що моделюємо, що passthrough (pivotCache/pivotTable, slicers, queryTables, connections, vbaProject, customXml, externalLinks, metadata, richData)
-- [~] `ooxml-spreadsheet`: `workbook.xml` ✔ (sheets зі станом, definedNames, calcPr, date1904, activeTab), `worksheets/*` ✔ (dimension, sheetViews з панелями й масштабом, cols, sheetData, mergeCells, autoFilter, tabColor), `sharedStrings` ✔. `styles` ✔ (numFmts, fonts, fills, borders, cellXfs/cellStyleXfs із каскадом `apply*`, dxfs). `theme` ✔ (резолв кольорів: індекс теми, tint по HLS, палітра 1997-го). `tables/*` ✔, `comments`/`threadedComments`/`persons` ✔. Лишилось: `vmlDrawing` (позиція жовтої рамки нотатки), conditionalFormatting/dataValidations/hyperlinks/pageSetup — поки лишаються verbatim через текстову підстановку
+- [~] `ooxml-spreadsheet`: `workbook.xml` ✔ (sheets зі станом, definedNames, calcPr, date1904, activeTab), `worksheets/*` ✔ (dimension, sheetViews з панелями й масштабом, cols, sheetData, mergeCells, autoFilter, tabColor), `sharedStrings` ✔. `styles` ✔ (numFmts, fonts, fills, borders, cellXfs/cellStyleXfs із каскадом `apply*`, dxfs). `theme` ✔ (резолв кольорів: індекс теми, tint по HLS, палітра 1997-го). `tables/*` ✔, `comments`/`threadedComments`/`persons` ✔, `conditionalFormatting` ✔ (читання правил — `conditional.ts`; на запис лишається verbatim). Лишилось: `vmlDrawing` (позиція жовтої рамки нотатки), dataValidations/hyperlinks/pageSetup — поки лишаються verbatim через текстову підстановку
 - [x] Стрімінговий парсер `sheetData` (власний сканер) — файл на 500k рядків не будує DOM; тест на 100k комірок
 - [~] Модель: sparse cells ✔, row metadata ✔, column metadata ✔, merged ranges ✔, freeze/split panes ✔, zoom ✔; style index → resolved style ✔ (`resolveStyle`; кешує викликач — грид питає це на кожну видиму комірку)
 - [ ] Shared/array formulas розгортаються; при незмінності — згортаються назад
@@ -69,7 +69,7 @@
 ### 1.3 Read-only рендер (grid v1)
 - [~] Canvas-grid: віртуалізація ✔, headers ✔, gridlines ✔, freeze panes ✔, таби аркушів ✔ (`packages/grid` + каркас аппа). Zoom — ще ні
 - [~] Рендер значень із кешу через `numfmt` ✔, вирівнювання за типом ✔, стилі (шрифт, колір, fill, borders, merge, indent) ✔. Wrap і rotation — ще ні
-- [ ] Умовне форматування read-only: `cellIs`, `containsText`, `colorScale`, `dataBar`, `iconSet` — обчислюється тільки для видимого діапазону
+- [~] Умовне форматування read-only: `cellIs` ✔, `containsText`/`beginsWith`/`endsWith`/blanks/errors ✔, `colorScale` ✔, `dataBar` ✔, `iconSet` ✔ (+ `top10`, `aboveAverage`, `duplicateValues`/`uniqueValues` — падають з тієї ж статистики діапазону). Рахується для видимої комірки, статистика діапазону — раз на блок, діапазон обрізається до реального extent (правило на `A:A` не коштує мільйона комірок). Лишилось: `expression` і `cellIs` з посиланням у формулі (чекають на движок, фаза 3), `timePeriod`, x14-розширення (від'ємні data bars, кастомні іконки)
 - [ ] Діаграми через `packages/charts`, картинки через drawingml
 - [ ] Коментарі — індикатор + hover
 - [~] Бюджет: відкриття книги 200k комірок < 2 с ✔ (реально ~0.52 с), формування вікна комірок < 8 ms ✔ (реально ~0.8 ms — стилі й формати; малювання на канвасі в jsdom не міряється, це в QA-чеклист)

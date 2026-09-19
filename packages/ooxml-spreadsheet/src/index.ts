@@ -38,6 +38,23 @@ export type {
   StyleColor,
   Styles,
 } from './styles'
+export { readConditionalFormats, rangeCovers } from './conditional'
+export type {
+  ColorScale,
+  ConditionalFormat,
+  ConditionalRule,
+  ConditionalValue,
+  DataBar,
+  IconSet,
+} from './conditional'
+export { highlightsOf } from './highlight'
+export type {
+  CellBar,
+  CellHighlight,
+  CellIcon,
+  HighlightOptions,
+  HighlightValue,
+} from './highlight'
 export { isColumnHidden, mergeAt, readWorksheet, widthOfColumn } from './worksheet'
 export type { ColumnRange, FrozenPanes, SheetFormat, SheetView, Worksheet } from './worksheet'
 export { newWorkbook } from './new-workbook'

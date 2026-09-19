@@ -5,6 +5,10 @@
  * every assertion about it would be vacuous. This records the calls instead,
  * which is what the tests ask about: not pixels, but "was this value drawn,
  * and where".
+ *
+ * Shared as `@orangery/grid/testing` because an app that draws through this
+ * grid has the same problem and the same questions, and two recorders would
+ * drift apart the first time the grid learned to draw something new.
  */
 
 export interface DrawnText {
@@ -23,6 +27,14 @@ export interface FilledRect {
   style: string
 }
 
+/** A filled path — an icon, which is a shape rather than a rectangle. */
+export interface FilledPath {
+  points: [number, number][]
+  /** Whether the path was curved, which is how a circle is told from a diamond. */
+  curved: boolean
+  style: string
+}
+
 export interface RecordedCanvas {
   texts: DrawnText[]
   strokedRects: { x: number; y: number; width: number; height: number }[]
@@ -30,6 +42,8 @@ export interface RecordedCanvas {
   fills: FilledRect[]
   /** Lines, with their colour: gridlines, borders, the frozen edge. */
   lines: { from: [number, number]; to: [number, number]; style: string }[]
+  /** Shapes, with the colour each was filled in. */
+  paths: FilledPath[]
   reset: () => void
 }
 
@@ -38,16 +52,24 @@ export const recorded: RecordedCanvas = {
   strokedRects: [],
   fills: [],
   lines: [],
+  paths: [],
   reset: () => {
     recorded.texts = []
     recorded.strokedRects = []
     recorded.fills = []
     recorded.lines = []
+    recorded.paths = []
+    path = []
+    curved = false
   },
 }
 
 /** Where the last `moveTo` put the pen, so a `lineTo` can be recorded as a line. */
 let pen: [number, number] = [0, 0]
+
+/** The path being built, which becomes a shape when something fills it. */
+let path: [number, number][] = []
+let curved = false
 
 const context = {
   canvas: null,
@@ -64,15 +86,30 @@ const context = {
   },
   save: () => undefined,
   restore: () => undefined,
-  beginPath: () => undefined,
+  beginPath: () => {
+    path = []
+    curved = false
+  },
   rect: () => undefined,
   clip: () => undefined,
+  closePath: () => undefined,
+  arc: (x: number, y: number) => {
+    curved = true
+    path.push([x, y])
+    pen = [x, y]
+  },
+  fill: () => {
+    if (path.length > 0)
+      recorded.paths.push({ points: [...path], curved, style: context.fillStyle })
+  },
   moveTo: (x: number, y: number) => {
     pen = [x, y]
+    path.push([x, y])
   },
   lineTo: (x: number, y: number) => {
     recorded.lines.push({ from: pen, to: [x, y], style: context.strokeStyle })
     pen = [x, y]
+    path.push([x, y])
   },
   stroke: () => undefined,
   fillText: (text: string, x: number, y: number) => {

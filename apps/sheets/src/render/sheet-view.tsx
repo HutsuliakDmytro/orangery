@@ -3,15 +3,27 @@ import { DataGrid } from '@orangery/grid'
 import type { CellAddress, CellStyle } from '@orangery/grid'
 import {
   cellAt,
+  extentOf,
   formatCodeOf,
+  highlightsOf,
   indexToColumn,
   mergeAt,
   resolveColor,
   resolveStyle,
   widthOfColumn,
 } from '@orangery/ooxml-spreadsheet'
-import type { Cell, ResolvedStyle } from '@orangery/ooxml-spreadsheet'
+import type {
+  BorderEdge,
+  Cell,
+  CellHighlight,
+  DifferentialFormat,
+  Font,
+  HighlightValue,
+  ResolvedStyle,
+  Styles,
+} from '@orangery/ooxml-spreadsheet'
 import { formatValue } from '@orangery/numfmt'
+import { iconOf } from './icon-sets'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
 /**
@@ -79,6 +91,40 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
   )
 
   /**
+   * What the sheet's conditional formatting makes of a cell.
+   *
+   * Null when the sheet has no rules, which is most sheets and is worth the
+   * branch: everything below is skipped rather than answered with nothing.
+   *
+   * Cached by address because the grid asks twice for every visible cell —
+   * once for the text, once for the look — and on a sheet nobody can edit yet
+   * the answer cannot have changed in between.
+   */
+  const highlight = useMemo(() => {
+    const rules = sheet.sheet.conditional
+    if (rules.length === 0) return null
+
+    const at = highlightsOf(rules, {
+      valueAt: (position) => valueOfCell(cellAt(sheet.cells, position), strings),
+      extent: extentOf(sheet.cells),
+      palette,
+    })
+
+    const held = new Map<number, CellHighlight | null>()
+    return (address: CellAddress): CellHighlight | null => {
+      // One number for a position: sixteen thousand columns fit in fourteen
+      // bits, and a string key per cell per repaint is garbage by the frame.
+      const key = address.row * 16_384 + address.column
+      const answer = held.get(key)
+      if (answer !== undefined) return answer
+
+      const made = at(address)
+      held.set(key, made)
+      return made
+    }
+  }, [palette, sheet.cells, sheet.sheet.conditional, strings])
+
+  /**
    * What a cell shows.
    *
    * The type says how to read the value — a shared string is an index into the
@@ -101,20 +147,32 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       const number = Number(cell.value)
       if (!Number.isFinite(number)) return cell.value
 
+      const marks = highlight?.(address) ?? null
+
+      // A bar or an icon can be asked to stand in for the number rather than
+      // sit beside it, which is how a column of figures becomes a chart.
+      if (marks?.bar?.showValue === false || marks?.icon?.showValue === false) return null
+
       const style = styleOf(cell.style)
+      const ruled = styles === null || marks === null ? null : formatOf(styles, marks.formats)
       const code =
-        styles === null || style === null ? null : formatCodeOf(styles, style.numberFormat)
+        ruled?.numberFormat ??
+        (styles === null || style === null ? null : formatCodeOf(styles, style.numberFormat))
 
       return formatValue(number, code, { date1904: open.workbook.date1904 }).text
     },
-    [cellFor, open.workbook.date1904, strings, styleOf, styles],
+    [cellFor, highlight, open.workbook.date1904, strings, styleOf, styles],
   )
 
   const styleAt = useCallback(
     (address: CellAddress): CellStyle | null => {
       const cell = cellFor(address)
-      const style = styleOf(cell?.style ?? null)
-      if (style === null) return null
+      const own = styleOf(cell?.style ?? null)
+      if (own === null) return null
+
+      const marks = highlight?.(address) ?? null
+      const ruled = styles === null || marks === null ? null : formatOf(styles, marks.formats)
+      const style = ruled === null ? own : overlaid(own, ruled)
 
       const hex = (color: Parameters<typeof resolveColor>[0]) => {
         const six = resolveColor(color, palette)
@@ -125,10 +183,21 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       // cell shows whatever is behind it, and painting it white would hide the
       // gridlines under it.
       const fill = style.fill
-      const background =
+      const painted =
         fill === null || fill.pattern === null || fill.pattern === 'none'
           ? undefined
           : hex(fill.foreground)
+
+      /**
+       * A colour scale, unless a rule named a colour of its own.
+       *
+       * Both are backgrounds and a cell has one. Which should win is a
+       * question of the two rules' priorities; taking the stated colour over
+       * the computed one is right whenever the rule stating it was written
+       * later, which is where Excel puts a new rule.
+       */
+      const scale = marks?.scale ?? null
+      const background = ruled?.fill == null && scale !== null ? `#${scale}` : painted
 
       const font = style.font
       const size = font?.size ?? 11
@@ -138,6 +207,14 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
         font: `${font?.italic === true ? 'italic ' : ''}${font?.bold === true ? 'bold ' : ''}${String(size)}px ${family}`,
         color: hex(font?.color ?? null),
         background,
+        bar:
+          marks?.bar === null || marks?.bar === undefined
+            ? undefined
+            : { color: `#${marks.bar.color}`, proportion: marks.bar.proportion },
+        icon:
+          marks?.icon === null || marks?.icon === undefined
+            ? undefined
+            : iconOf(marks.icon.set, marks.icon.index, marks.icon.count),
         align:
           style.alignment?.horizontal === 'center'
             ? 'center'
@@ -166,7 +243,7 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
         },
       }
     },
-    [cellFor, palette, styleOf],
+    [cellFor, highlight, palette, styleOf, styles],
   )
 
   const merged = useCallback(
@@ -247,4 +324,111 @@ function rowHeights(sheet: OpenSheet): number[] {
     const height = sheet.cells.properties.get(index)?.height
     return height === null || height === undefined ? fallback : Math.round(height) + 5
   })
+}
+
+/**
+ * What a cell holds, as a conditional rule asks about it.
+ *
+ * The rules compare numbers with numbers and words with words, so the two are
+ * told apart here and not inside the rule. A formula's cached result counts as
+ * whatever it is: the file states the answer, and a rule about that column
+ * means the answers rather than the formulas.
+ */
+function valueOfCell(cell: Cell | null, strings: readonly string[]): HighlightValue | null {
+  if (cell === null || cell.value === null) return null
+
+  if (cell.type === 's') {
+    const text = strings[Number(cell.value)] ?? ''
+    return text === '' ? null : { number: null, text, error: false }
+  }
+  if (cell.type === 'inlineStr' || cell.type === 'str') {
+    return cell.value === '' ? null : { number: null, text: cell.value, error: false }
+  }
+  if (cell.type === 'e') return { number: null, text: cell.value, error: true }
+  if (cell.type === 'b') {
+    return { number: null, text: cell.value === '1' ? 'TRUE' : 'FALSE', error: false }
+  }
+
+  const number = Number(cell.value)
+  return Number.isFinite(number)
+    ? { number, text: cell.value, error: false }
+    : { number: null, text: cell.value, error: false }
+}
+
+/**
+ * The formats of every rule that matched, as one.
+ *
+ * The list arrives most important first; merged the other way round, so that
+ * the most important rule is the last to have its say. A rule states only what
+ * it changes, so two rules can both be honoured — the bold of one and the fill
+ * of the other — which is what Excel does.
+ */
+function formatOf(styles: Styles, ids: readonly number[]): DifferentialFormat | null {
+  if (ids.length === 0) return null
+
+  const merged: DifferentialFormat = { font: null, fill: null, border: null, numberFormat: null }
+  let any = false
+
+  for (const id of [...ids].reverse()) {
+    const format = styles.differential[id]
+    if (format === undefined) continue
+
+    any = true
+    if (format.font !== null) merged.font = { ...merged.font, ...format.font }
+    if (format.fill !== null) merged.fill = format.fill
+    if (format.border !== null) merged.border = format.border
+    if (format.numberFormat !== null) merged.numberFormat = format.numberFormat
+  }
+
+  return any ? merged : null
+}
+
+/** A cell's own look with a rule's laid over it, part by part. */
+function overlaid(own: ResolvedStyle, ruled: DifferentialFormat): ResolvedStyle {
+  const edge = (mine: BorderEdge, theirs: BorderEdge | undefined): BorderEdge =>
+    theirs === undefined || theirs.style === null ? mine : theirs
+
+  return {
+    ...own,
+    font: ruled.font === null ? own.font : { ...(own.font ?? BARE_FONT), ...ruled.font },
+    /**
+     * A rule's colour is in `bgColor`, not `fgColor`.
+     *
+     * The classic "light red fill with dark red text" is written by Excel as a
+     * `patternFill` with only a `bgColor`, and a reader that looked where a
+     * cell's own fill keeps its colour would find nothing and paint nothing.
+     */
+    fill:
+      ruled.fill === null
+        ? own.fill
+        : {
+            pattern: 'solid',
+            foreground: ruled.fill.background ?? ruled.fill.foreground,
+            background: null,
+            gradient: false,
+          },
+    border:
+      ruled.border === null
+        ? own.border
+        : {
+            ...own.border,
+            left: edge(own.border.left, ruled.border.left),
+            right: edge(own.border.right, ruled.border.right),
+            top: edge(own.border.top, ruled.border.top),
+            bottom: edge(own.border.bottom, ruled.border.bottom),
+          },
+  }
+}
+
+/** What a rule's font is laid over when the cell itself states none. */
+const BARE_FONT: Font = {
+  name: null,
+  size: null,
+  bold: false,
+  italic: false,
+  underline: null,
+  strike: false,
+  color: null,
+  vertAlign: null,
+  scheme: null,
 }

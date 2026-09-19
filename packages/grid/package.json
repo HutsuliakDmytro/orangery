@@ -5,7 +5,8 @@
   "type": "module",
   "description": "A grid of cells, drawn on a canvas: the sheet surface every app shares.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/test-setup.ts"
   },
   "scripts": {
     "check": "pnpm lint && pnpm typecheck && pnpm test:unit",

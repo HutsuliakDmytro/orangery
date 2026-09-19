@@ -2,6 +2,8 @@ import { attribute, children, findChild, parseXml, tagName } from '@orangery/oox
 import type { XmlNode } from '@orangery/ooxml-core'
 import { parseRange } from './reference'
 import type { CellRange } from './reference'
+import { readConditionalFormats } from './conditional'
+import type { ConditionalFormat } from './conditional'
 
 /**
  * A worksheet, apart from its cells.
@@ -78,6 +80,14 @@ export interface Worksheet {
   tabColor: string | null
   /** The range an autofilter covers, for the arrows the grid draws on it. */
   autoFilter: CellRange | null
+  /**
+   * The rules that change how a cell looks because of what is in it.
+   *
+   * Not part of a cell's style and not resolvable without the neighbours: what
+   * a colour scale makes of a cell depends on every other cell in its range
+   * (`highlight.ts`).
+   */
+  conditional: ConditionalFormat[]
 }
 
 const DEFAULT_VIEW: SheetView = {
@@ -200,6 +210,7 @@ export function readWorksheet(xml: string): Worksheet | null {
     },
     tabColor: attribute(tab ?? {}, 'rgb') ?? null,
     autoFilter: parseRange(attribute(filter ?? {}, 'ref') ?? ''),
+    conditional: readConditionalFormats(root),
   }
 }
 

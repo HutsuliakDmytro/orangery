@@ -14,6 +14,7 @@ import {
 import type { CellAddress, FrozenPanes, GridMetrics, Viewport } from './layout'
 import { defaultAlign } from './cell-style'
 import type { CellBorders, CellStyle } from './cell-style'
+import { ICON_GUTTER, drawIcon } from './icon'
 
 /**
  * A grid of cells, drawn rather than built.
@@ -236,43 +237,67 @@ export function DataGrid({
           context.fillRect(rect.x, rect.y, rect.width, rect.height)
         }
 
+        // A bar goes over the fill and under the value: it is a picture of the
+        // number, so the number has to stay readable on top of it.
+        if (style?.bar !== undefined && style.bar.proportion > 0) {
+          context.fillStyle = style.bar.color
+          context.fillRect(
+            rect.x + 1,
+            rect.y + 2,
+            Math.max(0, (rect.width - 2) * Math.min(1, style.bar.proportion)),
+            Math.max(0, rect.height - 4),
+          )
+        }
+
+        if (style?.icon !== undefined) {
+          drawIcon(context, style.icon, rect.x + 3, rect.y + rect.height / 2)
+        }
+
         const text = valueAt(cell)
-        if (text === null || text === '') continue
 
-        context.save()
-        context.beginPath()
-        context.rect(rect.x, rect.y, rect.width, rect.height)
-        context.clip()
+        if (text !== null && text !== '') {
+          context.save()
+          context.beginPath()
+          context.rect(rect.x, rect.y, rect.width, rect.height)
+          context.clip()
 
-        context.font = style?.font ?? DEFAULT_FONT
-        context.fillStyle = style?.color ?? COLORS.text
+          context.font = style?.font ?? DEFAULT_FONT
+          context.fillStyle = style?.color ?? COLORS.text
 
-        // Numbers right, text left, unless the file says otherwise: the oldest
-        // convention in spreadsheets, and what makes a column of figures
-        // readable — the digits line up under each other.
-        const align = style?.align ?? defaultAlign(text)
-        const indent = (style?.indent ?? 0) * 9
-        const padding = 4
+          // Numbers right, text left, unless the file says otherwise: the oldest
+          // convention in spreadsheets, and what makes a column of figures
+          // readable — the digits line up under each other.
+          const align = style?.align ?? defaultAlign(text)
+          const indent = (style?.indent ?? 0) * 9
+          const padding = 4
 
-        const x =
-          align === 'right'
-            ? rect.x + rect.width - padding - indent
-            : align === 'center'
-              ? rect.x + rect.width / 2
-              : rect.x + padding + indent
+          // An icon sits in the cell rather than beside it, so the text starts
+          // after it. A right-aligned number is untouched: the icon is at the
+          // other end, and moving the digits would break the column.
+          const gutter = style?.icon === undefined ? 0 : ICON_GUTTER
 
-        const y =
-          style?.verticalAlign === 'top'
-            ? rect.y + rect.height / 4
-            : style?.verticalAlign === 'bottom'
-              ? rect.y + (rect.height * 3) / 4
-              : rect.y + rect.height / 2
+          const x =
+            align === 'right'
+              ? rect.x + rect.width - padding - indent
+              : align === 'center'
+                ? rect.x + gutter + (rect.width - gutter) / 2
+                : rect.x + padding + indent + gutter
 
-        context.textAlign = align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'
-        context.fillText(text, x, y)
-        context.textAlign = 'left'
-        context.restore()
+          const y =
+            style?.verticalAlign === 'top'
+              ? rect.y + rect.height / 4
+              : style?.verticalAlign === 'bottom'
+                ? rect.y + (rect.height * 3) / 4
+                : rect.y + rect.height / 2
 
+          context.textAlign = align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'
+          context.fillText(text, x, y)
+          context.textAlign = 'left'
+          context.restore()
+        }
+
+        // Outside the text, because a bordered cell with nothing in it is
+        // still a bordered cell — a ruled form is mostly those.
         if (style?.borders !== undefined) drawBorders(context, rect, style.borders)
       }
     }

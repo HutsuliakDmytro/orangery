@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { recorded } from '../test-setup'
 import { openWorkbook } from '../document/workbook'
 import type { OpenWorkbook } from '../document/workbook'
 import { SheetView } from './sheet-view'
@@ -21,6 +22,10 @@ let workbook: OpenWorkbook
 
 beforeAll(async () => {
   workbook = await openWorkbook(new Uint8Array(await readFile(FIXTURE)))
+})
+
+beforeEach(() => {
+  recorded.reset()
 })
 
 const drawn = () => {
@@ -96,5 +101,35 @@ describe('what a cell is shown as', () => {
     const grid = drawn()
 
     expect(await announced(user, grid, { row: 2, column: 1 })).toContain('B, row 3: -99.00')
+  })
+})
+
+describe('what a rule does to a cell', () => {
+  /**
+   * The fixture puts a rule on the two figures in column B: anything below
+   * nought takes the format Excel offers first — light red fill, dark red
+   * bold text — and the percentage in C3 gets a bar across it.
+   */
+
+  it('lays the rule’s colours over the cell that matched', () => {
+    drawn()
+
+    expect(recorded.fills.some((one) => one.style === '#FFC7CE')).toBe(true)
+    expect(recorded.texts.find((one) => one.text === '-99.00')?.font).toContain('bold')
+  })
+
+  it('leaves the cell that did not match alone', () => {
+    drawn()
+
+    // 1,234.50 is in the same range and above nought; a rule applied to the
+    // range rather than to the values would have reddened it too.
+    expect(recorded.texts.find((one) => one.text === '1,234.50')?.font).not.toContain('bold')
+  })
+
+  it('draws the bar the rule asks for, with the number still on it', () => {
+    drawn()
+
+    expect(recorded.fills.some((one) => one.style === '#638EC6')).toBe(true)
+    expect(recorded.texts.some((one) => one.text === '16%')).toBe(true)
   })
 })

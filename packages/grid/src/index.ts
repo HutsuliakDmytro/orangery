@@ -7,7 +7,8 @@
  */
 
 export { defaultAlign } from './cell-style'
-export type { CellBorders, CellStyle } from './cell-style'
+export type { CellBar, CellBorders, CellIcon, CellStyle, IconShape } from './cell-style'
+export { ICON_GUTTER, ICON_SIZE, drawIcon } from './icon'
 export { columnName, DataGrid } from './data-grid'
 export type { DataGridProps } from './data-grid'
 export {

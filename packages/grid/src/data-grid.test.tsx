@@ -312,6 +312,110 @@ describe('what a cell looks like', () => {
 
     expect(recorded.lines.some((line) => line.style === '#FF0000')).toBe(true)
   })
+
+  it('draws them around an empty cell too, which is most of a ruled form', () => {
+    grid({
+      valueAt: () => null,
+      styleAt: () => ({ borders: { left: null, right: null, top: null, bottom: '#FF0000' } }),
+    })
+
+    expect(recorded.lines.some((line) => line.style === '#FF0000')).toBe(true)
+  })
+})
+
+describe('a bar across a cell', () => {
+  const barred = (proportion: number) =>
+    grid({
+      styleAt: ({ row, column }) =>
+        row === 0 && column === 1 ? { bar: { color: '#638EC6', proportion } } : null,
+    })
+
+  it('fills the share of the cell it was given', () => {
+    barred(0.5)
+
+    // A column is 84 wide, less a point at each edge for the gridline.
+    expect(recorded.fills.find((one) => one.style === '#638EC6')?.width).toBeCloseTo(41)
+  })
+
+  it('leaves the number readable on top of it', () => {
+    barred(0.9)
+    expect(recorded.texts.some((one) => one.text === '10.5')).toBe(true)
+  })
+
+  it('draws nothing for a bar of no length', () => {
+    barred(0)
+    expect(recorded.fills.some((one) => one.style === '#638EC6')).toBe(false)
+  })
+})
+
+describe('an icon beside a value', () => {
+  const withIcon = (icon: CellStyle['icon']) =>
+    grid({ styleAt: ({ row, column }) => (row === 0 && column === 1 ? { icon } : null) })
+
+  it('draws a round shape for a round icon and a cornered one for a flag', () => {
+    withIcon({ shape: 'circle', color: '#00B050' })
+    expect(recorded.paths.some((one) => one.curved && one.style === '#00B050')).toBe(true)
+
+    recorded.reset()
+    withIcon({ shape: 'flag', color: '#FF0000' })
+    expect(recorded.paths.some((one) => !one.curved && one.style === '#FF0000')).toBe(true)
+  })
+
+  it('points an arrow where it is told', () => {
+    /**
+     * Where the tip is, from the shape alone.
+     *
+     * An arrow is a flat tail and a single point at the other end, so the end
+     * with one corner to it is the end it points at.
+     */
+    const tip = (points: [number, number][]) => {
+      const heights = points.map(([, y]) => Math.round(y * 100) / 100)
+      const top = Math.min(...heights)
+      const bottom = Math.max(...heights)
+      return heights.filter((y) => y === top).length === 1 ? top : bottom
+    }
+
+    withIcon({ shape: 'arrow', color: '#00B050', direction: 'up' })
+    const up = recorded.paths.find((one) => one.style === '#00B050')?.points ?? []
+
+    recorded.reset()
+    withIcon({ shape: 'arrow', color: '#00B050', direction: 'down' })
+    const down = recorded.paths.find((one) => one.style === '#00B050')?.points ?? []
+
+    expect(tip(up)).toBeLessThan(tip(down))
+  })
+
+  it('spends the segments a rating has not earned in grey', () => {
+    withIcon({ shape: 'bars', color: '#00B050', filled: 2, steps: 4 })
+
+    expect(recorded.fills.filter((one) => one.style === '#00B050')).toHaveLength(2)
+    expect(recorded.fills.filter((one) => one.style === '#D4D4D4')).toHaveLength(2)
+  })
+
+  it('moves a left-aligned value along to make room for it', () => {
+    const without = grid({ valueAt: () => 'Q1' })
+    const plain = recorded.texts.find((one) => one.text === 'Q1')?.x ?? 0
+    without.unmount()
+
+    recorded.reset()
+    grid({ valueAt: () => 'Q1', styleAt: () => ({ icon: { shape: 'circle', color: '#00B050' } }) })
+    const moved = recorded.texts.find((one) => one.text === 'Q1')?.x ?? 0
+
+    expect(moved).toBeGreaterThan(plain)
+  })
+
+  it('leaves a right-aligned number where it was, at the other end of the cell', () => {
+    grid({ valueAt: () => '10.5' })
+    const plain = recorded.texts.find((one) => one.text === '10.5')?.x ?? 0
+
+    recorded.reset()
+    grid({
+      valueAt: () => '10.5',
+      styleAt: () => ({ icon: { shape: 'circle', color: '#00B050' } }),
+    })
+
+    expect(recorded.texts.find((one) => one.text === '10.5')?.x).toBe(plain)
+  })
 })
 
 describe('cells merged into one', () => {

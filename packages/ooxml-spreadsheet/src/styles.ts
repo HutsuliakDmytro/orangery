@@ -120,9 +120,16 @@ export interface Styles {
   differential: DifferentialFormat[]
 }
 
-/** A format stated in parts: only what it changes, laid over what is there. */
+/**
+ * A format stated in parts: only what it changes, laid over what is there.
+ *
+ * The font is partial rather than whole, and it has to be. A `dxf` that only
+ * reddens the text says nothing about bold, and a reader that filled the gap
+ * with `false` would un-bold every heading it highlighted. What is absent here
+ * is absent, not off.
+ */
 export interface DifferentialFormat {
-  font: Font | null
+  font: Partial<Font> | null
   fill: Fill | null
   border: Border | null
   numberFormat: string | null
@@ -288,6 +295,31 @@ const listOf = <T>(
     .map((child) => read(child))
 }
 
+/**
+ * A font stated in parts, keeping the difference between "off" and "unsaid".
+ *
+ * `<b val="0"/>` is a rule that takes bold away and belongs in the answer;
+ * no `<b>` at all is a rule with no opinion about bold and does not.
+ */
+function readPartialFont(node: XmlNode): Partial<Font> {
+  const named = findChild(node, 'name') ?? findChild(node, 'rFont')
+  const underline = findChild(node, 'u')
+  const size = findChild(node, 'sz')
+  const color = findChild(node, 'color')
+  const vertAlign = findChild(node, 'vertAlign')
+
+  return {
+    ...(named === undefined ? {} : { name: attribute(named, 'val') ?? null }),
+    ...(size === undefined ? {} : { size: number(size, 'val', null) }),
+    ...(findChild(node, 'b') === undefined ? {} : { bold: stated(node, 'b') }),
+    ...(findChild(node, 'i') === undefined ? {} : { italic: stated(node, 'i') }),
+    ...(underline === undefined ? {} : { underline: attribute(underline, 'val') ?? 'single' }),
+    ...(findChild(node, 'strike') === undefined ? {} : { strike: stated(node, 'strike') }),
+    ...(color === undefined ? {} : { color: readColor(color) }),
+    ...(vertAlign === undefined ? {} : { vertAlign: attribute(vertAlign, 'val') ?? null }),
+  }
+}
+
 function readDifferential(node: XmlNode): DifferentialFormat {
   const font = findChild(node, 'font')
   const fill = findChild(node, 'fill')
@@ -295,7 +327,7 @@ function readDifferential(node: XmlNode): DifferentialFormat {
   const format = findChild(node, 'numFmt')
 
   return {
-    font: font === undefined ? null : readFont(font),
+    font: font === undefined ? null : readPartialFont(font),
     fill: fill === undefined ? null : readFill(fill),
     border: border === undefined ? null : readBorder(border),
     numberFormat: attribute(format ?? {}, 'formatCode') ?? null,

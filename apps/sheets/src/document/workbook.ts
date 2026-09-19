@@ -119,6 +119,7 @@ const EMPTY_SHEET: Worksheet = {
   format: { defaultRowHeight: null, defaultColumnWidth: null, customHeight: false },
   tabColor: null,
   autoFilter: null,
+  conditional: [],
 }
 
 /** The sheets a person sees, which is not all of them. */

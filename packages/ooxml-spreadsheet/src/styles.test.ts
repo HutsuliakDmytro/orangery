@@ -88,6 +88,25 @@ describe('reading the parts', () => {
     expect(styles().differential[0]?.font).toMatchObject({ bold: true })
     expect(styles().differential[0]?.fill?.background).toEqual({ kind: 'rgb', hex: 'FFFFC7CE' })
   })
+
+  it('says nothing about what such a format did not mention', () => {
+    // The rule reddens the text and makes it bold. It has no opinion about
+    // italics, and a reader that reported `italic: false` would straighten
+    // every italic cell it highlighted.
+    const format = styles().differential[0]
+
+    expect(format?.font).not.toHaveProperty('italic')
+    expect(format?.font).not.toHaveProperty('name')
+  })
+
+  it('reads a format that takes something away, which is not the same as silence', () => {
+    const taken = readStyles(
+      '<styleSheet xmlns="x"><dxfs count="1"><dxf><font><b val="0"/></font></dxf></dxfs>' +
+        '</styleSheet>',
+    )
+
+    expect(taken?.differential[0]?.font).toEqual({ bold: false })
+  })
 })
 
 describe('following a cell’s index', () => {

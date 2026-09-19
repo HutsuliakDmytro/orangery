@@ -66,6 +66,7 @@ import {
 } from '../document/file-operations'
 import { stepsPerSlide } from '../render/animation'
 import { groupAfterEscape } from '../render/selection'
+import { insertChartOnSlide } from '../document/insert-chart'
 import { insertPictureOnSlide } from '../document/insert-picture'
 import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
 import { startReview } from '../document/review'
@@ -1439,6 +1440,33 @@ export const connectorCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * A chart of each kind, as five commands rather than one and a dialog.
+ *
+ * PowerPoint opens a gallery; here the kinds are in the menu and the palette,
+ * where typing "pie" reaches a pie chart in one gesture. Changing the kind
+ * afterwards is a control in the panel, so the choice made here is not one
+ * anybody is stuck with.
+ */
+export const chartCommands: readonly Command[] = (
+  [
+    ['bar', 'Column Chart'],
+    ['line', 'Line Chart'],
+    ['pie', 'Pie Chart'],
+    ['area', 'Area Chart'],
+    ['scatter', 'Scatter Chart'],
+  ] as const
+).map(([kind, label]) => ({
+  id: `insert.chart.${kind}`,
+  label,
+  group: 'insert',
+  keywords: ['chart', 'graph', 'data'],
+  isEnabled: () => useDeckStore.getState().open !== null,
+  run: () => {
+    void insertChartOnSlide(kind)
+  },
+}))
+
 export const tableCommands: readonly Command[] = [
   {
     id: 'insert.table',
@@ -1793,6 +1821,7 @@ export function registerBuiltinCommands(): void {
   registerAll(iconCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)
+  registerAll(chartCommands)
   registerAll(footerCommands)
   registerAll(diagramCommands)
   registerAll(commentCommands)

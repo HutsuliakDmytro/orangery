@@ -3,17 +3,16 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getPartText, readPackage } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
-import { allSeries, readChart } from '@orangery/ooxml-drawingml'
 import {
-  cellsOf,
+  allSeries,
   patchedWorkbook,
   patchedWorkbookRows,
+  readChart,
   writeChartCache,
   writeChartCategories,
   writeChartPoints,
-} from './chart-data'
-import { readPptxPackage } from './parts'
-import { saveDeck } from './save'
+} from '@orangery/charts'
+import { readPptxPackage, saveDeck } from '@orangery/ooxml-presentation'
 
 /**
  * Changing the numbers a chart draws.
@@ -24,7 +23,7 @@ import { saveDeck } from './save'
  * somebody opens the other.
  */
 
-const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synthetic')
+const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
 const PART = 'ppt/charts/chart1.xml'
 
 const load = async () => readPptxPackage(await readFile(join(FIXTURES, 'charts.pptx')))
@@ -42,27 +41,6 @@ async function sheetOf(pkg: OoxmlPackage): Promise<string> {
   const book = await readPackage(bytes)
   return getPartText(book, 'xl/worksheets/sheet1.xml') ?? ''
 }
-
-describe('reading a range', () => {
-  it('lists the cells down a column', () => {
-    expect(cellsOf('Sheet1!$B$2:$B$5')).toEqual({
-      sheet: 'Sheet1',
-      cells: ['B2', 'B3', 'B4', 'B5'],
-    })
-  })
-
-  it('reads a single cell as a range of one, which is how a name is written', () => {
-    expect(cellsOf('Sheet1!$B$1')).toEqual({ sheet: 'Sheet1', cells: ['B1'] })
-  })
-
-  it('reads a sheet whose name is quoted', () => {
-    expect(cellsOf("'My Data'!$A$1:$A$2")?.sheet).toBe('My Data')
-  })
-
-  it('says nothing about a formula it does not understand', () => {
-    expect(cellsOf('SUM(A1:A5)')).toBeNull()
-  })
-})
 
 describe('the cache the chart is drawn from', () => {
   it('takes the new numbers', async () => {
@@ -237,10 +215,10 @@ describe('adding and taking away a point', () => {
     expect(writeChartPoints(pkg, PART, { at: 1, insert: false })).toBe(true)
 
     const chart = readChart(getPartText(pkg, PART) ?? '')
-    expect(chart?.categories).toEqual(['Q1', 'Q3', 'Q4'])
-    expect(
-      allSeries(chart ?? { plots: [], categories: [], title: null, legend: null })[0]?.values,
-    ).toEqual([10.5, 9.8, 18.1])
+    if (chart === null) throw new Error('the part holds no chart')
+
+    expect(chart.categories).toEqual(['Q1', 'Q3', 'Q4'])
+    expect(allSeries(chart)[0]?.values).toEqual([10.5, 9.8, 18.1])
   })
 
   it('survives a save and a reopen', async () => {

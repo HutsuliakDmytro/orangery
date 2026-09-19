@@ -20,6 +20,7 @@ import { RecentDecks } from '../components/recent-decks'
 import { PicturesDialog } from '../components/pictures-dialog'
 import { ShapeGallery } from '../components/shape-gallery'
 import { TablePicker } from '../components/table-picker'
+import { ChartDataDialog } from '../components/chart-data-dialog'
 import { HeaderFooterDialog } from '../components/header-footer-dialog'
 import { GridDialog } from '../components/grid-dialog'
 import { PasteDialog } from '../components/paste-dialog'
@@ -127,6 +128,7 @@ function Shell() {
       <TablePicker />
 
       <HeaderFooterDialog />
+      <ChartDataDialog />
 
       <GridDialog />
 

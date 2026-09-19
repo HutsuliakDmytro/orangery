@@ -1,12 +1,23 @@
 import {
+  applyChartEdits,
   patchedWorkbook,
   patchedWorkbookRows,
-  relationshipTarget,
   writeChartCache,
   writeChartCategories,
   writeChartPoints,
-} from '@orangery/ooxml-presentation'
-import type { ChartCategories, ChartValues, Shape } from '@orangery/ooxml-presentation'
+  writeChartSeriesName,
+  writeChartXValues,
+} from '@orangery/charts'
+import type {
+  ChartCategories,
+  ChartEdit,
+  ChartSeriesName,
+  ChartValues,
+  ChartXValues,
+} from '@orangery/charts'
+import { getPartText, setPartText } from '@orangery/ooxml-core'
+import { relationshipTarget } from '@orangery/ooxml-presentation'
+import type { Shape } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 
 /**
@@ -38,7 +49,10 @@ export function chartPartOf(shape: Shape, slidePath: string): string | null {
  * differs is which cache is patched, and both halves have to move together or
  * PowerPoint rebuilds one from the other.
  */
-async function edit(part: string, change: ChartValues | ChartCategories): Promise<void> {
+async function edit(
+  part: string,
+  change: ChartValues | ChartCategories | ChartSeriesName | ChartXValues,
+): Promise<void> {
   const { open } = useDeckStore.getState()
   if (open === null) return
 
@@ -46,9 +60,13 @@ async function edit(part: string, change: ChartValues | ChartCategories): Promis
 
   useDeckStore.getState().editPackage((deck) => {
     const cached =
-      'series' in change
+      'values' in change
         ? writeChartCache(deck.package, part, change)
-        : writeChartCategories(deck.package, part, change)
+        : 'xValues' in change
+          ? writeChartXValues(deck.package, part, change)
+          : 'name' in change
+            ? writeChartSeriesName(deck.package, part, change)
+            : writeChartCategories(deck.package, part, change)
 
     if (workbook !== null) {
       deck.package.parts.set(workbook.path, {
@@ -65,6 +83,10 @@ async function edit(part: string, change: ChartValues | ChartCategories): Promis
 export const editChartValues = (part: string, change: ChartValues) => edit(part, change)
 
 export const editChartCategories = (part: string, change: ChartCategories) => edit(part, change)
+
+export const editChartSeriesName = (part: string, change: ChartSeriesName) => edit(part, change)
+
+export const editChartXValues = (part: string, change: ChartXValues) => edit(part, change)
 
 /**
  * Adds a point to a chart, or takes one away.
@@ -93,5 +115,22 @@ export async function editChartPoints(
     }
 
     return written || workbook !== null
+  })
+}
+
+/**
+ * Changes what a chart is, rather than what it says.
+ *
+ * The type, the legend, the labels, the scale, a series' colour: all of it is
+ * inside the chart part and none of it is in the workbook, so unlike a number
+ * this is one file to write and there is nothing to keep in step.
+ */
+export function editChartProperties(part: string, edits: readonly ChartEdit[]): void {
+  useDeckStore.getState().editPackage((deck) => {
+    const written = applyChartEdits(getPartText(deck.package, part) ?? '', edits)
+    if (written === null) return false
+
+    setPartText(deck.package, part, written)
+    return true
   })
 }

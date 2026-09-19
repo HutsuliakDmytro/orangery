@@ -1,28 +1,22 @@
-import { allSeries, readChart } from '@orangery/ooxml-drawingml'
+import { ChartProperties, allSeries, readChart, themeAccents } from '@orangery/charts'
 import { getPartText } from '@orangery/ooxml-core'
-import {
-  chartPartOf,
-  editChartCategories,
-  editChartPoints,
-  editChartValues,
-} from '../document/chart-editing'
+import { colorContextFor, themeFor } from '@orangery/ooxml-presentation'
+import { chartPartOf, editChartProperties } from '../document/chart-editing'
 import { currentSlide, useDeckStore } from '../store/deck-store'
+import { useViewStore } from '../store/view-store'
 
 /**
- * The numbers behind a chart, as a table.
+ * What the properties panel says about a chart.
  *
- * A chart is a picture of some data, and the way to change the picture is to
- * change the data. PowerPoint opens Excel for this; here the numbers are in
- * the panel, because a spreadsheet is a large answer to "make that bar taller".
- *
- * Values, names, and how many points there are. The last of those moves every
- * range the chart states in `c:f` and a row in the workbook behind it, which
- * is why it is a button rather than a box you type in.
+ * Not the numbers themselves: those are a table, and a table in a strip this
+ * narrow is a table nobody can read. The panel says what the chart is made of
+ * and opens the editor, which is what PowerPoint's own button does.
  */
 export function ChartDataPanel() {
   const open = useDeckStore((state) => state.open)
   const slide = useDeckStore(currentSlide)
   const selection = useDeckStore((state) => state.selection)
+  const editData = useViewStore((state) => state.setEditingChartData)
 
   if (open === null || slide === null || selection.length !== 1) return null
 
@@ -34,103 +28,44 @@ export function ChartDataPanel() {
   if (part === null || chart === null) return null
 
   const series = allSeries(chart)
-  if (series.length === 0) return null
+  const points = Math.max(chart.categories.length, ...series.map((one) => one.values.length), 0)
 
-  // A scatter numbers its own bottom, so its rows are counted rather than named.
-  const rows =
-    chart.categories.length > 0
-      ? chart.categories
-      : (series[0]?.values ?? []).map((_, index) => `Point ${String(index + 1)}`)
+  // The colours the canvas is drawing this chart in, so the panel shows what
+  // is there rather than what a series would have if it stated one.
+  const palette = themeAccents(
+    themeFor(open.deck, open.themes, slide),
+    colorContextFor(open.deck, open.themes, slide),
+  )
 
   return (
-    <section aria-label="Chart data" className="space-y-2 text-xs">
-      <h2 className="uppercase tracking-wide text-muted">Chart data</h2>
+    <section aria-label="Chart" className="space-y-2 text-xs">
+      <h2 className="uppercase tracking-wide text-muted">Chart</h2>
 
-      <table className="w-full">
-        <thead>
-          <tr>
-            <th className="w-1/3 text-left font-normal text-muted">Category</th>
-            {series.map((one, index) => (
-              <th key={index} className="truncate text-left font-normal text-muted">
-                {one.name ?? `Series ${String(index + 1)}`}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((category, row) => (
-            <tr key={row}>
-              <td className="pr-1">
-                {chart.categories.length === 0 ? (
-                  // A scatter numbers its own bottom; there is no name to edit.
-                  <span className="text-muted">{category}</span>
-                ) : (
-                  <input
-                    type="text"
-                    aria-label={`Category ${String(row + 1)}`}
-                    defaultValue={category}
-                    onBlur={(event) => {
-                      const names = chart.categories.map((one, at) =>
-                        at === row ? event.target.value : one,
-                      )
-                      void editChartCategories(part, { categories: names })
-                    }}
-                    className="w-full rounded border border-border bg-transparent px-1 py-0.5 text-text outline-none focus:border-accent"
-                  />
-                )}
-              </td>
-              {series.map((one, index) => (
-                <td key={index} className="pr-1">
-                  <input
-                    type="number"
-                    aria-label={`${one.name ?? `Series ${String(index + 1)}`}, ${category}`}
-                    // A gap in a chart is a real thing and an empty box is how
-                    // it is written; it is left as it was rather than read as
-                    // a zero, which would be a bar where there is none.
-                    defaultValue={one.values[row] ?? ''}
-                    onBlur={(event) => {
-                      const wanted = Number(event.target.value)
-                      if (!Number.isFinite(wanted)) return
+      <p className="text-muted">
+        {series.length === 1 ? '1 series' : `${String(series.length)} series`},{' '}
+        {points === 1 ? '1 point' : `${String(points)} points`}
+      </p>
 
-                      const values = one.values.map((value, at) =>
-                        at === row ? wanted : (value ?? 0),
-                      )
-                      void editChartValues(part, { series: index, values })
-                    }}
-                    className="w-full rounded border border-border bg-transparent px-1 py-0.5 text-text outline-none focus:border-accent"
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <button
+        type="button"
+        onClick={() => {
+          editData(true)
+        }}
+        className="rounded border border-border px-1.5 py-0.5 text-text hover:border-accent"
+      >
+        Edit data
+      </button>
 
-      <div className="flex gap-1">
-        <button
-          type="button"
-          aria-label="Add a point"
-          onClick={() => {
-            void editChartPoints(part, { at: rows.length, insert: true })
-          }}
-          className="rounded border border-border px-1.5 py-0.5 text-text hover:border-accent"
-        >
-          Add point
-        </button>
-        <button
-          type="button"
-          aria-label="Remove the last point"
-          // A chart of one point is a chart of nothing; below that there is
-          // no picture left to look at.
-          disabled={rows.length <= 1}
-          onClick={() => {
-            void editChartPoints(part, { at: rows.length - 1, insert: false })
-          }}
-          className="rounded border border-border px-1.5 py-0.5 text-muted disabled:opacity-40"
-        >
-          Remove point
-        </button>
-      </div>
+      <ChartProperties
+        // Rebuilt when the chart changes, so the boxes that are only read on
+        // mount start from what the file says now.
+        key={`${part}:${String(series.length)}:${String(points)}`}
+        chart={chart}
+        palette={palette}
+        onEdit={(edits) => {
+          editChartProperties(part, edits)
+        }}
+      />
     </section>
   )
 }

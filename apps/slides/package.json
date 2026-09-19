@@ -27,8 +27,10 @@
     "icon": "tauri icon src-tauri/icons/icon.svg"
   },
   "dependencies": {
+    "@orangery/charts": "workspace:*",
     "@orangery/editor-text": "workspace:*",
     "@orangery/fonts": "workspace:*",
+    "@orangery/grid": "workspace:*",
     "@orangery/ooxml-core": "workspace:*",
     "@orangery/ooxml-drawingml": "workspace:*",
     "@orangery/ooxml-presentation": "workspace:*",
@@ -51,6 +53,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@orangery/ooxml-spreadsheet": "workspace:*",
     "@orangery/render-diff": "workspace:*",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",

@@ -33,6 +33,8 @@ interface ViewState {
   choosingTable: boolean
   /** Whether the date, footer and slide-number dialog is up. */
   editingFooters: boolean
+  /** The chart data editor, which opens on the chart that is selected. */
+  editingChartData: boolean
   /**
    * Whether the speaker notes are open for editing.
    *
@@ -118,6 +120,7 @@ interface ViewState {
   setChoosingShape: (choosing: boolean) => void
   setChoosingTable: (choosing: boolean) => void
   setEditingFooters: (editing: boolean) => void
+  setEditingChartData: (editing: boolean) => void
   setEditingNotes: (editing: boolean) => void
   setZoom: (zoom: number | null) => void
   toggleSection: (id: string) => void
@@ -154,6 +157,7 @@ export const useViewStore = create<ViewState>((set) => ({
   choosingShape: false,
   choosingTable: false,
   editingFooters: false,
+  editingChartData: false,
   editingNotes: false,
   zoom: null,
   collapsedSections: [],
@@ -250,6 +254,9 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setEditingFooters: (editing) => {
     set({ editingFooters: editing })
+  },
+  setEditingChartData: (editing) => {
+    set({ editingChartData: editing })
   },
 
   setFinding: (finding) => {

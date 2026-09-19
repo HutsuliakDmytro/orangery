@@ -40,7 +40,6 @@ import {
   EMU_PER_PIXEL,
   fontStackFor,
   toSvgPath,
-  readChart,
   resolveColor,
   resolveThemeFont,
   shadowOffset,
@@ -48,10 +47,10 @@ import {
   textOfBody,
 } from '@orangery/ooxml-drawingml'
 import type { ColorContext, PmNode, Theme } from '@orangery/ooxml-drawingml'
+import { ChartView, readChart } from '@orangery/charts'
 import { fillPaint, linePaint, textPaint } from './paint'
 import { mediaUrl } from './media'
 import { TableView } from './table-view'
-import { ChartView } from './chart-view'
 import type { GradientDefinition } from './paint'
 import { effectStyle, STILL } from './animation'
 import type { SlideAnimation } from './animation'

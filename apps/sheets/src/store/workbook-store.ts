@@ -16,7 +16,12 @@ export interface WorkbookState {
   path: string | null
   /** Which of the visible sheets is showing. */
   current: number
+  /** What went wrong the last time something was opened, for the banner. */
+  problem: string | null
+  busy: boolean
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
+  fail: (problem: string) => void
+  dismiss: () => void
   close: () => void
   select: (index: number) => void
 }
@@ -25,19 +30,32 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   open: null,
   path: null,
   current: 0,
+  problem: null,
+  busy: false,
 
   load: async (bytes, path) => {
+    set({ busy: true })
     const open = await openWorkbook(bytes)
     const sheets = visibleSheets(open)
 
     // The sheet the workbook was left on, as far as it is one a person can
     // see: a file can be saved with a hidden sheet active.
     const active = Math.min(Math.max(open.workbook.activeSheet, 0), Math.max(sheets.length - 1, 0))
-    set({ open, path, current: active })
+    set({ open, path, current: active, problem: null, busy: false })
+  },
+
+  fail: (problem) => {
+    // The workbook that was open stays open: a file that would not open is a
+    // reason to say so, not a reason to take away the one being worked on.
+    set({ problem, busy: false })
+  },
+
+  dismiss: () => {
+    set({ problem: null })
   },
 
   close: () => {
-    set({ open: null, path: null, current: 0 })
+    set({ open: null, path: null, current: 0, problem: null, busy: false })
   },
 
   select: (index) => {

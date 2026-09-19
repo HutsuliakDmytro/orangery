@@ -188,8 +188,23 @@ describe('recording what the text was shrunk to', () => {
     const node = shrinking('fontScale="85000" lnSpcReduction="10000"')
     writeAutofitScale(node, 70000)
 
-    // The second lever is PowerPoint's; leaving it alone is not the same as
-    // deciding it should be nothing.
+    // How PowerPoint pairs the two levers is not written down anywhere, and the
+    // text was measured with this one already in effect.
     expect(serializeNode(node)).toContain('lnSpcReduction="10000"')
+  })
+
+  it('drops the line spacing when the text is back at full size', () => {
+    const node = shrinking('fontScale="70000" lnSpcReduction="20000"')
+    expect(writeAutofitScale(node, 100000)).toBe(true)
+
+    // Otherwise a shape whose text was cut short keeps its lines squashed
+    // under words that now overflow nothing, here and in PowerPoint.
+    expect(serializeNode(node)).not.toContain('lnSpcReduction')
+    expect(serializeNode(node)).not.toContain('fontScale')
+  })
+
+  it('reports no change when it is already unshrunk', () => {
+    const node = shrinking('')
+    expect(writeAutofitScale(node, 100000)).toBe(false)
   })
 })

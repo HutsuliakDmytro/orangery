@@ -163,6 +163,16 @@ export function autofitKindOf(body: XmlNode): AutofitKind | null {
  * A hundred percent is written as no attribute at all, because that is what an
  * unshrunk shape says and a deck full of `fontScale="100000"` is a deck that
  * differs from its file for no reason.
+ *
+ * `lnSpcReduction` is the other lever, and it is left where the file put it:
+ * how PowerPoint pairs the two is not written down anywhere, and the text was
+ * measured with the reduction already in effect, so the scale answered here
+ * fits with it. Where a stated scale goes back to full size the reduction goes
+ * with it: they were written together by whatever shrank the text, and keeping
+ * one would leave the lines squashed under words that now overflow nothing. A
+ * body that states only a reduction is left alone — PowerPoint reduces spacing
+ * before it touches the font size, so that one is a decision rather than a
+ * leftover.
  */
 export function writeAutofitScale(body: XmlNode, fontScale: number): boolean {
   const properties = findChild(body, 'a:bodyPr')
@@ -173,7 +183,10 @@ export function writeAutofitScale(body: XmlNode, fontScale: number): boolean {
   const written = wanted >= 100000 ? null : String(wanted)
   if ((attribute(normal, 'fontScale') ?? null) === written) return false
 
-  if (written === null) removeAttribute(normal, 'fontScale')
-  else setAttribute(normal, 'fontScale', written)
+  if (written === null) {
+    removeAttribute(normal, 'fontScale')
+    removeAttribute(normal, 'lnSpcReduction')
+  } else setAttribute(normal, 'fontScale', written)
+
   return true
 }

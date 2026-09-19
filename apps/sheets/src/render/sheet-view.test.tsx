@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { recorded } from '../test-setup'
@@ -34,6 +34,13 @@ const drawn = () => {
 
   render(<SheetView open={workbook} sheet={sheet} width={800} height={400} />)
   return screen.getByRole('grid', { name: 'Budget' })
+}
+
+/** The element the pointer events land on, which is the scrolling surface. */
+const surfaceOf = (grid: HTMLElement) => {
+  const surface = grid.querySelector(':scope > div')
+  if (surface === null) throw new Error('the grid has no surface')
+  return surface
 }
 
 /** What the grid says about the cell it is on, which is the formatted value. */
@@ -205,5 +212,47 @@ describe('what sits on the sheet rather than in it', () => {
     // 914400 EMU is an inch, which is seventy-two points.
     const picture = screen.getByLabelText('Logo')
     expect(picture.style.width).toBe('72px')
+  })
+})
+
+describe('what has been said about a cell', () => {
+  it('marks a thread and a note differently, because they are different things', () => {
+    drawn()
+
+    // One of them can be replied to and one of them cannot; a reader who sees
+    // the same mark for both learns that only by clicking.
+    expect(recorded.paths.some((one) => one.style === '#7B4FA8')).toBe(true)
+    expect(recorded.paths.some((one) => one.style === '#C00000')).toBe(true)
+  })
+
+  it('shows the whole thread when the pointer is over the cell', () => {
+    const surface = surfaceOf(drawn())
+
+    // B3: column A is twenty characters wide, and the first two rows are 20
+    // and 35 points tall.
+    fireEvent.pointerMove(surface, { clientX: 200, clientY: 85 })
+
+    const note = screen.getByRole('note')
+    expect(note.textContent).toContain('Is this the refund?')
+    expect(note.textContent).toContain('Yes, from March.')
+  })
+
+  it('prefers the thread to the note Excel writes beside it', () => {
+    const surface = surfaceOf(drawn())
+
+    fireEvent.pointerMove(surface, { clientX: 200, clientY: 85 })
+
+    // The fallback note holds the same words with the author glued to the
+    // front; showing both would be showing it twice.
+    expect(screen.getByRole('note').textContent).not.toContain('Olena: Is this')
+  })
+
+  it('shows nothing once the pointer leaves the sheet', () => {
+    const surface = surfaceOf(drawn())
+
+    fireEvent.pointerMove(surface, { clientX: 200, clientY: 85 })
+    fireEvent.pointerLeave(surface)
+
+    expect(screen.queryByRole('note')).toBeNull()
   })
 })

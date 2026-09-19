@@ -85,6 +85,14 @@ export interface CellStyle {
   bar?: CellBar
   /** Drawn at the left, with the text moved along to make room. */
   icon?: CellIcon
+  /**
+   * A small mark in the top-right corner, in this colour.
+   *
+   * What a spreadsheet uses to say "there is something here that is not the
+   * value": a note, a comment, an error somebody chose to ignore. The grid
+   * draws the corner; what it means is the caller's.
+   */
+  corner?: string
 }
 
 /**

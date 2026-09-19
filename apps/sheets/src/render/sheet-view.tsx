@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DataGrid } from '@orangery/grid'
 import type { CellAddress, CellStyle } from '@orangery/grid'
 import {
@@ -25,6 +25,8 @@ import type {
 import { formatValue } from '@orangery/numfmt'
 import { iconOf } from './icon-sets'
 import { SheetDrawings } from './sheet-drawings'
+import { NoteBox } from './note-box'
+import { notesOf } from './sheet-notes'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
 /**
@@ -124,6 +126,12 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       return made
     }
   }, [palette, sheet.cells, sheet.sheet.conditional, strings])
+
+  /** What has been said about the cells, indexed once for the whole sheet. */
+  const notes = useMemo(() => notesOf(sheet.comments), [sheet.comments])
+
+  /** The cell the pointer is over, which is what a note is shown beside. */
+  const [hovered, setHovered] = useState<CellAddress | null>(null)
 
   /**
    * What a cell shows.
@@ -233,6 +241,9 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
         indent: style.alignment?.indent ?? 0,
         wrap: style.alignment?.wrapText ?? false,
         rotation: turnOf(style.alignment?.textRotation ?? null),
+        // Purple for a thread and red for a note, as Excel marks them: the
+        // two are different things and one of them can be replied to.
+        corner: cornerOf(notes.at(address)),
         borders: {
           left:
             hex(style.border.left.color) ?? (style.border.left.style === null ? null : '#B2B2B2'),
@@ -245,7 +256,7 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
         },
       }
     },
-    [cellFor, highlight, palette, styleOf, styles],
+    [cellFor, highlight, notes, palette, styleOf, styles],
   )
 
   const merged = useCallback(
@@ -318,18 +329,28 @@ export function SheetView({ open, sheet, width, height }: SheetViewProps) {
       metrics={metrics}
       frozen={frozen}
       zoom={zoom}
+      onHoverCell={notes.any ? setHovered : undefined}
       overlay={
-        sheet.drawings.length === 0
+        sheet.drawings.length === 0 && !notes.any
           ? undefined
           : (view) => (
-              <SheetDrawings
-                open={open}
-                sheet={sheet}
-                metrics={view.metrics}
-                scrollX={view.scrollX}
-                scrollY={view.scrollY}
-                zoom={zoom}
-              />
+              <>
+                <SheetDrawings
+                  open={open}
+                  sheet={sheet}
+                  metrics={view.metrics}
+                  scrollX={view.scrollX}
+                  scrollY={view.scrollY}
+                  zoom={zoom}
+                />
+                <NoteBox
+                  note={hovered === null ? null : notes.at(hovered)}
+                  cell={hovered}
+                  metrics={view.metrics}
+                  scrollX={view.scrollX}
+                  scrollY={view.scrollY}
+                />
+              </>
             )
       }
       columnHeader={(column) => indexToColumn(column)}
@@ -353,6 +374,16 @@ function rowHeights(sheet: OpenSheet): number[] {
     const height = sheet.cells.properties.get(index)?.height
     return height === null || height === undefined ? fallback : Math.round(height) + 5
   })
+}
+
+/** The colour of the mark on a cell with something said about it. */
+function cornerOf(note: ReturnType<ReturnType<typeof notesOf>['at']>): string | undefined {
+  if (note === null) return undefined
+  // A resolved thread is still there and is no longer waiting for anybody; a
+  // quieter mark says so without taking it away.
+  if (note.resolved) return '#B0B0B0'
+
+  return note.kind === 'thread' ? '#7B4FA8' : '#C00000'
 }
 
 /**

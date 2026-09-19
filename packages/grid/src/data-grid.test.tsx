@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataGrid, columnName } from './data-grid'
@@ -538,5 +538,42 @@ describe('a sheet drawn larger', () => {
 
     // Three rows of 22 and a header of 22, all doubled.
     expect(content?.style.height).toBe('176px')
+  })
+})
+
+describe('a mark in the corner of a cell', () => {
+  it('draws a small triangle in the colour the caller asks for', () => {
+    grid({ styleAt: ({ row, column }) => (row === 0 && column === 0 ? { corner: '#B00' } : null) })
+
+    const mark = recorded.paths.find((one) => one.style === '#B00')
+    expect(mark?.points).toHaveLength(3)
+  })
+
+  it('draws it over the value, not under it', () => {
+    // A wide number painted across the corner would hide the one thing that
+    // says there is more here than the number.
+    grid({
+      valueAt: () => '1234567890',
+      styleAt: ({ row, column }) => (row === 0 && column === 0 ? { corner: '#B00' } : null),
+    })
+
+    const mark = recorded.paths.findIndex((one) => one.style === '#B00')
+    expect(mark).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('the cell under the pointer', () => {
+  it('is reported as it moves, and forgotten when it leaves', () => {
+    const hovered = vi.fn()
+    const { container } = grid({ onHoverCell: hovered })
+
+    const surface = container.querySelector('[role="grid"] > div')
+    if (surface === null) throw new Error('the grid has no surface')
+
+    fireEvent.pointerMove(surface, { clientX: 60, clientY: 30 })
+    expect(hovered).toHaveBeenCalledWith({ row: 0, column: 0 })
+
+    fireEvent.pointerLeave(surface)
+    expect(hovered).toHaveBeenLastCalledWith(null)
   })
 })

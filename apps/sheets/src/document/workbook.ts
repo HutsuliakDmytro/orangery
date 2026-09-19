@@ -4,6 +4,7 @@ import {
   drawingRelationshipId,
   paletteOf,
   readSharedStrings,
+  readSheetComments,
   readSheetData,
   readSheetDrawings,
   readStyles,
@@ -12,6 +13,7 @@ import {
 } from '@orangery/ooxml-spreadsheet'
 import type {
   SheetCells,
+  SheetComments,
   SheetDrawing,
   Styles,
   Workbook,
@@ -56,6 +58,8 @@ export interface OpenSheet {
   cells: SheetCells
   /** Charts and pictures, which sit on the sheet rather than in a cell. */
   drawings: AnchoredDrawing[]
+  /** What has been said about its cells: threads, and the older notes. */
+  comments: SheetComments
 }
 
 export interface OpenWorkbook {
@@ -94,6 +98,7 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
       sheet: readWorksheet(text) ?? EMPTY_SHEET,
       cells: readSheetData(text),
       drawings: drawingsOf(pkg, entry.path, text),
+      comments: commentsOf(pkg, entry.path),
     }
   })
 
@@ -150,6 +155,30 @@ function drawingsOf(pkg: OoxmlPackage, sheetPath: string, sheetXml: string): Anc
 
     return { drawing, path: to === undefined ? null : resolveTarget(to, directory) }
   })
+}
+
+const NOTES_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments'
+const THREADS_RELATIONSHIP =
+  'http://schemas.microsoft.com/office/2017/10/relationships/threadedComment'
+
+/**
+ * The comment parts of one sheet, found through its relationships.
+ *
+ * Both kinds, because Excel writes both: a thread for itself and a note for
+ * readers older than 2018. Which of them to show is the renderer's decision,
+ * and it can only make it if it has been given both.
+ */
+function commentsOf(pkg: OoxmlPackage, sheetPath: string): SheetComments {
+  const relationships = parseRelationships(getPartText(pkg, relationshipsOf(sheetPath)) ?? '')
+  const directory = partDirectory(sheetPath)
+
+  const partOf = (type: string) => {
+    const target = [...relationships.values()].find((one) => one.type === type)?.target
+    return target === undefined ? null : resolveTarget(target, directory)
+  }
+
+  return readSheetComments(pkg, partOf(NOTES_RELATIONSHIP), partOf(THREADS_RELATIONSHIP))
 }
 
 /** A theme colour as six hex digits, which is all the palette needs of it. */

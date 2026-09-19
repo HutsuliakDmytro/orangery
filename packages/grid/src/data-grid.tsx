@@ -70,6 +70,14 @@ export interface DataGridProps {
    */
   overlay?: (view: { scrollX: number; scrollY: number; metrics: GridMetrics }) => React.ReactNode
   /**
+   * The cell the pointer is over, or null once it leaves.
+   *
+   * Hovering is the grid's to know — it owns the scroll and the geometry — and
+   * what to do about it is the caller's. A note shown on hover is the reason
+   * this exists.
+   */
+  onHoverCell?: (cell: CellAddress | null) => void
+  /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
    * Folded into the measurements rather than applied to the canvas, so that
@@ -186,6 +194,7 @@ export function DataGrid({
   frozen = null,
   zoom = 1,
   overlay,
+  onHoverCell,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -326,6 +335,19 @@ export function DataGrid({
         // Outside the text, because a bordered cell with nothing in it is
         // still a bordered cell — a ruled form is mostly those.
         if (style?.borders !== undefined) drawBorders(context, rect, style.borders)
+
+        // Last of all, so nothing in the cell is drawn over it: a corner mark
+        // that a wide value painted over would be a mark nobody sees.
+        if (style?.corner !== undefined) {
+          const side = 5 * zoom
+          context.fillStyle = style.corner
+          context.beginPath()
+          context.moveTo(rect.x + rect.width - side, rect.y)
+          context.lineTo(rect.x + rect.width, rect.y)
+          context.lineTo(rect.x + rect.width, rect.y + side)
+          context.closePath()
+          context.fill()
+        }
       }
     }
 
@@ -556,6 +578,23 @@ export function DataGrid({
         onDoubleClick={() => {
           if (canEdit(selected)) setEditing({ cell: selected, text: valueAt(selected) ?? '' })
         }}
+        onPointerMove={(event) => {
+          if (onHoverCell === undefined) return
+
+          const box = event.currentTarget.parentElement?.getBoundingClientRect()
+          if (box === undefined) return
+
+          onHoverCell(
+            cellAtPoint(
+              metrics,
+              viewport,
+              { x: event.clientX - box.left, y: event.clientY - box.top },
+              { rows, columns },
+              frozen,
+            ),
+          )
+        }}
+        onPointerLeave={() => onHoverCell?.(null)}
       >
         <canvas
           ref={canvas}

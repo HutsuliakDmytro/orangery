@@ -46,6 +46,7 @@ function slideWithRuns(...runs: string[]): Slide {
 
   return {
     path: 'ppt/slides/slide1.xml',
+    id: '256',
     root: { 'p:sld': [{ 'p:cSld': [tree] }] },
     tree,
     shapes: parseShapeTree(tree),

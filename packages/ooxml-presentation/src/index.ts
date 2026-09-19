@@ -52,7 +52,14 @@ export {
   writeChartPoints,
 } from './chart-data'
 export type { ChartCategories, ChartValues } from './chart-data'
-export { applicable, applyChange, compareDecks, describeChange } from './compare'
+export {
+  applyChange,
+  applySlideChange,
+  compareDecks,
+  describeChange,
+  isShapeChange,
+} from './compare'
+export { importSlide } from './import-slide'
 export type { Change, ShapeChange } from './compare'
 export {
   addComment,

@@ -1,4 +1,4 @@
-import { applicable, describeChange } from '@orangery/ooxml-presentation'
+import { describeChange } from '@orangery/ooxml-presentation'
 import { accept, reject, useReviewStore } from '../document/review'
 import { useDeckStore } from '../store/deck-store'
 
@@ -8,9 +8,9 @@ import { useDeckStore } from '../store/deck-store'
  * Every change says which slide it is on and takes you there, because a
  * difference you cannot see is one nobody can decide about.
  *
- * A change about a whole slide is shown and cannot be taken. Bringing a slide
- * across means bringing its layout, its pictures and the relationships that
- * name them, and saying so is more use than a button that does half of it.
+ * Every change can be taken, including one about a whole slide: that one
+ * brings the slide's layout, its pictures and the parts they live in, which is
+ * why it took its own piece of work rather than a branch of this one.
  */
 export function ReviewPanel() {
   const theirs = useReviewStore((state) => state.theirs)
@@ -62,20 +62,16 @@ export function ReviewPanel() {
                 <p className="text-text">{describeChange(change)}</p>
 
                 <div className="flex gap-1">
-                  {applicable(change) ? (
-                    <button
-                      type="button"
-                      aria-label={`Accept change ${String(index + 1)}`}
-                      onClick={() => {
-                        accept(index)
-                      }}
-                      className="rounded bg-accent px-2 py-0.5 text-black"
-                    >
-                      Accept
-                    </button>
-                  ) : (
-                    <span className="text-muted">Shown only</span>
-                  )}
+                  <button
+                    type="button"
+                    aria-label={`Accept change ${String(index + 1)}`}
+                    onClick={() => {
+                      accept(index)
+                    }}
+                    className="rounded bg-accent px-2 py-0.5 text-black"
+                  >
+                    Accept
+                  </button>
                   <button
                     type="button"
                     aria-label={`Reject change ${String(index + 1)}`}
@@ -84,7 +80,7 @@ export function ReviewPanel() {
                     }}
                     className="rounded border border-border px-2 py-0.5 text-muted"
                   >
-                    {applicable(change) ? 'Reject' : 'Dismiss'}
+                    Reject
                   </button>
                 </div>
               </li>

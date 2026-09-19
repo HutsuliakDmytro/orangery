@@ -35,6 +35,10 @@ import { syncSections } from './sections'
  * runs over this list, so a change here is a change there, and a deck where the
  * two disagree is one PowerPoint shows slides missing from every section.
  *
+ * The pieces of that plumbing are exported for `import-slide.ts`, which does
+ * the same five things for a slide arriving from another package — not for
+ * anyone outside this package, which is why none of them are in `index.ts`.
+ *
  * A slide is not a node in a document — it is a part of the package, and five
  * things have to agree about it: the part itself, its own relationships, the
  * content type naming it, a relationship from `presentation.xml`, and an entry
@@ -42,23 +46,24 @@ import { syncSections } from './sections'
  * from nothing else, which is why reordering never touches the parts.
  */
 
-const SLIDE_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
+export const SLIDE_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
 
 /** Slide ids start at 256 in every deck PowerPoint writes. */
 const FIRST_SLIDE_ID = 256
 
-function presentationRoot(pkg: OoxmlPackage): { roots: XmlNode[]; root: XmlNode } | null {
+export function presentationRoot(pkg: OoxmlPackage): { roots: XmlNode[]; root: XmlNode } | null {
   const roots = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '')
   const root = roots.find((node) => tagName(node) === 'p:presentation')
   return root === undefined ? null : { roots, root }
 }
 
-function writePresentation(pkg: OoxmlPackage, roots: XmlNode[]): void {
+export function writePresentation(pkg: OoxmlPackage, roots: XmlNode[]): void {
   setPartText(pkg, PRESENTATION_PART, withDeclaration(buildXml(roots)))
 }
 
 /** The next free `slideN.xml`, so a new part never lands on an existing one. */
-function nextSlideName(pkg: OoxmlPackage): string {
+export function nextSlideName(pkg: OoxmlPackage): string {
   let highest = 0
   for (const path of pkg.parts.keys()) {
     const match = /^ppt\/slides\/slide(\d+)\.xml$/u.exec(path)
@@ -68,7 +73,7 @@ function nextSlideName(pkg: OoxmlPackage): string {
 }
 
 /** The next free id for `p:sldId`, which is not the same as the part number. */
-function nextSlideId(list: XmlNode): number {
+export function nextSlideId(list: XmlNode): number {
   const used = children(list)
     .filter((child) => tagName(child) === 'p:sldId')
     .map((child) => Number(attribute(child, 'id')))
@@ -183,7 +188,7 @@ export function addSlide(
 }
 
 /** One part's path as another part's relationship states it. */
-function relativeTo(fromPath: string, toPath: string): string {
+export function relativeTo(fromPath: string, toPath: string): string {
   const from = fromPath.split('/').slice(0, -1)
   const to = toPath.split('/')
 
@@ -285,7 +290,7 @@ const NOTES_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml'
 
 /** The next free `nameN.xml` in a directory, so a new part never lands on an existing one. */
-function nextPartName(pkg: OoxmlPackage, directory: string, stem: string): string {
+export function nextPartName(pkg: OoxmlPackage, directory: string, stem: string): string {
   const pattern = new RegExp(`^${directory}/${stem}(\\d+)\\.xml$`, 'u')
 
   let highest = 0

@@ -1,10 +1,13 @@
 import { children, findChild } from '@orangery/ooxml-core'
-import type { XmlNode } from '@orangery/ooxml-core'
+import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { textOfBody } from '@orangery/ooxml-drawingml'
 import type { Deck, Slide } from './deck'
 import { flatten } from './shape-tree'
 import type { Shape, Transform } from './shape-tree'
 import { writeTransform } from './write-shape'
+import { removeSlide } from './add-slide'
+import { importSlide } from './import-slide'
+import { readPresentation } from './presentation'
 
 /**
  * What one deck has that another has not.
@@ -21,34 +24,49 @@ import { writeTransform } from './write-shape'
  * the deck as changed.
  */
 
+/**
+ * What every change says about where it is.
+ *
+ * `slide` is the position a person sees, counting from one, in whichever deck
+ * the change is about — theirs for a slide they added, mine for everything
+ * else. `slideId` is what the deck calls that slide, and is what anything
+ * acting on the change looks it up by: the two decks agree on the id and need
+ * not agree on the position.
+ */
+interface Where {
+  slide: number
+  slideId: string
+}
+
 export type Change =
-  | { kind: 'slide-added'; slide: number; title: string }
-  | { kind: 'slide-removed'; slide: number; title: string }
-  | { kind: 'text'; slide: number; shapeId: number; name: string; from: string; to: string }
-  | { kind: 'moved'; slide: number; shapeId: number; name: string; to: Transform }
-  | { kind: 'shape-added'; slide: number; shapeId: number; name: string }
-  | { kind: 'shape-removed'; slide: number; shapeId: number; name: string }
+  | ({ kind: 'slide-added'; title: string } & Where)
+  | ({ kind: 'slide-removed'; title: string } & Where)
+  | ({ kind: 'text'; shapeId: number; name: string; from: string; to: string } & Where)
+  | ({ kind: 'moved'; shapeId: number; name: string; to: Transform } & Where)
+  | ({ kind: 'shape-added'; shapeId: number; name: string } & Where)
+  | ({ kind: 'shape-removed'; shapeId: number; name: string } & Where)
 
 /** A change that happens inside a slide both decks have. */
 export type ShapeChange = Extract<Change, { shapeId: number }>
 
-/** Whether a change can be taken into this deck, or only looked at. */
-export function applicable(change: Change): change is ShapeChange {
+/** Whether a change is about a shape, which is applied differently from a slide. */
+export function isShapeChange(change: Change): change is ShapeChange {
   return change.kind !== 'slide-added' && change.kind !== 'slide-removed'
 }
 
-/** The id `p:sldIdLst` gives a slide, which a copy of the deck keeps. */
+/**
+ * The slides of a deck by the id `p:sldIdLst` gives them.
+ *
+ * A copy of a deck keeps those ids through every edit; positions it does not.
+ * Pairing slide four with slide four after somebody inserted one would report
+ * every slide in the deck as changed.
+ */
 function slideIds(deck: Deck): Map<string, Slide> {
-  const ids = new Map<string, Slide>()
-
-  // The list is in the presentation part, and the deck reads its slides from
-  // it in order — so the nth entry is the nth slide.
-  deck.slides.forEach((slide, index) => {
-    ids.set(String(index), slide)
-  })
-
-  return ids
+  return new Map(deck.slides.map((slide) => [slide.id, slide]))
 }
+
+/** Where a slide sits in its deck, counting from one. */
+const positionOf = (deck: Deck, slide: Slide): number => deck.slides.indexOf(slide) + 1
 
 const titleOf = (slide: Slide): string => {
   const title = flatten(slide.shapes).find((shape) => shape.placeholder?.type === 'title')
@@ -82,13 +100,20 @@ export function compareDecks(mine: Deck, theirs: Deck): Change[] {
 
   for (const [id, slide] of yours) {
     if (!ours.has(id)) {
-      changes.push({ kind: 'slide-added', slide: Number(id) + 1, title: titleOf(slide) })
+      changes.push({
+        kind: 'slide-added',
+        slide: positionOf(theirs, slide),
+        slideId: id,
+        title: titleOf(slide),
+      })
     }
   }
 
   for (const [id, slide] of ours) {
+    const number = positionOf(mine, slide)
+
     if (!yours.has(id)) {
-      changes.push({ kind: 'slide-removed', slide: Number(id) + 1, title: titleOf(slide) })
+      changes.push({ kind: 'slide-removed', slide: number, slideId: id, title: titleOf(slide) })
       continue
     }
 
@@ -97,7 +122,6 @@ export function compareDecks(mine: Deck, theirs: Deck): Change[] {
 
     const here = byId(slide)
     const there = byId(other)
-    const number = Number(id) + 1
 
     for (const [shapeId, shape] of here) {
       const match = there.get(shapeId)
@@ -105,6 +129,7 @@ export function compareDecks(mine: Deck, theirs: Deck): Change[] {
         changes.push({
           kind: 'shape-removed',
           slide: number,
+          slideId: id,
           shapeId,
           name: nameOf(shape),
         })
@@ -115,6 +140,7 @@ export function compareDecks(mine: Deck, theirs: Deck): Change[] {
         changes.push({
           kind: 'text',
           slide: number,
+          slideId: id,
           shapeId,
           name: nameOf(shape),
           from: textOf(shape),
@@ -126,6 +152,7 @@ export function compareDecks(mine: Deck, theirs: Deck): Change[] {
         changes.push({
           kind: 'moved',
           slide: number,
+          slideId: id,
           shapeId,
           name: nameOf(shape),
           to: match.transform,
@@ -135,7 +162,13 @@ export function compareDecks(mine: Deck, theirs: Deck): Change[] {
 
     for (const [shapeId, shape] of there) {
       if (!here.has(shapeId)) {
-        changes.push({ kind: 'shape-added', slide: number, shapeId, name: nameOf(shape) })
+        changes.push({
+          kind: 'shape-added',
+          slide: number,
+          slideId: id,
+          shapeId,
+          name: nameOf(shape),
+        })
       }
     }
   }
@@ -149,16 +182,15 @@ const bodyOf = (shape: Shape): XmlNode | undefined => findChild(shape.node, 'p:t
 /**
  * Takes one change into this deck.
  *
- * Only the ones that live inside a slide both decks have. Bringing a whole
- * slide across means bringing its layout, its pictures and the relationships
- * that name them — the clipboard's problem at slide scale, and its own piece of
- * work rather than a branch of this one.
+ * The ones that live inside a slide both decks have; a change about a whole
+ * slide is a change to the package rather than to the model, and is applied by
+ * `applySlideChange`.
  */
 export function applyChange(mine: Deck, theirs: Deck, change: Change): boolean {
-  if (!applicable(change)) return false
+  if (!isShapeChange(change)) return false
 
-  const slide = mine.slides[change.slide - 1]
-  const other = theirs.slides[change.slide - 1]
+  const slide = slideIds(mine).get(change.slideId)
+  const other = slideIds(theirs).get(change.slideId)
   if (slide === undefined || other === undefined) return false
 
   const here = byId(slide).get(change.shapeId)
@@ -221,5 +253,36 @@ export function describeChange(change: Change): string {
       return `${change.name} added`
     case 'shape-removed':
       return `${change.name} removed`
+  }
+}
+
+/**
+ * Takes a change about a whole slide.
+ *
+ * Not the model but the package: a slide is a part, with its own relationships,
+ * its own content type and an entry in the list that decides the order, and
+ * none of those are in the shape tree. Accepting one they added means importing
+ * it with everything it names; accepting one they removed means dropping ours.
+ *
+ * The slide is placed where it sits in their deck. That is the only place it
+ * can go: it is between two slides there, and those two are the only thing that
+ * says anything about where it belongs.
+ */
+export function applySlideChange(into: OoxmlPackage, from: OoxmlPackage, change: Change): boolean {
+  switch (change.kind) {
+    case 'slide-added': {
+      const source = readPresentation(from).slides.find((slide) => slide.id === change.slideId)
+      return source === undefined
+        ? false
+        : importSlide(into, from, source.path, change.slide - 1) !== null
+    }
+
+    case 'slide-removed': {
+      const index = readPresentation(into).slides.findIndex((slide) => slide.id === change.slideId)
+      return index === -1 ? false : removeSlide(into, index)
+    }
+
+    default:
+      return false
   }
 }

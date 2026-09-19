@@ -13,7 +13,7 @@ import {
   withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
-import { PRESENTATION_PART } from './parts'
+import { PRESENTATION_ORDER, PRESENTATION_PART } from './parts'
 
 /**
  * Sections: the named runs a long deck is divided into.
@@ -34,25 +34,6 @@ import { PRESENTATION_PART } from './parts'
 
 const SECTION_EXT = '{521415D9-36F7-43E2-AB2F-B90AF26B5E84}'
 const P14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main'
-
-/** `CT_Presentation` in schema order; `p:extLst` is last, and must be. */
-const PRESENTATION_ORDER = [
-  'p:sldMasterIdLst',
-  'p:notesMasterIdLst',
-  'p:handoutMasterIdLst',
-  'p:sldIdLst',
-  'p:sldSz',
-  'p:notesSz',
-  'p:smartTags',
-  'p:embeddedFontLst',
-  'p:custShowLst',
-  'p:photoAlbum',
-  'p:custDataLst',
-  'p:kinsoku',
-  'p:defaultTextStyle',
-  'p:modifyVerifier',
-  'p:extLst',
-] as const
 
 export interface Section {
   /** `{GUID}` as the file states it; what a rename or a delete names. */

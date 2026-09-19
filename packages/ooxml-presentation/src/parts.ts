@@ -65,3 +65,28 @@ export const MEDIA_RELATIONSHIPS = [
   `${RELATIONSHIP}video`,
   `${RELATIONSHIP}media`,
 ]
+
+/**
+ * The order `p:presentation` states its children in.
+ *
+ * A sequence, not a set: an element put in the wrong place makes PowerPoint
+ * offer to repair the deck. Shared, because three different edits add a child
+ * to this one element.
+ */
+export const PRESENTATION_ORDER = [
+  'p:sldMasterIdLst',
+  'p:notesMasterIdLst',
+  'p:handoutMasterIdLst',
+  'p:sldIdLst',
+  'p:sldSz',
+  'p:notesSz',
+  'p:smartTags',
+  'p:embeddedFontLst',
+  'p:custShowLst',
+  'p:photoAlbum',
+  'p:custDataLst',
+  'p:kinsoku',
+  'p:defaultTextStyle',
+  'p:modifyVerifier',
+  'p:extLst',
+]

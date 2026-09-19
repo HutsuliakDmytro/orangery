@@ -43,6 +43,14 @@ export interface SlideSize {
 export interface SlideParts {
   /** Path in the package, e.g. `ppt/slides/slide1.xml`. */
   path: string
+  /**
+   * `p:sldId/@id` — what the deck calls this slide.
+   *
+   * Stable across every edit, which the position is not: inserting one slide
+   * renumbers every slide after it. Anything that has to recognise the same
+   * slide in a copy of the deck matches on this.
+   */
+  id: string
   /** The layout this slide is built on; null only in a malformed deck. */
   layout: string | null
   /** The notes page, when the slide has one. */
@@ -164,14 +172,25 @@ function orderedTargets(
   itemTag: string,
   relationships: Relationship[],
 ): string[] {
+  return orderedEntries(presentation, listTag, itemTag, relationships).map((entry) => entry.target)
+}
+
+/** The same, keeping the id the list gives each entry. */
+function orderedEntries(
+  presentation: XmlNode | undefined,
+  listTag: string,
+  itemTag: string,
+  relationships: Relationship[],
+): { id: string; target: string }[] {
   const list = presentation === undefined ? undefined : findChild(presentation, listTag)
   if (list === undefined) return []
 
   const byId = new Map(relationships.map((relationship) => [relationship.id, relationship.target]))
 
-  return findChildren(list, itemTag)
-    .map((item) => byId.get(attribute(item, 'r:id') ?? ''))
-    .filter((target): target is string => target !== undefined)
+  return findChildren(list, itemTag).flatMap((item) => {
+    const target = byId.get(attribute(item, 'r:id') ?? '')
+    return target === undefined ? [] : [{ id: attribute(item, 'id') ?? '', target }]
+  })
 }
 
 export function readPresentation(pkg: OoxmlPackage): PresentationMap {
@@ -180,10 +199,12 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
   )
   const relationships = relationshipsOf(pkg, PRESENTATION_PART)
 
-  const slides = orderedTargets(root, 'p:sldIdLst', 'p:sldId', relationships).map((path) => {
+  const slides = orderedEntries(root, 'p:sldIdLst', 'p:sldId', relationships).map((entry) => {
+    const path = entry.target
     const own = relationshipsOf(pkg, path)
     return {
       path,
+      id: entry.id,
       layout: firstTargetOf(own, SLIDE_LAYOUT_RELATIONSHIP),
       notes: firstTargetOf(own, NOTES_SLIDE_RELATIONSHIP),
       comments: [

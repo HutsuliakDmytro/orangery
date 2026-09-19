@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { children } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { textOfBody } from '@orangery/ooxml-drawingml'
-import { applicable, applyChange, compareDecks, describeChange } from './compare'
+import { applySlideChange, applyChange, compareDecks, describeChange } from './compare'
 import { readDeck } from './deck'
 import type { Deck } from './deck'
-import { removeSlide } from './add-slide'
+import { duplicateSlide, removeSlide } from './add-slide'
 import { deleteShapes } from './create-shape'
 import { readPptxPackage } from './parts'
 import { flatten } from './shape-tree'
@@ -97,19 +97,28 @@ describe('what somebody did to a copy', () => {
     })
   })
 
-  it('finds a slide that is gone, and says so without offering to take it', async () => {
+  it('finds a slide that is gone', async () => {
     const mine = await deckOf('many-slides')
     const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
     removeSlide(pkg, 0)
     const theirs = readDeck(pkg)
 
     const changes = compareDecks(mine, theirs)
-    const slideChange = changes.find((one) => one.kind === 'slide-removed')
+    expect(changes.find((one) => one.kind === 'slide-removed')).toMatchObject({ slide: 1 })
+  })
 
-    expect(slideChange).toBeDefined()
-    // Bringing a whole slide across means bringing its layout, its pictures
-    // and the relationships naming them: its own piece of work.
-    expect(slideChange === undefined ? true : applicable(slideChange)).toBe(false)
+  it('does not call every slide after an inserted one changed', async () => {
+    // The whole reason slides are paired by the id in `p:sldIdLst`: by position,
+    // one slide put in at the front would make every slide behind it a
+    // difference, and the list would be useless on the one edit people make.
+    const mine = await deckOf('many-slides')
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    duplicateSlide(pkg, 0)
+    const theirs = readDeck(await readPptxPackage(await saveDeck(pkg)))
+
+    const changes = compareDecks(mine, theirs)
+    expect(changes).toHaveLength(1)
+    expect(changes[0]).toMatchObject({ kind: 'slide-added' })
   })
 })
 
@@ -157,7 +166,9 @@ describe('taking a change', () => {
     expect(children(shorter.slides[0]?.tree ?? {}).length).toBe(before + 1)
   })
 
-  it('refuses a change about a whole slide', async () => {
+  it('leaves a change about a whole slide to the package', async () => {
+    // `applyChange` patches the shape tree, and a slide is not in one: it is a
+    // part, a content type and an entry in the list that decides the order.
     const mine = await deckOf('many-slides')
     const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
     removeSlide(pkg, 0)
@@ -168,12 +179,68 @@ describe('taking a change', () => {
   })
 })
 
+describe('taking a change about a whole slide', () => {
+  /** Their deck: this one with the first slide copied to the front. */
+  async function theirsWithOneMore() {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    duplicateSlide(pkg, 0)
+    const reopened = await readPptxPackage(await saveDeck(pkg))
+    return { pkg: reopened, deck: readDeck(reopened) }
+  }
+
+  it('brings a slide they added into this deck', async () => {
+    const mine = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    const theirs = await theirsWithOneMore()
+
+    const change = compareDecks(readDeck(mine), theirs.deck).find(
+      (one) => one.kind === 'slide-added',
+    )
+    if (change === undefined) throw new Error('nothing was added')
+
+    expect(applySlideChange(mine, theirs.pkg, change)).toBe(true)
+
+    const after = readDeck(await readPptxPackage(await saveDeck(mine)))
+    expect(after.slides).toHaveLength(9)
+    expect(compareDecks(after, theirs.deck)).toEqual([])
+  })
+
+  it('drops a slide they removed', async () => {
+    const mine = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    removeSlide(pkg, 2)
+    const theirs = readDeck(pkg)
+
+    const change = compareDecks(readDeck(mine), theirs).find((one) => one.kind === 'slide-removed')
+    if (change === undefined) throw new Error('nothing was removed')
+
+    expect(applySlideChange(mine, pkg, change)).toBe(true)
+
+    const after = readDeck(await readPptxPackage(await saveDeck(mine)))
+    expect(after.slides).toHaveLength(7)
+    expect(compareDecks(after, theirs)).toEqual([])
+  })
+
+  it('names the slide by its id, not by where it sits', async () => {
+    // They added a slide at the front, so every slide after it is one further
+    // along in their deck than in ours. Taking a later change must still act on
+    // the slide it was about.
+    const mine = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    duplicateSlide(pkg, 0)
+    const theirs = readDeck(await readPptxPackage(await saveDeck(pkg)))
+
+    const added = compareDecks(readDeck(mine), theirs).find((one) => one.kind === 'slide-added')
+    expect(added?.slide).toBe(2)
+  })
+})
+
 describe('saying what changed', () => {
   it('reads as a person would say it', () => {
     expect(
       describeChange({
         kind: 'text',
         slide: 1,
+        slideId: '256',
         shapeId: 2,
         name: 'Title',
         from: 'Before',

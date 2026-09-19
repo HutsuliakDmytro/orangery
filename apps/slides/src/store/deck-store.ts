@@ -644,7 +644,13 @@ export const useDeckStore = create<DeckState>((set, get) => ({
     if (!change(open)) return
 
     const parts = [...open.package.parts].flatMap(([path, part]) => {
-      const after = part.text ?? ''
+      // Binary parts are left out of the step. Undo restores a part by writing
+      // text into it, and writing text into a picture would replace the image
+      // with nothing; what makes the picture disappear is the slide going back,
+      // and a part nothing points at is not on the slide.
+      const after = part.text
+      if (after === undefined) return []
+
       const original = before.get(path)
       // A part that did not exist before has no `before` to restore to, so an
       // empty string stands for "it was not there" — reopening the deck reads
@@ -737,9 +743,10 @@ function asSlide(part: SlidePart): Slide {
   const existing = widened.get(part)
   if (existing !== undefined) return existing
 
-  // A layout has no layout of its own and no notes; that is the whole of the
-  // difference, and everything that draws or edits a shape tree ignores it.
-  const made: Slide = { ...part, layout: null, notes: null }
+  // A layout has no layout of its own, no notes and no entry in the slide
+  // list to be named by; that is the whole of the difference, and everything
+  // that draws or edits a shape tree ignores it.
+  const made: Slide = { ...part, id: '', layout: null, notes: null }
   widened.set(part, made)
   return made
 }

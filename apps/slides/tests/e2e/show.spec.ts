@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
@@ -12,6 +14,8 @@ import type { Page } from '@playwright/test'
  */
 
 const show = (page: Page) => page.getByTestId('show')
+
+const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
 
 /** A deck with enough slides that running off the end means something. */
 async function deck(page: Page) {
@@ -111,4 +115,39 @@ test('goes end to end and back to the editor without touching the mouse', async 
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('canvas')).toBeVisible()
   await expect(page.getByRole('button', { name: /^Slide \d+$/ })).toHaveCount(7)
+})
+
+/**
+ * A film on a slide, which is the one thing on it the browser draws itself.
+ *
+ * Its controls are laid out in CSS pixels whatever the element is told it is:
+ * a bar forty pixels tall inside a box five million wide is a bar the viewBox
+ * then scales to nothing, and a person presenting has no way to pause the film.
+ * So this asks the question in the only unit that matters — how large the
+ * player thinks it is.
+ */
+test('plays a film at a size a person can work the controls of', async ({ page }) => {
+  await page.addInitScript(`window.loaded = (name) => {
+    const entries = performance.getEntriesByType('resource').map((entry) => entry.name)
+    return entries.find((entry) => entry.includes(name)) ?? name
+  }`)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'New Presentation' }).click()
+
+  const bytes = [...new Uint8Array(await readFile(join(FIXTURES, 'media.pptx')))]
+  await page.evaluate(async (data: number[]) => {
+    const store = (await import(loaded('deck-store'))) as {
+      useDeckStore: { getState: () => { load: (bytes: Uint8Array, path: string) => Promise<void> } }
+    }
+    await store.useDeckStore.getState().load(new Uint8Array(data), '/decks/media.pptx')
+  }, bytes)
+
+  await page.keyboard.press('F5')
+  const player = page.getByTestId('media-video')
+  await expect(player).toBeVisible()
+
+  const laidOut = await player.evaluate((node) => node.clientWidth)
+  // A slide is about a thousand pixels across and twelve million EMU.
+  expect(laidOut).toBeGreaterThan(0)
+  expect(laidOut).toBeLessThan(10_000)
 })

@@ -421,6 +421,9 @@ function ShapeLink({
   )
 }
 
+/** A length in EMU as the CSS pixels a browser lays text and players out in. */
+const pixels = (emu: number): number => emu / EMU_PER_PIXEL
+
 /**
  * A film or a sound, where there is somewhere to play it.
  *
@@ -457,32 +460,39 @@ function MediaPlayer({
   }
 
   return (
-    <foreignObject
-      x={transform.x}
-      y={transform.y}
-      width={transform.width}
-      height={transform.height}
-      onPointerDown={stop}
-      onClick={stop}
-    >
-      {shape.media.kind === 'video' ? (
-        <video
-          data-testid="media-video"
-          src={url}
-          controls
-          autoPlay={autoplay}
-          style={{ width: '100%', height: '100%' }}
-        />
-      ) : (
-        <audio
-          data-testid="media-audio"
-          src={url}
-          controls
-          autoPlay={autoplay}
-          style={{ width: '100%' }}
-        />
-      )}
-    </foreignObject>
+    /* In pixels, scaled back by the group — the same reason the text of a shape
+       is. A player's controls are laid out in CSS pixels whatever the element
+       is: a bar forty pixels tall inside a box five million wide is a bar the
+       viewBox then scales to nothing, and a person presenting has no way to
+       pause the film. */
+    <g transform={`scale(${String(EMU_PER_PIXEL)})`}>
+      <foreignObject
+        x={pixels(transform.x)}
+        y={pixels(transform.y)}
+        width={pixels(transform.width)}
+        height={pixels(transform.height)}
+        onPointerDown={stop}
+        onClick={stop}
+      >
+        {shape.media.kind === 'video' ? (
+          <video
+            data-testid="media-video"
+            src={url}
+            controls
+            autoPlay={autoplay}
+            style={{ width: '100%', height: '100%' }}
+          />
+        ) : (
+          <audio
+            data-testid="media-audio"
+            src={url}
+            controls
+            autoPlay={autoplay}
+            style={{ width: '100%' }}
+          />
+        )}
+      </foreignObject>
+    </g>
   )
 }
 
@@ -635,9 +645,6 @@ function ShapeOutline({ drawing }: { drawing: Drawing }) {
     </g>
   )
 }
-
-/** A length in EMU as the CSS pixels the text of a shape is laid out in. */
-const pixels = (emu: number): number => emu / EMU_PER_PIXEL
 
 /**
  * The text of a shape, in HTML inside the SVG so it wraps.

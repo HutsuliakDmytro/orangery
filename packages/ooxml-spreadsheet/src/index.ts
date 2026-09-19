@@ -19,6 +19,8 @@ export {
 export type { CellPosition, CellRange } from './reference'
 export { readSharedStrings, readWorkbook, sheetPath, textOf } from './workbook'
 export type { DefinedName, SheetEntry, Workbook } from './workbook'
+export { applyTint, paletteOf, resolveColor } from './colors'
+export type { ColorPalette } from './colors'
 export { formatCodeOf, isDateFormat, readStyles, resolveStyle } from './styles'
 export type {
   Alignment,

@@ -51,7 +51,7 @@
 
 ### 1.1 Пакет
 - [x] ADR `0002-xlsx-roundtrip.md`: що моделюємо, що passthrough (pivotCache/pivotTable, slicers, queryTables, connections, vbaProject, customXml, externalLinks, metadata, richData)
-- [~] `ooxml-spreadsheet`: `workbook.xml` ✔ (sheets зі станом, definedNames, calcPr, date1904, activeTab), `worksheets/*` ✔ (dimension, sheetViews з панелями й масштабом, cols, sheetData, mergeCells, autoFilter, tabColor), `sharedStrings` ✔. `styles` ✔ (numFmts, fonts, fills, borders, cellXfs/cellStyleXfs із каскадом `apply*`, dxfs). Лишилось: `theme`, `tables/*`, `comments`/`threadedComments`/`persons`, `vmlDrawing`, conditionalFormatting/dataValidations/hyperlinks/pageSetup (поки лишаються verbatim через текстову підстановку)
+- [~] `ooxml-spreadsheet`: `workbook.xml` ✔ (sheets зі станом, definedNames, calcPr, date1904, activeTab), `worksheets/*` ✔ (dimension, sheetViews з панелями й масштабом, cols, sheetData, mergeCells, autoFilter, tabColor), `sharedStrings` ✔. `styles` ✔ (numFmts, fonts, fills, borders, cellXfs/cellStyleXfs із каскадом `apply*`, dxfs). `theme` ✔ (резолв кольорів: індекс теми, tint по HLS, палітра 1997-го). Лишилось: `tables/*`, `comments`/`threadedComments`/`persons`, `vmlDrawing`, conditionalFormatting/dataValidations/hyperlinks/pageSetup (поки лишаються verbatim через текстову підстановку)
 - [x] Стрімінговий парсер `sheetData` (власний сканер) — файл на 500k рядків не будує DOM; тест на 100k комірок
 - [~] Модель: sparse cells ✔, row metadata ✔, column metadata ✔, merged ranges ✔, freeze/split panes ✔, zoom ✔; style index → resolved style ✔ (`resolveStyle`; кешує викликач — грид питає це на кожну видиму комірку)
 - [ ] Shared/array formulas розгортаються; при незмінності — згортаються назад

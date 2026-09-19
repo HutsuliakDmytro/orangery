@@ -281,3 +281,54 @@ describe('emptying a cell', () => {
     expect(clearCell(sheet, 'nonsense')).toBe(false)
   })
 })
+
+describe('what a workbook says about itself', () => {
+  const WORKBOOK_XML =
+    '<workbook xmlns="x" xmlns:r="r"><workbookPr date1904="1"/>' +
+    '<bookViews><workbookView activeTab="1"/></bookViews>' +
+    '<sheets><sheet name="Data" sheetId="1" r:id="rId1"/>' +
+    '<sheet name="Working" sheetId="2" state="veryHidden" r:id="rId1"/></sheets>' +
+    '<definedNames><definedName name="Rates">Data!$B$2:$B$9</definedName>' +
+    '<definedName name="Local" localSheetId="0" hidden="1">Data!$A$1</definedName></definedNames>' +
+    '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>'
+
+  const workbook = () => {
+    const pkg = { parts: new Map() }
+    setPartText(pkg, 'xl/workbook.xml', WORKBOOK_XML)
+    setPartText(pkg, 'xl/_rels/workbook.xml.rels', RELS)
+    const read = readWorkbook(pkg)
+    if (read === null) throw new Error('the part holds no workbook')
+    return read
+  }
+
+  it('reads the date system, which decides what every date means', () => {
+    expect(workbook().date1904).toBe(true)
+  })
+
+  it('reads which sheets are hidden, and how thoroughly', () => {
+    // `veryHidden` is hidden from the menu that unhides things, which is how a
+    // workbook keeps a working sheet out of sight.
+    expect(workbook().sheets.map((sheet) => sheet.state)).toEqual(['visible', 'veryHidden'])
+  })
+
+  it('reads the sheet the workbook opens on', () => {
+    expect(workbook().activeSheet).toBe(1)
+  })
+
+  it('reads the names and what they stand for', () => {
+    expect(workbook().definedNames[0]).toEqual({
+      name: 'Rates',
+      formula: 'Data!$B$2:$B$9',
+      sheet: null,
+      hidden: false,
+    })
+  })
+
+  it('keeps a name local to its sheet, because two can share a spelling', () => {
+    expect(workbook().definedNames[1]).toMatchObject({ name: 'Local', sheet: 0, hidden: true })
+  })
+
+  it('reads the workbook asking to be recalculated before it is shown', () => {
+    expect(workbook().fullCalcOnLoad).toBe(true)
+  })
+})

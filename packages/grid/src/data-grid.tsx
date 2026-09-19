@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   cellAtPoint,
+  frozenSize,
+  heightOfRow,
   rectangleOfCell,
   scrollToCell,
   totalHeight,
@@ -9,7 +11,9 @@ import {
   visibleRows,
   widthOfColumn,
 } from './layout'
-import type { CellAddress, GridMetrics, Viewport } from './layout'
+import type { CellAddress, FrozenPanes, GridMetrics, Viewport } from './layout'
+import { defaultAlign } from './cell-style'
+import type { CellBorders, CellStyle } from './cell-style'
 
 /**
  * A grid of cells, drawn rather than built.
@@ -39,6 +43,21 @@ export interface DataGridProps {
   onChange?: (cell: CellAddress, text: string) => void
   /** Cells this says no to are selectable and not editable. */
   editable?: (cell: CellAddress) => boolean
+  /**
+   * What a cell looks like. Resolved by the caller, because what a style means
+   * is a question about the file rather than about the grid.
+   */
+  styleAt?: (cell: CellAddress) => CellStyle | null
+  /**
+   * The cell a merged range starts at, for any cell inside it.
+   *
+   * Merged cells are drawn once, from their top-left corner, across the whole
+   * range: a heading merged across four columns is one box with one string in
+   * it, and drawing each cell separately would clip it four times.
+   */
+  mergeAt?: (cell: CellAddress) => { cell: CellAddress; rows: number; columns: number } | null
+  /** Rows and columns held still at the top and left. */
+  frozen?: FrozenPanes | null
   width: number
   height: number
   label: string
@@ -59,6 +78,38 @@ const COLORS = {
   text: '#111111',
   selection: '#FF7A00',
   background: '#FFFFFF',
+}
+
+/**
+ * The lines a cell states around itself.
+ *
+ * Drawn per cell rather than per edge, which means a shared edge is drawn
+ * twice — once by each neighbour. That is what the format describes and what
+ * Excel does: the cell below can state a different line from the cell above,
+ * and the last one drawn is the one that shows.
+ */
+function drawBorders(
+  context: CanvasRenderingContext2D,
+  rect: { x: number; y: number; width: number; height: number },
+  borders: CellBorders,
+): void {
+  const edges: [string | null, number, number, number, number][] = [
+    [borders.top, rect.x, rect.y, rect.x + rect.width, rect.y],
+    [borders.bottom, rect.x, rect.y + rect.height, rect.x + rect.width, rect.y + rect.height],
+    [borders.left, rect.x, rect.y, rect.x, rect.y + rect.height],
+    [borders.right, rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + rect.height],
+  ]
+
+  for (const [color, x1, y1, x2, y2] of edges) {
+    if (color === null) continue
+
+    context.strokeStyle = color
+    context.lineWidth = 1
+    context.beginPath()
+    context.moveTo(x1, y1)
+    context.lineTo(x2, y2)
+    context.stroke()
+  }
 }
 
 /** A, B, … Z, AA — the names a spreadsheet gives its columns. */
@@ -83,6 +134,9 @@ export function DataGrid({
   height,
   label,
   metrics: overrides,
+  styleAt,
+  mergeAt,
+  frozen = null,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(() => ({ ...DEFAULTS, ...overrides }), [overrides])
 
@@ -105,44 +159,144 @@ export function DataGrid({
     context.fillRect(0, 0, width, height)
 
     const view: Viewport = { scrollX: scroll.x, scrollY: scroll.y, width, height }
-    const seenRows = visibleRows(metrics, view, rows)
-    const seenColumns = visibleColumns(metrics, view, columns)
+    const scrolling = {
+      rows: visibleRows(metrics, view, rows, frozen),
+      columns: visibleColumns(metrics, view, columns, frozen),
+    }
 
-    context.font = '12px -apple-system, system-ui, sans-serif'
+    const held = frozen ?? { rows: 0, columns: 0 }
+    const DEFAULT_FONT = '12px -apple-system, system-ui, sans-serif'
+
+    context.font = DEFAULT_FONT
     context.textBaseline = 'middle'
 
-    // The cells, then the lines over them, then the headers over both: a
-    // header is a fixed strip and has to cover whatever scrolled under it.
-    for (let row = seenRows.first; row <= seenRows.last; row += 1) {
-      for (let column = seenColumns.first; column <= seenColumns.last; column += 1) {
-        const rect = rectangleOfCell(metrics, view, { row, column })
-        const text = valueAt({ row, column })
+    /**
+     * Every row and column on screen, the held ones included.
+     *
+     * The frozen strip is drawn with the same code as the rest — it is the
+     * same cells at a fixed offset — so a column keeps its width, its style
+     * and its borders on both sides of the line.
+     */
+    const rowsOnScreen = [
+      ...Array.from({ length: held.rows }, (_, index) => index),
+      ...Array.from(
+        { length: Math.max(scrolling.rows.last - scrolling.rows.first + 1, 0) },
+        (_, index) => scrolling.rows.first + index,
+      ),
+    ]
+    const columnsOnScreen = [
+      ...Array.from({ length: held.columns }, (_, index) => index),
+      ...Array.from(
+        { length: Math.max(scrolling.columns.last - scrolling.columns.first + 1, 0) },
+        (_, index) => scrolling.columns.first + index,
+      ),
+    ]
+
+    /** A cell's box, grown to the whole merge when it starts one. */
+    const boxOf = (cell: CellAddress) => {
+      const rect = rectangleOfCell(metrics, view, cell, frozen)
+      const merge = mergeAt?.(cell)
+      if (merge === undefined || merge === null) return { rect, skip: false }
+
+      // Only the corner draws; the cells swallowed by a merge draw nothing,
+      // or the corner's text is clipped by the boxes it was merged with.
+      if (merge.cell.row !== cell.row || merge.cell.column !== cell.column) {
+        return { rect, skip: true }
+      }
+
+      const last = rectangleOfCell(
+        metrics,
+        view,
+        { row: cell.row + merge.rows - 1, column: cell.column + merge.columns - 1 },
+        frozen,
+      )
+      return {
+        rect: {
+          x: rect.x,
+          y: rect.y,
+          width: last.x + last.width - rect.x,
+          height: last.y + last.height - rect.y,
+        },
+        skip: false,
+      }
+    }
+
+    // What is behind the cells, then what is in them, then the lines, then the
+    // headers over all of it: a header is a fixed strip and has to cover
+    // whatever scrolled under it.
+    for (const row of rowsOnScreen) {
+      for (const column of columnsOnScreen) {
+        const cell = { row, column }
+        const style = styleAt?.(cell) ?? null
+        const { rect, skip } = boxOf(cell)
+        if (skip) continue
+
+        if (style?.background !== undefined) {
+          context.fillStyle = style.background
+          context.fillRect(rect.x, rect.y, rect.width, rect.height)
+        }
+
+        const text = valueAt(cell)
         if (text === null || text === '') continue
 
-        context.fillStyle = COLORS.text
         context.save()
         context.beginPath()
         context.rect(rect.x, rect.y, rect.width, rect.height)
         context.clip()
-        context.fillText(text, rect.x + 4, rect.y + rect.height / 2)
+
+        context.font = style?.font ?? DEFAULT_FONT
+        context.fillStyle = style?.color ?? COLORS.text
+
+        // Numbers right, text left, unless the file says otherwise: the oldest
+        // convention in spreadsheets, and what makes a column of figures
+        // readable — the digits line up under each other.
+        const align = style?.align ?? defaultAlign(text)
+        const indent = (style?.indent ?? 0) * 9
+        const padding = 4
+
+        const x =
+          align === 'right'
+            ? rect.x + rect.width - padding - indent
+            : align === 'center'
+              ? rect.x + rect.width / 2
+              : rect.x + padding + indent
+
+        const y =
+          style?.verticalAlign === 'top'
+            ? rect.y + rect.height / 4
+            : style?.verticalAlign === 'bottom'
+              ? rect.y + (rect.height * 3) / 4
+              : rect.y + rect.height / 2
+
+        context.textAlign = align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'
+        context.fillText(text, x, y)
+        context.textAlign = 'left'
         context.restore()
+
+        if (style?.borders !== undefined) drawBorders(context, rect, style.borders)
       }
     }
+
+    context.font = DEFAULT_FONT
 
     context.strokeStyle = COLORS.grid
     context.lineWidth = 1
     context.beginPath()
 
-    for (let row = seenRows.first; row <= seenRows.last + 1; row += 1) {
-      const y = metrics.headerHeight + metrics.rowHeight * row - scroll.y
-      context.moveTo(metrics.headerWidth, y)
-      context.lineTo(width, y)
+    for (const row of rowsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row, column: 0 }, frozen)
+      context.moveTo(metrics.headerWidth, rect.y)
+      context.lineTo(width, rect.y)
+      context.moveTo(metrics.headerWidth, rect.y + rect.height)
+      context.lineTo(width, rect.y + rect.height)
     }
 
-    for (let column = seenColumns.first; column <= seenColumns.last + 1; column += 1) {
-      const rect = rectangleOfCell(metrics, view, { row: 0, column })
+    for (const column of columnsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row: 0, column }, frozen)
       context.moveTo(rect.x, metrics.headerHeight)
       context.lineTo(rect.x, height)
+      context.moveTo(rect.x + rect.width, metrics.headerHeight)
+      context.lineTo(rect.x + rect.width, height)
     }
 
     context.stroke()
@@ -153,31 +307,54 @@ export function DataGrid({
     context.fillRect(0, 0, metrics.headerWidth, height)
     context.fillStyle = COLORS.headerText
 
-    for (let column = seenColumns.first; column <= seenColumns.last; column += 1) {
-      const rect = rectangleOfCell(metrics, view, { row: 0, column })
+    for (const column of columnsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row: 0, column }, frozen)
       context.fillText(columnHeader(column), rect.x + 4, metrics.headerHeight / 2)
     }
 
-    for (let row = seenRows.first; row <= seenRows.last; row += 1) {
-      const y = metrics.headerHeight + metrics.rowHeight * row - scroll.y
-      context.fillText(rowHeader(row), 4, y + metrics.rowHeight / 2)
+    for (const row of rowsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row, column: 0 }, frozen)
+      context.fillText(rowHeader(row), 4, rect.y + rect.height / 2)
+    }
+
+    // The line where the frozen strip ends, which is what tells somebody the
+    // rows above it are not simply the rows they scrolled to.
+    if (frozen !== null) {
+      const size = frozenSize(metrics, frozen)
+      context.strokeStyle = COLORS.headerText
+      context.lineWidth = 1
+      context.beginPath()
+
+      if (frozen.rows > 0) {
+        context.moveTo(0, metrics.headerHeight + size.height)
+        context.lineTo(width, metrics.headerHeight + size.height)
+      }
+      if (frozen.columns > 0) {
+        context.moveTo(metrics.headerWidth + size.width, 0)
+        context.lineTo(metrics.headerWidth + size.width, height)
+      }
+
+      context.stroke()
     }
 
     // The selection last, so nothing draws over it.
-    const rect = rectangleOfCell(metrics, view, selected)
+    const rect = rectangleOfCell(metrics, view, selected, frozen)
     context.strokeStyle = COLORS.selection
     context.lineWidth = 2
     context.strokeRect(rect.x, rect.y, rect.width, rect.height)
   }, [
     columnHeader,
     columns,
+    frozen,
     height,
+    mergeAt,
     metrics,
     rowHeader,
     rows,
     scroll.x,
     scroll.y,
     selected,
+    styleAt,
     valueAt,
     width,
   ])
@@ -287,7 +464,7 @@ export function DataGrid({
     }
   }
 
-  const editor = editing === null ? null : rectangleOfCell(metrics, viewport, editing.cell)
+  const editor = editing === null ? null : rectangleOfCell(metrics, viewport, editing.cell, frozen)
 
   return (
     <div
@@ -319,6 +496,7 @@ export function DataGrid({
             viewport,
             { x: event.clientX - box.left, y: event.clientY - box.top },
             { rows, columns },
+            frozen,
           )
           if (cell !== null) move(cell)
         }}
@@ -380,7 +558,7 @@ export function DataGrid({
             left: editor.x,
             top: editor.y,
             width: widthOfColumn(metrics, editing.cell.column),
-            height: metrics.rowHeight,
+            height: heightOfRow(metrics, editing.cell.row),
             font: '12px -apple-system, system-ui, sans-serif',
             border: `2px solid ${COLORS.selection}`,
             padding: '0 2px',

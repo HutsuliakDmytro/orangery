@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   cellAtPoint,
   columnAtOffset,
+  frozenSize,
   offsetOfColumn,
+  offsetOfRow,
   rectangleOfCell,
+  rowAtOffset,
   scrollToCell,
   totalHeight,
   totalWidth,
@@ -133,5 +136,86 @@ describe('scrolling to a cell', () => {
   it('brings a cell above the window back into it', () => {
     const to = scrollToCell(METRICS, { ...VIEW, scrollY: 200 }, { row: 3, column: 0 })
     expect(to.scrollY).toBe(60)
+  })
+})
+
+describe('rows of their own heights', () => {
+  const tall: GridMetrics = { ...METRICS, rowHeights: [40, 20, 60] }
+
+  it('adds up the ones above it', () => {
+    expect(offsetOfRow(tall, 0)).toBe(0)
+    expect(offsetOfRow(tall, 2)).toBe(60)
+    expect(offsetOfRow(tall, 3)).toBe(120)
+  })
+
+  it('finds the row a distance falls in', () => {
+    expect(rowAtOffset(tall, 39, 5)).toBe(0)
+    expect(rowAtOffset(tall, 40, 5)).toBe(1)
+    expect(rowAtOffset(tall, 119, 5)).toBe(2)
+  })
+
+  it('falls back to the default height past the ones it was given', () => {
+    expect(offsetOfRow(tall, 4)).toBe(140)
+  })
+
+  it('counts the whole grid with the heights it was given', () => {
+    expect(totalHeight(tall, 3)).toBe(METRICS.headerHeight + 120)
+  })
+})
+
+describe('rows and columns held still', () => {
+  const frozen = { rows: 2, columns: 1 }
+
+  it('takes up the room its rows and columns take', () => {
+    expect(frozenSize(METRICS, frozen)).toEqual({ width: 100, height: 40 })
+    expect(frozenSize(METRICS, null)).toEqual({ width: 0, height: 0 })
+  })
+
+  it('stays where it is while the rest scrolls', () => {
+    const scrolled: Viewport = { ...VIEW, scrollY: 200, scrollX: 300 }
+
+    // The first two rows are always the first two on screen.
+    expect(rectangleOfCell(METRICS, scrolled, { row: 0, column: 0 }, frozen)).toMatchObject({
+      x: 40,
+      y: 20,
+    })
+    // And the rest has moved.
+    expect(rectangleOfCell(METRICS, scrolled, { row: 20, column: 4 }, frozen).y).toBe(
+      20 + 20 * 20 - 200,
+    )
+  })
+
+  it('starts the scrolling region after the frozen one', () => {
+    const rows = visibleRows(METRICS, { ...VIEW, scrollY: 0 }, 100, frozen)
+    expect(rows.first).toBe(2)
+
+    const columns = visibleColumns(METRICS, VIEW, 10, frozen)
+    expect(columns.first).toBe(1)
+  })
+
+  it('finds a frozen cell under the pointer wherever the sheet has scrolled', () => {
+    const scrolled: Viewport = { ...VIEW, scrollY: 400 }
+
+    // A click in the top strip is the frozen row, not the row the scroll
+    // would put there.
+    expect(
+      cellAtPoint(METRICS, scrolled, { x: 45, y: 25 }, { rows: 100, columns: 5 }, frozen),
+    ).toEqual({ row: 0, column: 0 })
+  })
+
+  it('finds the scrolled cell past the strip', () => {
+    const scrolled: Viewport = { ...VIEW, scrollY: 400 }
+    const cell = cellAtPoint(
+      METRICS,
+      scrolled,
+      { x: 45, y: 100 },
+      { rows: 100, columns: 5 },
+      frozen,
+    )
+
+    // The scrolling region starts at the scroll plus the frozen strip — 440,
+    // which is row 22 — and it is drawn just below that strip. Forty points
+    // further down is two rows on.
+    expect(cell).toEqual({ row: 24, column: 0 })
   })
 })

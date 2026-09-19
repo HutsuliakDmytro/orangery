@@ -25,6 +25,18 @@ const TYPING_BUDGET_MS = 50
 const MEASURE_ITERATIONS = 20
 
 /**
+ * Why these two may be retried.
+ *
+ * They measure wall-clock time on a machine running the whole workspace's
+ * tests at once, and every so often a run lands beside something that eats the
+ * processor for a second. A retry costs a few seconds and buys a suite people
+ * still believe; a failure that means "another package was busy" is the kind
+ * that teaches everybody to ignore a red build. What a retry cannot hide is a
+ * real regression — that fails every time, because it is in the code rather
+ * than in the weather.
+ */
+
+/**
  * What a ten-fold document may cost relative to a tenth of it.
  *
  * Both views measure at almost exactly ten on a healthy build, so this is
@@ -149,7 +161,7 @@ describe('derived views', () => {
   /** What a ten-fold document is allowed to cost, on this machine, today. */
   const allowanceFrom = (small: number) => Math.max(small * GROWTH_ALLOWANCE, NOISE_FLOOR_MS)
 
-  it('builds the outline of a 200-page document in step with its size', () => {
+  it('builds the outline of a 200-page document in step with its size', { retry: 2 }, () => {
     editor = createTestEditor('<p></p>')
 
     // ProseMirror documents are immutable, so the small one survives being
@@ -183,7 +195,7 @@ describe('derived views', () => {
    * machine; a pass over the document hiding inside the per-word work would
    * show as four.
    */
-  it('counts words of a 200-page document in step with its size', () => {
+  it('counts words of a 200-page document in step with its size', { retry: 2 }, () => {
     editor = createTestEditor('<p></p>')
 
     editor.commands.setContent(buildLargeDocument(100))

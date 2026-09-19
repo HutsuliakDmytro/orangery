@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataGrid, columnName } from './data-grid'
+import type { CellStyle } from './cell-style'
 import { recorded } from './test-setup'
 
 /**
@@ -269,5 +270,93 @@ describe('emptying a cell', () => {
     await user.keyboard('{Delete}')
 
     expect(changed).not.toHaveBeenCalled()
+  })
+})
+
+describe('what a cell looks like', () => {
+  const styled = (style: CellStyle) =>
+    grid({
+      styleAt: ({ row, column }) => (row === 0 && column === 0 ? style : null),
+    })
+
+  it('fills the background the style asks for', () => {
+    styled({ background: '#FFF2CC' })
+
+    const fill = recorded.fills.find((one) => one.style === '#FFF2CC')
+    expect(fill).toMatchObject({ x: 44, y: 22 })
+  })
+
+  it('draws the text in the font and colour the style states', () => {
+    styled({ font: 'bold 14px Calibri', color: '#9C0006' })
+
+    const drawnCell = recorded.texts.find((one) => one.text === 'Q1')
+    expect(drawnCell?.font).toBe('bold 14px Calibri')
+  })
+
+  it('puts numbers on the right and words on the left, unasked', () => {
+    // The oldest convention in spreadsheets: the digits line up under each
+    // other, and a number that landed in a text cell shows on the wrong side.
+    grid()
+
+    expect(recorded.texts.find((one) => one.text === 'Q1')?.align).toBe('left')
+    expect(recorded.texts.find((one) => one.text === '10.5')?.align).toBe('right')
+  })
+
+  it('follows the file where the file states an alignment', () => {
+    styled({ align: 'center' })
+    expect(recorded.texts.find((one) => one.text === 'Q1')?.align).toBe('center')
+  })
+
+  it('draws the lines a cell states around itself', () => {
+    styled({ borders: { left: null, right: null, top: null, bottom: '#FF0000' } })
+
+    expect(recorded.lines.some((line) => line.style === '#FF0000')).toBe(true)
+  })
+})
+
+describe('cells merged into one', () => {
+  const merged = () =>
+    grid({
+      columns: 3,
+      mergeAt: ({ row, column }) =>
+        row === 0 && column <= 1 ? { cell: { row: 0, column: 0 }, rows: 1, columns: 2 } : null,
+      styleAt: ({ row, column }) => (row === 0 && column === 0 ? { background: '#DDEEFF' } : null),
+    })
+
+  it('draws the corner across the whole range', () => {
+    merged()
+
+    // Two columns of 84 make one box of 168.
+    expect(recorded.fills.find((one) => one.style === '#DDEEFF')?.width).toBe(168)
+  })
+
+  it('draws nothing for the cells the merge swallowed', () => {
+    merged()
+
+    // The corner's text is drawn once; the cell beside it draws nothing, or
+    // the text would be clipped by a box it was merged with.
+    expect(recorded.texts.filter((one) => one.text === '10.5')).toHaveLength(0)
+  })
+})
+
+describe('rows and columns held still', () => {
+  const frozen = () =>
+    grid({
+      rows: 3,
+      columns: 3,
+      frozen: { rows: 1, columns: 1 },
+    })
+
+  it('draws the held rows as well as the scrolled ones', () => {
+    frozen()
+    expect(recorded.texts.some((one) => one.text === 'Q1')).toBe(true)
+  })
+
+  it('marks where the held strip ends', () => {
+    frozen()
+
+    // Without the line, the first rows look like the rows somebody scrolled
+    // to rather than the ones that will not move.
+    expect(recorded.lines.some((line) => line.style === '#666666')).toBe(true)
   })
 })

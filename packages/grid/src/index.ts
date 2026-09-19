@@ -6,13 +6,19 @@
  * is what stops the two from drifting into two different spreadsheets.
  */
 
+export { defaultAlign } from './cell-style'
+export type { CellBorders, CellStyle } from './cell-style'
 export { columnName, DataGrid } from './data-grid'
 export type { DataGridProps } from './data-grid'
 export {
   cellAtPoint,
   columnAtOffset,
+  frozenSize,
+  heightOfRow,
   offsetOfColumn,
+  offsetOfRow,
   rectangleOfCell,
+  rowAtOffset,
   scrollToCell,
   totalHeight,
   totalWidth,
@@ -20,4 +26,4 @@ export {
   visibleRows,
   widthOfColumn,
 } from './layout'
-export type { CellAddress, GridMetrics, Rectangle, Viewport } from './layout'
+export type { CellAddress, FrozenPanes, GridMetrics, Rectangle, Viewport } from './layout'

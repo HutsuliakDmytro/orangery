@@ -9,7 +9,7 @@
 //! somebody typed into one cell has a handful of dependants, and repainting
 //! the other million would be the slowest possible way to be right.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::Expr;
 use crate::eval::{evaluate, Cells, Context};
@@ -146,7 +146,21 @@ impl Engine {
             }
         }
 
-        let plan = self.graph.order_from(changed);
+        // Every volatile formula goes into the plan whatever was typed:
+        // `NOW()` is a different time and `OFFSET(A1,B1,0)` may be a
+        // different cell, and neither fact is reachable through an edge. They
+        // are worked out, not reported — a volatile cell whose answer came
+        // out the same is not a cell that changed.
+        let mut seeds: Vec<CellId> = changed.to_vec();
+        let already: HashSet<CellId> = changed.iter().cloned().collect();
+        seeds.extend(
+            self.graph
+                .volatile()
+                .filter(|cell| !already.contains(*cell))
+                .cloned(),
+        );
+
+        let plan = self.graph.order_from(&seeds);
 
         for cell in plan.order {
             // A formula the graph knows about but the sheet does not is one

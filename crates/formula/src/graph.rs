@@ -45,6 +45,14 @@ pub struct Precedents {
     pub areas: Vec<Area>,
     /// Whether it names something whose extent is not known here, like `A:A`.
     pub whole_columns: bool,
+    /// Whether it calls a function that has to be worked out afresh every
+    /// time — `NOW`, `RAND`, `OFFSET`, `INDIRECT`.
+    ///
+    /// These are the formulas the graph cannot hold an edge for: what
+    /// `OFFSET(A1,B1,0)` reads depends on a value rather than on anything
+    /// written down, so the only safe answer is to work it out on every
+    /// recalculation and see whether it came out different.
+    pub volatile: bool,
 }
 
 /// Everything a formula depends on, worked out from its tree.
@@ -68,7 +76,10 @@ fn walk(expression: &Expr, sheet: &str, found: &mut Precedents) {
         Expr::Unary { operand, .. } | Expr::Percent(operand) | Expr::Parenthesised(operand) => {
             walk(operand, sheet, found)
         }
-        Expr::Call { arguments, .. } => {
+        Expr::Call { name, arguments } => {
+            if crate::functions::lookup(name).is_some_and(|function| function.volatile) {
+                found.volatile = true;
+            }
             for argument in arguments {
                 walk(argument, sheet, found);
             }
@@ -137,6 +148,8 @@ pub struct Graph {
     areas: Vec<(Area, CellId)>,
     /// What each formula reaches, so it can be taken out again cleanly.
     precedents: HashMap<CellId, Precedents>,
+    /// The formulas that have to be worked out on every recalculation.
+    volatile: HashSet<CellId>,
 }
 
 impl Graph {
@@ -158,6 +171,9 @@ impl Graph {
         for area in &precedents.areas {
             self.areas.push((area.clone(), cell.clone()));
         }
+        if precedents.volatile {
+            self.volatile.insert(cell.clone());
+        }
 
         self.precedents.insert(cell, precedents);
     }
@@ -173,6 +189,7 @@ impl Graph {
         }
 
         self.areas.retain(|(_, dependent)| dependent != cell);
+        self.volatile.remove(cell);
     }
 
     /// The formulas that name a cell, directly.
@@ -196,6 +213,11 @@ impl Graph {
     /// Every formula the graph knows about.
     pub fn formulas(&self) -> impl Iterator<Item = &CellId> {
         self.precedents.keys()
+    }
+
+    /// The formulas that are worked out again whatever changed.
+    pub fn volatile(&self) -> impl Iterator<Item = &CellId> {
+        self.volatile.iter()
     }
 
     /// Everything that has to be worked out again once these cells change,

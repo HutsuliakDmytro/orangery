@@ -18,7 +18,7 @@ pub mod stats;
 pub mod text;
 
 use crate::ast::Expr;
-use crate::eval::{evaluate, Context};
+use crate::eval::{evaluate, Context, Rect};
 use crate::value::{Error, Value};
 
 /// What a function is, as far as the evaluator is concerned.
@@ -69,6 +69,20 @@ pub fn call(name: &str, arguments: &[Expr], context: &Context<'_>) -> Value {
     (function.call)(arguments, context)
 }
 
+/// The rectangle a function names, for the few that answer with a place
+/// rather than with a value.
+///
+/// Kept as a second entry point rather than a field on `Function`, because
+/// two functions out of five hundred work this way and a field would ask the
+/// other four hundred and ninety-eight to say that they do not.
+pub fn reference(name: &str, arguments: &[Expr], context: &Context<'_>) -> Option<Rect> {
+    match lookup(name)?.name {
+        "OFFSET" => lookup::offset(arguments, context).ok(),
+        "INDIRECT" => lookup::indirect(arguments, context).ok(),
+        _ => None,
+    }
+}
+
 /// Every function this engine has, in one list for looking up.
 static FUNCTIONS: &[&Function] = &[
     &math::SUM,
@@ -100,6 +114,8 @@ static FUNCTIONS: &[&Function] = &[
     &lookup::INDEX,
     &lookup::MATCH,
     &lookup::CHOOSE,
+    &lookup::OFFSET,
+    &lookup::INDIRECT,
     &lookup::ROW,
     &lookup::COLUMN,
     &lookup::ROWS,

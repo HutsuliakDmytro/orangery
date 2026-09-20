@@ -35,6 +35,58 @@ pub trait Cells {
     }
 }
 
+/// A rectangle of the sheet, named rather than read.
+///
+/// What `OFFSET` and `INDIRECT` work out, and what `ROW`, `COLUMN`, `ROWS`
+/// and `COLUMNS` ask about: the place, not what is in it. A formula that
+/// wants the values never meets one of these — `evaluate` reads them on the
+/// way past — which is why this is a second way of asking rather than another
+/// kind of `Value`. Making it one would mean every coercion, every
+/// comparison and every function had to have an opinion about a rectangle
+/// nobody has looked in yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rect {
+    /// `None` for the sheet the formula is on.
+    pub sheet: Option<String>,
+    pub top: i64,
+    pub bottom: i64,
+    pub left: i64,
+    pub right: i64,
+}
+
+impl Rect {
+    /// The rectangle one cell makes.
+    pub fn cell(sheet: Option<String>, row: i64, column: i64) -> Self {
+        Self {
+            sheet,
+            top: row,
+            bottom: row,
+            left: column,
+            right: column,
+        }
+    }
+
+    pub fn height(&self) -> i64 {
+        self.bottom - self.top + 1
+    }
+
+    pub fn width(&self) -> i64 {
+        self.right - self.left + 1
+    }
+
+    /// What is in it: one value for one cell, an array for the rest.
+    pub fn value(&self, context: &Context<'_>) -> Value {
+        rectangle(
+            context,
+            self.sheet.as_deref(),
+            self.top,
+            self.bottom,
+            self.left,
+            self.right,
+        )
+    }
+}
+
 /// What a formula is being worked out in aid of.
 pub struct Context<'a> {
     pub cells: &'a dyn Cells,
@@ -220,37 +272,63 @@ fn subtract(left: f64, right: f64) -> f64 {
 
 /// The value of a reference: one cell, or the rectangle it names.
 fn resolve(reference: &Reference, context: &Context<'_>) -> Value {
-    let sheet = reference.sheet.as_ref().map(|(first, _)| first.as_str());
+    rect_of(reference, context).value(context)
+}
+
+/// The rectangle a reference names, before anything has been read.
+///
+/// A whole column is not a million cells: it is the cells that are there, and
+/// only the caller knows how far that reaches.
+pub fn rect_of(reference: &Reference, context: &Context<'_>) -> Rect {
+    let sheet = reference.sheet.as_ref().map(|(first, _)| first.clone());
+    let named = sheet.as_deref();
 
     match &reference.kind {
-        ReferenceKind::Cell { row, column } => {
-            context.cells.value_at(sheet, row.index, column.index)
-        }
+        ReferenceKind::Cell { row, column } => Rect::cell(sheet, row.index, column.index),
 
-        ReferenceKind::Range { from, to } => {
-            let top = from.0.index.min(to.0.index);
-            let bottom = from.0.index.max(to.0.index);
-            let left = from.1.index.min(to.1.index);
-            let right = from.1.index.max(to.1.index);
-
-            rectangle(context, sheet, top, bottom, left, right)
-        }
+        ReferenceKind::Range { from, to } => Rect {
+            sheet,
+            top: from.0.index.min(to.0.index),
+            bottom: from.0.index.max(to.0.index),
+            left: from.1.index.min(to.1.index),
+            right: from.1.index.max(to.1.index),
+        },
 
         ReferenceKind::Columns { from, to } => {
-            let (rows, _) = context.cells.extent(sheet);
-            let left = from.index.min(to.index);
-            let right = from.index.max(to.index);
-
-            rectangle(context, sheet, 0, (rows - 1).max(0), left, right)
+            let (rows, _) = context.cells.extent(named);
+            Rect {
+                sheet,
+                top: 0,
+                bottom: (rows - 1).max(0),
+                left: from.index.min(to.index),
+                right: from.index.max(to.index),
+            }
         }
 
         ReferenceKind::Rows { from, to } => {
-            let (_, columns) = context.cells.extent(sheet);
-            let top = from.index.min(to.index);
-            let bottom = from.index.max(to.index);
-
-            rectangle(context, sheet, top, bottom, 0, (columns - 1).max(0))
+            let (_, columns) = context.cells.extent(named);
+            Rect {
+                sheet,
+                top: from.index.min(to.index),
+                bottom: from.index.max(to.index),
+                left: 0,
+                right: (columns - 1).max(0),
+            }
         }
+    }
+}
+
+/// The rectangle an argument names, if it names one at all.
+///
+/// A reference is written as one, or worked out by a function that answers
+/// with a place rather than a value. Anything else — a number, a sum, a piece
+/// of text — names nothing, and the functions that need a place say so.
+pub fn reference_of(expression: &Expr, context: &Context<'_>) -> Option<Rect> {
+    match expression {
+        Expr::Reference(reference) => Some(rect_of(reference, context)),
+        Expr::Parenthesised(inside) => reference_of(inside, context),
+        Expr::Call { name, arguments } => crate::functions::reference(name, arguments, context),
+        _ => None,
     }
 }
 

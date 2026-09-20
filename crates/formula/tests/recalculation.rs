@@ -42,6 +42,12 @@ fn set(engine: &mut Engine, cell: &str, value: f64) {
     engine.set_value("Sheet1", row, column, Value::Number(value));
 }
 
+/// A cell set, with what the engine said changed because of it.
+fn set_and_report(engine: &mut Engine, cell: &str, value: f64) -> formula::engine::Changed {
+    let (row, column) = address(cell);
+    engine.set_value("Sheet1", row, column, Value::Number(value))
+}
+
 fn formula(engine: &mut Engine, cell: &str, text: &str) {
     let (row, column) = address(cell);
     engine
@@ -232,4 +238,71 @@ fn everything_can_be_worked_out_again_from_what_was_typed() {
 
     assert_eq!(number(&engine, "C1"), 8.0);
     assert!(changed.circular.is_empty());
+}
+
+#[test]
+fn a_formula_that_works_out_where_to_look_is_worked_out_every_time() {
+    // The graph has no edge from A3 to B1: `OFFSET(A1,C1,0)` names A1 and C1
+    // and nothing else, and which cell it reads is a fact about a value. So
+    // it is volatile, and volatile means worked out whatever changed.
+    let mut engine = engine();
+    set(&mut engine, "A1", 1.0);
+    set(&mut engine, "A2", 2.0);
+    set(&mut engine, "A3", 3.0);
+    set(&mut engine, "C1", 2.0);
+    formula(&mut engine, "B1", "OFFSET(A1,C1,0)");
+    assert_eq!(number(&engine, "B1"), 3.0);
+
+    set(&mut engine, "A3", 99.0);
+    assert_eq!(number(&engine, "B1"), 99.0);
+
+    // And it still follows the value it was given for where to look.
+    set(&mut engine, "C1", 1.0);
+    assert_eq!(number(&engine, "B1"), 2.0);
+}
+
+#[test]
+fn a_volatile_formula_that_came_out_the_same_is_not_a_cell_that_changed() {
+    // Worked out again is not the same as changed: a repaint of every
+    // volatile cell on every keystroke would be the slowest way to be right.
+    let mut engine = engine();
+    set(&mut engine, "A1", 1.0);
+    set(&mut engine, "A2", 2.0);
+    formula(&mut engine, "B1", "OFFSET(A1,1,0)");
+
+    let changed = set_and_report(&mut engine, "D9", 7.0);
+    assert!(!changed
+        .cells
+        .iter()
+        .any(|(cell, _)| cell == &("Sheet1".to_string(), 0, 1)));
+}
+
+#[test]
+fn what_depends_on_a_volatile_formula_follows_it() {
+    let mut engine = engine();
+    set(&mut engine, "A1", 1.0);
+    set(&mut engine, "A2", 2.0);
+    formula(&mut engine, "B1", "OFFSET(A1,1,0)");
+    formula(&mut engine, "C1", "B1*10");
+    assert_eq!(number(&engine, "C1"), 20.0);
+
+    set(&mut engine, "A2", 5.0);
+    assert_eq!(number(&engine, "C1"), 50.0);
+}
+
+#[test]
+fn an_address_written_as_text_is_followed_when_the_text_changes() {
+    let mut engine = engine();
+    set(&mut engine, "A1", 10.0);
+    set(&mut engine, "A2", 20.0);
+    formula(&mut engine, "C1", "INDIRECT(\"A\"&D1)");
+    set(&mut engine, "D1", 1.0);
+    assert_eq!(number(&engine, "C1"), 10.0);
+
+    set(&mut engine, "D1", 2.0);
+    assert_eq!(number(&engine, "C1"), 20.0);
+
+    // And the cell it landed on is followed too, though no edge says so.
+    set(&mut engine, "A2", 30.0);
+    assert_eq!(number(&engine, "C1"), 30.0);
 }

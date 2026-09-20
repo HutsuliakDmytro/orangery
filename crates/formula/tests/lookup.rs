@@ -337,6 +337,70 @@ fn averageif_is_the_sum_over_the_count_and_says_so_when_there_is_none() {
     );
 }
 
+#[test]
+fn offset_moves_from_a_place_rather_than_from_a_value() {
+    assert_eq!(answer("OFFSET(A1,1,1)"), Value::Number(10.0));
+    assert_eq!(answer("OFFSET(A1,0,0)"), Value::Text("Region".into()));
+    assert_eq!(answer("OFFSET(B2,3,0)"), Value::Number(40.0));
+    // A block keeps its shape when no shape is given, which is what makes
+    // `OFFSET(table,1,0)` the same table one row down.
+    assert_eq!(answer("SUM(OFFSET(B1:B4,1,0))"), Value::Number(100.0));
+    assert_eq!(answer("SUM(OFFSET(B2,0,0,4,1))"), Value::Number(100.0));
+    // A number is not a place to start from.
+    assert_eq!(answer("OFFSET(5,1,1)"), Value::Error(Error::Value));
+}
+
+#[test]
+fn offset_off_the_sheet_or_of_no_size_is_ref() {
+    assert_eq!(answer("OFFSET(A1,-1,0)"), Value::Error(Error::Reference));
+    assert_eq!(answer("OFFSET(A1,0,-1)"), Value::Error(Error::Reference));
+    assert_eq!(answer("OFFSET(A1,1,1,0,1)"), Value::Error(Error::Reference));
+    assert_eq!(answer("OFFSET(A1,1,1,1,0)"), Value::Error(Error::Reference));
+    // Moving down past the last row is not off the sheet: the cells are
+    // simply empty, as they are anywhere else nobody has typed.
+    assert_eq!(answer("OFFSET(A1,100,0)"), Value::Blank);
+}
+
+#[test]
+fn a_place_a_function_worked_out_can_be_asked_about_like_any_other() {
+    assert_eq!(answer("ROW(OFFSET(A1,2,0))"), Value::Number(3.0));
+    assert_eq!(answer("COLUMN(OFFSET(A1,0,2))"), Value::Number(3.0));
+    assert_eq!(answer("ROWS(OFFSET(A1,0,0,4,2))"), Value::Number(4.0));
+    assert_eq!(answer("COLUMNS(OFFSET(A1,0,0,4,2))"), Value::Number(2.0));
+    assert_eq!(answer("ROW(INDIRECT(\"B7\"))"), Value::Number(7.0));
+    assert_eq!(answer("COLUMNS(INDIRECT(\"A1:C1\"))"), Value::Number(3.0));
+}
+
+#[test]
+fn indirect_reads_a_reference_somebody_wrote_as_text() {
+    assert_eq!(answer("INDIRECT(\"B3\")"), Value::Number(20.0));
+    // Which is the point of it: the address is worked out rather than typed.
+    assert_eq!(answer("INDIRECT(\"A\"&3)"), Value::Text("South".into()));
+    assert_eq!(answer("SUM(INDIRECT(\"B2:B5\"))"), Value::Number(100.0));
+    assert_eq!(
+        answer("SUM(INDIRECT(\"B\"&2&\":B\"&5))"),
+        Value::Number(100.0)
+    );
+    assert_eq!(answer("INDIRECT(\"$B$3\")"), Value::Number(20.0));
+}
+
+#[test]
+fn indirect_given_something_that_is_not_an_address_says_ref() {
+    assert_eq!(
+        answer("INDIRECT(\"not a reference\")"),
+        Value::Error(Error::Reference)
+    );
+    assert_eq!(answer("INDIRECT(\"1+1\")"), Value::Error(Error::Reference));
+    assert_eq!(answer("INDIRECT(\"\")"), Value::Error(Error::Reference));
+    // The second argument asks for R1C1, which this engine does not read.
+    // Answering in A1 anyway would point at the wrong cell without saying so.
+    assert_eq!(
+        answer("INDIRECT(\"B3\",FALSE)"),
+        Value::Error(Error::Reference)
+    );
+    assert_eq!(answer("INDIRECT(\"B3\",TRUE)"), Value::Number(20.0));
+}
+
 /// A cell of each kind, which is what the questions are asked about.
 fn kinds() -> Sheet {
     Sheet::with(&[

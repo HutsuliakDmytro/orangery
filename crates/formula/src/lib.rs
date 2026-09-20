@@ -21,7 +21,7 @@ pub mod value;
 
 pub use ast::{Expr, Operator};
 pub use engine::{Changed, Engine};
-pub use eval::{evaluate, Cells, Context};
+pub use eval::{evaluate, reference_of, Cells, Context, Rect};
 pub use graph::{precedents_of, Graph, Precedents, Recalculation};
 pub use lexer::{lex, Token, TokenKind};
 pub use parser::{parse, ParseError};

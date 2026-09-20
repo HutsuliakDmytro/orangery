@@ -45,6 +45,14 @@ pub struct Precedents {
     pub areas: Vec<Area>,
     /// Whether it names something whose extent is not known here, like `A:A`.
     pub whole_columns: bool,
+    /// Whether it names a workbook this one does not have.
+    ///
+    /// A formula that reaches into somebody else's file is not worked out at
+    /// all: the number in the cell is the one the file was saved with, and
+    /// replacing it with an error because the other workbook is not open
+    /// would lose the figure and tell the reader nothing they can act on.
+    /// Excel behaves the same way until the link is updated.
+    pub external: bool,
     /// Whether it calls a function that has to be worked out afresh every
     /// time — `NOW`, `RAND`, `OFFSET`, `INDIRECT`.
     ///
@@ -73,9 +81,16 @@ fn walk(expression: &Expr, sheet: &str, found: &mut Precedents) {
             walk(left, sheet, found);
             walk(right, sheet, found);
         }
-        Expr::Unary { operand, .. } | Expr::Percent(operand) | Expr::Parenthesised(operand) => {
-            walk(operand, sheet, found)
-        }
+        Expr::Unary { operand, .. }
+        | Expr::Percent(operand)
+        | Expr::Parenthesised(operand)
+        | Expr::Implicit(operand) => walk(operand, sheet, found),
+
+        // Where a table's column is depends on where the table is, and the
+        // table moves when rows are put in around it — which is the reason
+        // people write references this way. So nothing static can be said
+        // about what it covers, and it is worked out every time instead.
+        Expr::Structured(_) => found.volatile = true,
         Expr::Call { name, arguments } => {
             if crate::functions::lookup(name).is_some_and(|function| function.volatile) {
                 found.volatile = true;
@@ -101,6 +116,11 @@ fn add(reference: &Reference, sheet: &str, found: &mut Precedents) {
         .sheet
         .as_ref()
         .map_or_else(|| sheet.to_string(), |(first, _)| first.clone());
+
+    // `[Book.xlsx]Sheet1` — a sheet in a file this program has not been given.
+    if on.starts_with('[') {
+        found.external = true;
+    }
 
     match &reference.kind {
         ReferenceKind::Cell { row, column } => found.cells.push((on, row.index, column.index)),

@@ -64,6 +64,29 @@ impl Operator {
     }
 }
 
+/// A reference written in a table's own words: `Table1[Amount]`.
+///
+/// What Excel writes as soon as a range is made into a table, and what
+/// somebody sees when they click a column of one. It survives rows being
+/// inserted, which an `A1` reference does not — that is the whole point of
+/// it, and the reason a workbook that uses tables uses these everywhere.
+///
+/// The parts are kept as they were written rather than resolved here.
+/// Where `Table1[Amount]` actually is depends on where the table is, which
+/// is a fact about the workbook and not about the formula (`Cells::area_of`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Structured {
+    /// The table named, or nothing when the formula is inside the table it
+    /// is talking about.
+    pub table: Option<String>,
+    /// `#Headers`, `#Totals`, `#Data`, `#All` — without the hash.
+    pub parts: Vec<String>,
+    /// The columns named: one, or two where a span was written.
+    pub columns: Vec<String>,
+    /// `[@Amount]` — the part of the column on the row this formula is on.
+    pub this_row: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Number(f64),
@@ -72,6 +95,14 @@ pub enum Expr {
     /// An error written into the formula, which is a value like any other.
     Error(String),
     Reference(Reference),
+    /// A table's own way of naming a column: `Table1[Amount]`.
+    Structured(Structured),
+    /// `@` — the one value of a range that lines up with this formula.
+    ///
+    /// Excel writes it in front of anything that could spill but should not,
+    /// which is how a workbook written in 365 still opens in 2013 and means
+    /// the same thing.
+    Implicit(Box<Expr>),
     /// A defined name, or a table, or anything else spelled as a word.
     Name(String),
     Call {

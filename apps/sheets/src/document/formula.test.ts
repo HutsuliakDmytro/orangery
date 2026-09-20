@@ -13,6 +13,7 @@ import {
   moment,
   outOfSight,
   shownAs,
+  tablesOf,
   typedFormula,
 } from './formula'
 import { cellChanges } from './history'
@@ -355,6 +356,23 @@ describe('an answer that did not fit in its own cell', () => {
     })
 
     expect(cellAt(sheet.cells, { row: at.row + 2, column: at.column })).toBeNull()
+  })
+})
+
+describe('the tables a formula can name', () => {
+  it('names them by the sheet they sit on', () => {
+    // Of the workbook rather than of a sheet: a formula on one sheet can
+    // name a table on another, and a table's name is the workbook's own.
+    for (const table of tablesOf(open)) {
+      expect(open.sheets.some((one) => one.name === table.sheet)).toBe(true)
+      expect(table.bottom).toBeGreaterThanOrEqual(table.top)
+      expect(table.columns.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('reads the tables of the file it opened', () => {
+    const found = open.sheets.flatMap((sheet) => sheet.tables)
+    expect(tablesOf(open)).toHaveLength(found.length)
   })
 })
 

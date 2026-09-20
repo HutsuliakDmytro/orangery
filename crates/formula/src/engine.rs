@@ -15,9 +15,10 @@ use std::sync::Arc;
 
 use crate::ast::Expr;
 use crate::date::DateSystem;
-use crate::eval::{evaluate, Cells, Context, Standing};
+use crate::eval::{evaluate, Cells, Context, Rect, Standing};
 use crate::graph::{precedents_of, CellId, Graph};
 use crate::parser::{parse, ParseError};
+use crate::table::Table;
 use crate::value::{Error, Value};
 
 /// What is in a cell: something typed, or something worked out.
@@ -50,6 +51,11 @@ pub struct Engine {
     spills: FastMap<CellId, Vec<CellId>>,
     /// And the other way round, so a cell can say whose answer it is showing.
     spilled_from: FastMap<CellId, CellId>,
+    /// The tables of the workbook, for the references written in their words.
+    ///
+    /// Of the workbook rather than of a sheet: a formula on one sheet can
+    /// name a table on another, and every table name is the workbook's own.
+    tables: Vec<Table>,
     /// The rows nobody can see, and why.
     ///
     /// Not a fact about any cell's value, and not one the engine could work
@@ -122,6 +128,15 @@ impl Engine {
     /// Which morning this workbook counts days from — `date1904` in the file.
     pub fn set_date_system(&mut self, system: DateSystem) {
         self.system = system;
+    }
+
+    /// The tables of the workbook, which is what `Table1[Amount]` is asking
+    /// about.
+    ///
+    /// Told rather than worked out: a table moves when rows are put in around
+    /// it, and only whoever holds the workbook knows where it is now.
+    pub fn set_tables(&mut self, tables: Vec<Table>) {
+        self.tables = tables;
     }
 
     /// Which rows are out of sight on a sheet: hidden by a filter, and
@@ -472,6 +487,19 @@ impl Engine {
                     continue;
                 };
 
+                // A formula that reaches into a workbook nobody has opened is
+                // left showing the number its file was saved with. Working it
+                // out would mean answering `#REF!` about a figure that is
+                // probably still true, which loses the figure and tells the
+                // reader nothing they can do anything about.
+                if self
+                    .graph
+                    .precedents_of(&cell)
+                    .is_some_and(|precedents| precedents.external)
+                {
+                    continue;
+                }
+
                 let value = {
                     let view = View {
                         engine: self,
@@ -655,6 +683,10 @@ impl Cells for View<'_> {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let on = sheet.unwrap_or(&self.sheet);
         self.engine.extents.get(on).copied().unwrap_or((0, 0))
+    }
+
+    fn area_of(&self, reference: &crate::ast::Structured, at: (i64, i64)) -> Option<Rect> {
+        crate::table::area_of(&self.engine.tables, reference, at)
     }
 
     fn standing(&self, sheet: Option<&str>, row: i64, column: i64) -> Standing {

@@ -544,3 +544,28 @@ fn what_depends_on_a_spilled_cell_follows_it() {
     assert_eq!(number(&engine, "A3"), 12.0);
     assert_eq!(number(&engine, "C1"), 120.0);
 }
+
+#[test]
+fn a_formula_naming_another_workbook_keeps_the_number_it_came_with() {
+    // Nothing here can open that file. Working the formula out would mean
+    // answering `#REF!` about a figure that is probably still true, which
+    // loses the figure and tells the reader nothing they can act on — so the
+    // cell keeps what its file was saved with, as Excel does until somebody
+    // updates the link.
+    let mut engine = engine();
+    engine
+        .load_formula(
+            "Sheet1",
+            0,
+            0,
+            "[Budget.xlsx]Sheet1!A1*2",
+            Value::Number(500.0),
+        )
+        .expect("the formula should parse");
+
+    engine.recalculate();
+    assert_eq!(number(&engine, "A1"), 500.0);
+
+    set(&mut engine, "B1", 1.0);
+    assert_eq!(number(&engine, "A1"), 500.0);
+}

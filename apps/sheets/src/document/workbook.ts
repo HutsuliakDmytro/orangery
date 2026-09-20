@@ -10,6 +10,7 @@ import {
   readSheetData,
   readSheetDrawings,
   readStyles,
+  readTable,
   readWorkbook,
   readWorksheet,
 } from '@orangery/ooxml-spreadsheet'
@@ -22,6 +23,7 @@ import type {
   SheetComments,
   SheetDrawing,
   Styles,
+  Table,
   Workbook,
   Worksheet,
 } from '@orangery/ooxml-spreadsheet'
@@ -64,6 +66,14 @@ export interface OpenSheet {
   cells: SheetCells
   /** Charts and pictures, which sit on the sheet rather than in a cell. */
   drawings: AnchoredDrawing[]
+  /**
+   * The tables on it, which are what `Table1[Amount]` is asking about.
+   *
+   * Read on open because a structured reference cannot be worked out without
+   * them: the formula says which table and which column, and only the file
+   * says where that is.
+   */
+  tables: Table[]
   /** What has been said about its cells: threads, and the older notes. */
   comments: SheetComments
   /**
@@ -151,6 +161,7 @@ export function openSheetOf(pkg: OoxmlPackage, entry: SheetEntry): OpenSheet {
     sheet: readWorksheet(text) ?? EMPTY_SHEET,
     cells: readSheetData(text),
     drawings: drawingsOf(pkg, entry.path, text),
+    tables: tablesOf(pkg, entry.path),
     comments: commentsOf(pkg, entry.path),
     links: readHyperlinks(
       text,
@@ -202,6 +213,29 @@ const NOTES_RELATIONSHIP =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments'
 const THREADS_RELATIONSHIP =
   'http://schemas.microsoft.com/office/2017/10/relationships/threadedComment'
+
+const TABLE_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table'
+
+/**
+ * The tables of one sheet, found through its relationships.
+ *
+ * A table part says where it is and what its columns are called; which sheet
+ * it belongs to is said only by the relationship pointing at it, which is why
+ * this is asked per sheet rather than read off the package in one go.
+ */
+function tablesOf(pkg: OoxmlPackage, sheetPath: string): Table[] {
+  const relationships = parseRelationships(getPartText(pkg, relationshipsOf(sheetPath)) ?? '')
+  const directory = partDirectory(sheetPath)
+
+  return [...relationships.values()]
+    .filter((one) => one.type === TABLE_RELATIONSHIP)
+    .flatMap((one) => {
+      const path = resolveTarget(one.target, directory)
+      const table = readTable(getPartText(pkg, path) ?? '')
+      return table === null ? [] : [table]
+    })
+}
 
 /**
  * The comment parts of one sheet, found through its relationships.

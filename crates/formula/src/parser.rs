@@ -176,6 +176,16 @@ impl Parser {
         self.skip_spaces();
 
         if let Some(TokenKind::Operator(text)) = self.peek().map(|token| token.kind.clone()) {
+            // `@` in front of a range asks for the one value of it that lines
+            // up with this formula. Excel writes it wherever a formula could
+            // spill but should not, which is how a workbook written in 365
+            // still means the same thing in 2013.
+            if text == "@" {
+                self.next();
+                let operand = self.unary()?;
+                return Ok(self.postfix(Expr::Implicit(Box::new(operand))));
+            }
+
             if text == "-" || text == "+" {
                 self.next();
                 // Binds tighter than everything but the power operator, which
@@ -223,6 +233,7 @@ impl Parser {
             TokenKind::Bool(value) => Ok(Expr::Bool(value)),
             TokenKind::Error(value) => Ok(Expr::Error(value)),
             TokenKind::Reference(reference) => Ok(Expr::Reference(reference)),
+            TokenKind::Structured(structured) => Ok(Expr::Structured(structured)),
 
             TokenKind::Name(name) => {
                 // A name with a bracket after it is a call; without one it is

@@ -6,7 +6,7 @@
 //! spaces, an error value written into it, a function nobody here has heard
 //! of — is read rather than refused.
 
-use formula::ast::{Expr, Operator};
+use formula::ast::{Expr, Operator, Structured};
 use formula::parser::parse;
 use formula::reference::{Reference, ReferenceKind};
 
@@ -302,4 +302,105 @@ fn a_formula_that_is_not_one_says_where_it_went_wrong() {
     assert!(parse("SUM(1,").is_err());
     assert!(parse("(1+2").is_err());
     assert!(parse("1 2 3").is_err());
+}
+
+#[test]
+fn a_table_names_its_own_columns() {
+    // What Excel writes as soon as a range is made into a table, and what a
+    // workbook that uses tables uses everywhere. It has to parse whether or
+    // not anything here can say where the table is: a formula this program
+    // could not read would be a formula it could not write back.
+    let Expr::Call { arguments, .. } = parsed("SUM(Table1[Amount])") else {
+        panic!("not a call")
+    };
+
+    assert_eq!(
+        arguments.first(),
+        Some(&Expr::Structured(Structured {
+            table: Some("Table1".to_string()),
+            parts: vec![],
+            columns: vec!["Amount".to_string()],
+            this_row: false,
+        }))
+    );
+}
+
+#[test]
+fn the_parts_of_a_table_are_read_as_they_were_written() {
+    assert_eq!(
+        parsed("Table1[[#Headers],[Amount]]"),
+        Expr::Structured(Structured {
+            table: Some("Table1".to_string()),
+            parts: vec!["Headers".to_string()],
+            columns: vec!["Amount".to_string()],
+            this_row: false,
+        })
+    );
+
+    // `@` and `#This Row` are the same thing said two ways, one of them
+    // older than the other.
+    assert_eq!(
+        parsed("[@Amount]"),
+        Expr::Structured(Structured {
+            table: None,
+            parts: vec![],
+            columns: vec!["Amount".to_string()],
+            this_row: true,
+        })
+    );
+    assert_eq!(
+        parsed("Table1[[#This Row],[Amount]]"),
+        Expr::Structured(Structured {
+            table: Some("Table1".to_string()),
+            parts: vec![],
+            columns: vec!["Amount".to_string()],
+            this_row: true,
+        })
+    );
+}
+
+#[test]
+fn a_column_with_brackets_in_its_name_keeps_them() {
+    // The brackets are the language's own punctuation inside a reference, so
+    // a column really called `Amount [net]` is written with them escaped.
+    assert_eq!(
+        parsed("Table1[Amount '[net']]"),
+        Expr::Structured(Structured {
+            table: Some("Table1".to_string()),
+            parts: vec![],
+            columns: vec!["Amount [net]".to_string()],
+            this_row: false,
+        })
+    );
+}
+
+#[test]
+fn a_workbook_somebody_else_has_is_named_and_not_opened() {
+    let Expr::Reference(reference) = parsed("[Book.xlsx]Sheet1!A1") else {
+        panic!("not a reference")
+    };
+
+    assert_eq!(
+        reference.sheet.map(|(name, _)| name),
+        Some("[Book.xlsx]Sheet1".to_string())
+    );
+
+    // The quoted spelling of the same thing, which is what Excel writes when
+    // the name has a space in it.
+    let Expr::Reference(quoted) = parsed("'[Book.xlsx]Sheet1'!A1") else {
+        panic!("not a reference")
+    };
+    assert_eq!(
+        quoted.sheet.map(|(name, _)| name),
+        Some("[Book.xlsx]Sheet1".to_string())
+    );
+}
+
+#[test]
+fn the_at_sign_asks_for_the_one_value_that_lines_up() {
+    assert_eq!(parsed("@A1:A9"), Expr::Implicit(Box::new(parsed("A1:A9"))));
+    assert_eq!(parsed("SUM(@A1:A9)"), parsed("SUM(@A1:A9)"));
+    // In front of a function, which is where Excel writes it when a formula
+    // could spill and the file says it should not.
+    assert!(matches!(parsed("@INDEX(A1:A9,1)"), Expr::Implicit(_)));
 }

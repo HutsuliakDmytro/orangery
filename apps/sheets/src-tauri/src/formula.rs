@@ -105,6 +105,40 @@ pub struct SheetInput {
     pub hidden: Vec<i64>,
 }
 
+/// A table, as the window describes one.
+///
+/// Of the workbook rather than of a sheet: a formula on one sheet can name a
+/// table on another, and a table's name is the workbook's own.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableInput {
+    pub name: String,
+    pub sheet: String,
+    pub top: i64,
+    pub bottom: i64,
+    pub left: i64,
+    pub right: i64,
+    pub header_rows: i64,
+    pub totals_rows: i64,
+    pub columns: Vec<String>,
+}
+
+impl From<TableInput> for formula::table::Table {
+    fn from(table: TableInput) -> Self {
+        Self {
+            name: table.name,
+            sheet: table.sheet,
+            top: table.top,
+            bottom: table.bottom,
+            left: table.left,
+            right: table.right,
+            header_rows: table.header_rows,
+            totals_rows: table.totals_rows,
+            columns: table.columns,
+        }
+    }
+}
+
 /// Where a cell is.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,6 +229,7 @@ pub fn formula_open(
     books: tauri::State<'_, Workbooks>,
     book: String,
     sheets: Vec<SheetInput>,
+    tables: Vec<TableInput>,
     moment: f64,
     date1904: bool,
     seed: u64,
@@ -207,6 +242,7 @@ pub fn formula_open(
         DateSystem::Excel1900
     });
     engine.seed_random(seed);
+    engine.set_tables(tables.into_iter().map(Into::into).collect());
 
     for sheet in sheets {
         engine.set_out_of_sight(&sheet.sheet, sheet.filtered, sheet.hidden);

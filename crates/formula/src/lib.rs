@@ -19,6 +19,7 @@ pub mod graph;
 pub mod lexer;
 pub mod parser;
 pub mod reference;
+pub mod table;
 pub mod value;
 
 pub use ast::{Expr, Operator};
@@ -29,4 +30,5 @@ pub use graph::{precedents_of, Graph, Precedents, Recalculation};
 pub use lexer::{lex, Token, TokenKind};
 pub use parser::{parse, ParseError};
 pub use reference::{Reference, ReferenceKind};
+pub use table::Table;
 pub use value::{Array, Error, Value};

@@ -47,6 +47,19 @@ export interface CellInput {
   value: Held
 }
 
+/** A table, as the engine is told about one. */
+export interface TableInput {
+  name: string
+  sheet: string
+  top: number
+  bottom: number
+  left: number
+  right: number
+  headerRows: number
+  totalsRows: number
+  columns: string[]
+}
+
 export interface SheetInput {
   sheet: string
   cells: CellInput[]
@@ -180,6 +193,28 @@ export function outOfSight(
   }
 
   return { filtered, hidden }
+}
+
+/**
+ * Every table of the workbook, named by the sheet it sits on.
+ *
+ * Of the workbook rather than of a sheet, because a formula on one sheet can
+ * name a table on another and a table's name is the workbook's own.
+ */
+export function tablesOf(open: OpenWorkbook): TableInput[] {
+  return open.sheets.flatMap((sheet) =>
+    sheet.tables.map((table) => ({
+      name: table.name,
+      sheet: sheet.name,
+      top: Math.min(table.range.from.row, table.range.to.row),
+      bottom: Math.max(table.range.from.row, table.range.to.row),
+      left: Math.min(table.range.from.column, table.range.to.column),
+      right: Math.max(table.range.from.column, table.range.to.column),
+      headerRows: table.headerRows,
+      totalsRows: table.totalsRows,
+      columns: table.columns.map((column) => column.name),
+    })),
+  )
 }
 
 /** The name a formula would use for the sheet kept in that part. */
@@ -418,6 +453,7 @@ export async function openEngine(book: string, open: OpenWorkbook): Promise<void
   await invoke('formula_open', {
     book,
     sheets: cellsOf(open),
+    tables: tablesOf(open),
     moment: moment(open.workbook.date1904),
     date1904: open.workbook.date1904,
     // The seed is the session's, so the same workbook recalculated twice in

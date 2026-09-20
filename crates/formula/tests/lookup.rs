@@ -621,3 +621,74 @@ fn an_address_written_out_can_be_followed_again() {
         Value::Number(100.0)
     );
 }
+
+/// The same table again, with a name and column headings of its own.
+fn named() -> Sheet {
+    table().with_table("Sales", "A1:C5", &["Region", "Amount", "Code"])
+}
+
+#[test]
+fn a_table_can_be_asked_about_in_its_own_words() {
+    // Which is the point of writing a reference this way: it survives rows
+    // being inserted, where `B2:B5` does not.
+    let sheet = named();
+
+    assert_eq!(on(&sheet, "SUM(Sales[Amount])"), Value::Number(100.0));
+    assert_eq!(on(&sheet, "COUNT(Sales[Amount])"), Value::Number(4.0));
+    // The heading is a label rather than a figure, so the data leaves it out.
+    assert_eq!(
+        on(&sheet, "Sales[[#Headers],[Amount]]"),
+        Value::Text("Amount".into())
+    );
+    assert_eq!(
+        on(&sheet, "COUNTA(Sales[[#All],[Amount]])"),
+        Value::Number(5.0)
+    );
+    assert_eq!(
+        on(&sheet, "SUM(Sales[Nowhere])"),
+        Value::Error(Error::Reference)
+    );
+}
+
+#[test]
+fn this_row_means_the_row_the_formula_is_on() {
+    let sheet = named();
+
+    // Written in D3, `[@Amount]` is B3.
+    assert_eq!(on_cell(&sheet, "[@Amount]", (2, 3)), Value::Number(20.0));
+    assert_eq!(
+        on_cell(&sheet, "[@Region]", (3, 3)),
+        Value::Text("East".into())
+    );
+    assert_eq!(
+        on_cell(&sheet, "Sales[[#This Row],[Amount]]", (4, 3)),
+        Value::Number(40.0)
+    );
+}
+
+#[test]
+fn the_at_sign_takes_the_one_value_that_lines_up_with_the_formula() {
+    let sheet = named();
+
+    // Written in D3, `@B2:B5` is the cell of that column on row 3.
+    assert_eq!(on_cell(&sheet, "@B2:B5", (2, 3)), Value::Number(20.0));
+    assert_eq!(on_cell(&sheet, "@B2:B5", (4, 3)), Value::Number(40.0));
+    // A single cell is itself, and a formula nowhere near the range has no
+    // row to meet it on.
+    assert_eq!(on_cell(&sheet, "@B3", (0, 3)), Value::Number(20.0));
+    assert_eq!(
+        on_cell(&sheet, "@B2:B5", (9, 3)),
+        Value::Error(Error::Value)
+    );
+}
+
+#[test]
+fn a_table_nobody_has_heard_of_is_a_reference_error() {
+    // Not a parse failure: a formula this program could not read would be a
+    // formula it could not write back, and a workbook using tables must not
+    // become a workbook we have damaged.
+    assert_eq!(
+        answer("SUM(Nowhere[Amount])"),
+        Value::Error(Error::Reference)
+    );
+}

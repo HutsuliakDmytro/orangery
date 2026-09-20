@@ -12,7 +12,7 @@
 //! between two kinds of value has an order that puts every number before every
 //! word.
 
-use crate::ast::{Expr, Operator};
+use crate::ast::{Expr, Operator, Structured};
 use crate::date::DateSystem;
 use crate::reference::{Reference, ReferenceKind};
 use crate::value::{compare, round_to_significant, Array, Error, Value};
@@ -33,6 +33,19 @@ pub trait Cells {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let _ = sheet;
         (0, 0)
+    }
+
+    /// Where a table's column is, in cells.
+    ///
+    /// `Table1[Amount]` survives rows being inserted, which is the whole
+    /// point of writing it that way — and means the engine cannot know where
+    /// it is. Only whoever holds the workbook does.
+    ///
+    /// `at` is where the formula is, for the `[@Amount]` form, which means
+    /// the part of that column on this row.
+    fn area_of(&self, reference: &Structured, at: (i64, i64)) -> Option<Rect> {
+        let _ = (reference, at);
+        None
     }
 
     /// What a cell is to the functions that leave some cells out.
@@ -168,6 +181,17 @@ pub fn evaluate(expression: &Expr, context: &Context<'_>) -> Value {
         Expr::Parenthesised(inside) => evaluate(inside, context),
 
         Expr::Reference(reference) => resolve(reference, context),
+
+        // Where `Table1[Amount]` is depends on where the table is, which is
+        // a fact about the workbook rather than about the formula. A caller
+        // that has not been asked about tables says so by not answering, and
+        // `#REF!` is what a reference to a table nobody has heard of means.
+        Expr::Structured(structured) => match context.cells.area_of(structured, context.at) {
+            Some(rect) => rect.value(context),
+            None => Value::Error(Error::Reference),
+        },
+
+        Expr::Implicit(inside) => implicit(inside, context),
 
         // A name nothing has defined is `#NAME?`: the formula is kept, and
         // the answer says plainly that this program did not know the word.
@@ -376,6 +400,44 @@ pub fn rect_of(reference: &Reference, context: &Context<'_>) -> Rect {
     }
 }
 
+/// The one value of a range that lines up with the formula asking.
+///
+/// Excel's `@`, which it writes in front of anything that could spill but
+/// should not — that is how a workbook written in 365 still opens in 2013 and
+/// means the same thing. A column is read across the formula's own row, a row
+/// down its own column, and a block has no single value to give.
+fn implicit(inside: &Expr, context: &Context<'_>) -> Value {
+    let Some(rect) = reference_of(inside, context) else {
+        // Not a place but a value: `@` in front of one is nothing to do.
+        return match evaluate(inside, context) {
+            Value::Array(array) => array.values.first().cloned().unwrap_or(Value::Blank),
+            value => value,
+        };
+    };
+
+    let (row, column) = context.at;
+
+    if rect.height() == 1 && rect.width() == 1 {
+        return rect.value(context);
+    }
+
+    if rect.width() == 1 && (rect.top..=rect.bottom).contains(&row) {
+        return context
+            .cells
+            .value_at(rect.sheet.as_deref(), row, rect.left);
+    }
+
+    if rect.height() == 1 && (rect.left..=rect.right).contains(&column) {
+        return context
+            .cells
+            .value_at(rect.sheet.as_deref(), rect.top, column);
+    }
+
+    // Excel's answer when the formula is not beside the range it is asking
+    // about, and there is no row to meet it on.
+    Value::Error(Error::Value)
+}
+
 /// The rectangle an argument names, if it names one at all.
 ///
 /// A reference is written as one, or worked out by a function that answers
@@ -384,6 +446,7 @@ pub fn rect_of(reference: &Reference, context: &Context<'_>) -> Rect {
 pub fn reference_of(expression: &Expr, context: &Context<'_>) -> Option<Rect> {
     match expression {
         Expr::Reference(reference) => Some(rect_of(reference, context)),
+        Expr::Structured(structured) => context.cells.area_of(structured, context.at),
         Expr::Parenthesised(inside) => reference_of(inside, context),
         Expr::Call { name, arguments } => crate::functions::reference(name, arguments, context),
         _ => None,

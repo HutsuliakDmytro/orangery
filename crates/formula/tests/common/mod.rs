@@ -9,14 +9,17 @@
 
 use std::collections::HashMap;
 
+use formula::ast::Structured;
 use formula::date::DateSystem;
-use formula::eval::{evaluate, Cells, Context};
+use formula::eval::{evaluate, Cells, Context, Rect};
 use formula::parser::parse;
 use formula::value::Value;
 
 #[derive(Default)]
 pub struct Sheet {
     cells: HashMap<(i64, i64), Value>,
+    /// The tables on the sheet, for the references written in their words.
+    tables: Vec<formula::table::Table>,
     /// What time the workbook is being worked out at; nought unless said.
     moment: f64,
     chance: f64,
@@ -30,6 +33,30 @@ impl Sheet {
             sheet.cells.insert(address(at), value.clone());
         }
         sheet
+    }
+
+    /// A table over part of the sheet, with a header row at the top.
+    ///
+    /// The same answer the app has to give about its own tables, written
+    /// small: where a table is is a fact about the workbook, and the engine
+    /// is told rather than working it out.
+    pub fn with_table(mut self, name: &str, at: &str, columns: &[&str]) -> Self {
+        let (from, to) = at.split_once(':').unwrap_or((at, at));
+        let (top, left) = address(from);
+        let (bottom, right) = address(to);
+
+        self.tables.push(formula::table::Table {
+            name: name.to_string(),
+            sheet: "Sheet1".to_string(),
+            top,
+            bottom,
+            left,
+            right,
+            header_rows: 1,
+            totals_rows: 0,
+            columns: columns.iter().map(|name| (*name).to_string()).collect(),
+        });
+        self
     }
 
     /// A workbook being worked out at a particular moment, so that the two
@@ -78,6 +105,10 @@ impl Cells for Sheet {
 
     fn extent(&self, _sheet: Option<&str>) -> (i64, i64) {
         (20, 20)
+    }
+
+    fn area_of(&self, reference: &Structured, at: (i64, i64)) -> Option<Rect> {
+        formula::table::area_of(&self.tables, reference, at)
     }
 
     fn now(&self) -> f64 {

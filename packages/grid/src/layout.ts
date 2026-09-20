@@ -275,6 +275,59 @@ export function headerAtPoint(
   return { kind: 'row', index: rowAtOffset(metrics, y, counts.rows) }
 }
 
+/** How near a boundary a pointer has to be to take hold of it. */
+const GRIP = 4
+
+/**
+ * The row or column edge under a point, for a pointer over a header.
+ *
+ * Returned in preference to the header itself, because the two gestures start
+ * in nearly the same place: a click a few points to the left of a boundary
+ * selects the column, and one on the boundary resizes it. Which is which is
+ * decided here so that it is decided once.
+ */
+export function resizeHandleAt(
+  metrics: GridMetrics,
+  viewport: Viewport,
+  point: { x: number; y: number },
+  counts: { rows: number; columns: number },
+  frozen: FrozenPanes | null = null,
+): { axis: 'row' | 'column'; index: number } | null {
+  const overRows = point.x < metrics.headerWidth
+  const overColumns = point.y < metrics.headerHeight
+  if (overRows === overColumns) return null
+
+  const size = frozenSize(metrics, frozen)
+
+  if (overColumns) {
+    const acrossFrozen = point.x - metrics.headerWidth < size.width
+    const x = point.x - metrics.headerWidth + (acrossFrozen ? 0 : viewport.scrollX)
+    const column = columnAtOffset(metrics, x, counts.columns)
+
+    // The edge on the right of a column, and the one on its left — which is
+    // the right-hand edge of the column before it.
+    const right = offsetOfColumn(metrics, column + 1)
+    if (Math.abs(x - right) <= GRIP) return { axis: 'column', index: column }
+
+    const left = offsetOfColumn(metrics, column)
+    if (Math.abs(x - left) <= GRIP && column > 0) return { axis: 'column', index: column - 1 }
+
+    return null
+  }
+
+  const downFrozen = point.y - metrics.headerHeight < size.height
+  const y = point.y - metrics.headerHeight + (downFrozen ? 0 : viewport.scrollY)
+  const row = rowAtOffset(metrics, y, counts.rows)
+
+  const bottom = offsetOfRow(metrics, row + 1)
+  if (Math.abs(y - bottom) <= GRIP) return { axis: 'row', index: row }
+
+  const top = offsetOfRow(metrics, row)
+  if (Math.abs(y - top) <= GRIP && row > 0) return { axis: 'row', index: row - 1 }
+
+  return null
+}
+
 /**
  * The scroll position that brings a cell into view, moving as little as it can.
  *

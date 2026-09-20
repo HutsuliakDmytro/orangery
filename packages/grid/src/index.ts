@@ -22,6 +22,7 @@ export {
   offsetOfColumn,
   offsetOfRow,
   rectangleOfCell,
+  resizeHandleAt,
   rowAtOffset,
   scrollToCell,
   totalHeight,

@@ -152,6 +152,46 @@ export const structureCommands: readonly Command[] = [
     },
   },
   {
+    id: 'sheet.hideRows',
+    label: 'Hide Rows',
+    group: 'view',
+    keywords: ['row'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().hide('row', true)
+    },
+  },
+  {
+    id: 'sheet.hideColumns',
+    label: 'Hide Columns',
+    group: 'view',
+    keywords: ['column'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().hide('column', true)
+    },
+  },
+  {
+    id: 'sheet.showRows',
+    label: 'Unhide Rows',
+    group: 'view',
+    keywords: ['row', 'show'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().hide('row', false)
+    },
+  },
+  {
+    id: 'sheet.showColumns',
+    label: 'Unhide Columns',
+    group: 'view',
+    keywords: ['column', 'show'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().hide('column', false)
+    },
+  },
+  {
     id: 'sheet.deleteColumns',
     label: 'Delete Columns',
     group: 'edit',

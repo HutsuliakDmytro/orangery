@@ -1,5 +1,5 @@
-import { adjustFormula, putCell } from '@orangery/ooxml-spreadsheet'
-import type { BandChange, Cell } from '@orangery/ooxml-spreadsheet'
+import { adjustFormula, putCell, withColumns } from '@orangery/ooxml-spreadsheet'
+import type { BandChange, Cell, ColumnLook, RowProperties } from '@orangery/ooxml-spreadsheet'
 import type { CellChange } from './edit'
 import type { OpenSheet } from './workbook'
 
@@ -129,3 +129,47 @@ function reshapeRows(sheet: OpenSheet, change: BandChange): void {
 }
 
 const rowsOf = (sheet: OpenSheet) => [...sheet.cells.properties.values()]
+
+/**
+ * What a column or a row looks like, changed over a span.
+ *
+ * Not in the history, and this is where that decision bites hardest: a width
+ * belongs to a column and a height to a row, and the history records cells.
+ * Dragging a column edge and pressing undo takes back the last thing typed
+ * rather than the drag — which is wrong, and is the price of a history that
+ * is honest about only knowing cells. The right fix is a step that can hold
+ * something other than cell changes, and it is the next thing this file
+ * wants (`PLAN.md`, phase 2).
+ */
+export function resizeColumns(
+  sheet: OpenSheet,
+  from: number,
+  to: number,
+  look: Partial<ColumnLook>,
+): void {
+  sheet.sheet.columns = withColumns(sheet.sheet.columns, from, to, look)
+}
+
+export function resizeRows(
+  sheet: OpenSheet,
+  from: number,
+  to: number,
+  look: Partial<Pick<RowProperties, 'height' | 'customHeight' | 'hidden'>>,
+): void {
+  for (let index = Math.min(from, to); index <= Math.max(from, to); index += 1) {
+    const existing = sheet.cells.properties.get(index)
+
+    sheet.cells.properties.set(index, {
+      index,
+      height: null,
+      customHeight: false,
+      hidden: false,
+      outlineLevel: null,
+      style: null,
+      collapsed: false,
+      carried: null,
+      ...existing,
+      ...look,
+    })
+  }
+}

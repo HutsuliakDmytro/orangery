@@ -6,7 +6,9 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { replaceSheetData } from './sheet-data'
+import { replaceColumns } from './columns'
 import type { SheetCells } from './cells'
+import type { ColumnRange } from './worksheet'
 
 /**
  * A workbook, written back.
@@ -28,6 +30,13 @@ export interface SheetToWrite {
   /** The part, e.g. `xl/worksheets/sheet1.xml`. */
   path: string
   cells: SheetCells
+  /**
+   * The column runs, where they may have changed.
+   *
+   * Left out for a sheet nobody has resized, so that its `<cols>` keeps its
+   * own bytes rather than being rewritten into the same thing.
+   */
+  columns?: readonly ColumnRange[]
 }
 
 const CALC_CHAIN_PART = 'xl/calcChain.xml'
@@ -64,7 +73,12 @@ export function writeWorkbook(
     const xml = getPartText(pkg, sheet.path)
     if (xml === undefined) continue
 
-    setPartText(pkg, sheet.path, replaceSheetData(xml, sheet.cells))
+    const withCells = replaceSheetData(xml, sheet.cells)
+    setPartText(
+      pkg,
+      sheet.path,
+      sheet.columns === undefined ? withCells : replaceColumns(withCells, sheet.columns),
+    )
   }
 
   if (options.edited === true) removeCalcChain(pkg)

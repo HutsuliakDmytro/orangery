@@ -5,6 +5,7 @@ import {
   headerAtPoint,
   heightOfRow,
   rectangleOfCell,
+  resizeHandleAt,
   scrollToCell,
   totalHeight,
   totalWidth,
@@ -120,6 +121,14 @@ export interface DataGridProps {
    * as one.
    */
   onFill?: (selection: GridSelection, text: string) => void
+  /**
+   * Called while a header edge is dragged, with the size it is now.
+   *
+   * Continuously rather than at the end, so the sheet follows the pointer: a
+   * drag with no feedback is a drag people do twice because they could not
+   * tell whether the first one worked.
+   */
+  onResize?: (axis: 'row' | 'column', index: number, size: number) => void
   /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
@@ -263,6 +272,7 @@ export function DataGrid({
   onSelectionChange,
   onDelete,
   onFill,
+  onResize,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -279,8 +289,19 @@ export function DataGrid({
   /** Whether the pointer is dragging a range out. */
   const dragging = useRef(false)
 
+  /** The edge being dragged, and where the pointer took hold of it. */
+  const resizing = useRef<{ axis: 'row' | 'column'; index: number; from: number } | null>(null)
+
   const selectedCells = useMemo(() => selectedCount(selection), [selection])
   const [editing, setEditing] = useState<{ cell: CellAddress; text: string } | null>(null)
+
+  /**
+   * What the pointer would do here, said the one way a pointer can say it.
+   *
+   * Without it the only way to find an edge is to try dragging it, which is
+   * how people conclude that a grid cannot be resized.
+   */
+  const [cursor, setCursor] = useState<'default' | 'col-resize' | 'row-resize'>('default')
 
   const viewport: Viewport = { scrollX: scroll.x, scrollY: scroll.y, width, height }
 
@@ -844,7 +865,7 @@ export function DataGrid({
       onScroll={(event) => {
         setScroll({ x: event.currentTarget.scrollLeft, y: event.currentTarget.scrollTop })
       }}
-      style={{ position: 'relative', width, height, overflow: 'auto', outline: 'none' }}
+      style={{ position: 'relative', width, height, overflow: 'auto', outline: 'none', cursor }}
     >
       {/* Sized to the whole grid so the scrollbars mean what they say. */}
       <div
@@ -860,6 +881,19 @@ export function DataGrid({
           const point = { x: event.clientX - box.left, y: event.clientY - box.top }
           const counts = { rows, columns }
           const adding = event.metaKey || event.ctrlKey
+
+          // An edge before a header: the two gestures start a few points
+          // apart, and taking hold of the edge is the more particular of them.
+          const handle =
+            onResize === undefined ? null : resizeHandleAt(metrics, viewport, point, counts, frozen)
+          if (handle !== null) {
+            resizing.current = {
+              ...handle,
+              from: handle.axis === 'column' ? point.x : point.y,
+            }
+            holdPointer(event.currentTarget, event.pointerId, true)
+            return
+          }
 
           const header = headerAtPoint(metrics, viewport, point, counts, frozen)
           if (header !== null) {
@@ -896,6 +930,7 @@ export function DataGrid({
         }}
         onPointerUp={(event) => {
           dragging.current = false
+          resizing.current = null
           holdPointer(event.currentTarget, event.pointerId, false)
         }}
         onDoubleClick={() => {
@@ -906,6 +941,30 @@ export function DataGrid({
           if (box === undefined) return
 
           const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+
+          const held = resizing.current
+          if (held !== null && onResize !== undefined) {
+            const was =
+              held.axis === 'column'
+                ? widthOfColumn(metrics, held.index)
+                : heightOfRow(metrics, held.index)
+            const moved = (held.axis === 'column' ? point.x : point.y) - held.from
+
+            // Never to nothing: a column dragged to no width is one nobody can
+            // find again, which is what hiding is for and is reversible.
+            onResize(held.axis, held.index, Math.max(8, was + moved))
+            resizing.current = { ...held, from: held.axis === 'column' ? point.x : point.y }
+            return
+          }
+
+          const over =
+            onResize === undefined
+              ? null
+              : resizeHandleAt(metrics, viewport, point, { rows, columns }, frozen)
+          setCursor(
+            over === null ? 'default' : over.axis === 'column' ? 'col-resize' : 'row-resize',
+          )
+
           const cell = cellAtPoint(metrics, viewport, point, { rows, columns }, frozen)
 
           if (dragging.current) {

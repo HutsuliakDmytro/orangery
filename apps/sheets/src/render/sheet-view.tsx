@@ -10,6 +10,7 @@ import {
   mergeAt,
   resolveColor,
   resolveStyle,
+  isColumnHidden,
   widthOfColumn,
 } from '@orangery/ooxml-spreadsheet'
 import type {
@@ -64,6 +65,8 @@ export interface SheetViewProps {
   onClear?: () => void
   /** Called on `Mod+Enter`, to put one value into everything selected. */
   onFill?: (text: string) => void
+  /** Called while a header edge is dragged, in points. */
+  onResize?: (axis: 'row' | 'column', index: number, size: number) => void
 }
 
 export function SheetView({
@@ -76,6 +79,7 @@ export function SheetView({
   onEdit,
   onClear,
   onFill,
+  onResize,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -358,7 +362,12 @@ export function SheetView({
   }, [selection, sheet.cells])
 
   const metrics = useMemo(() => {
+    // A hidden column is one of no width. The grid needs no notion of hiding
+    // for that to work: everything it measures, hit-tests and scrolls past
+    // comes out right because the column is genuinely nought wide.
     const widths = Array.from({ length: extent.columns }, (_, column) => {
+      if (isColumnHidden(sheet.sheet, column)) return 0
+
       const stated = widthOfColumn(sheet.sheet, column) ?? DEFAULT_COLUMN_WIDTH
       return Math.round(stated * POINTS_PER_CHARACTER)
     })
@@ -407,6 +416,7 @@ export function SheetView({
       {...(onEdit === undefined ? {} : { onChange: onEdit })}
       {...(onClear === undefined ? {} : { onDelete: onClear })}
       {...(filled === undefined ? {} : { onFill: filled })}
+      {...(onResize === undefined ? {} : { onResize })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any
@@ -440,16 +450,27 @@ export function SheetView({
   )
 }
 
-/** The heights a sheet states for its rows, as the grid counts them. */
+/**
+ * The heights a sheet states for its rows, as the grid counts them.
+ *
+ * A hidden row is one of no height, for the same reason a hidden column is one
+ * of no width: everything the grid measures and hit-tests then comes out right
+ * without the grid knowing what hiding is.
+ */
 function rowHeights(sheet: OpenSheet): number[] {
-  const stated = [...sheet.cells.properties.entries()].filter(([, row]) => row.height !== null)
+  const stated = [...sheet.cells.properties.entries()].filter(
+    ([, row]) => row.height !== null || row.hidden,
+  )
   if (stated.length === 0) return []
 
   const last = Math.max(...stated.map(([index]) => index))
   const fallback = Math.round(sheet.sheet.format.defaultRowHeight ?? DEFAULT_ROW_HEIGHT) + 5
 
   return Array.from({ length: last + 1 }, (_, index) => {
-    const height = sheet.cells.properties.get(index)?.height
+    const row = sheet.cells.properties.get(index)
+    if (row?.hidden === true) return 0
+
+    const height = row?.height
     return height === null || height === undefined ? fallback : Math.round(height) + 5
   })
 }

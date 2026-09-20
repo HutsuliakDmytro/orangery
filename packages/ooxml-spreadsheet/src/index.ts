@@ -92,6 +92,8 @@ export type {
   HighlightOptions,
   HighlightValue,
 } from './highlight'
+export { replaceColumns, widthOfColumnIn, withColumns, writeColumns } from './columns'
+export type { ColumnLook } from './columns'
 export { isColumnHidden, mergeAt, readWorksheet, widthOfColumn } from './worksheet'
 export type { ColumnRange, FrozenPanes, SheetFormat, SheetView, Worksheet } from './worksheet'
 export { newWorkbook } from './new-workbook'

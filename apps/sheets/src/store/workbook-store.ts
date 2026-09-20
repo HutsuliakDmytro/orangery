@@ -11,7 +11,7 @@ import {
   writeClipboard,
 } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
-import { reshape } from '../document/structure'
+import { reshape, resizeColumns, resizeRows } from '../document/structure'
 import { shownText } from '../document/shown'
 import { emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
@@ -67,6 +67,10 @@ export interface WorkbookState {
   format: (look: LookChange) => void
   /** Puts rows or columns in where the selection is, or takes them out. */
   reshape: (axis: BandChange['axis'], insert: boolean) => void
+  /** How wide a column is, or how tall a row; null for the sheet's own. */
+  resize: (axis: BandChange['axis'], from: number, to: number, size: number | null) => void
+  /** Hides what is selected, or brings it back. */
+  hide: (axis: BandChange['axis'], hidden: boolean) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   paste: () => Promise<void>
@@ -235,6 +239,36 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       edited: true,
       history: recorded(history, { changes, selection }),
     })
+  },
+
+  resize: (axis, from, to, size) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    if (axis === 'column') resizeColumns(sheet, from, to, { width: size, custom: size !== null })
+    else resizeRows(sheet, from, to, { height: size, customHeight: size !== null })
+
+    set({ open: redrawn(open, [sheet.path]), edited: true })
+  },
+
+  hide: (axis, hidden) => {
+    const { open, current, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const bounds = selection.ranges.map((range) => boundsOf(range))
+    const from = Math.min(...bounds.map((one) => (axis === 'row' ? one.top : one.left)))
+    const to = Math.max(...bounds.map((one) => (axis === 'row' ? one.bottom : one.right)))
+
+    if (axis === 'column') resizeColumns(sheet, from, to, { hidden })
+    else resizeRows(sheet, from, to, { hidden })
+
+    set({ open: redrawn(open, [sheet.path]), edited: true })
   },
 
   copy: async () => {

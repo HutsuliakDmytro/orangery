@@ -41,6 +41,7 @@ function Shell() {
   const clear = useWorkbookStore((state) => state.clear)
   const fill = useWorkbookStore((state) => state.fill)
   const format = useWorkbookStore((state) => state.format)
+  const resize = useWorkbookStore((state) => state.resize)
   const size = useWindowSize()
 
   useEffect(() => {
@@ -101,6 +102,12 @@ function Shell() {
             onEdit={edit}
             onClear={clear}
             onFill={fill}
+            onResize={(axis, index, size) => {
+              // Points on the screen, characters in the file: a column's width
+              // is counted in the widest digit of the default font, which is
+              // what the seven in `POINTS_PER_CHARACTER` stands for.
+              resize(axis, index, index, axis === 'column' ? size / 7 : size - 5)
+            }}
           />
         )}
       </main>

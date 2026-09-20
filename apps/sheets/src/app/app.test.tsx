@@ -670,3 +670,70 @@ describe('rows and columns', () => {
     expect(getCommand('sheet.insertRows')?.isEnabled?.({})).toBe(false)
   })
 })
+
+describe('hiding and resizing', () => {
+  const goTo = async (range: string) => {
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, `${range}{Enter}`)
+  }
+
+  const sheetNow = () => useWorkbookStore.getState().open?.sheets[0]
+
+  it('hides the columns that are selected, and brings them back', async () => {
+    render(<App />)
+    await load()
+    await goTo('B1:C1')
+
+    act(() => {
+      runCommand('sheet.hideColumns', {})
+    })
+    expect(sheetNow()?.sheet.columns.filter((one) => one.hidden)).toHaveLength(1)
+
+    act(() => {
+      runCommand('sheet.showColumns', {})
+    })
+    expect(sheetNow()?.sheet.columns.filter((one) => one.hidden)).toHaveLength(0)
+  })
+
+  it('hides a row by giving it no height at all', async () => {
+    render(<App />)
+    await load()
+    await goTo('A2')
+
+    act(() => {
+      runCommand('sheet.hideRows', {})
+    })
+
+    expect(sheetNow()?.cells.properties.get(1)?.hidden).toBe(true)
+  })
+
+  it('keeps a width a drag gave a column, all the way into the file', async () => {
+    render(<App />)
+    await load()
+
+    act(() => {
+      useWorkbookStore.getState().resize('column', 1, 1, 30)
+    })
+
+    const open = useWorkbookStore.getState().open
+    if (open === null) throw new Error('nothing open')
+
+    const again = await openWorkbook(await workbookBytes(open, { edited: true }))
+
+    expect(again.sheets[0]?.sheet.columns.find((one) => one.from === 1)?.width).toBe(30)
+  })
+
+  it('leaves the runs of an untouched sheet exactly as they were', async () => {
+    render(<App />)
+    await load()
+
+    const before = useWorkbookStore.getState().open
+    if (before === null) throw new Error('nothing open')
+
+    const again = await openWorkbook(await workbookBytes(before))
+
+    expect(again.sheets[0]?.sheet.columns).toEqual(before.sheets[0]?.sheet.columns)
+  })
+})

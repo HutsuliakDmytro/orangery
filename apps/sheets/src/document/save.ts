@@ -29,7 +29,13 @@ export async function workbookBytes(
 ): Promise<Uint8Array> {
   writeWorkbook(
     open.pkg,
-    open.sheets.map((sheet) => ({ path: sheet.path, cells: sheet.cells })),
+    open.sheets.map((sheet) => ({
+      path: sheet.path,
+      cells: sheet.cells,
+      // Only when something was edited: an untouched sheet keeps the bytes of
+      // its `<cols>` rather than being rewritten into the same thing.
+      ...(options.edited === true ? { columns: sheet.sheet.columns } : {}),
+    })),
     { edited: options.edited ?? false },
   )
 

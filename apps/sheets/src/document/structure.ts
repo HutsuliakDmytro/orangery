@@ -1,5 +1,17 @@
-import { adjustFormula, putCell, withColumns } from '@orangery/ooxml-spreadsheet'
-import type { BandChange, Cell, ColumnLook, RowProperties } from '@orangery/ooxml-spreadsheet'
+import {
+  adjustFormula,
+  putCell,
+  withColumns,
+  withMerge,
+  withoutMerges,
+} from '@orangery/ooxml-spreadsheet'
+import type {
+  BandChange,
+  Cell,
+  CellRange,
+  ColumnLook,
+  RowProperties,
+} from '@orangery/ooxml-spreadsheet'
 import { cellChanges } from './history'
 import type { Change } from './history'
 import type { CellChange } from './edit'
@@ -178,4 +190,50 @@ export function resizeRows(
   }
 
   return changes
+}
+
+/**
+ * The cells of a range drawn as one, and the values that cannot survive it.
+ *
+ * Only the corner's value is kept, because only the corner is drawn: Excel
+ * discards the rest and says so, and a merge that quietly kept values nobody
+ * can see would be a merge that loses them for good on the next save.
+ *
+ * The cells themselves are not removed — a merged range is still cells, still
+ * addressable — so unmerging gives back an empty grid rather than a hole.
+ */
+export function merge(sheet: OpenSheet, range: CellRange): Change[] {
+  const before = sheet.sheet.merges
+  const after = withMerge(before, range)
+  sheet.sheet.merges = after
+
+  const changes: Change[] = [{ kind: 'merges', sheet: sheet.path, before, after }]
+
+  const top = Math.min(range.from.row, range.to.row)
+  const left = Math.min(range.from.column, range.to.column)
+  const emptied: CellChange[] = []
+
+  for (let row = top; row <= Math.max(range.from.row, range.to.row); row += 1) {
+    for (let column = left; column <= Math.max(range.from.column, range.to.column); column += 1) {
+      if (row === top && column === left) continue
+
+      const existing = sheet.cells.rows.get(row)?.get(column) ?? null
+      if (existing === null || existing.value === null) continue
+
+      sheet.cells.rows.get(row)?.delete(column)
+      emptied.push({ sheet: sheet.path, row, column, before: existing, after: null })
+    }
+  }
+
+  return [...changes, ...cellChanges(emptied)]
+}
+
+/** The merges a range touches, taken away. */
+export function unmerge(sheet: OpenSheet, range: CellRange): Change[] {
+  const before = sheet.sheet.merges
+  const after = withoutMerges(before, range)
+  if (after.length === before.length) return []
+
+  sheet.sheet.merges = after
+  return [{ kind: 'merges', sheet: sheet.path, before, after }]
 }

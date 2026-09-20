@@ -7,7 +7,9 @@ import {
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { replaceSheetData } from './sheet-data'
 import { replaceColumns } from './columns'
+import { replaceMerges } from './merges'
 import type { SheetCells } from './cells'
+import type { CellRange } from './reference'
 import type { ColumnRange } from './worksheet'
 
 /**
@@ -37,6 +39,8 @@ export interface SheetToWrite {
    * own bytes rather than being rewritten into the same thing.
    */
   columns?: readonly ColumnRange[]
+  /** The merged ranges, where they may have changed; left out for none. */
+  merges?: readonly CellRange[]
 }
 
 const CALC_CHAIN_PART = 'xl/calcChain.xml'
@@ -73,12 +77,11 @@ export function writeWorkbook(
     const xml = getPartText(pkg, sheet.path)
     if (xml === undefined) continue
 
-    const withCells = replaceSheetData(xml, sheet.cells)
-    setPartText(
-      pkg,
-      sheet.path,
-      sheet.columns === undefined ? withCells : replaceColumns(withCells, sheet.columns),
-    )
+    let written = replaceSheetData(xml, sheet.cells)
+    if (sheet.columns !== undefined) written = replaceColumns(written, sheet.columns)
+    if (sheet.merges !== undefined) written = replaceMerges(written, sheet.merges)
+
+    setPartText(pkg, sheet.path, written)
   }
 
   if (options.edited === true) removeCalcChain(pkg)

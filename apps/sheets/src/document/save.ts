@@ -34,7 +34,9 @@ export async function workbookBytes(
       cells: sheet.cells,
       // Only when something was edited: an untouched sheet keeps the bytes of
       // its `<cols>` rather than being rewritten into the same thing.
-      ...(options.edited === true ? { columns: sheet.sheet.columns } : {}),
+      ...(options.edited === true
+        ? { columns: sheet.sheet.columns, merges: sheet.sheet.merges }
+        : {}),
     })),
     { edited: options.edited ?? false },
   )

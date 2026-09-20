@@ -1,5 +1,5 @@
 import { putCell } from '@orangery/ooxml-spreadsheet'
-import type { ColumnRange, RowProperties } from '@orangery/ooxml-spreadsheet'
+import type { CellRange, ColumnRange, RowProperties } from '@orangery/ooxml-spreadsheet'
 import type { GridSelection } from '@orangery/grid'
 import type { CellChange } from './edit'
 import type { OpenSheet, OpenWorkbook } from './workbook'
@@ -38,6 +38,7 @@ import type { OpenSheet, OpenWorkbook } from './workbook'
 export type Change =
   | { kind: 'cell'; cell: CellChange }
   | { kind: 'columns'; sheet: string; before: ColumnRange[]; after: ColumnRange[] }
+  | { kind: 'merges'; sheet: string; before: CellRange[]; after: CellRange[] }
   | {
       kind: 'row'
       sheet: string
@@ -153,6 +154,11 @@ function put(open: OpenWorkbook, change: Change, to: 'before' | 'after'): void {
 function restore(sheet: OpenSheet, change: Change, to: 'before' | 'after'): void {
   if (change.kind === 'columns') {
     sheet.sheet.columns = change[to]
+    return
+  }
+
+  if (change.kind === 'merges') {
+    sheet.sheet.merges = change[to]
     return
   }
 

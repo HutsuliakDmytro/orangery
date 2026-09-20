@@ -92,6 +92,7 @@ export type {
   HighlightOptions,
   HighlightValue,
 } from './highlight'
+export { mergeCovering, replaceMerges, withMerge, withoutMerges, writeMerges } from './merges'
 export { replaceColumns, widthOfColumnIn, withColumns, writeColumns } from './columns'
 export type { ColumnLook } from './columns'
 export { isColumnHidden, mergeAt, readWorksheet, widthOfColumn } from './worksheet'

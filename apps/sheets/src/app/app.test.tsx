@@ -861,3 +861,78 @@ describe('the rest of the toolbar', () => {
     expect(lookOf(8, 5).alignment?.wrapText).toBe(true)
   })
 })
+
+describe('cells drawn as one', () => {
+  const sheetNow = () => useWorkbookStore.getState().open?.sheets[0]
+  const cellAt = (row: number, column: number) =>
+    sheetNow()?.cells.rows.get(row)?.get(column) ?? null
+
+  const goTo = async (range: string) => {
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, `${range}{Enter}`)
+  }
+
+  it('merges what is selected and keeps only the corner’s value', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+    await goTo('A2:B2')
+
+    // A2 is January, B2 the figure beside it.
+    expect(cellAt(1, 1)).not.toBeNull()
+    await typist.click(screen.getByRole('button', { name: 'Merge cells' }))
+
+    expect(sheetNow()?.sheet.merges).toHaveLength(2)
+    expect(cellAt(1, 0)?.value).toBe('2')
+    // Excel discards the rest and says so; keeping a value nobody can see
+    // would lose it for good on the next save.
+    expect(cellAt(1, 1)).toBeNull()
+  })
+
+  it('says so when the cursor is inside one', async () => {
+    render(<App />)
+    await load()
+
+    // B1 to C1 is merged in the fixture.
+    await goTo('C1')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Merge cells' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+  })
+
+  it('gives the cells back, and takes the whole thing back on undo', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+    await goTo('B1')
+
+    await typist.click(screen.getByRole('button', { name: 'Merge cells' }))
+    expect(sheetNow()?.sheet.merges).toHaveLength(0)
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(sheetNow()?.sheet.merges).toHaveLength(1)
+  })
+
+  it('carries a merge into the file it saves', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+    await goTo('A3:B3')
+    await typist.click(screen.getByRole('button', { name: 'Merge cells' }))
+
+    const open = useWorkbookStore.getState().open
+    if (open === null) throw new Error('nothing open')
+
+    const again = await openWorkbook(await workbookBytes(open, { edited: true }))
+    expect(again.sheets[0]?.sheet.merges).toHaveLength(2)
+  })
+})

@@ -11,7 +11,7 @@ import {
   writeClipboard,
 } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
-import { reshape, resizeColumns, resizeRows } from '../document/structure'
+import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
 import { shownText } from '../document/shown'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
@@ -71,6 +71,8 @@ export interface WorkbookState {
   resize: (axis: BandChange['axis'], from: number, to: number, size: number | null) => void
   /** Hides what is selected, or brings it back. */
   hide: (axis: BandChange['axis'], hidden: boolean) => void
+  /** Draws what is selected as one cell, or gives the cells back. */
+  merge: (join: boolean) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   paste: () => Promise<void>
@@ -280,6 +282,31 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       open: redrawn(open, [sheet.path]),
       edited: true,
       history: recorded(useWorkbookStore.getState().history, { changes, selection }),
+    })
+  },
+
+  merge: (join) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const last = selection.ranges[selection.ranges.length - 1]
+    const bounds = boundsOf(last ?? { anchor: selection.active, focus: selection.active })
+    const range = {
+      sheet: null,
+      from: { row: bounds.top, column: bounds.left },
+      to: { row: bounds.bottom, column: bounds.right },
+    }
+
+    const changes = join ? merge(sheet, range) : unmerge(sheet, range)
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
     })
   },
 

@@ -42,6 +42,7 @@ function Shell() {
   const fill = useWorkbookStore((state) => state.fill)
   const format = useWorkbookStore((state) => state.format)
   const resize = useWorkbookStore((state) => state.resize)
+  const join = useWorkbookStore((state) => state.merge)
   const size = useWindowSize()
 
   useEffect(() => {
@@ -69,7 +70,7 @@ function Shell() {
       )}
 
       {sheet !== null && open !== null && (
-        <Toolbar open={open} sheet={sheet} selection={selection} onFormat={format} />
+        <Toolbar open={open} sheet={sheet} selection={selection} onFormat={format} onMerge={join} />
       )}
 
       {sheet !== null && (

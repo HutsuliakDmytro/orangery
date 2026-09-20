@@ -1,4 +1,4 @@
-import { resolveColor, resolveStyle } from '@orangery/ooxml-spreadsheet'
+import { mergeCovering, resolveColor, resolveStyle } from '@orangery/ooxml-spreadsheet'
 import type { LookChange, ResolvedStyle } from '@orangery/ooxml-spreadsheet'
 import type { GridSelection } from '@orangery/grid'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
@@ -20,6 +20,7 @@ export interface ToolbarProps {
   sheet: OpenSheet
   selection: GridSelection
   onFormat: (look: LookChange) => void
+  onMerge: (join: boolean) => void
 }
 
 /**
@@ -79,7 +80,7 @@ const FORMATS: { label: string; code: string | null }[] = [
   { label: 'Custom…', code: null },
 ]
 
-export function Toolbar({ open, sheet, selection, onFormat }: ToolbarProps) {
+export function Toolbar({ open, sheet, selection, onFormat, onMerge }: ToolbarProps) {
   const cell = sheet.cells.rows.get(selection.active.row)?.get(selection.active.column) ?? null
   const style: ResolvedStyle | null =
     open.styles === null ? null : resolveStyle(open.styles, cell?.style ?? null)
@@ -88,6 +89,10 @@ export function Toolbar({ open, sheet, selection, onFormat }: ToolbarProps) {
     const six = color === null ? null : resolveColor(color, open.palette)
     return six === null ? fallback : `#${six.length === 8 ? six.slice(2) : six}`
   }
+
+  // Whether the cursor is in a merge, which is what turns the button into an
+  // unmerge: one button, two meanings, as every spreadsheet has it.
+  const merged = mergeCovering(sheet.sheet.merges, selection.active) !== null
 
   const fill = style?.fill
   const filled =
@@ -195,6 +200,16 @@ export function Toolbar({ open, sheet, selection, onFormat }: ToolbarProps) {
         }}
       >
         <span aria-hidden>↵</span>
+      </Toggle>
+
+      <Toggle
+        label="Merge cells"
+        on={merged}
+        onClick={() => {
+          onMerge(!merged)
+        }}
+      >
+        <span aria-hidden>▭</span>
       </Toggle>
 
       <Divider />

@@ -9,8 +9,9 @@
 //! somebody typed into one cell has a handful of dependants, and repainting
 //! the other million would be the slowest possible way to be right.
 
-use std::collections::{HashMap, HashSet};
+use crate::fast::{FastMap, FastSet};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use crate::ast::Expr;
 use crate::date::DateSystem;
@@ -20,34 +21,41 @@ use crate::parser::{parse, ParseError};
 use crate::value::{Error, Value};
 
 /// What is in a cell: something typed, or something worked out.
+///
+/// The tree is shared rather than owned, because a recalculation has to hand
+/// it to the evaluator while the engine itself is borrowed — and copying a
+/// tree per formula per recalculation is a million allocations on a workbook
+/// of a million formulas, which is most of the time it takes. `Arc` rather
+/// than `Rc` because the engine is held by a window, and a window hands its
+/// state between threads.
 #[derive(Debug, Clone)]
 enum Content {
     Value(Value),
-    Formula { text: String, tree: Expr },
+    Formula { text: String, tree: Arc<Expr> },
 }
 
 #[derive(Default)]
 pub struct Engine {
-    contents: HashMap<CellId, Content>,
+    contents: FastMap<CellId, Content>,
     /// What each cell currently shows, formulas included.
-    values: HashMap<CellId, Value>,
+    values: FastMap<CellId, Value>,
     graph: Graph,
     /// How far each sheet reaches, for `A:A` and its kind.
-    extents: HashMap<String, (i64, i64)>,
+    extents: FastMap<String, (i64, i64)>,
     /// What time it is, as the workbook counts time.
     moment: f64,
     /// Which morning the workbook counts days from.
     system: DateSystem,
     /// For each formula that spilled, the cells it filled besides its own.
-    spills: HashMap<CellId, Vec<CellId>>,
+    spills: FastMap<CellId, Vec<CellId>>,
     /// And the other way round, so a cell can say whose answer it is showing.
-    spilled_from: HashMap<CellId, CellId>,
+    spilled_from: FastMap<CellId, CellId>,
     /// The rows nobody can see, and why.
     ///
     /// Not a fact about any cell's value, and not one the engine could work
     /// out: a filter and a hidden row are things done to a sheet. They are
     /// here because `SUBTOTAL` asks about them, and the window is what knows.
-    out_of_sight: HashMap<String, (HashSet<i64>, HashSet<i64>)>,
+    out_of_sight: FastMap<String, (FastSet<i64>, FastSet<i64>)>,
     /// Where `RAND` gets its answers.
     ///
     /// A sequence rather than a source of entropy: the seed comes from
@@ -190,12 +198,15 @@ impl Engine {
             cell.clone(),
             Content::Formula {
                 text: text.to_string(),
-                tree,
+                tree: Arc::new(tree),
             },
         );
         self.grow(sheet, row, column);
 
-        Ok(self.recalculate_from(&[cell]))
+        let mut changed = self.recalculate_from(std::slice::from_ref(&cell));
+        self.say_what_it_came_to(&mut changed, std::slice::from_ref(&cell));
+
+        Ok(changed)
     }
 
     /// A cell put in place without working anything out.
@@ -232,7 +243,7 @@ impl Engine {
             cell.clone(),
             Content::Formula {
                 text: text.to_string(),
-                tree,
+                tree: Arc::new(tree),
             },
         );
         self.values.insert(cell, cached);
@@ -269,8 +280,13 @@ impl Engine {
                 Edit::Formula(text) => match parse(&text) {
                     Ok(tree) => {
                         self.graph.set(cell.clone(), precedents_of(&tree, &cell.0));
-                        self.contents
-                            .insert(cell.clone(), Content::Formula { text, tree });
+                        self.contents.insert(
+                            cell.clone(),
+                            Content::Formula {
+                                text,
+                                tree: Arc::new(tree),
+                            },
+                        );
                         self.grow(&cell.0, cell.1, cell.2);
                     }
                     Err(_) => {
@@ -295,9 +311,26 @@ impl Engine {
             moved.push(cell);
         }
 
-        Applied {
-            changed: self.recalculate_from(&moved),
-            refused,
+        let mut changed = self.recalculate_from(&moved);
+        self.say_what_it_came_to(&mut changed, &moved);
+
+        Applied { changed, refused }
+    }
+
+    /// Makes sure a cell just written about is in the answer.
+    ///
+    /// A formula only reports itself when its value came out different from
+    /// what was there before — and a formula written into a cell that already
+    /// showed the same number would then report nothing at all, leaving the
+    /// window holding a cell it had deliberately blanked while it waited.
+    fn say_what_it_came_to(&self, changed: &mut Changed, cells: &[CellId]) {
+        for cell in cells {
+            if changed.cells.iter().any(|(at, _)| at == cell) {
+                continue;
+            }
+
+            let value = self.values.get(cell).cloned().unwrap_or(Value::Blank);
+            changed.cells.push((cell.clone(), value));
         }
     }
 
@@ -369,12 +402,18 @@ impl Engine {
         let mut result = Changed::default();
 
         // The cell that was typed into has changed by definition; the rest
-        // have to be worked out to find out.
+        // have to be worked out to find out. A formula among them is left to
+        // the walk, which reports it if its answer came out different —
+        // otherwise a full recalculation would report every formula in the
+        // workbook twice, once as it was and once as it is.
         for cell in changed {
-            if let Some(value) = self.values.get(cell) {
-                result.cells.push((cell.clone(), value.clone()));
-            } else {
-                result.cells.push((cell.clone(), Value::Blank));
+            if self.graph.precedents_of(cell).is_some() {
+                continue;
+            }
+
+            match self.values.get(cell) {
+                Some(value) => result.cells.push((cell.clone(), value.clone())),
+                None => result.cells.push((cell.clone(), Value::Blank)),
             }
         }
 
@@ -404,7 +443,7 @@ impl Engine {
         // are worked out, not reported — a volatile cell whose answer came
         // out the same is not a cell that changed.
         let mut seeds: Vec<CellId> = changed.to_vec();
-        let already: HashSet<CellId> = changed.iter().cloned().collect();
+        let already: FastSet<CellId> = changed.iter().cloned().collect();
         seeds.extend(
             self.graph
                 .volatile()

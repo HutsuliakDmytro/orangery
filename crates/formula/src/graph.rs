@@ -10,7 +10,7 @@
 //! interval tree when the sheets are large (`PLAN.md`, phase 3.1) — the shape
 //! of the answer does not change, only how quickly it is found.
 
-use std::collections::{HashMap, HashSet};
+use crate::fast::{FastMap, FastSet};
 
 use crate::ast::Expr;
 use crate::reference::{Reference, ReferenceKind};
@@ -139,17 +139,86 @@ fn add(reference: &Reference, sheet: &str, found: &mut Precedents) {
     }
 }
 
+/// Where the rectangles are, so that "which of them covers this cell" is not
+/// a walk through all of them.
+///
+/// A sheet of ten thousand sums has ten thousand rectangles, and a scan
+/// through all of them for every cell being recalculated is the difference
+/// between a spreadsheet that answers a keystroke and one that thinks about
+/// it for three seconds. Nearly every rectangle in a real workbook is a
+/// column or a few, so they are filed under the columns they cover; the few
+/// too wide to file — a whole row, `A:Z`, a block of a thousand columns — go
+/// in one list that every lookup reads as well.
+#[derive(Debug, Default)]
+struct Rectangles {
+    by_column: FastMap<(String, i64), Vec<(Area, CellId)>>,
+    wide: Vec<(Area, CellId)>,
+}
+
+/// Wider than this and a rectangle is filed once rather than per column.
+const TOO_WIDE: i64 = 64;
+
+impl Rectangles {
+    fn add(&mut self, area: Area, dependent: CellId) {
+        if area.right - area.left >= TOO_WIDE {
+            self.wide.push((area, dependent));
+            return;
+        }
+
+        for column in area.left..=area.right {
+            self.by_column
+                .entry((area.sheet.clone(), column))
+                .or_default()
+                .push((area.clone(), dependent.clone()));
+        }
+    }
+
+    /// Takes out everything one formula covers, told where to look.
+    fn remove(&mut self, areas: &[Area], dependent: &CellId) {
+        for area in areas {
+            if area.right - area.left >= TOO_WIDE {
+                continue;
+            }
+
+            for column in area.left..=area.right {
+                if let Some(filed) = self.by_column.get_mut(&(area.sheet.clone(), column)) {
+                    filed.retain(|(_, held)| held != dependent);
+                }
+            }
+        }
+
+        self.wide.retain(|(_, held)| held != dependent);
+    }
+
+    /// The formulas whose rectangles cover a cell.
+    fn covering(&self, cell: &CellId, found: &mut FastSet<CellId>) {
+        if let Some(filed) = self.by_column.get(&(cell.0.clone(), cell.2)) {
+            for (area, dependent) in filed {
+                if area.contains(cell) {
+                    found.insert(dependent.clone());
+                }
+            }
+        }
+
+        for (area, dependent) in &self.wide {
+            if area.contains(cell) {
+                found.insert(dependent.clone());
+            }
+        }
+    }
+}
+
 /// Which formula depends on what, and the other way round.
 #[derive(Debug, Default)]
 pub struct Graph {
     /// For each cell, the formulas that name it directly.
-    dependents: HashMap<CellId, HashSet<CellId>>,
+    dependents: FastMap<CellId, FastSet<CellId>>,
     /// For each formula, the rectangles it covers — asked by intersection.
-    areas: Vec<(Area, CellId)>,
+    areas: Rectangles,
     /// What each formula reaches, so it can be taken out again cleanly.
-    precedents: HashMap<CellId, Precedents>,
+    precedents: FastMap<CellId, Precedents>,
     /// The formulas that have to be worked out on every recalculation.
-    volatile: HashSet<CellId>,
+    volatile: FastSet<CellId>,
 }
 
 impl Graph {
@@ -169,7 +238,7 @@ impl Graph {
                 .insert(cell.clone());
         }
         for area in &precedents.areas {
-            self.areas.push((area.clone(), cell.clone()));
+            self.areas.add(area.clone(), cell.clone());
         }
         if precedents.volatile {
             self.volatile.insert(cell.clone());
@@ -186,21 +255,17 @@ impl Graph {
                     set.remove(cell);
                 }
             }
+
+            self.areas.remove(&before.areas, cell);
         }
 
-        self.areas.retain(|(_, dependent)| dependent != cell);
         self.volatile.remove(cell);
     }
 
     /// The formulas that name a cell, directly.
     pub fn dependents_of(&self, cell: &CellId) -> Vec<CellId> {
-        let mut found: HashSet<CellId> = self.dependents.get(cell).cloned().unwrap_or_default();
-
-        for (area, dependent) in &self.areas {
-            if area.contains(cell) {
-                found.insert(dependent.clone());
-            }
-        }
+        let mut found: FastSet<CellId> = self.dependents.get(cell).cloned().unwrap_or_default();
+        self.areas.covering(cell, &mut found);
 
         found.into_iter().collect()
     }
@@ -227,7 +292,7 @@ impl Graph {
     /// silently: Excel warns about a circular reference and sets those cells
     /// to nought, and the warning is the caller's to show.
     pub fn order_from(&self, changed: &[CellId]) -> Recalculation {
-        let mut affected: HashSet<CellId> = HashSet::new();
+        let mut affected: FastSet<CellId> = FastSet::default();
         let mut queue: Vec<CellId> = changed.to_vec();
 
         // A formula that has just been written is one of the things that has
@@ -249,13 +314,21 @@ impl Graph {
 
         // Kahn's algorithm over the affected set: a formula is ready when
         // everything it depends on inside the set has been done.
-        let mut waiting: HashMap<CellId, usize> = HashMap::new();
+        //
+        // Counted forwards — for each affected cell, whatever depends on it —
+        // rather than backwards. Asking each formula "how many of the cells
+        // you cover are being recalculated?" means asking a rectangle about
+        // every cell in the set, once per formula; a sheet of ten thousand
+        // sums then spends three seconds on one keystroke.
+        let mut waiting: FastMap<CellId, usize> =
+            affected.iter().map(|cell| (cell.clone(), 0usize)).collect();
+
         for cell in &affected {
-            let count = self
-                .precedents_of(cell)
-                .map(|precedents| self.inside(precedents, &affected))
-                .unwrap_or(0);
-            waiting.insert(cell.clone(), count);
+            for dependent in self.dependents_of(cell) {
+                if let Some(count) = waiting.get_mut(&dependent) {
+                    *count += 1;
+                }
+            }
         }
 
         let mut ready: Vec<CellId> = waiting
@@ -284,7 +357,7 @@ impl Graph {
             ready.extend(freed);
         }
 
-        let done: HashSet<CellId> = order.iter().cloned().collect();
+        let done: FastSet<CellId> = order.iter().cloned().collect();
         let mut circular: Vec<CellId> = affected
             .into_iter()
             .filter(|cell| !done.contains(cell))
@@ -292,27 +365,6 @@ impl Graph {
         circular.sort();
 
         Recalculation { order, circular }
-    }
-
-    /// How many of a formula's precedents are themselves being recalculated.
-    fn inside(&self, precedents: &Precedents, affected: &HashSet<CellId>) -> usize {
-        let mut count = 0;
-
-        for cell in &precedents.cells {
-            if affected.contains(cell) {
-                count += 1;
-            }
-        }
-
-        for area in &precedents.areas {
-            for cell in affected {
-                if area.contains(cell) {
-                    count += 1;
-                }
-            }
-        }
-
-        count
     }
 }
 

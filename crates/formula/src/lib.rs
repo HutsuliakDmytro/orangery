@@ -13,6 +13,7 @@ pub mod ast;
 pub mod date;
 pub mod engine;
 pub mod eval;
+pub mod fast;
 pub mod functions;
 pub mod graph;
 pub mod lexer;

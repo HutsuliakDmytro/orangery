@@ -2,9 +2,10 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { compareXml, describeDifferences, getPartText, readPackage } from '@orangery/ooxml-core'
-import { cellAt } from '@orangery/ooxml-spreadsheet'
+import { cellAt, putCell } from '@orangery/ooxml-spreadsheet'
 import { openWorkbook } from './workbook'
 import { workbookBytes } from './save'
+import { applyEdit } from './edit'
 
 /**
  * A workbook opened and put back.
@@ -144,5 +145,51 @@ describe('a workbook that was edited', () => {
     expect(sheet).toContain('state="frozen"')
     expect(sheet).toContain('<cfRule type="cellIs"')
     expect(sheet).toContain('<drawing r:id="rId1"/>')
+  })
+})
+
+describe('a formula somebody typed', () => {
+  /**
+   * The part of a formula that has to survive the file.
+   *
+   * A workbook keeps both halves of a formula cell: the formula, so it can be
+   * worked out again, and the last number it came to, so that every other
+   * program shows a figure without recalculating anything. A save that kept
+   * only one of them would be a file that opened blank in Excel, or one that
+   * could never be edited again.
+   */
+  const withFormula = async () => {
+    const open = await openWorkbook(original)
+    const sheet = open.sheets[0]
+    if (sheet === undefined) throw new Error('the fixture has no sheets')
+
+    applyEdit(open, sheet, { row: 20, column: 1 }, '=1+1')
+    // What the engine would have put back, which is what the file records.
+    const cell = cellAt(sheet.cells, { row: 20, column: 1 })
+    if (cell !== null) putCell(sheet.cells, { ...cell, type: 'n', value: '2' })
+
+    return await openWorkbook(await workbookBytes(open, { edited: true }))
+  }
+
+  it('is still a formula when the file is opened again', async () => {
+    const again = await withFormula()
+    const sheet = again.sheets[0]
+    if (sheet === undefined) throw new Error('the saved workbook has no sheets')
+
+    expect(cellAt(sheet.cells, { row: 20, column: 1 })).toMatchObject({
+      formula: { text: '1+1' },
+      value: '2',
+    })
+  })
+
+  it('takes the calculation chain out, because it is no longer true', async () => {
+    const open = await openWorkbook(original)
+    const sheet = open.sheets[0]
+    if (sheet === undefined) throw new Error('the fixture has no sheets')
+
+    applyEdit(open, sheet, { row: 20, column: 1 }, '=1+1')
+    const saved = await readPackage(await workbookBytes(open, { edited: true }), 'xl/workbook.xml')
+
+    expect(saved.parts.has('xl/calcChain.xml')).toBe(false)
   })
 })

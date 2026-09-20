@@ -30,7 +30,7 @@ import {
   wholeRows,
   withRange,
 } from './selection'
-import type { Direction, GridSelection, Order } from './selection'
+import type { Direction, GridRange, GridSelection, Order } from './selection'
 import type { CellBorders, CellStyle } from './cell-style'
 import { ICON_GUTTER, drawIcon } from './icon'
 import { drawCellText } from './text'
@@ -140,6 +140,16 @@ export interface DataGridProps {
   /** Called when a filter arrow is clicked, with the cell it is on. */
   onFilterClick?: (cell: CellAddress) => void
   /**
+   * Called when the fill handle is dragged, with what was dragged and how far.
+   *
+   * The little square at the corner of a selection. The grid owns the gesture
+   * — it is geometry — and the caller owns the answer to what 1, 2 goes on
+   * with, which is a question about values rather than about a grid.
+   *
+   * Without it there is no handle, which is what the chart data editor wants.
+   */
+  onFillSeries?: (from: GridRange, to: GridRange) => void
+  /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
    * Folded into the measurements rather than applied to the canvas, so that
@@ -156,6 +166,66 @@ export interface DataGridProps {
 
 /** The font the grid writes in where a cell does not say otherwise. */
 const BASE_FONT = '12px -apple-system, system-ui, sans-serif'
+
+/** The side of the little square at the corner of a selection. */
+const HANDLE = 6
+
+/**
+ * A fill's reach, kept to the axis it has gone furthest along.
+ *
+ * A drag that went down and across at once would have no order to fill in —
+ * which of the two directions the series runs in would be anybody's guess —
+ * so the larger of the two wins and the other is left where it was.
+ */
+function straightened(
+  bounds: { top: number; bottom: number; left: number; right: number },
+  to: CellAddress,
+): CellAddress {
+  const down = to.row > bounds.bottom ? to.row - bounds.bottom : bounds.top - to.row
+  const across = to.column > bounds.right ? to.column - bounds.right : bounds.left - to.column
+
+  return down >= across
+    ? { row: to.row, column: Math.min(Math.max(to.column, bounds.left), bounds.right) }
+    : { row: Math.min(Math.max(to.row, bounds.top), bounds.bottom), column: to.column }
+}
+
+/** The corner of the selection a fill starts from, or ends at. */
+function boundsCorner(selection: GridSelection, which: 'first' | 'last'): CellAddress {
+  const bounds = boundsOf(lastRange(selection))
+  return which === 'first'
+    ? { row: bounds.top, column: bounds.left }
+    : { row: bounds.bottom, column: bounds.right }
+}
+
+/**
+ * Where the fill handle sits, which is also where it is taken hold of.
+ *
+ * Half on and half off the corner of the selection, as every spreadsheet
+ * draws it: a square wholly inside the last cell reads as part of the cell,
+ * and one wholly outside reads as belonging to the cell beyond.
+ */
+function handleBox(
+  metrics: GridMetrics,
+  view: Viewport,
+  selection: GridSelection,
+  counts: { rows: number; columns: number },
+  frozen: FrozenPanes | null,
+  zoom: number,
+): { x: number; y: number; size: number } {
+  const corner = boundsCorner(selection, 'last')
+  const last = rectangleOfCell(
+    metrics,
+    view,
+    {
+      row: Math.min(corner.row, counts.rows - 1),
+      column: Math.min(corner.column, counts.columns - 1),
+    },
+    frozen,
+  )
+
+  const size = HANDLE * zoom
+  return { x: last.x + last.width - size / 2, y: last.y + last.height - size / 2, size }
+}
 
 /**
  * How many filled cells an auto-fit looks at.
@@ -305,6 +375,7 @@ export function DataGrid({
   onFill,
   onResize,
   onFilterClick,
+  onFillSeries,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -323,6 +394,12 @@ export function DataGrid({
 
   /** The edge being dragged, and where the pointer took hold of it. */
   const resizing = useRef<{ axis: 'row' | 'column'; index: number; from: number } | null>(null)
+
+  /** The range the fill handle is being dragged out of, while it is. */
+  const filling = useRef<GridRange | null>(null)
+
+  /** How far the fill has been dragged, which is drawn while it lasts. */
+  const [fillTo, setFillTo] = useState<CellAddress | null>(null)
 
   const selectedCells = useMemo(() => selectedCount(selection), [selection])
   const [editing, setEditing] = useState<{ cell: CellAddress; text: string } | null>(null)
@@ -673,6 +750,30 @@ export function DataGrid({
     context.strokeStyle = COLORS.selection
     context.lineWidth = 2
     context.strokeRect(activeRect.x, activeRect.y, activeRect.width, activeRect.height)
+
+    if (onFillSeries !== undefined) {
+      // How far the drag has reached, shown while it is happening: a fill
+      // with no outline is a fill people do twice.
+      if (fillTo !== null) {
+        const reach = rectangleOfCell(metrics, view, fillTo, frozen)
+        const start = rectangleOfCell(metrics, view, boundsCorner(selection, 'first'), frozen)
+
+        context.strokeStyle = COLORS.selection
+        context.lineWidth = 1
+        context.setLineDash([3, 2])
+        context.strokeRect(
+          Math.min(start.x, reach.x),
+          Math.min(start.y, reach.y),
+          Math.abs(reach.x + reach.width - start.x),
+          Math.abs(reach.y + reach.height - start.y),
+        )
+        context.setLineDash([])
+      }
+
+      const box = handleBox(metrics, view, selection, { rows, columns }, frozen, zoom)
+      context.fillStyle = COLORS.selection
+      context.fillRect(box.x, box.y, box.size, box.size)
+    }
   }, [
     columnHeader,
     columns,
@@ -684,10 +785,13 @@ export function DataGrid({
     rows,
     scroll.x,
     scroll.y,
+    fillTo,
+    onFillSeries,
     selected,
     selectedCells,
     selection,
     styleAt,
+    zoom,
     valueAt,
     width,
     zoom,
@@ -990,6 +1094,22 @@ export function DataGrid({
           const counts = { rows, columns }
           const adding = event.metaKey || event.ctrlKey
 
+          // The handle before anything else: it sits over the corner cell, and
+          // a click on it is not a click on that cell.
+          if (onFillSeries !== undefined) {
+            const square = handleBox(metrics, viewport, selection, counts, frozen, zoom)
+            if (
+              point.x >= square.x &&
+              point.x <= square.x + square.size &&
+              point.y >= square.y &&
+              point.y <= square.y + square.size
+            ) {
+              filling.current = lastRange(selection)
+              holdPointer(event.currentTarget, event.pointerId, true)
+              return
+            }
+          }
+
           // An edge before a header: the two gestures start a few points
           // apart, and taking hold of the edge is the more particular of them.
           const handle =
@@ -1052,6 +1172,13 @@ export function DataGrid({
           else move(cell)
         }}
         onPointerUp={(event) => {
+          const reaching = filling.current
+          if (reaching !== null && fillTo !== null && onFillSeries !== undefined) {
+            onFillSeries(reaching, { anchor: fillTo, focus: fillTo })
+          }
+
+          filling.current = null
+          setFillTo(null)
           dragging.current = false
           resizing.current = null
           holdPointer(event.currentTarget, event.pointerId, false)
@@ -1063,6 +1190,38 @@ export function DataGrid({
           // The edge before the header, as on the way down: the two gestures
           // start a few points apart, and this is the more particular of them.
           const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+
+          // The handle filled to the end of the table beside it, which is the
+          // gesture for a column of a thousand rows that nobody wants to drag.
+          if (onFillSeries !== undefined) {
+            const square = handleBox(metrics, viewport, selection, { rows, columns }, frozen, zoom)
+            if (
+              point.x >= square.x &&
+              point.x <= square.x + square.size &&
+              point.y >= square.y &&
+              point.y <= square.y + square.size
+            ) {
+              const range = lastRange(selection)
+              const bounds = boundsOf(range)
+              const beside = bounds.left > 0 ? bounds.left - 1 : bounds.right + 1
+
+              let last = bounds.bottom
+              while (
+                last + 1 < rows &&
+                (valueAt({ row: last + 1, column: beside }) ?? '') !== '' &&
+                (valueAt({ row: last + 1, column: bounds.left }) ?? '') === ''
+              ) {
+                last += 1
+              }
+
+              if (last > bounds.bottom) {
+                const to = { row: last, column: bounds.right }
+                onFillSeries(range, { anchor: to, focus: to })
+              }
+              return
+            }
+          }
+
           const handle =
             onResize === undefined
               ? null
@@ -1080,6 +1239,15 @@ export function DataGrid({
           if (box === undefined) return
 
           const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+
+          const reaching = filling.current
+          if (reaching !== null) {
+            const to = cellAtPoint(metrics, viewport, point, { rows, columns }, frozen)
+            // Along one axis at a time, as every spreadsheet does: a fill that
+            // went both ways at once would have no order to go in.
+            if (to !== null) setFillTo(straightened(boundsOf(reaching), to))
+            return
+          }
 
           const held = resizing.current
           if (held !== null && onResize !== undefined) {

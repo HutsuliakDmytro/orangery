@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { boundsOf, singleCell } from '@orangery/grid'
-import type { CellAddress, GridSelection } from '@orangery/grid'
+import type { CellAddress, GridRange, GridSelection } from '@orangery/grid'
 import type { BandChange, FilterCriteria, LookChange } from '@orangery/ooxml-spreadsheet'
 import {
   blockFrom,
@@ -13,6 +13,7 @@ import {
 } from '../document/clipboard'
 import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
+import { fillCells } from '../document/fill'
 import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
 import { columnNamesIn, looksLikeHeader, sortRows, tableToSort } from '../document/sort'
 import type { SortKey } from '../document/sort'
@@ -86,6 +87,13 @@ export interface WorkbookState {
   fill: (text: string) => void
   /** Changes how everything selected looks, likewise. */
   format: (look: LookChange) => void
+  /**
+   * Drags the corner of a selection out, and fills what it passed over.
+   *
+   * One step in the history however many cells it touched, because what
+   * somebody did was drag a handle once.
+   */
+  fillSeries: (from: GridRange, to: GridRange) => void
   /** Puts rows or columns in where the selection is, or takes them out. */
   reshape: (axis: BandChange['axis'], insert: boolean) => void
   /** How wide a column is, or how tall a row; null for the sheet's own. */
@@ -228,6 +236,42 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       open: redrawn(open, [sheet.path]),
       edited: true,
       history: recorded(history, { changes: cellChanges(changes), selection }),
+    })
+  },
+
+  fillSeries: (from, to) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const bounds = boundsOf(from)
+    const reach = boundsOf(to)
+    const changes = fillCells(open, sheet, {
+      from: bounds,
+      to: { row: reach.bottom, column: reach.right },
+    })
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes: cellChanges(changes), selection }),
+      // What was filled is what is selected afterwards, the whole of it: the
+      // cells that were dragged and the cells they were dragged over.
+      selection: {
+        ranges: [
+          {
+            anchor: { row: bounds.top, column: bounds.left },
+            focus: {
+              row: Math.max(reach.bottom, bounds.bottom),
+              column: Math.max(reach.right, bounds.right),
+            },
+          },
+        ],
+        active: { row: bounds.top, column: bounds.left },
+      },
     })
   },
 

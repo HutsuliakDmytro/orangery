@@ -111,6 +111,9 @@ const context = {
   },
   measureText: (text: string) => ({ width: text.length * 7 }),
   clearRect: () => undefined,
+  // Dashes are a look rather than a shape; the fake takes them and forgets
+  // them, which is enough for anything asserting about what was drawn.
+  setLineDash: () => undefined,
   fillRect: (x: number, y: number, width: number, height: number) => {
     recorded.fills.push({ x, y, width, height, style: context.fillStyle })
   },

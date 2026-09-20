@@ -991,3 +991,99 @@ describe('an edge somebody double-clicks', () => {
     expect(await screen.findByRole('textbox')).toBeDefined()
   })
 })
+
+describe('the little square at the corner of a selection', () => {
+  const surfaceOf = (container: HTMLElement) => {
+    const surface = container.querySelector('[role="grid"] > div')
+    if (surface === null) throw new Error('the grid has no surface')
+    return surface
+  }
+
+  /** The middle of a cell, for a grid of 84 by 22 cells under 44 by 22 headers. */
+  const at = (row: number, column: number) => ({
+    clientX: 44 + column * 84 + 10,
+    clientY: 22 + row * 22 + 10,
+  })
+
+  /** The corner of the cell the handle hangs off. */
+  const handleAt = (row: number, column: number) => ({
+    clientX: 44 + (column + 1) * 84,
+    clientY: 22 + (row + 1) * 22,
+  })
+
+  it('is drawn where a selection ends', () => {
+    grid({ onFillSeries: vi.fn() })
+
+    const square = recorded.fills.find((one) => one.style === '#FF7A00' && one.width === 6)
+    expect(square).toBeDefined()
+  })
+
+  it('is not drawn at all where nothing can be filled', () => {
+    grid()
+    expect(recorded.fills.some((one) => one.style === '#FF7A00' && one.width === 6)).toBe(false)
+  })
+
+  it('reports what was dragged and how far', () => {
+    const filled = vi.fn()
+    const { container } = grid({ onFillSeries: filled })
+    const surface = surfaceOf(container)
+
+    fireEvent.pointerDown(surface, handleAt(0, 0))
+    fireEvent.pointerMove(surface, at(2, 0))
+    fireEvent.pointerUp(surface, at(2, 0))
+
+    expect(filled).toHaveBeenCalledTimes(1)
+    expect(filled.mock.calls[0]?.[0]).toMatchObject({ anchor: { row: 0, column: 0 } })
+    expect(filled.mock.calls[0]?.[1]).toMatchObject({ focus: { row: 2, column: 0 } })
+  })
+
+  it('keeps to one direction, because a series has to have an order', () => {
+    const filled = vi.fn()
+    const { container } = grid({ onFillSeries: filled })
+    const surface = surfaceOf(container)
+
+    // Three rows down and one column across: down wins, and the column stays.
+    fireEvent.pointerDown(surface, handleAt(0, 0))
+    fireEvent.pointerMove(surface, at(2, 1))
+    fireEvent.pointerUp(surface, at(2, 1))
+
+    expect(filled.mock.calls[0]?.[1]).toMatchObject({ focus: { row: 2, column: 0 } })
+  })
+
+  it('does not select the cell it is sitting on', () => {
+    const chosen = vi.fn()
+    const { container } = grid({ onFillSeries: vi.fn(), onSelectionChange: chosen })
+
+    fireEvent.pointerDown(surfaceOf(container), handleAt(0, 0))
+    expect(chosen).not.toHaveBeenCalled()
+  })
+
+  it('reports nothing for a drag that went nowhere', () => {
+    const filled = vi.fn()
+    const { container } = grid({ onFillSeries: filled })
+    const surface = surfaceOf(container)
+
+    fireEvent.pointerDown(surface, handleAt(0, 0))
+    fireEvent.pointerUp(surface, handleAt(0, 0))
+
+    expect(filled).not.toHaveBeenCalled()
+  })
+
+  it('fills to the end of the table beside it on a double click', () => {
+    // The gesture for a column of a thousand rows nobody wants to drag.
+    const filled = vi.fn()
+    const { container } = grid({
+      onFillSeries: filled,
+      valueAt: ({ row, column }) =>
+        column === 0 ? `row ${String(row)}` : column === 1 ? '' : null,
+      selection: {
+        ranges: [{ anchor: { row: 0, column: 1 }, focus: { row: 0, column: 1 } }],
+        active: { row: 0, column: 1 },
+      },
+    })
+
+    fireEvent.doubleClick(surfaceOf(container), handleAt(0, 1))
+
+    expect(filled.mock.calls[0]?.[1]).toMatchObject({ focus: { row: 2, column: 1 } })
+  })
+})

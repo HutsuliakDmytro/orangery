@@ -56,6 +56,7 @@ function Shell() {
   const resize = useWorkbookStore((state) => state.resize)
   const join = useWorkbookStore((state) => state.merge)
   const filterBy = useWorkbookStore((state) => state.filterBy)
+  const fillSeries = useWorkbookStore((state) => state.fillSeries)
 
   /** The header cell whose filter list is open, if one is. */
   const [filtering, setFiltering] = useState<CellAddress | null>(null)
@@ -237,6 +238,7 @@ function Shell() {
             onClear={clear}
             onFill={fill}
             onFilterClick={setFiltering}
+            onFillSeries={fillSeries}
             onResize={(axis, index, size) => {
               // Points on the screen, characters in the file: a column's width
               // is counted in the widest digit of the default font, which is

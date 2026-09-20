@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DataGrid } from '@orangery/grid'
-import type { CellAddress, CellStyle, GridSelection } from '@orangery/grid'
+import type { CellAddress, CellStyle, GridRange, GridSelection } from '@orangery/grid'
 import {
   cellAt,
   extentOf,
@@ -70,6 +70,8 @@ export interface SheetViewProps {
   onResize?: (axis: 'row' | 'column', index: number, size: number) => void
   /** Called when a filter arrow is clicked, with the cell it sits on. */
   onFilterClick?: (cell: CellAddress) => void
+  /** Called when the fill handle is dragged, with what and how far. */
+  onFillSeries?: (from: GridRange, to: GridRange) => void
 }
 
 export function SheetView({
@@ -84,6 +86,7 @@ export function SheetView({
   onFill,
   onResize,
   onFilterClick,
+  onFillSeries,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -423,6 +426,7 @@ export function SheetView({
       {...(filled === undefined ? {} : { onFill: filled })}
       {...(onResize === undefined ? {} : { onResize })}
       {...(onFilterClick === undefined ? {} : { onFilterClick })}
+      {...(onFillSeries === undefined ? {} : { onFillSeries })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any

@@ -439,6 +439,34 @@ pub fn formula_value(
     Ok(Held::from(&engine.value(&sheet, row, column)))
 }
 
+/// One function, as a window offering it to somebody needs it.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FunctionSummary {
+    pub name: String,
+    pub least: usize,
+    /// Nothing for the ones that take as many as they are given, like `SUM`.
+    pub most: Option<usize>,
+    pub volatile: bool,
+}
+
+/// Every function the engine has.
+///
+/// Asked for rather than written out in the interface, because a list kept
+/// in two places is a list that says `XLOOKUP` exists on the day it stops
+/// existing.
+#[tauri::command]
+pub fn formula_functions() -> Vec<FunctionSummary> {
+    formula::functions::all()
+        .map(|function| FunctionSummary {
+            name: function.name.to_string(),
+            least: function.min_arguments,
+            most: function.max_arguments,
+            volatile: function.volatile,
+        })
+        .collect()
+}
+
 /// A workbook closed: the engine goes with the window.
 #[tauri::command]
 pub fn formula_close(books: tauri::State<'_, Workbooks>, book: String) -> Result<(), String> {

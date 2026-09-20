@@ -271,6 +271,15 @@ pub fn table(argument: Option<&Expr>, context: &Context<'_>) -> Result<Array, Er
     }
 }
 
+/// Every function this engine has, for whoever is offering them to somebody.
+///
+/// The window needs the list to suggest names as they are typed, and there is
+/// no second place to keep it: a list written out in the interface would be a
+/// list that says `XLOOKUP` exists on the day it is removed.
+pub fn all() -> impl Iterator<Item = &'static Function> {
+    FUNCTIONS.iter().copied()
+}
+
 /// Every argument, worked out.
 pub fn values(arguments: &[Expr], context: &Context<'_>) -> Vec<Value> {
     arguments

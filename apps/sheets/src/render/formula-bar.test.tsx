@@ -77,3 +77,63 @@ describe('the formula bar', () => {
     expect(box().value).toBe('42')
   })
 })
+
+describe('the functions it offers while a name is being typed', () => {
+  const functions = [
+    { name: 'SUM', least: 1, most: null, volatile: false },
+    { name: 'SUMIF', least: 2, most: 3, volatile: false },
+    { name: 'SUMIFS', least: 3, most: null, volatile: false },
+  ]
+
+  const offering = (text = '') =>
+    render(<FormulaBar text={text} functions={functions} onCommit={vi.fn()} />)
+
+  it('offers what a half-typed name could become', async () => {
+    const user = userEvent.setup()
+    offering()
+
+    await user.click(box())
+    await user.keyboard('=SUM')
+
+    expect(screen.getByRole('list', { name: 'Functions' })).toBeTruthy()
+    expect(screen.getAllByRole('button').map((one) => one.textContent)).toEqual([
+      'SUM1 or more arguments',
+      'SUMIF2 to 3 arguments',
+      'SUMIFS3 or more arguments',
+    ])
+  })
+
+  it('offers nothing in a cell that is not a formula', async () => {
+    const user = userEvent.setup()
+    offering()
+
+    await user.click(box())
+    await user.keyboard('Sum of things')
+
+    expect(screen.queryByRole('list', { name: 'Functions' })).toBeNull()
+  })
+
+  it('puts the chosen one in rather than committing half a formula', async () => {
+    // Which is what every spreadsheet does, and what the fingers expect.
+    const user = userEvent.setup()
+    const committed = vi.fn()
+    render(<FormulaBar text="" functions={functions} onCommit={committed} />)
+
+    await user.click(box())
+    await user.keyboard('=SUM{ArrowDown}{Enter}')
+
+    expect(box().value).toBe('=SUMIF(')
+    expect(committed).not.toHaveBeenCalled()
+  })
+
+  it('commits once the list has gone', async () => {
+    const user = userEvent.setup()
+    const committed = vi.fn()
+    render(<FormulaBar text="" functions={functions} onCommit={committed} />)
+
+    await user.click(box())
+    await user.keyboard('=SUM(A1){Enter}')
+
+    expect(committed).toHaveBeenCalledWith('=SUM(A1)')
+  })
+})

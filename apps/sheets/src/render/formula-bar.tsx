@@ -1,4 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { chosen, functionsKnownSoFar, knownFunctions, shape, suggest } from '../document/suggest'
+import type { KnownFunction } from '../document/suggest'
 
 /**
  * The strip that shows what is in the cell rather than what it looks like.
@@ -12,6 +14,10 @@ import { useRef, useState } from 'react'
  * the reference box beside it does, and commits the same way the cell editor
  * does: Enter puts it in, Escape puts it back, and clicking away puts it in —
  * because a person who typed something and looked elsewhere meant to type it.
+ *
+ * While a name is being typed it offers the functions it could become. The
+ * list comes from the engine, so it is the functions this program actually
+ * has rather than the ones somebody wrote down in an interface once.
  */
 
 export interface FormulaBarProps {
@@ -19,12 +25,22 @@ export interface FormulaBarProps {
   text: string
   /** A cell on a sheet nobody can edit is shown and not offered. */
   editable?: boolean
+  /**
+   * The functions to offer, for a caller that has its own list.
+   *
+   * The window has none: it asks the engine, which is the only place the
+   * list exists. A test has one, which is the whole reason this is a prop.
+   */
+  functions?: readonly KnownFunction[]
   onCommit: (text: string) => void
 }
 
-export function FormulaBar({ text, editable = true, onCommit }: FormulaBarProps) {
+export function FormulaBar({ text, editable = true, functions, onCommit }: FormulaBarProps) {
   const [typed, setTyped] = useState(text)
   const [followed, setFollowed] = useState(text)
+  const [caret, setCaret] = useState(0)
+  const [highlighted, setHighlighted] = useState(0)
+  const box = useRef<HTMLInputElement>(null)
   /**
    * Whether the box is being left on purpose.
    *
@@ -36,6 +52,12 @@ export function FormulaBar({ text, editable = true, onCommit }: FormulaBarProps)
    */
   const abandoning = useRef(false)
 
+  // Asked for once. The list does not change while the program is running,
+  // and asking per keystroke would be a message to Rust per keystroke.
+  useEffect(() => {
+    void knownFunctions()
+  }, [])
+
   // Adjusted while rendering rather than in an effect: an effect would show
   // the previous cell's contents for a frame and then correct itself, which
   // is a flicker on every arrow key.
@@ -44,12 +66,31 @@ export function FormulaBar({ text, editable = true, onCommit }: FormulaBarProps)
     setTyped(text)
   }
 
+  const offer = suggest(typed, caret, functions ?? functionsKnownSoFar())
+  const showing = offer?.matches ?? []
+  const picked = showing[Math.min(highlighted, showing.length - 1)]
+
+  const take = (name: string) => {
+    if (offer === null) return
+
+    const made = chosen(typed, offer, name)
+    setTyped(made.text)
+    setHighlighted(0)
+    // After the render that puts the new text in, or the caret would be set
+    // on the old one and the browser would move it back to the end.
+    requestAnimationFrame(() => {
+      box.current?.setSelectionRange(made.caret, made.caret)
+      setCaret(made.caret)
+    })
+  }
+
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className="relative flex min-w-0 flex-1 items-center gap-2">
       <span aria-hidden className="select-none font-serif text-xs italic text-muted">
         fx
       </span>
       <input
+        ref={box}
         aria-label="Formula bar"
         className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted"
         value={typed}
@@ -58,6 +99,11 @@ export function FormulaBar({ text, editable = true, onCommit }: FormulaBarProps)
         placeholder=""
         onChange={(event) => {
           setTyped(event.target.value)
+          setCaret(event.target.selectionStart ?? event.target.value.length)
+          setHighlighted(0)
+        }}
+        onSelect={(event) => {
+          setCaret(event.currentTarget.selectionStart ?? 0)
         }}
         onBlur={() => {
           if (abandoning.current) {
@@ -67,6 +113,30 @@ export function FormulaBar({ text, editable = true, onCommit }: FormulaBarProps)
           if (typed !== text) onCommit(typed)
         }}
         onKeyDown={(event) => {
+          // While the list is open the keys belong to it: Enter chooses a
+          // function rather than committing a half-written formula, which is
+          // what every spreadsheet does and what the fingers expect.
+          if (picked !== undefined) {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault()
+              const step = event.key === 'ArrowDown' ? 1 : showing.length - 1
+              setHighlighted((was) => (was + step) % showing.length)
+              return
+            }
+
+            if (event.key === 'Enter' || event.key === 'Tab') {
+              event.preventDefault()
+              take(picked.name)
+              return
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              setCaret(-1)
+              return
+            }
+          }
+
           if (event.key === 'Enter') {
             event.preventDefault()
             event.currentTarget.blur()
@@ -82,6 +152,39 @@ export function FormulaBar({ text, editable = true, onCommit }: FormulaBarProps)
           }
         }}
       />
+
+      {picked !== undefined && (
+        <ul
+          aria-label="Functions"
+          className="absolute left-6 top-7 z-20 max-h-64 w-72 overflow-auto rounded border border-border bg-surface py-1 shadow-lg"
+        >
+          {showing.map((one, at) => (
+            <li key={one.name}>
+              <button
+                type="button"
+                className={`flex w-full items-baseline justify-between gap-3 px-2 py-1 text-left text-xs ${
+                  one.name === picked.name ? 'bg-accent/15' : ''
+                }`}
+                // The mouse must not take the focus away from the box, or
+                // the blur would commit the half-written formula before the
+                // click had a chance to finish it.
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  take(one.name)
+                }}
+                onMouseEnter={() => {
+                  setHighlighted(at)
+                }}
+              >
+                <span className="font-mono">{one.name}</span>
+                <span className="text-muted">{shape(one)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

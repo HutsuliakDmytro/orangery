@@ -5,6 +5,8 @@ import type { CellRange } from './reference'
 import { readConditionalFormats } from './conditional'
 import { readValidationsIn } from './validation'
 import type { DataValidation } from './validation'
+import { readPageSetupIn } from './page'
+import type { PageSetup } from './page'
 import type { ConditionalFormat } from './conditional'
 import { readAutoFilter } from './autofilter'
 import type { AutoFilter } from './autofilter'
@@ -116,6 +118,8 @@ export interface Worksheet {
    * find two small elements is a second walk over all of them.
    */
   validations: DataValidation[]
+  /** How it is meant to come out of a printer. */
+  page: PageSetup
 }
 
 /** What a protected sheet allows anyway. */
@@ -282,6 +286,7 @@ export function readWorksheet(xml: string): Worksheet | null {
     conditional: readConditionalFormats(root),
     protection: readProtection(root),
     validations: readValidationsIn(root),
+    page: readPageSetupIn(root),
   }
 }
 

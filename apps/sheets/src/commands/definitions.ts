@@ -9,6 +9,7 @@ import {
   saveWorkbookAs,
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
+import { printSheet } from '../document/print'
 import { exportOds, exportSheet } from '../document/file'
 import {
   chartFromSelection,
@@ -429,6 +430,21 @@ export const viewCommands: readonly Command[] = [
     isEnabled: hasWorkbook,
     run: () => {
       useWorkbookStore.getState().zoom(100)
+    },
+  },
+  {
+    id: 'file.print',
+    label: 'Print…',
+    group: 'file',
+    shortcut: 'Mod+P',
+    keywords: ['pdf', 'export', 'paper'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      // The same dialog gives a PDF on macOS, which is the export: a
+      // renderer of our own would print something other than what is here.
+      const { open, current } = useWorkbookStore.getState()
+      const sheet = open === null ? undefined : visibleSheets(open)[current]
+      if (sheet !== undefined) printSheet(sheet.sheet.page)
     },
   },
   {

@@ -9,6 +9,7 @@ import {
   readSheetComments,
   readSheetData,
   readSheetDrawings,
+  DEFAULT_PAGE,
   readStyles,
   readTable,
   readWorkbook,
@@ -289,6 +290,7 @@ const EMPTY_SHEET: Worksheet = {
   conditional: [],
   protection: null,
   validations: [],
+  page: DEFAULT_PAGE,
 }
 
 /** The sheets a person sees, which is not all of them. */

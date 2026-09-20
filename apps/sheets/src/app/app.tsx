@@ -28,6 +28,7 @@ import { FindPanel } from '../render/find-panel'
 import { FormatDialog } from '../render/format-dialog'
 import { GoalSeekDialog } from '../render/goal-seek-dialog'
 import { NamesDialog } from '../render/names-dialog'
+import { PrintView } from '../render/print-view'
 import { LinkDialog } from '../render/link-dialog'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
@@ -386,7 +387,7 @@ function Shell() {
         </div>
       )}
 
-      <main className="min-h-0 flex-1">
+      <main className="min-h-0 flex-1 print:hidden">
         {sheet === null || open === null ? (
           <Welcome />
         ) : (
@@ -470,6 +471,10 @@ function Shell() {
             setLinking(null)
           }}
         />
+      )}
+
+      {open !== null && sheet !== null && (
+        <PrintView open={open} sheet={sheet} setup={sheet.sheet.page} />
       )}
 
       {naming !== null && open !== null && (

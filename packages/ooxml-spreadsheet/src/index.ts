@@ -23,6 +23,15 @@ export { readNotes, readPeople, readSheetComments, readThreads } from './comment
 export type { Note, Reply, SheetComments, Thread } from './comments'
 export { isValidName, replaceDefinedNames, writeDefinedNames } from './names-edit'
 export {
+  DEFAULT_PAGE,
+  paperSize,
+  printArea,
+  printTitles,
+  readPageSetup,
+  readPageSetupIn,
+} from './page'
+export type { PageSetup } from './page'
+export {
   freeTableName,
   readTable,
   readTables,

@@ -83,7 +83,7 @@ defined names, external references, the operators including the two that are
 written as whitespace and a comma, array literals, `%`, unary minus and plus,
 and the `_xlfn.` prefixes Excel writes for functions older readers lack.
 
-An unknown *function* is not a parse error: it parses, it evaluates to
+An unknown _function_ is not a parse error: it parses, it evaluates to
 `#NAME?`, and it is written back into the file exactly as it came. That is the
 rule that keeps a workbook using something we have not implemented from being
 a workbook we damage.

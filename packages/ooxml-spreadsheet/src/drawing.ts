@@ -7,6 +7,8 @@ import {
   tagName,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
+import { movedEnd, movedStart } from './band'
+import type { BandChange } from './formulas'
 
 /**
  * What sits on top of a worksheet rather than in it.
@@ -344,4 +346,48 @@ export function replaceDrawingReference(xml: string, relationshipId: string): st
 
   const at = xml.lastIndexOf('</worksheet>')
   return at === -1 ? xml : xml.slice(0, at) + written + xml.slice(at)
+}
+
+/**
+ * A drawing part seen from after rows or columns moved under it.
+ *
+ * Patched as text rather than rewritten from the model, which is the opposite
+ * of how a drawing part is written everywhere else here and is the point. A
+ * shape, a connector, a piece of SmartArt is read into the model as "something
+ * that is not a chart or a picture", and regenerating the part turns it into
+ * an empty frame. That is a price worth paying when somebody adds a chart; it
+ * is not a price worth paying when somebody inserts a row.
+ *
+ * So only the numbers in `<xdr:from>` and `<xdr:to>` change, and everything
+ * around them — every element this does not model, every attribute it has
+ * never heard of — stays exactly where it was.
+ *
+ * The two ends move by different rules, which is what makes a drawing over an
+ * insertion get taller rather than move: `from` is the first line still in it
+ * and `to` is the last. A drawing whose rows are all deleted is flattened
+ * rather than removed, because taking it out would mean taking out the chart
+ * part and the relationship behind it, and a row deleted is not somebody
+ * asking for that.
+ */
+export function adjustDrawingAnchors(xml: string, change: BandChange): string {
+  if (change.by === 0) return xml
+
+  const line = change.axis === 'row' ? 'row' : 'col'
+  const blocks = new RegExp(String.raw`<(\w+:)?(from|to)>([\s\S]*?)</\1?\2>`, 'gu')
+
+  return xml.replace(blocks, (whole, prefix: string | undefined, end: string, inside: string) => {
+    const moved = inside.replace(
+      new RegExp(String.raw`<(\w+:)?${line}>(-?\d+)</\1?${line}>`, 'u'),
+      (part, tag: string | undefined, digits: string) => {
+        const index = Number(digits)
+        const to = end === 'to' ? movedEnd(index, change) : movedStart(index, change)
+        if (to === index) return part
+
+        const name = `${tag ?? ''}${line}`
+        return `<${name}>${String(Math.max(0, to))}</${name}>`
+      },
+    )
+
+    return moved === inside ? whole : `<${prefix ?? ''}${end}>${moved}</${prefix ?? ''}${end}>`
+  })
 }

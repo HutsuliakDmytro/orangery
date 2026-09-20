@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adjustDrawingAnchors,
   drawingRelationshipId,
   readSheetDrawings,
   replaceDrawingReference,
@@ -205,5 +206,67 @@ describe('writing the drawings of a sheet back', () => {
 
     expect(written).toContain('rId3')
     expect(written).not.toContain('rId9')
+  })
+})
+
+describe('a drawing after rows moved under it', () => {
+  const anchor = (fromRow: number, toRow: number) =>
+    '<?xml version="1.0"?><xdr:wsDr><xdr:twoCellAnchor>' +
+    `<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${String(fromRow)}</xdr:row>` +
+    '<xdr:rowOff>0</xdr:rowOff></xdr:from>' +
+    `<xdr:to><xdr:col>5</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${String(toRow)}</xdr:row>` +
+    '<xdr:rowOff>9525</xdr:rowOff></xdr:to>' +
+    '<xdr:graphicFrame/><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>'
+
+  it('moves down when the rows above it do', () => {
+    const after = adjustDrawingAnchors(anchor(4, 20), { axis: 'row', at: 0, by: 2 })
+
+    expect(after).toContain('<xdr:row>6</xdr:row>')
+    expect(after).toContain('<xdr:row>22</xdr:row>')
+  })
+
+  it('gets taller when a row goes in under its top edge', () => {
+    const after = adjustDrawingAnchors(anchor(4, 20), { axis: 'row', at: 10, by: 1 })
+
+    expect(after).toContain('<xdr:row>4</xdr:row>')
+    expect(after).toContain('<xdr:row>21</xdr:row>')
+  })
+
+  it('moves across for a column change and not for a row one', () => {
+    const after = adjustDrawingAnchors(anchor(4, 20), { axis: 'column', at: 0, by: 1 })
+
+    expect(after).toContain('<xdr:col>2</xdr:col>')
+    expect(after).toContain('<xdr:col>6</xdr:col>')
+    expect(after).toContain('<xdr:row>4</xdr:row>')
+  })
+
+  it('keeps everything it does not understand, which is the point', () => {
+    // A shape or a piece of SmartArt survives this; it would not survive the
+    // part being written out again from the model.
+    const after = adjustDrawingAnchors(anchor(4, 20), { axis: 'row', at: 0, by: 2 })
+
+    expect(after).toContain('<xdr:rowOff>9525</xdr:rowOff>')
+    expect(after).toContain('<xdr:graphicFrame/>')
+    expect(after).toContain('<xdr:clientData/>')
+  })
+
+  it('flattens rather than removes a drawing whose rows all went', () => {
+    // Taking it out would mean taking out the chart part and the relationship
+    // behind it, and a row deleted is not somebody asking for that.
+    const after = adjustDrawingAnchors(anchor(4, 6), { axis: 'row', at: 4, by: -3 })
+
+    expect(after).toContain(
+      '<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row>',
+    )
+    expect(after).toContain(
+      '<xdr:to><xdr:col>5</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row>',
+    )
+  })
+
+  it('changes nothing when nothing moved', () => {
+    const xml = anchor(4, 20)
+
+    expect(adjustDrawingAnchors(xml, { axis: 'row', at: 0, by: 0 })).toBe(xml)
+    expect(adjustDrawingAnchors(xml, { axis: 'row', at: 30, by: 2 })).toBe(xml)
   })
 })

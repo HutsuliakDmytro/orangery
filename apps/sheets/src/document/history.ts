@@ -1,3 +1,4 @@
+import { setPartText } from '@orangery/ooxml-core'
 import { putCell } from '@orangery/ooxml-spreadsheet'
 import type {
   AutoFilter,
@@ -12,7 +13,7 @@ import type { SheetShape } from './shape'
 import { writeTables } from './table-parts'
 import type { GridSelection } from '@orangery/grid'
 import type { CellChange } from './edit'
-import type { OpenSheet, OpenWorkbook } from './workbook'
+import type { AnchoredDrawing, OpenSheet, OpenWorkbook } from './workbook'
 
 /**
  * What can be taken back.
@@ -59,6 +60,21 @@ export type Change =
    * the tables and the sparklines move together or not at all.
    */
   | { kind: 'shape'; sheet: string; before: SheetShape; after: SheetShape }
+  /**
+   * The charts and pictures of a sheet, as the part that holds them.
+   *
+   * The part rather than the model, because a drawing part is patched as text
+   * and not written out from what we understand of it: a shape this program
+   * does not model would not survive the round trip, and undoing a row
+   * insertion is not somebody asking to lose one.
+   */
+  | {
+      kind: 'drawings'
+      sheet: string
+      part: string
+      before: { xml: string; drawings: AnchoredDrawing[] }
+      after: { xml: string; drawings: AnchoredDrawing[] }
+    }
   /** The workbook's names, which belong to no sheet and move with every one. */
   | { kind: 'names'; sheet: string; before: DefinedName[]; after: DefinedName[] }
   | {
@@ -196,6 +212,12 @@ function restore(
     if (change.before.tables.length > 0 || change.after.tables.length > 0) {
       writeTables(open, sheet)
     }
+    return
+  }
+
+  if (change.kind === 'drawings') {
+    setPartText(open.pkg, change.part, change[to].xml)
+    sheet.drawings = change[to].drawings
     return
   }
 

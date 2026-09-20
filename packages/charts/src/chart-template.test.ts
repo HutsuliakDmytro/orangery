@@ -170,6 +170,7 @@ describe('a chart that points at a sheet', () => {
 
   it('is read back as the chart it describes', () => {
     const chart = readChart(newChartPart('bar', data, source))
+    if (chart === null) throw new Error('the part this just wrote is not a chart')
 
     expect(chart.plots[0]?.kind).toBe('bar')
     expect(chart.plots[0]?.series[0]?.valuesRef).toBe("'Budget'!$B$2:$B$4")

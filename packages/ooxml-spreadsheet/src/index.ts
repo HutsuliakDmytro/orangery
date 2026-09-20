@@ -100,9 +100,10 @@ export {
   shiftFormula,
 } from './formulas'
 export type { BandChange, FormulaPlace, SharedMaster } from './formulas'
-export { movedIndex, movedPosition, movedRange, movedRanges } from './band'
+export { movedEnd, movedIndex, movedPosition, movedRange, movedRanges, movedStart } from './band'
 export {
   EMU_PER_POINT,
+  adjustDrawingAnchors,
   drawingRelationshipId,
   readSheetDrawings,
   replaceDrawingReference,

@@ -14,11 +14,14 @@ import type {
   FormulaPlace,
   RowProperties,
 } from '@orangery/ooxml-spreadsheet'
+import { getPartText, setPartText } from '@orangery/ooxml-core'
+import { adjustDrawingAnchors, readSheetDrawings } from '@orangery/ooxml-spreadsheet'
 import { cellChanges } from './history'
 import type { Change } from './history'
 import { movedShape, putShape, shapeOf, tablesMoved } from './shape'
 import { writeTables } from './table-parts'
 import type { CellChange } from './edit'
+import { drawingPartOf } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 
 /**
@@ -70,6 +73,7 @@ export function reshape(open: OpenWorkbook, sheet: OpenSheet, change: BandChange
     ...adjustedElsewhere(open, sheet, change),
     ...reshapeRows(sheet, change),
     ...reshapedShape(open, sheet, change),
+    ...movedDrawings(open, sheet, change),
     ...reshapedNames(open, sheet.name, change),
   ]
 }
@@ -173,6 +177,47 @@ function reshapedShape(open: OpenWorkbook, sheet: OpenSheet, change: BandChange)
   if (tablesMoved(before, after)) writeTables(open, sheet)
 
   return [{ kind: 'shape', sheet: sheet.path, before, after }]
+}
+
+/**
+ * The charts and pictures, moved with the cells they sit over.
+ *
+ * The part is patched where it lies rather than written out from the model,
+ * and the model is then read back off it. A drawing part can hold a shape, a
+ * connector, a piece of SmartArt — things read as "not a chart and not a
+ * picture" — and regenerating the part would flatten every one of them. That
+ * is a price worth paying to add a chart; it is not a price worth paying to
+ * insert a row.
+ */
+function movedDrawings(open: OpenWorkbook, sheet: OpenSheet, change: BandChange): Change[] {
+  const part = drawingPartOf(open.pkg, sheet.path)
+  if (part === null) return []
+
+  const xml = getPartText(open.pkg, part)
+  if (xml === undefined) return []
+
+  const moved = adjustDrawingAnchors(xml, change)
+  if (moved === xml) return []
+
+  const before = sheet.drawings
+  const anchors = readSheetDrawings(moved)
+  const after = before.map((one, at) => {
+    const now = anchors[at]
+    return now === undefined ? one : { ...one, drawing: now }
+  })
+
+  setPartText(open.pkg, part, moved)
+  sheet.drawings = after
+
+  return [
+    {
+      kind: 'drawings',
+      sheet: sheet.path,
+      part,
+      before: { xml, drawings: before },
+      after: { xml: moved, drawings: after },
+    },
+  ]
 }
 
 /**

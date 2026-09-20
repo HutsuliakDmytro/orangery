@@ -82,8 +82,11 @@ export function movedRange(range: CellRange, change: BandChange): CellRange | nu
  * A deletion that swallowed the top of a range leaves the range starting where
  * the band was: the rows below it have moved up into that place, and they are
  * the rows the range still covers.
+ *
+ * Exported for the things that are a rectangle in a file that is not this
+ * model — a drawing's anchor, which is patched as text where it lies.
  */
-function movedStart(index: number, change: BandChange): number {
+export function movedStart(index: number, change: BandChange): number {
   if (index < change.at) return index
   if (change.by < 0 && index < change.at - change.by) return change.at
 
@@ -99,7 +102,7 @@ function movedStart(index: number, change: BandChange): number {
  * and the block moves. Both are what a person expects, and the asymmetry is
  * only visible when you write the two rules down next to each other.
  */
-function movedEnd(index: number, change: BandChange): number {
+export function movedEnd(index: number, change: BandChange): number {
   if (index < change.at) return index
   if (change.by < 0 && index < change.at - change.by) return change.at - 1
 

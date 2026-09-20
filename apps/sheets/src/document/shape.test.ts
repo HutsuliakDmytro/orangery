@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { formatReference, parseRange } from '@orangery/ooxml-spreadsheet'
+import { formatReference, parseRange, readSheetDrawings } from '@orangery/ooxml-spreadsheet'
 import type { CellRange, ConditionalRule, DataValidation, Table } from '@orangery/ooxml-spreadsheet'
 import { getPartText } from '@orangery/ooxml-core'
 import { singleCell } from '@orangery/grid'
@@ -329,5 +329,52 @@ describe('a table that moved, written back', () => {
 
     const again = await openWorkbook(await workbookBytes(open, { edited: true }))
     expect(again.sheets[0]?.tables[0]?.range.from.row).toBe(2)
+  })
+})
+
+describe('the charts and pictures on a sheet', () => {
+  const rowOf = (at: number) => sheet.drawings[at]?.drawing.anchor
+
+  it('move down with the cells they sit over', () => {
+    const before = rowOf(0)
+    expect(before?.kind).toBe('two')
+
+    reshape(open, sheet, { axis: 'row', at: 0, by: 2 })
+    const after = rowOf(0)
+
+    if (before?.kind !== 'two' || after?.kind !== 'two')
+      throw new Error('expected a two-cell anchor')
+    expect(after.from.row).toBe(before.from.row + 2)
+    expect(after.to.row).toBe(before.to.row + 2)
+  })
+
+  it('keeps everything the part holds that this program does not model', () => {
+    // The part is patched where it lies rather than written out again: a
+    // shape or a piece of SmartArt would not survive the second.
+    const part = 'xl/drawings/drawing1.xml'
+    const before = getPartText(open.pkg, part) ?? ''
+
+    reshape(open, sheet, { axis: 'row', at: 0, by: 2 })
+    const after = getPartText(open.pkg, part) ?? ''
+
+    expect(after).not.toBe(before)
+    expect(after.length).toBeCloseTo(before.length, -2)
+    expect(after).toContain('<xdr:graphicFrame')
+  })
+
+  it('comes back with an undo, part and all', () => {
+    const part = 'xl/drawings/drawing1.xml'
+    const before = getPartText(open.pkg, part)
+
+    const history = recorded(emptyHistory(), {
+      changes: reshape(open, sheet, { axis: 'row', at: 0, by: 2 }),
+      selection: singleCell({ row: 0, column: 0 }),
+    })
+    undo(open, history)
+
+    expect(getPartText(open.pkg, part)).toBe(before)
+    // The model and the part have to agree afterwards, not merely each be
+    // back to something.
+    expect(sheet.drawings[0]?.drawing.anchor).toEqual(readSheetDrawings(before ?? '')[0]?.anchor)
   })
 })

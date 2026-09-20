@@ -179,6 +179,23 @@ const relationshipsOf = (path: string): string => {
 }
 
 /**
+ * Where a sheet's drawings are kept, or null for a sheet that has none.
+ *
+ * A relationship target is relative to the part that states it, so this is
+ * two lookups rather than a name that can be guessed at.
+ */
+export function drawingPartOf(pkg: OoxmlPackage, sheetPath: string): string | null {
+  const id = drawingRelationshipId(getPartText(pkg, sheetPath) ?? '')
+  if (id === null) return null
+
+  const relationships = parseRelationships(getPartText(pkg, relationshipsOf(sheetPath)) ?? '')
+  const target = relationships.get(id)?.target
+  if (target === undefined) return null
+
+  return resolveTarget(target, partDirectory(sheetPath))
+}
+
+/**
  * The drawings on a sheet, and what each one points at.
  *
  * Two hops. The sheet names a drawing part by relationship id; the drawing

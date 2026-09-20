@@ -8,7 +8,7 @@ import {
   saveWorkbookAs,
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
-import { exportSheet } from '../document/file'
+import { exportOds, exportSheet } from '../document/file'
 import { useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
@@ -97,6 +97,16 @@ export const fileCommands: readonly Command[] = [
     isEnabled: () => isTauri() && hasWorkbook(),
     run: () => {
       void exportSheet()
+    },
+  },
+  {
+    id: 'file.exportOds',
+    label: 'Export as OpenDocument…',
+    group: 'file',
+    keywords: ['ods', 'opendocument', 'libreoffice', 'export'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      void exportOds()
     },
   },
   {

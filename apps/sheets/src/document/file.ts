@@ -5,6 +5,7 @@ import { useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from './workbook'
 import { clearSnapshot, readSnapshot } from './autosave'
 import { exportCsv } from './csv-file'
+import { isOds, odsBytes, workbookFromOds } from './converters/ods-file'
 import { blankWorkbook } from './new'
 import { saveWorkbookTo } from './save'
 
@@ -54,6 +55,20 @@ export const nameOf = baseName
 export async function openWorkbookAt(path: string): Promise<boolean> {
   try {
     const bytes = await readWorkbookFile(path)
+
+    // An `.ods` is converted rather than opened, and the workbook it becomes
+    // belongs to no file: writing our own bytes over somebody's OpenDocument
+    // would change the format of their file without saying so.
+    if (await isOds(bytes)) {
+      useWorkbookStore
+        .getState()
+        .converted(
+          await workbookFromOds(bytes),
+          `${baseName(path)} was opened as a copy. Saving writes a workbook, not an .ods.`,
+        )
+      return true
+    }
+
     await useWorkbookStore.getState().load(bytes, path)
     return true
   } catch (error) {
@@ -154,6 +169,34 @@ export async function recoverWorkbook(key: string, path: string | null): Promise
     useWorkbookStore
       .getState()
       .fail(error instanceof Error ? error.message : 'Could not recover that workbook.')
+    return false
+  }
+}
+
+/**
+ * Writes the whole workbook out as an OpenDocument spreadsheet.
+ *
+ * Every sheet, unlike the `.csv` below: an `.ods` holds a workbook, so there
+ * is nothing to choose between.
+ */
+export async function exportOds(): Promise<boolean> {
+  const { open } = useWorkbookStore.getState()
+  if (open === null || !isTauri()) return false
+
+  const to = await saveDialog({
+    defaultPath: 'Workbook.ods',
+    filters: [{ name: 'OpenDocument spreadsheet', extensions: ['ods'] }],
+  })
+  if (typeof to !== 'string') return false
+
+  try {
+    const bytes = await odsBytes(open)
+    await invoke('write_document', { path: to, bytes: [...bytes], keepBackup: true })
+    return true
+  } catch (error) {
+    useWorkbookStore
+      .getState()
+      .fail(error instanceof Error ? error.message : 'Could not write that file.')
     return false
   }
 }

@@ -88,6 +88,8 @@ export interface WorkbookState {
   session: string
   busy: boolean
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
+  /** A workbook made from another format, which belongs to no file yet. */
+  converted: (open: OpenWorkbook, notice: string | null) => void
   fail: (problem: string) => void
   dismiss: () => void
   close: () => void
@@ -231,6 +233,29 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       history: emptyHistory(),
       problem: null,
       notice: noticeFor(open),
+      session: newSession(),
+      busy: false,
+    })
+  },
+
+  /**
+   * A workbook that came from somewhere other than a file of ours.
+   *
+   * An `.ods` or a `.csv` turns into a workbook and belongs to no path: the
+   * first save has to ask where it should go, because writing our own bytes
+   * over somebody's `.ods` would be changing the format of their file without
+   * saying so.
+   */
+  converted: (open, notice) => {
+    set({
+      open,
+      path: null,
+      current: 0,
+      selection: singleCell({ row: 0, column: 0 }),
+      edited: true,
+      history: emptyHistory(),
+      problem: null,
+      notice,
       session: newSession(),
       busy: false,
     })

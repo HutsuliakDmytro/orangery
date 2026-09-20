@@ -1087,3 +1087,30 @@ describe('the little square at the corner of a selection', () => {
     expect(filled.mock.calls[0]?.[1]).toMatchObject({ focus: { row: 2, column: 1 } })
   })
 })
+
+describe('a sheet that wants no grid', () => {
+  const gridColored = () => recorded.lines.filter((one) => one.style === '#DADADA')
+
+  it('draws the lines between the cells by default', () => {
+    grid()
+    expect(gridColored().length).toBeGreaterThan(0)
+  })
+
+  it('draws none when it is told not to', () => {
+    // A form is made on nothing, and the borders somebody drew have to be the
+    // only lines there are.
+    grid({ gridLines: false })
+    expect(gridColored()).toHaveLength(0)
+  })
+
+  it('still draws the borders a cell asks for', () => {
+    grid({
+      gridLines: false,
+      styleAt: () => ({
+        borders: { left: '#FF0000', right: null, top: null, bottom: null },
+      }),
+    })
+
+    expect(recorded.lines.some((one) => one.style === '#FF0000')).toBe(true)
+  })
+})

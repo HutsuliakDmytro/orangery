@@ -158,6 +158,13 @@ export interface DataGridProps {
    * would have made the painting right and every other answer wrong.
    */
   zoom?: number
+  /**
+   * Whether the lines between the cells are drawn.
+   *
+   * A sheet can be told to show none, which is what a form or a printed
+   * layout is made on: the only lines then are the borders somebody drew.
+   */
+  gridLines?: boolean
   width: number
   height: number
   label: string
@@ -376,6 +383,7 @@ export function DataGrid({
   onResize,
   onFilterClick,
   onFillSeries,
+  gridLines = true,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -577,7 +585,10 @@ export function DataGrid({
 
     context.font = DEFAULT_FONT
 
-    context.strokeStyle = COLORS.grid
+    // A sheet can say it wants no grid, and then the cells are drawn on
+    // nothing: it is what a form or a printed layout is made on, and the
+    // borders somebody drew have to be the only lines there are.
+    context.strokeStyle = gridLines ? COLORS.grid : COLORS.background
     context.lineWidth = 1
     context.beginPath()
 
@@ -786,6 +797,7 @@ export function DataGrid({
     scroll.x,
     scroll.y,
     fillTo,
+    gridLines,
     onFillSeries,
     selected,
     selectedCells,

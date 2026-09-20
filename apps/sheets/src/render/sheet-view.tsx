@@ -418,6 +418,7 @@ export function SheetView({
       height={height}
       metrics={metrics}
       frozen={frozen}
+      gridLines={sheet.sheet.view.showGridLines}
       zoom={zoom}
       {...(selection === undefined ? {} : { selection })}
       {...(onSelectionChange === undefined ? {} : { onSelectionChange })}

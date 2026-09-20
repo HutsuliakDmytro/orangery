@@ -139,3 +139,6 @@ export {
   setSheetState,
   setTabColor,
 } from './sheets-edit'
+
+export { changeView } from './view-edit'
+export type { ViewChange } from './view-edit'

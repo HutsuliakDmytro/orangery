@@ -15,6 +15,7 @@ import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { fillCells } from '../document/fill'
 import { findAll, nextAfter, replaceAll, replaceIn } from '../document/find'
+import { freezeAt, showGridlines, unfreeze, zoomTo } from '../document/view'
 import type { SearchOptions } from '../document/find'
 import {
   addSheet,
@@ -164,6 +165,16 @@ export interface WorkbookState {
   replaceOne: (term: string, replacement: string, options: SearchOptions) => void
   /** Replaces every match as one step, and says how many that was. */
   replaceEverywhere: (term: string, replacement: string, options: SearchOptions) => number
+  /**
+   * How the sheet is looked at, which is not what it says.
+   *
+   * None of these are in the history. Nobody expects undo to take back a
+   * zoom, and Excel does not offer it either: a view is where somebody is
+   * standing rather than what they have written.
+   */
+  freeze: () => void
+  zoom: (percent: number) => void
+  toggleGridlines: () => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   /**
@@ -623,6 +634,45 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       edited: true,
       history: recorded(history, { changes, selection }),
     })
+  },
+
+  freeze: () => {
+    const { open, current, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    // The same command both ways: a sheet that is frozen unfreezes, and one
+    // that is not freezes at the cursor.
+    const done =
+      sheet.sheet.view.panes === null
+        ? freezeAt(open, sheet, selection.active)
+        : unfreeze(open, sheet)
+    if (!done) return
+
+    set({ open: { ...open, sheets: [...open.sheets] }, edited: true })
+  },
+
+  zoom: (percent) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined || !zoomTo(open, sheet, percent)) return
+
+    set({ open: { ...open, sheets: [...open.sheets] }, edited: true })
+  },
+
+  toggleGridlines: () => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+    if (!showGridlines(open, sheet, !sheet.sheet.view.showGridLines)) return
+
+    set({ open: { ...open, sheets: [...open.sheets] }, edited: true })
   },
 
   findNext: (term, options, backwards = false) => {

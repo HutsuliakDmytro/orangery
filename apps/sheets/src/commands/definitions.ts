@@ -341,6 +341,68 @@ export const structureCommands: readonly Command[] = [
   },
 ]
 
+/** The sheet on screen, for a command that asks about how it is being looked at. */
+const sheetNow = () => {
+  const { open, current } = useWorkbookStore.getState()
+  return open === null ? undefined : sheetsNow()[current]
+}
+
+export const viewCommands: readonly Command[] = [
+  {
+    id: 'view.freeze',
+    label: 'Freeze at Cursor',
+    group: 'view',
+    keywords: ['panes', 'header', 'lock', 'unfreeze'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().freeze()
+    },
+  },
+  {
+    id: 'view.zoomIn',
+    label: 'Zoom In',
+    group: 'view',
+    shortcut: 'Mod+=',
+    isEnabled: hasWorkbook,
+    run: () => {
+      const { zoom } = useWorkbookStore.getState()
+      zoom((sheetNow()?.sheet.view.zoom ?? 100) + 10)
+    },
+  },
+  {
+    id: 'view.zoomOut',
+    label: 'Zoom Out',
+    group: 'view',
+    shortcut: 'Mod+-',
+    isEnabled: hasWorkbook,
+    run: () => {
+      const { zoom } = useWorkbookStore.getState()
+      zoom((sheetNow()?.sheet.view.zoom ?? 100) - 10)
+    },
+  },
+  {
+    id: 'view.zoomReset',
+    label: 'Actual Size',
+    group: 'view',
+    shortcut: 'Mod+0',
+    keywords: ['zoom', '100'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().zoom(100)
+    },
+  },
+  {
+    id: 'view.gridlines',
+    label: 'Show Gridlines',
+    group: 'view',
+    keywords: ['grid', 'lines', 'hide'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().toggleGridlines()
+    },
+  },
+]
+
 export const sheetCommands: readonly Command[] = [
   {
     id: 'sheet.next',
@@ -380,5 +442,6 @@ export function registerBuiltinCommands(): void {
   registerAll(editCommands)
   registerAll(dataCommands)
   registerAll(structureCommands)
+  registerAll(viewCommands)
   registerAll(sheetCommands)
 }

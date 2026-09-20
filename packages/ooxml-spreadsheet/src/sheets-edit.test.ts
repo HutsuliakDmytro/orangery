@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPartText } from '@orangery/ooxml-core'
+import { getPartText, setPartText } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { newWorkbook } from './new-workbook'
 import { readWorkbook } from './workbook'
@@ -81,12 +81,7 @@ describe('adding one', () => {
     const pkg = made()
     const source = 'xl/worksheets/sheet1.xml'
     const xml = getPartText(pkg, source) ?? ''
-    pkg.parts.set(source, {
-      path: source,
-      bytes: new TextEncoder().encode(
-        xml.replace('<sheetData', '<drawing r:id="rId9"/><sheetData'),
-      ),
-    })
+    setPartText(pkg, source, xml.replace('<sheetData', '<drawing r:id="rId9"/><sheetData'))
 
     const added = addSheet(pkg, 'Copy', { copyOf: source })
 

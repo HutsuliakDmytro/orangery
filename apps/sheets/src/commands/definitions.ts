@@ -1,7 +1,12 @@
 import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
-import { openWorkbookFromDialog, saveWorkbook } from '../document/file'
+import {
+  newWorkbookFile,
+  openWorkbookFromDialog,
+  saveWorkbook,
+  saveWorkbookAs,
+} from '../document/file'
 import { canRedo, canUndo } from '../document/history'
 import { useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
@@ -27,6 +32,16 @@ const sheetsNow = () => {
 
 export const fileCommands: readonly Command[] = [
   {
+    id: 'file.new',
+    label: 'New Workbook',
+    group: 'file',
+    shortcut: 'Mod+N',
+    keywords: ['blank', 'empty'],
+    run: () => {
+      void newWorkbookFile()
+    },
+  },
+  {
     id: 'file.open',
     label: 'Open…',
     group: 'file',
@@ -48,6 +63,17 @@ export const fileCommands: readonly Command[] = [
     isEnabled: () => isTauri() && hasWorkbook(),
     run: () => {
       void saveWorkbook()
+    },
+  },
+  {
+    id: 'file.saveAs',
+    label: 'Save As…',
+    group: 'file',
+    shortcut: 'Mod+Shift+S',
+    keywords: ['copy', 'elsewhere'],
+    isEnabled: () => isTauri() && hasWorkbook(),
+    run: () => {
+      void saveWorkbookAs()
     },
   },
   {

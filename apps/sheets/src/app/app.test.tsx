@@ -8,6 +8,7 @@ import { getCommand, runCommand } from '@orangery/ui-kit'
 import { resolveStyle } from '@orangery/ooxml-spreadsheet'
 import { openWorkbook } from '../document/workbook'
 import { workbookBytes } from '../document/save'
+import { newWorkbookFile } from '../document/file'
 import { recorded } from '../test-setup'
 import { App } from './app'
 import { useWorkbookStore } from '../store/workbook-store'
@@ -1063,5 +1064,47 @@ describe('filtering a table', () => {
 
     const again = await openWorkbook(await workbookBytes(open, { edited: true }))
     expect(again.sheets[0]?.sheet.autoFilter?.range.to).toEqual({ row: 3, column: 2 })
+  })
+})
+
+describe('starting a workbook, and being told about one', () => {
+  it('opens an empty one that belongs to no file yet', async () => {
+    render(<App />)
+
+    await act(async () => {
+      await newWorkbookFile()
+    })
+
+    expect(await screen.findByRole('grid', { name: 'Sheet1' })).toBeInTheDocument()
+    expect(useWorkbookStore.getState().path).toBeNull()
+  })
+
+  it('offers a new workbook even with nothing open', () => {
+    // Unlike everything else on the File menu, which needs one.
+    render(<App />)
+    expect(getCommand('file.new')?.isEnabled?.({}) ?? true).toBe(true)
+  })
+
+  it('says a workbook has macros, without calling it a failure', async () => {
+    const bytes = new Uint8Array(
+      await readFile(join(process.cwd(), 'tests/fixtures/xlsx/macros.xlsm')),
+    )
+    render(<App />)
+
+    await act(async () => {
+      await useWorkbookStore.getState().load(bytes, '/books/macros.xlsm')
+    })
+
+    const said = await screen.findByRole('status')
+    expect(said.textContent).toContain('macros')
+    // A failure is announced; this is not one.
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('says nothing at all about a workbook without them', async () => {
+    render(<App />)
+    await load()
+
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

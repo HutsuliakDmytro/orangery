@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { baseName, isTauri } from '@orangery/platform'
 import { useWorkbookStore } from '../store/workbook-store'
+import { blankWorkbook } from './new'
 import { saveWorkbookTo } from './save'
 
 /**
@@ -78,8 +79,15 @@ export async function saveWorkbook(): Promise<boolean> {
   if (open === null) return false
 
   const to = path ?? (await pickSavePath())
-  if (to === null) return false
+  return to === null ? false : writeTo(open, to, edited)
+}
 
+/** The one place a workbook is written, whichever door asked for it. */
+async function writeTo(
+  open: Parameters<typeof saveWorkbookTo>[0],
+  to: string,
+  edited = true,
+): Promise<boolean> {
   try {
     await saveWorkbookTo(open, to, { edited })
     useWorkbookStore.getState().saved(to)
@@ -101,4 +109,24 @@ async function pickSavePath(): Promise<string | null> {
   })
 
   return typeof chosen === 'string' ? chosen : null
+}
+
+/**
+ * An empty workbook, belonging to no file yet.
+ *
+ * It opens with no path, so the first save asks where. That is the same door
+ * a workbook opened from disk goes through, which is why saving is one
+ * function rather than two.
+ */
+export async function newWorkbookFile(): Promise<void> {
+  await useWorkbookStore.getState().load(await blankWorkbook(), null)
+}
+
+/** Writes the workbook somewhere else, and belongs to that file afterwards. */
+export async function saveWorkbookAs(): Promise<boolean> {
+  const { open } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const to = await pickSavePath()
+  return to === null ? false : writeTo(open, to)
 }

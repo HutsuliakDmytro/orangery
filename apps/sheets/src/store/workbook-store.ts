@@ -54,6 +54,14 @@ export interface WorkbookState {
   history: History
   /** What went wrong the last time something was opened, for the banner. */
   problem: string | null
+  /**
+   * Something worth saying that is not a failure.
+   *
+   * A workbook with macros in it, for one: they are kept and they are not
+   * run, and somebody who does not know that would think the file was broken
+   * rather than that this program is not Excel.
+   */
+  notice: string | null
   busy: boolean
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
   fail: (problem: string) => void
@@ -99,6 +107,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   edited: false,
   history: emptyHistory(),
   problem: null,
+  notice: null,
   busy: false,
 
   load: async (bytes, path) => {
@@ -117,6 +126,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       edited: false,
       history: emptyHistory(),
       problem: null,
+      notice: noticeFor(open),
       busy: false,
     })
   },
@@ -128,7 +138,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   },
 
   dismiss: () => {
-    set({ problem: null })
+    set({ problem: null, notice: null })
   },
 
   close: () => {
@@ -140,6 +150,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       edited: false,
       history: emptyHistory(),
       problem: null,
+      notice: null,
       busy: false,
     })
   },
@@ -523,3 +534,16 @@ function redrawn(open: OpenWorkbook, paths: Iterable<string>): OpenWorkbook {
 }
 
 export const visibleSheetsOf = (open: OpenWorkbook): OpenSheet[] => visibleSheets(open)
+
+/**
+ * What is worth saying about a workbook that has just been opened.
+ *
+ * Macros are the one thing so far. They are kept byte for byte and they are
+ * never run, and a person who did not know that would think the file had come
+ * out broken rather than that this is not Excel.
+ */
+function noticeFor(open: OpenWorkbook): string | null {
+  return open.pkg.parts.has('xl/vbaProject.bin')
+    ? 'This workbook contains macros. They are kept when you save, and they are not run.'
+    : null
+}

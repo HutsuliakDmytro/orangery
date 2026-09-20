@@ -36,6 +36,7 @@ function Shell() {
   const path = useWorkbookStore((state) => state.path)
   const current = useWorkbookStore((state) => state.current)
   const problem = useWorkbookStore((state) => state.problem)
+  const notice = useWorkbookStore((state) => state.notice)
   const dismiss = useWorkbookStore((state) => state.dismiss)
   const select = useWorkbookStore((state) => state.select)
   const selection = useWorkbookStore((state) => state.selection)
@@ -83,12 +84,14 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
-      {problem !== null && (
+      {(problem ?? notice) !== null && (
         <div
-          role="alert"
+          // A failure is announced; a notice is not. Both are worth reading,
+          // and only one is worth interrupting somebody for.
+          role={problem === null ? 'status' : 'alert'}
           className="flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
         >
-          <span>{problem}</span>
+          <span className={problem === null ? 'text-muted' : undefined}>{problem ?? notice}</span>
           <button type="button" onClick={dismiss} className="text-muted hover:text-text">
             Dismiss
           </button>
@@ -121,7 +124,7 @@ function Shell() {
             sheet={sheet}
             width={size.width}
             height={Math.max(
-              size.height - tabsHeight - barHeight - (problem === null ? 0 : 34),
+              size.height - tabsHeight - barHeight - ((problem ?? notice) === null ? 0 : 34),
               120,
             )}
             selection={selection}

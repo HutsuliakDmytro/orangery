@@ -6,7 +6,7 @@ import { readSheetDrawings } from '@orangery/ooxml-spreadsheet'
 import { readChart } from '@orangery/charts'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
-import { chartDataFrom, insertChart, insertPicture } from './charts'
+import { chartDataFrom, insertChart, insertPicture, refreshCharts } from './charts'
 import { workbookBytes } from './save'
 
 /**
@@ -144,5 +144,34 @@ describe('putting a picture on the sheet', () => {
     expect(
       insertPicture(open, sheet, { row: 0, column: 0 }, { name: 'notes.txt', bytes: png() }),
     ).toBeNull()
+  })
+})
+
+describe('keeping a chart in step with its cells', () => {
+  it('redraws it from the numbers as they now stand', () => {
+    // The whole reason a chart on a sheet differs from one in a document:
+    // its numbers are somebody else's, and when they change it changes.
+    const added = insertChart(open, sheet, range, 'bar')
+    const before = readChart(getPartText(open.pkg, added?.path ?? '') ?? '')
+    const first = before?.plots[0]?.series[0]?.values[0] ?? null
+
+    const cell = sheet.cells.rows.get(3)?.get(1)
+    if (cell === undefined) throw new Error('the fixture has no cell there')
+    sheet.cells.rows.get(3)?.set(1, { ...cell, type: 'n', value: '9999' })
+
+    expect(refreshCharts(open, [sheet.path])).toEqual([sheet.path])
+
+    const after = readChart(getPartText(open.pkg, added?.path ?? '') ?? '')
+    expect(after?.plots[0]?.series[0]?.values).toContain(9999)
+    expect(after?.plots[0]?.series[0]?.values[0]).not.toBe(null)
+    expect(first).not.toBe(9999)
+  })
+
+  it('leaves alone a chart whose sheet nothing happened on', () => {
+    const added = insertChart(open, sheet, range, 'bar')
+    const before = getPartText(open.pkg, added?.path ?? '')
+
+    expect(refreshCharts(open, ['xl/worksheets/sheet9.xml'])).toEqual([])
+    expect(getPartText(open.pkg, added?.path ?? '')).toBe(before)
   })
 })

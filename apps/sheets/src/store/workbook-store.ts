@@ -34,7 +34,7 @@ import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
 import { refusalFor } from '../document/validation'
 import { refusalForLocked } from '../document/protection'
-import { insertChart, insertPicture } from '../document/charts'
+import { insertChart, insertPicture, refreshCharts } from '../document/charts'
 import type { NewChartKind } from '@orangery/charts'
 import {
   applyReport,
@@ -1201,6 +1201,19 @@ async function followUp(
   changes: Change[],
   direction: 'before' | 'after',
 ): Promise<void> {
+  // Charts follow the cells whether or not a formula did: a column of
+  // figures somebody typed over is the ordinary way a chart changes.
+  const withCells = new Set(
+    changes.filter((change) => change.kind === 'cell').map((change) => change.cell.sheet),
+  )
+  if (withCells.size > 0) {
+    const charts = refreshCharts(open, withCells)
+    if (charts.length > 0) {
+      const now = useWorkbookStore.getState()
+      if (now.open !== null) useWorkbookStore.setState({ open: redrawn(now.open, charts) })
+    }
+  }
+
   const cells = inputsFor(open, changes, direction)
   if (cells.length > 0) {
     const report: Report = await setCells(session, cells)
@@ -1239,7 +1252,11 @@ function applyOutcome(session: string, report: Report): void {
   const touched = applyReport(state.open, report)
   if (touched.length === 0) return
 
-  useWorkbookStore.setState({ open: redrawn(state.open, touched) })
+  // A chart on a sheet is the one kind whose numbers are somebody else's:
+  // when the cells change it has to change with them.
+  const charts = refreshCharts(state.open, touched)
+
+  useWorkbookStore.setState({ open: redrawn(state.open, [...touched, ...charts]) })
 }
 
 useWorkbookStore.subscribe((state, previous) => {

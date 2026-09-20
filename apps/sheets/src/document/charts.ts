@@ -12,14 +12,15 @@ import {
   drawingRelationshipId,
   EMU_PER_POINT,
   formatReference,
+  parseRange,
   readSheetDrawings,
   replaceDrawingReference,
   writeSheetDrawings,
 } from '@orangery/ooxml-spreadsheet'
-import type { SheetDrawing } from '@orangery/ooxml-spreadsheet'
+import type { Cell, SheetDrawing } from '@orangery/ooxml-spreadsheet'
 import { addMedia } from '@orangery/ooxml-core'
 import { imageSize } from '@orangery/ooxml-drawingml'
-import { newChartPart } from '@orangery/charts'
+import { newChartPart, readChart, writeChartCache, writeChartCategories } from '@orangery/charts'
 import type { ChartData, NewChartKind, SheetSource } from '@orangery/charts'
 import type { GridRange } from '@orangery/grid'
 import { shownText } from './shown'
@@ -318,4 +319,117 @@ export function insertPicture(
   sheet.drawings.push(anchored)
 
   return anchored
+}
+
+/**
+ * The charts on a sheet, redrawn from the cells they point at.
+ *
+ * This is the whole reason a chart on a sheet is different from a chart in a
+ * document: its numbers are somebody else's, and when they change it has to
+ * change with them. A chart part says the same thing twice — where the
+ * numbers are and what they were — and only the second half is drawn, so
+ * keeping the second half true is the work.
+ *
+ * Every chart is looked at rather than only the ones whose range was touched:
+ * a sheet has a handful of charts and a range is a rectangle somebody may
+ * have moved rows into. Hands back the paths of the sheets that changed.
+ */
+export function refreshCharts(open: OpenWorkbook, touched: Iterable<string>): string[] {
+  const sheets = new Set(touched)
+  const redraw = new Set<string>()
+
+  for (const sheet of open.sheets) {
+    for (const anchored of sheet.drawings) {
+      if (anchored.drawing.content.kind !== 'chart' || anchored.path === null) continue
+
+      const chart = readChart(getPartText(open.pkg, anchored.path) ?? '')
+      if (chart === null) continue
+
+      let changed = false
+      let at = 0
+
+      for (const plot of chart.plots) {
+        if (plot.kind === 'unsupported') continue
+
+        for (const series of plot.series) {
+          const values = cellsUnder(open, series.valuesRef, sheets)
+          if (values !== null) {
+            changed = writeChartCache(open.pkg, anchored.path, { series: at, values }) || changed
+          }
+          at += 1
+        }
+      }
+
+      const first = chart.plots[0]?.series[0]
+      const categories = first === undefined ? null : namesUnder(open, first.categoriesRef, sheets)
+      if (categories !== null) {
+        changed = writeChartCategories(open.pkg, anchored.path, { categories }) || changed
+      }
+
+      if (changed) redraw.add(sheet.path)
+    }
+  }
+
+  return [...redraw]
+}
+
+/**
+ * The cells a chart reference names, as numbers.
+ *
+ * Null when the reference points at a sheet nothing changed on, or at one
+ * this workbook does not have — a chart copied in from elsewhere keeps its
+ * cached numbers rather than losing them to a `#REF!` nobody can act on.
+ */
+function cellsUnder(
+  open: OpenWorkbook,
+  reference: string | null,
+  sheets: ReadonlySet<string>,
+): (number | null)[] | null {
+  const found = rangeOf(open, reference, sheets)
+  if (found === null) return null
+
+  return found.cells.map((cell) => {
+    const number = Number(cell?.value ?? '')
+    return cell === null || !Number.isFinite(number) ? null : number
+  })
+}
+
+function namesUnder(
+  open: OpenWorkbook,
+  reference: string | null,
+  sheets: ReadonlySet<string>,
+): string[] | null {
+  const found = rangeOf(open, reference, sheets)
+  if (found === null) return null
+
+  return found.cells.map((cell) => shownText(open, cell))
+}
+
+function rangeOf(
+  open: OpenWorkbook,
+  reference: string | null,
+  sheets: ReadonlySet<string>,
+): { cells: (Cell | null)[] } | null {
+  if (reference === null) return null
+
+  const range = parseRange(reference)
+  if (range === null || range.sheet === null) return null
+
+  const named = range.sheet.replace(/^'|'$/gu, '')
+  const from = open.sheets.find((one) => one.name === named)
+  if (from === undefined || !sheets.has(from.path)) return null
+
+  const top = Math.min(range.from.row, range.to.row)
+  const bottom = Math.max(range.from.row, range.to.row)
+  const left = Math.min(range.from.column, range.to.column)
+  const right = Math.max(range.from.column, range.to.column)
+
+  const cells: (Cell | null)[] = []
+  for (let row = top; row <= bottom; row += 1) {
+    for (let column = left; column <= right; column += 1) {
+      cells.push(from.cells.rows.get(row)?.get(column) ?? null)
+    }
+  }
+
+  return { cells }
 }

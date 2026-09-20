@@ -35,6 +35,7 @@ pub fn run() {
             formula::formula_open,
             formula::formula_set,
             formula::formula_set_many,
+            formula::formula_out_of_sight,
             formula::formula_clear,
             formula::formula_recalculate,
             formula::formula_value,

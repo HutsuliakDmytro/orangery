@@ -384,3 +384,82 @@ fn the_time_and_the_date_system_are_the_workbooks_own() {
         .expect("the formula should parse");
     assert_eq!(mac.value("Sheet1", 0, 0), Value::Number(43830.0));
 }
+
+#[test]
+fn a_subtotal_leaves_out_the_rows_a_filter_hid() {
+    // The classic wrong answer in a spreadsheet is `SUM` over a filtered
+    // table: it adds the rows nobody can see, and the figure at the bottom
+    // disagrees with the figures above it.
+    let mut engine = engine();
+    set(&mut engine, "A1", 10.0);
+    set(&mut engine, "A2", 20.0);
+    set(&mut engine, "A3", 30.0);
+    formula(&mut engine, "B1", "SUBTOTAL(9,A1:A3)");
+    formula(&mut engine, "B2", "SUM(A1:A3)");
+    assert_eq!(number(&engine, "B1"), 60.0);
+
+    engine.set_out_of_sight("Sheet1", vec![1], vec![]);
+    engine.recalculate();
+
+    assert_eq!(number(&engine, "B1"), 40.0);
+    // And `SUM` still adds what it was given, which is the whole difference
+    // between the two.
+    assert_eq!(number(&engine, "B2"), 60.0);
+}
+
+#[test]
+fn only_the_hundreds_leave_out_a_row_somebody_hid_by_hand() {
+    // Hiding a row and filtering a table are different acts, and this is
+    // where a formula can tell them apart.
+    let mut engine = engine();
+    set(&mut engine, "A1", 10.0);
+    set(&mut engine, "A2", 20.0);
+    formula(&mut engine, "B1", "SUBTOTAL(9,A1:A2)");
+    formula(&mut engine, "B2", "SUBTOTAL(109,A1:A2)");
+
+    engine.set_out_of_sight("Sheet1", vec![], vec![0]);
+    engine.recalculate();
+
+    assert_eq!(number(&engine, "B1"), 30.0);
+    assert_eq!(number(&engine, "B2"), 20.0);
+}
+
+#[test]
+fn a_grand_total_does_not_count_the_subtotals_under_it() {
+    // A column with subtotals down it and a grand total at the bottom is the
+    // ordinary shape of a report, and a grand total that counted them would
+    // count every figure twice.
+    let mut engine = engine();
+    set(&mut engine, "A1", 10.0);
+    set(&mut engine, "A2", 20.0);
+    formula(&mut engine, "A3", "SUBTOTAL(9,A1:A2)");
+    set(&mut engine, "A4", 5.0);
+    formula(&mut engine, "A5", "SUBTOTAL(9,A4:A4)");
+    formula(&mut engine, "A6", "SUBTOTAL(9,A1:A5)");
+
+    assert_eq!(number(&engine, "A3"), 30.0);
+    assert_eq!(number(&engine, "A6"), 35.0);
+}
+
+#[test]
+fn aggregate_can_be_told_to_step_over_the_broken_cells() {
+    // Which is what somebody wants when one cell in a thousand is stopping
+    // the total.
+    let mut engine = engine();
+    set(&mut engine, "A1", 10.0);
+    engine.set_value("Sheet1", 1, 0, Value::Error(Error::DivideByZero));
+    set(&mut engine, "A3", 30.0);
+
+    formula(&mut engine, "B1", "AGGREGATE(9,6,A1:A3)");
+    formula(&mut engine, "B2", "SUM(A1:A3)");
+    formula(&mut engine, "B3", "AGGREGATE(14,6,A1:A3,1)");
+
+    assert_eq!(number(&engine, "B1"), 40.0);
+    assert_eq!(number(&engine, "B3"), 30.0);
+    // And a plain sum still says what is wrong, because that is what an
+    // error is for.
+    assert_eq!(
+        engine.value("Sheet1", 1, 1),
+        Value::Error(Error::DivideByZero)
+    );
+}

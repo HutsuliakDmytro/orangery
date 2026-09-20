@@ -5,7 +5,16 @@ import { cellAt, putCell } from '@orangery/ooxml-spreadsheet'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 import { applyEdit } from './edit'
-import { applyReport, cellsOf, heldOf, inputsFor, moment, shownAs, typedFormula } from './formula'
+import {
+  applyReport,
+  cellsOf,
+  heldOf,
+  inputsFor,
+  moment,
+  outOfSight,
+  shownAs,
+  typedFormula,
+} from './formula'
 import { cellChanges } from './history'
 
 /**
@@ -216,6 +225,34 @@ describe('which cells a step of history moved', () => {
       'after',
     )
     expect(widths).toEqual([])
+  })
+})
+
+describe('which rows are out of sight', () => {
+  it('tells a filtered row apart from one somebody hid', () => {
+    // A row's `hidden` flag says it cannot be seen and not why, because that
+    // is all the file records — and `SUBTOTAL(9,…)` and `SUBTOTAL(109,…)`
+    // need to know which is which.
+    sheet.cells.properties.set(7, {
+      index: 7,
+      height: null,
+      customHeight: false,
+      hidden: true,
+      outlineLevel: null,
+      style: null,
+      collapsed: false,
+      carried: null,
+    })
+
+    const { filtered, hidden } = outOfSight(open, sheet)
+    expect(hidden).toContain(7)
+    expect(filtered).not.toContain(7)
+  })
+
+  it('says nothing is out of sight on a sheet nobody has touched', () => {
+    const { filtered, hidden } = outOfSight(open, sheet)
+    expect(filtered).toEqual([])
+    expect(hidden).toEqual([])
   })
 })
 

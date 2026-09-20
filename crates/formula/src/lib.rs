@@ -23,7 +23,7 @@ pub mod value;
 pub use ast::{Expr, Operator};
 pub use date::{date_of, serial_of, DateSystem};
 pub use engine::{Applied, Changed, Edit, Engine};
-pub use eval::{evaluate, reference_of, Cells, Context, Rect};
+pub use eval::{evaluate, reference_of, Cells, Context, Rect, Standing};
 pub use graph::{precedents_of, Graph, Precedents, Recalculation};
 pub use lexer::{lex, Token, TokenKind};
 pub use parser::{parse, ParseError};

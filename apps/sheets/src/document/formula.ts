@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { isTauri } from '@orangery/platform'
 import { putCell } from '@orangery/ooxml-spreadsheet'
 import type { Cell, CellType } from '@orangery/ooxml-spreadsheet'
+import { rowsFilteredBy } from './filter'
 import type { Change } from './history'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 
@@ -49,6 +50,9 @@ export interface CellInput {
 export interface SheetInput {
   sheet: string
   cells: CellInput[]
+  /** Rows a filter put out of sight, and rows somebody hid by hand. */
+  filtered: number[]
+  hidden: number[]
 }
 
 export interface Outcome {
@@ -141,7 +145,32 @@ export function cellsOf(open: OpenWorkbook): SheetInput[] {
   return open.sheets.map((sheet) => ({
     sheet: sheet.name,
     cells: inputsOf(open, sheet),
+    ...outOfSight(open, sheet),
   }))
+}
+
+/**
+ * Which rows cannot be seen, and why.
+ *
+ * Two lists rather than one, because `SUBTOTAL` can tell them apart and the
+ * sheet cannot: a row's `hidden` flag says it is out of sight and not why,
+ * which is all the file records. 9 leaves out what a filter hid; 109 leaves
+ * out what somebody hid by hand as well. Asking the filter again is the only
+ * way to know which rows belong in which list.
+ */
+export function outOfSight(
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+): { filtered: number[]; hidden: number[] } {
+  const filtered = rowsFilteredBy(open, sheet)
+  const byFilter = new Set(filtered)
+  const hidden: number[] = []
+
+  for (const [row, properties] of sheet.cells.properties) {
+    if (properties.hidden && !byFilter.has(row)) hidden.push(row)
+  }
+
+  return { filtered, hidden }
 }
 
 /** The name a formula would use for the sheet kept in that part. */
@@ -317,6 +346,27 @@ export async function clearCell(
 ): Promise<Report> {
   if (!isTauri()) return nothing
   return await invoke<Report>('formula_clear', { book, sheet, row, column })
+}
+
+/**
+ * The engine told which rows are out of sight on one sheet.
+ *
+ * Only the totals are worked out again, because nothing else on a sheet
+ * cares whether a row is hidden — so filtering a table of a hundred thousand
+ * rows recalculates the handful of cells that are about it.
+ */
+export async function sendOutOfSight(
+  book: string,
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+): Promise<Report> {
+  if (!isTauri()) return nothing
+
+  return await invoke<Report>('formula_out_of_sight', {
+    book,
+    sheet: sheet.name,
+    ...outOfSight(open, sheet),
+  })
 }
 
 export async function recalculate(book: string, date1904: boolean): Promise<Report> {

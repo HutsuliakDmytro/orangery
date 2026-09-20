@@ -10,6 +10,7 @@
 //! — a spreadsheet where `IF(A1=0,0,1/A1)` divides by nought anyway is a
 //! spreadsheet that is wrong about the one thing the formula was guarding.
 
+pub mod aggregate;
 pub mod criteria;
 pub mod datetime;
 pub mod financial;
@@ -105,6 +106,8 @@ static FUNCTIONS: &[&Function] = &[
     &math::LOG10,
     &math::SIGN,
     &math::PI,
+    &aggregate::SUBTOTAL,
+    &aggregate::AGGREGATE,
     &math::CEILING,
     &math::FLOOR,
     &math::SUMSQ,

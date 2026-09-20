@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::ast::Expr;
 use crate::date::DateSystem;
-use crate::eval::{evaluate, Cells, Context};
+use crate::eval::{evaluate, Cells, Context, Standing};
 use crate::graph::{precedents_of, CellId, Graph};
 use crate::parser::{parse, ParseError};
 use crate::value::Value;
@@ -38,6 +38,12 @@ pub struct Engine {
     moment: f64,
     /// Which morning the workbook counts days from.
     system: DateSystem,
+    /// The rows nobody can see, and why.
+    ///
+    /// Not a fact about any cell's value, and not one the engine could work
+    /// out: a filter and a hidden row are things done to a sheet. They are
+    /// here because `SUBTOTAL` asks about them, and the window is what knows.
+    out_of_sight: HashMap<String, (HashSet<i64>, HashSet<i64>)>,
     /// Where `RAND` gets its answers.
     ///
     /// A sequence rather than a source of entropy: the seed comes from
@@ -91,6 +97,26 @@ impl Engine {
     /// Which morning this workbook counts days from — `date1904` in the file.
     pub fn set_date_system(&mut self, system: DateSystem) {
         self.system = system;
+    }
+
+    /// Which rows are out of sight on a sheet: hidden by a filter, and
+    /// hidden by hand.
+    ///
+    /// Replaces whatever was said before, because the window always knows the
+    /// whole answer and a difference would be more to go wrong than it saves.
+    pub fn set_out_of_sight(&mut self, sheet: &str, filtered: Vec<i64>, hidden: Vec<i64>) {
+        self.out_of_sight.insert(
+            sheet.to_string(),
+            (filtered.into_iter().collect(), hidden.into_iter().collect()),
+        );
+    }
+
+    /// Whether a cell holds a total of its own, which no other total counts.
+    fn is_a_total(&self, cell: &CellId) -> bool {
+        match self.contents.get(cell) {
+            Some(Content::Formula { tree, .. }) => calls_a_total(tree),
+            _ => false,
+        }
     }
 
     /// Where the random numbers start from.
@@ -302,6 +328,25 @@ impl Engine {
         self.recalculate_from(&formulas)
     }
 
+    /// Everything that depends on which rows are in sight, worked out again.
+    ///
+    /// What a filter changes. Only the totals are seeded — nothing else on a
+    /// sheet cares whether a row is hidden — so turning a filter on over a
+    /// table of a hundred thousand rows recalculates the handful of cells
+    /// that are about it rather than the workbook.
+    pub fn recalculate_totals(&mut self) -> Changed {
+        let totals: Vec<CellId> = self
+            .contents
+            .iter()
+            .filter(|(_, content)| {
+                matches!(content, Content::Formula { tree, .. } if calls_a_total(tree))
+            })
+            .map(|(cell, _)| cell.clone())
+            .collect();
+
+        self.recalculate_from(&totals)
+    }
+
     /// The cells that changed, worked out in an order that respects the graph.
     fn recalculate_from(&mut self, changed: &[CellId]) -> Changed {
         let mut result = Changed::default();
@@ -396,6 +441,20 @@ impl Cells for View<'_> {
         self.engine.extents.get(on).copied().unwrap_or((0, 0))
     }
 
+    fn standing(&self, sheet: Option<&str>, row: i64, column: i64) -> Standing {
+        let on = sheet.unwrap_or(&self.sheet);
+        let (filtered, hidden) = match self.engine.out_of_sight.get(on) {
+            Some((filtered, hidden)) => (filtered.contains(&row), hidden.contains(&row)),
+            None => (false, false),
+        };
+
+        Standing {
+            filtered,
+            hidden,
+            a_total: self.engine.is_a_total(&(on.to_string(), row, column)),
+        }
+    }
+
     fn now(&self) -> f64 {
         self.engine.moment
     }
@@ -406,5 +465,29 @@ impl Cells for View<'_> {
 
     fn date_system(&self) -> DateSystem {
         self.engine.system
+    }
+}
+
+/// Whether a formula takes a total of its own anywhere inside it.
+///
+/// Anywhere rather than at the top, because `=SUBTOTAL(9,A1:A9)/12` is still
+/// a cell holding a subtotal, and a grand total over a column of those would
+/// otherwise count every figure twice.
+fn calls_a_total(expression: &Expr) -> bool {
+    match expression {
+        Expr::Call { name, arguments } => {
+            let plain = name
+                .trim_start_matches("_xlfn.")
+                .trim_start_matches("_xlws.")
+                .to_ascii_uppercase();
+
+            plain == "SUBTOTAL" || plain == "AGGREGATE" || arguments.iter().any(calls_a_total)
+        }
+        Expr::Binary { left, right, .. } => calls_a_total(left) || calls_a_total(right),
+        Expr::Unary { operand, .. } | Expr::Percent(operand) | Expr::Parenthesised(operand) => {
+            calls_a_total(operand)
+        }
+        Expr::Array(rows) => rows.iter().flatten().any(calls_a_total),
+        _ => false,
     }
 }

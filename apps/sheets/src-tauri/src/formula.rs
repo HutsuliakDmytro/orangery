@@ -93,6 +93,16 @@ pub struct CellInput {
 pub struct SheetInput {
     pub sheet: String,
     pub cells: Vec<CellInput>,
+    /// Rows a filter has hidden, and rows somebody hid by hand.
+    ///
+    /// Two lists rather than one, because `SUBTOTAL` can tell them apart and
+    /// the sheet cannot: a row's `hidden` flag says it is out of sight and
+    /// not why, which is exactly what the file records and exactly what a
+    /// formula needs told.
+    #[serde(default)]
+    pub filtered: Vec<i64>,
+    #[serde(default)]
+    pub hidden: Vec<i64>,
 }
 
 /// Where a cell is.
@@ -179,6 +189,8 @@ pub fn formula_open(
     engine.seed_random(seed);
 
     for sheet in sheets {
+        engine.set_out_of_sight(&sheet.sheet, sheet.filtered, sheet.hidden);
+
         for cell in sheet.cells {
             let value = Value::from(cell.value);
             match cell.formula {
@@ -279,6 +291,26 @@ pub fn formula_set_many(
     }
 
     Ok(report)
+}
+
+/// Which rows are out of sight, and why.
+///
+/// What a filter changes, and the one thing a total is about that no value
+/// can answer. Only the totals are worked out again: nothing else on a sheet
+/// cares whether a row is hidden.
+#[tauri::command]
+pub fn formula_out_of_sight(
+    books: tauri::State<'_, Workbooks>,
+    book: String,
+    sheet: String,
+    filtered: Vec<i64>,
+    hidden: Vec<i64>,
+) -> Result<Report, String> {
+    let mut engines = books.engines()?;
+    let engine = engines.get_mut(&book).ok_or_else(unopened)?;
+
+    engine.set_out_of_sight(&sheet, filtered, hidden);
+    Ok(Report::of(engine.recalculate_totals()))
 }
 
 /// A cell emptied.

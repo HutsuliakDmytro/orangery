@@ -38,6 +38,7 @@ import {
   inputsFor,
   openEngine,
   recalculate,
+  sendOutOfSight,
   setCells,
 } from '../document/formula'
 import type { Report } from '../document/formula'
@@ -1149,10 +1150,25 @@ async function followUp(
   direction: 'before' | 'after',
 ): Promise<void> {
   const cells = inputsFor(open, changes, direction)
-  if (cells.length === 0) return
+  if (cells.length > 0) {
+    const report: Report = await setCells(session, cells)
+    applyOutcome(session, report)
+  }
 
-  const report: Report = await setCells(session, cells)
-  applyOutcome(session, report)
+  // A row hidden, a row shown, a filter turned on: none of them change a
+  // value, and all of them change what a `SUBTOTAL` over the column comes to.
+  const moved = new Set(
+    changes
+      .filter((change) => change.kind === 'row' || change.kind === 'filter')
+      .map((change) => change.sheet),
+  )
+
+  for (const path of moved) {
+    const sheet = open.sheets.find((one) => one.path === path)
+    if (sheet === undefined) continue
+
+    applyOutcome(session, await sendOutOfSight(session, open, sheet))
+  }
 }
 
 /**

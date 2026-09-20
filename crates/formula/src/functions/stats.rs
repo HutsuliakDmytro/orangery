@@ -233,25 +233,50 @@ function!(
 fn most_often(arguments: &[Expr], context: &Context<'_>) -> Value {
     done((|| {
         let found = numbers(&flattened(arguments, context), false)?;
-
-        // Strictly more than the best so far, so the first of a tie wins.
-        let mut best: Option<(f64, usize)> = None;
-        for value in &found {
-            let seen = found.iter().filter(|other| *other == value).count();
-            let better = match best {
-                None => seen > 1,
-                Some((_, most)) => seen > most,
-            };
-            if better {
-                best = Some((*value, seen));
-            }
-        }
-
-        match best {
-            Some((value, _)) => Ok(Value::Number(value)),
+        match mode_of(&found) {
+            Some(value) => Ok(Value::Number(value)),
             None => Ok(Value::Error(Error::NotAvailable)),
         }
     })())
+}
+
+/// The number that turns up most often, or nothing if none turns up twice.
+pub(crate) fn mode_of(found: &[f64]) -> Option<f64> {
+    // Strictly more than the best so far, so the first of a tie wins.
+    let mut best: Option<(f64, usize)> = None;
+
+    for value in found {
+        let seen = found.iter().filter(|other| *other == value).count();
+        let better = match best {
+            None => seen > 1,
+            Some((_, most)) => seen > most,
+        };
+        if better {
+            best = Some((*value, seen));
+        }
+    }
+
+    best.map(|(value, _)| value)
+}
+
+/// How far along a sorted list a fraction falls, under either rule.
+///
+/// The inclusive kind spreads the fraction across the numbers given; the
+/// exclusive kind pretends there is one more at each end and refuses to
+/// answer about a fraction that would fall outside them.
+pub(crate) fn place_in(size: f64, fraction: f64, inclusive: bool) -> Option<f64> {
+    if inclusive {
+        if !(0.0..=1.0).contains(&fraction) {
+            return None;
+        }
+        return Some(fraction * (size - 1.0));
+    }
+
+    if fraction < 1.0 / (size + 1.0) || fraction > size / (size + 1.0) {
+        return None;
+    }
+
+    Some(fraction * (size + 1.0) - 1.0)
 }
 
 /// The spread of a sample, and of a whole population.
@@ -260,7 +285,7 @@ fn most_often(arguments: &[Expr], context: &Context<'_>) -> Value {
 /// by one fewer because it is standing in for something larger, and a table
 /// of every branch there is divides by all of them. Excel has both under four
 /// names apiece, because the names changed in 2010 and the files did not.
-fn variance(found: &[f64], of_a_sample: bool) -> Result<f64, Error> {
+pub(crate) fn variance(found: &[f64], of_a_sample: bool) -> Result<f64, Error> {
     let least = if of_a_sample { 2 } else { 1 };
     if found.len() < least {
         return Err(Error::DivideByZero);
@@ -401,7 +426,7 @@ fn nth_from_the_end(
 /// Between two of them it is interpolated rather than rounded to one: the
 /// median of an even list is the average of the middle pair, and a percentile
 /// is the same idea at any other fraction.
-fn at_fraction(found: &mut [f64], place: f64) -> f64 {
+pub(crate) fn at_fraction(found: &mut [f64], place: f64) -> f64 {
     found.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let below = place.floor() as usize;
@@ -428,21 +453,11 @@ fn percentile(
         return Ok(Value::Error(Error::Number));
     }
 
-    let size = found.len() as f64;
-
-    let place = if inclusive {
-        if !(0.0..=1.0).contains(&fraction) {
-            return Ok(Value::Error(Error::Number));
-        }
-        fraction * (size - 1.0)
-    } else {
-        // The exclusive kind leaves out the ends: with ten numbers it will
-        // not answer about the 5th percentile, because it holds that the
-        // sample says nothing about what lies outside it.
-        if fraction < 1.0 / (size + 1.0) || fraction > size / (size + 1.0) {
-            return Ok(Value::Error(Error::Number));
-        }
-        fraction * (size + 1.0) - 1.0
+    // The exclusive kind leaves out the ends: with ten numbers it will not
+    // answer about the 5th percentile, because it holds that the sample says
+    // nothing about what lies outside it.
+    let Some(place) = place_in(found.len() as f64, fraction, inclusive) else {
+        return Ok(Value::Error(Error::Number));
     };
 
     Ok(Value::Number(at_fraction(&mut found, place)))

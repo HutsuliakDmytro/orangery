@@ -66,24 +66,55 @@ export function applyFilter(
 
   const top = Math.min(range.from.row, range.to.row)
   const bottom = Math.max(range.from.row, range.to.row)
-  const left = Math.min(range.from.column, range.to.column)
+  const out = new Set(rowsFilteredBy(open, sheet, filter))
 
   for (let row = top + 1; row <= bottom; row += 1) {
-    const hidden =
-      filter !== null &&
-      filter.columns.some(
-        (criteria) =>
-          !passes(
-            criteria,
-            shownText(open, sheet.cells.rows.get(row)?.get(left + criteria.column) ?? null),
-          ),
-      )
-
+    const hidden = out.has(row)
     if ((sheet.cells.properties.get(row)?.hidden ?? false) === hidden) continue
     changes.push(...resizeRows(sheet, row, row, { hidden }))
   }
 
   return changes
+}
+
+/**
+ * The rows a filter puts out of sight — which is not the same list as the
+ * rows that are out of sight.
+ *
+ * A row's `hidden` flag says it cannot be seen and not why, because that is
+ * all the file records. `SUBTOTAL` can tell the two apart — 9 leaves out what
+ * a filter hid and 109 leaves out what somebody hid by hand — so the engine
+ * has to be told which is which, and the only way to know is to ask the
+ * filter again.
+ *
+ * The header row is never among them: it is what the arrows are on.
+ */
+export function rowsFilteredBy(
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+  filter: AutoFilter | null = sheet.sheet.autoFilter,
+): number[] {
+  const range = filter?.range
+  if (filter === null || range === undefined) return []
+
+  const top = Math.min(range.from.row, range.to.row)
+  const bottom = Math.max(range.from.row, range.to.row)
+  const left = Math.min(range.from.column, range.to.column)
+
+  const out: number[] = []
+  for (let row = top + 1; row <= bottom; row += 1) {
+    const fails = filter.columns.some(
+      (criteria) =>
+        !passes(
+          criteria,
+          shownText(open, sheet.cells.rows.get(row)?.get(left + criteria.column) ?? null),
+        ),
+    )
+
+    if (fails) out.push(row)
+  }
+
+  return out
 }
 
 /** Turns filtering on over the table a cell is in, or takes it off. */

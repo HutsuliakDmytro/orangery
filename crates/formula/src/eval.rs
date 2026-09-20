@@ -35,6 +35,17 @@ pub trait Cells {
         (0, 0)
     }
 
+    /// What a cell is to the functions that leave some cells out.
+    ///
+    /// `SUBTOTAL` over a filtered table must not count the rows the filter
+    /// hid, and a grand total made of subtotals must not add them twice.
+    /// Neither is a question about a cell's value, so neither can be answered
+    /// from the value — only whoever holds the sheet knows.
+    fn standing(&self, sheet: Option<&str>, row: i64, column: i64) -> Standing {
+        let _ = (sheet, row, column);
+        Standing::default()
+    }
+
     /// What time it is, as a serial number in this workbook's date system.
     ///
     /// A pure library has no clock, so `NOW()` is worth exactly what the
@@ -63,6 +74,23 @@ pub trait Cells {
     fn date_system(&self) -> DateSystem {
         DateSystem::Excel1900
     }
+}
+
+/// What a cell is to a total that leaves some cells out.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Standing {
+    /// Out of sight because a filter is on. Every kind of `SUBTOTAL` leaves
+    /// these out — which is the whole reason the function exists rather than
+    /// `SUM` being used over a filtered table.
+    pub filtered: bool,
+    /// Out of sight because somebody hid the row by hand. Only the hundreds —
+    /// 101 to 111 — leave these out, because hiding a row and filtering a
+    /// table are different acts and Excel lets a formula tell them apart.
+    pub hidden: bool,
+    /// Holds a total of its own. No total counts another one, or a column
+    /// with subtotals down it and a grand total at the bottom would count
+    /// every figure twice.
+    pub a_total: bool,
 }
 
 /// A rectangle of the sheet, named rather than read.

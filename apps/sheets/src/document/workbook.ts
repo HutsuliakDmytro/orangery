@@ -14,6 +14,7 @@ import {
 } from '@orangery/ooxml-spreadsheet'
 import type {
   RichText,
+  SheetEntry,
   StyleChanges,
   SheetCells,
   SheetComments,
@@ -104,19 +105,7 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
     { foreground: '000000', background: 'FFFFFF' },
   )
 
-  const sheets = (workbook?.sheets ?? []).map((entry) => {
-    const text = getPartText(pkg, entry.path) ?? ''
-
-    return {
-      name: entry.name,
-      path: entry.path,
-      hidden: entry.state !== 'visible',
-      sheet: readWorksheet(text) ?? EMPTY_SHEET,
-      cells: readSheetData(text),
-      drawings: drawingsOf(pkg, entry.path, text),
-      comments: commentsOf(pkg, entry.path),
-    }
-  })
+  const sheets = (workbook?.sheets ?? []).map((entry) => openSheetOf(pkg, entry))
 
   return {
     pkg,
@@ -132,6 +121,28 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
     styleChanges: noStyleChanges(),
     strings: readRichStrings(pkg),
     palette,
+  }
+}
+
+/**
+ * One sheet of a workbook, read out of its part.
+ *
+ * Separate from the open above because a sheet can arrive after the file
+ * does: adding one, or duplicating one, makes a part and then has to make the
+ * model that goes with it — and doing that by hand somewhere else is how the
+ * two come to disagree about what a sheet is.
+ */
+export function openSheetOf(pkg: OoxmlPackage, entry: SheetEntry): OpenSheet {
+  const text = getPartText(pkg, entry.path) ?? ''
+
+  return {
+    name: entry.name,
+    path: entry.path,
+    hidden: entry.state !== 'visible',
+    sheet: readWorksheet(text) ?? EMPTY_SHEET,
+    cells: readSheetData(text),
+    drawings: drawingsOf(pkg, entry.path, text),
+    comments: commentsOf(pkg, entry.path),
   }
 }
 

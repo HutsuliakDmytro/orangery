@@ -14,6 +14,15 @@ import {
 import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { fillCells } from '../document/fill'
+import {
+  addSheet,
+  colorTab,
+  hideSheet,
+  indexOfSheet,
+  moveSheet,
+  removeSheet,
+  renameSheet,
+} from '../document/sheets'
 import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
 import { columnNamesIn, looksLikeHeader, sortRows, tableToSort } from '../document/sort'
 import type { SortKey } from '../document/sort'
@@ -79,6 +88,27 @@ export interface WorkbookState {
   dismiss: () => void
   close: () => void
   select: (index: number) => void
+  /**
+   * The tabs along the bottom.
+   *
+   * None of these can be taken back, as in Excel: a history step that could
+   * undo a deleted sheet would have to hold a whole worksheet — its cells,
+   * its drawings, the parts they point at — where every other step holds a
+   * few cells. Being asked first is what takes the place of undo, and the
+   * window does the asking.
+   *
+   * A sheet is named by its part rather than by its position. A tab has two
+   * positions — among the sheets a person can see and among all of them — and
+   * a hidden sheet has only the second, so the part is the only name that
+   * means one thing everywhere.
+   */
+  addSheet: (options?: { duplicate?: boolean }) => void
+  removeSheet: (path: string) => void
+  renameSheet: (path: string, name: string) => void
+  /** Moved to where the sheet at `before` is now, counting the visible ones. */
+  moveSheet: (path: string, before: number) => void
+  hideSheet: (path: string, hidden: boolean) => void
+  colorTab: (path: string, color: string | null) => void
   choose: (selection: GridSelection) => void
   edit: (address: CellAddress, text: string) => void
   /** Empties everything selected, as one thing that can be taken back. */
@@ -195,6 +225,94 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     // A selection belongs to the sheet it was made on; carrying it across
     // would put the cursor on a cell nobody chose.
     set({ current: index, selection: singleCell({ row: 0, column: 0 }) })
+  },
+
+  addSheet: (options) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    const at = sheet === undefined ? open.sheets.length : indexOfSheet(open, sheet.path) + 1
+
+    const added = addSheet(open, {
+      at,
+      ...(options?.duplicate === true && sheet !== undefined
+        ? { copyOf: sheet, name: `${sheet.name} (2)` }
+        : {}),
+    })
+    if (added === null) return
+
+    const made = open.sheets[added]
+    set({
+      open: { ...open, sheets: [...open.sheets] },
+      edited: true,
+      current: made === undefined ? current : visibleSheets(open).indexOf(made),
+      selection: singleCell({ row: 0, column: 0 }),
+    })
+  },
+
+  removeSheet: (path) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    if (!removeSheet(open, indexOfSheet(open, path))) return
+
+    set({
+      open: { ...open, sheets: [...open.sheets] },
+      edited: true,
+      // Whichever sheet is now where that one was, or the last if it was last.
+      current: Math.min(current, Math.max(visibleSheets(open).length - 1, 0)),
+      selection: singleCell({ row: 0, column: 0 }),
+    })
+  },
+
+  renameSheet: (path, name) => {
+    const { open } = useWorkbookStore.getState()
+    if (open === null) return
+
+    if (renameSheet(open, indexOfSheet(open, path), name) === null) return
+
+    set({ open: { ...open, sheets: [...open.sheets] }, edited: true })
+  },
+
+  moveSheet: (path, before) => {
+    const { open } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const shown = visibleSheets(open)
+    const sheet = shown.find((one) => one.path === path)
+    const target = shown[before]
+    if (sheet === undefined || target === undefined) return
+
+    if (!moveSheet(open, indexOfSheet(open, path), indexOfSheet(open, target.path))) return
+
+    set({
+      open: { ...open, sheets: [...open.sheets] },
+      edited: true,
+      current: visibleSheets(open).indexOf(sheet),
+    })
+  },
+
+  hideSheet: (path, hidden) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    if (!hideSheet(open, indexOfSheet(open, path), hidden)) return
+
+    set({
+      open: { ...open, sheets: [...open.sheets] },
+      edited: true,
+      current: Math.min(current, Math.max(visibleSheets(open).length - 1, 0)),
+    })
+  },
+
+  colorTab: (path, color) => {
+    const { open } = useWorkbookStore.getState()
+    if (open === null) return
+
+    if (!colorTab(open, indexOfSheet(open, path), color)) return
+
+    set({ open: { ...open, sheets: [...open.sheets] }, edited: true })
   },
 
   choose: (selection) => {

@@ -14,6 +14,7 @@ import { valuesIn } from '../document/filter'
 import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
+import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
 import { SortDialog } from '../render/sort-dialog'
 import { sortTarget, useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
@@ -57,6 +58,12 @@ function Shell() {
   const join = useWorkbookStore((state) => state.merge)
   const filterBy = useWorkbookStore((state) => state.filterBy)
   const fillSeries = useWorkbookStore((state) => state.fillSeries)
+  const addSheet = useWorkbookStore((state) => state.addSheet)
+  const renameSheet = useWorkbookStore((state) => state.renameSheet)
+  const removeSheet = useWorkbookStore((state) => state.removeSheet)
+  const moveSheet = useWorkbookStore((state) => state.moveSheet)
+  const hideSheet = useWorkbookStore((state) => state.hideSheet)
+  const colorTab = useWorkbookStore((state) => state.colorTab)
 
   /** The header cell whose filter list is open, if one is. */
   const [filtering, setFiltering] = useState<CellAddress | null>(null)
@@ -309,26 +316,19 @@ function Shell() {
         />
       )}
 
-      {sheets.length > 0 && (
-        <nav aria-label="Sheets" className="flex h-8 items-stretch gap-px border-t border-border">
-          {sheets.map((one, index) => (
-            <button
-              key={one.path}
-              type="button"
-              aria-current={index === current}
-              onClick={() => {
-                select(index)
-              }}
-              className={`px-3 text-xs ${
-                index === current
-                  ? 'border-b-2 border-accent text-text'
-                  : 'text-muted hover:text-text'
-              }`}
-            >
-              {one.name}
-            </button>
-          ))}
-        </nav>
+      {sheets.length > 0 && open !== null && (
+        <SheetTabs
+          open={open}
+          sheets={sheets}
+          current={current}
+          onSelect={select}
+          onAdd={addSheet}
+          onRename={renameSheet}
+          onRemove={removeSheet}
+          onMove={moveSheet}
+          onHide={hideSheet}
+          onColor={colorTab}
+        />
       )}
 
       <CommandPalette />

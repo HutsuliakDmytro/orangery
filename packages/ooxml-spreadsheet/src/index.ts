@@ -129,3 +129,13 @@ export {
 export type { SheetDataHandlers } from './sheet-data'
 export { clearCell, insertRow, openSheet, readCell, removeRow, saveSheet, writeCell } from './sheet'
 export type { CellValue, Sheet } from './sheet'
+
+export {
+  addSheet,
+  freeName,
+  moveSheet,
+  removeSheet,
+  renameSheet,
+  setSheetState,
+  setTabColor,
+} from './sheets-edit'

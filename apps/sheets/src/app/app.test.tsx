@@ -82,8 +82,10 @@ describe('a window with a workbook', () => {
 
     const tabs = screen.getByRole('navigation', { name: 'Sheets' })
 
-    // The fixture has three sheets and one of them is hidden.
-    expect(tabs.querySelectorAll('button')).toHaveLength(2)
+    // The fixture has three sheets and one of them is hidden. A tab is the
+    // button that says whether it is the current one; the others in the strip
+    // are the plus and the count of what is hidden.
+    expect(tabs.querySelectorAll('button[aria-current]')).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Notes' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Working' })).not.toBeInTheDocument()
   })

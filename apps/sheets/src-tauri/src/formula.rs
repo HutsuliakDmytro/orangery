@@ -226,6 +226,25 @@ impl Report {
     }
 }
 
+/// A workbook, as the window hands it over.
+///
+/// One argument rather than six: what is being described is a workbook, and
+/// a list of loose parameters would let a caller send its sheets without its
+/// tables and find out at the first formula.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Opening {
+    pub sheets: Vec<SheetInput>,
+    pub tables: Vec<TableInput>,
+    pub names: Vec<NameInput>,
+    /// What time it is, in this workbook's own date system.
+    pub moment: f64,
+    pub date1904: bool,
+    /// Where the random numbers start, so that two recalculations of one
+    /// workbook in one sitting agree about a column of them.
+    pub seed: u64,
+}
+
 /// A workbook loaded, without anything being worked out.
 ///
 /// The numbers in a file are the ones the program that wrote it worked out,
@@ -236,27 +255,22 @@ impl Report {
 pub fn formula_open(
     books: tauri::State<'_, Workbooks>,
     book: String,
-    sheets: Vec<SheetInput>,
-    tables: Vec<TableInput>,
-    names: Vec<NameInput>,
-    moment: f64,
-    date1904: bool,
-    seed: u64,
+    workbook: Opening,
 ) -> Result<(), String> {
     let mut engine = Engine::new();
-    engine.set_moment(moment);
-    engine.set_date_system(if date1904 {
+    engine.set_moment(workbook.moment);
+    engine.set_date_system(if workbook.date1904 {
         DateSystem::Excel1904
     } else {
         DateSystem::Excel1900
     });
-    engine.seed_random(seed);
-    engine.set_tables(tables.into_iter().map(Into::into).collect());
-    for defined in names {
+    engine.seed_random(workbook.seed);
+    engine.set_tables(workbook.tables.into_iter().map(Into::into).collect());
+    for defined in workbook.names {
         engine.set_name(&defined.name, &defined.formula);
     }
 
-    for sheet in sheets {
+    for sheet in workbook.sheets {
         engine.set_out_of_sight(&sheet.sheet, sheet.filtered, sheet.hidden);
 
         for cell in sheet.cells {

@@ -473,14 +473,16 @@ export async function openEngine(book: string, open: OpenWorkbook): Promise<void
 
   await invoke('formula_open', {
     book,
-    sheets: cellsOf(open),
-    tables: tablesOf(open),
-    names: namesOf(open),
-    moment: moment(open.workbook.date1904),
-    date1904: open.workbook.date1904,
-    // The seed is the session's, so the same workbook recalculated twice in
-    // one sitting does not invent a different column of random numbers.
-    seed: Math.floor(Math.random() * 2 ** 32) + 1,
+    workbook: {
+      sheets: cellsOf(open),
+      tables: tablesOf(open),
+      names: namesOf(open),
+      moment: moment(open.workbook.date1904),
+      date1904: open.workbook.date1904,
+      // The seed is the session's, so the same workbook recalculated twice
+      // in one sitting does not invent a different column of random numbers.
+      seed: Math.floor(Math.random() * 2 ** 32) + 1,
+    },
   })
 }
 

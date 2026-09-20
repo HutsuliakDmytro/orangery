@@ -32,6 +32,7 @@ import { iconOf } from './icon-sets'
 import { SheetDrawings } from './sheet-drawings'
 import { NoteBox } from './note-box'
 import { notesOf } from './sheet-notes'
+import { editableText } from '../document/shown'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
 /**
@@ -225,6 +226,18 @@ export function SheetView({
       return formatValue(number, code, { date1904: open.workbook.date1904 }).text
     },
     [cellFor, highlight, open.workbook.date1904, strings, styleOf, styles],
+  )
+
+  /**
+   * What somebody edits when they open a cell.
+   *
+   * The formula, where there is one: a cell showing 42 that holds `=6*7` has
+   * to open as `=6*7`, or the only way to change a formula would be to write
+   * it out again from memory. Everything else opens as what it shows.
+   */
+  const editableAt = useCallback(
+    (address: CellAddress): string | null => editableText(open, cellFor(address)),
+    [cellFor, open],
   )
 
   const styleAt = useCallback(
@@ -491,6 +504,7 @@ export function SheetView({
       columnHeader={(column) => indexToColumn(column)}
       rowHeader={(row) => String(row + 1)}
       valueAt={valueAt}
+      editableAt={editableAt}
       styleAt={styleAt}
       mergeAt={merged}
     />

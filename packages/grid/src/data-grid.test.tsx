@@ -119,6 +119,19 @@ describe('editing a cell', () => {
     expect(screen.getByRole<HTMLInputElement>('textbox').value).toBe('Q1')
   })
 
+  it('opens with the question rather than the answer where they differ', async () => {
+    // A cell showing 42 may hold `=6*7`. What is drawn is the answer; what is
+    // edited is the question, and a grid that opened the answer would make a
+    // formula something you can only replace, never change.
+    const user = userEvent.setup()
+    grid({ onChange: vi.fn(), editableAt: () => '=6*7' })
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('{F2}')
+
+    expect(screen.getByRole<HTMLInputElement>('textbox').value).toBe('=6*7')
+  })
+
   it('starts from the first keystroke, replacing what was there', async () => {
     // Every spreadsheet does this, and the keystroke that starts it is the
     // first character rather than a lost one.

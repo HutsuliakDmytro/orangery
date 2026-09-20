@@ -61,6 +61,15 @@ export interface DataGridProps {
   columnHeader?: (column: number) => string
   /** The numbers down the left. */
   rowHeader?: (row: number) => string
+  /**
+   * What somebody edits when they open a cell, where that is not what the
+   * cell shows.
+   *
+   * A cell showing 42 may hold `=6*7`, and a cell showing 15 % may hold
+   * 0.15. What is drawn is the answer; what is edited is the question. Left
+   * out, the two are the same, which is true of most cells in most grids.
+   */
+  editableAt?: (cell: CellAddress) => string | null
   /** Called when a cell is committed. Without it the grid is read-only. */
   onChange?: (cell: CellAddress, text: string) => void
   /** Cells this says no to are selectable and not editable. */
@@ -370,6 +379,7 @@ export function DataGrid({
   rows,
   columns,
   valueAt,
+  editableAt,
   columnHeader = columnName,
   rowHeader = (row) => String(row + 1),
   onChange,
@@ -857,6 +867,17 @@ export function DataGrid({
   )
 
   /**
+   * What a cell opens with when somebody begins editing it.
+   *
+   * What is drawn is the answer; what is edited is the question — and for
+   * most cells in most grids they are the same string.
+   */
+  const openedText = useCallback(
+    (cell: CellAddress) => (editableAt ?? valueAt)(cell) ?? '',
+    [editableAt, valueAt],
+  )
+
+  /**
    * A row or a column made the size its own values need.
    *
    * The gesture is a double click on the edge somebody would otherwise drag,
@@ -1054,7 +1075,7 @@ export function DataGrid({
 
     if (event.key === 'F2' && canEdit(selected)) {
       event.preventDefault()
-      setEditing({ cell: selected, text: valueAt(selected) ?? '' })
+      setEditing({ cell: selected, text: openedText(selected) })
       return
     }
 
@@ -1258,7 +1279,7 @@ export function DataGrid({
             return
           }
 
-          if (canEdit(selected)) setEditing({ cell: selected, text: valueAt(selected) ?? '' })
+          if (canEdit(selected)) setEditing({ cell: selected, text: openedText(selected) })
         }}
         onPointerMove={(event) => {
           const box = event.currentTarget.parentElement?.getBoundingClientRect()

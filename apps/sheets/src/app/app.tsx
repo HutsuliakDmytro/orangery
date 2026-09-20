@@ -3,7 +3,7 @@ import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
 import { selectedCount } from '@orangery/grid'
-import { formatCodeOf, resolveStyle } from '@orangery/ooxml-spreadsheet'
+import { cellAt, formatCodeOf, resolveStyle } from '@orangery/ooxml-spreadsheet'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog, recoverWorkbook } from '../document/file'
 import { recoverable } from '../document/autosave'
@@ -14,6 +14,8 @@ import type { Recoverable } from '../document/autosave'
 import { valuesIn } from '../document/filter'
 import { linkAt } from '../document/links'
 import { FilterMenu } from '../render/filter-menu'
+import { editableText } from '../document/shown'
+import { FormulaBar } from '../render/formula-bar'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
 import { FindPanel } from '../render/find-panel'
@@ -316,6 +318,12 @@ function Shell() {
           {selected > 1 && (
             <span className="text-xs text-muted">{`${String(selected)} cells`}</span>
           )}
+          <FormulaBar
+            text={open === null ? '' : editableText(open, cellAt(sheet.cells, selection.active))}
+            onCommit={(text) => {
+              edit(selection.active, text)
+            }}
+          />
         </div>
       )}
 

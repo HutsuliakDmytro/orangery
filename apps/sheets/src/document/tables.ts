@@ -1,24 +1,10 @@
-import {
-  addRelationship,
-  ensureOverride,
-  getPartText,
-  parseRelationships,
-  partDirectory,
-  serializeRelationships,
-} from '@orangery/ooxml-core'
-import {
-  putCell,
-  regionAround,
-  replaceTableParts,
-  freeTableName,
-  writeTable,
-} from '@orangery/ooxml-spreadsheet'
-import { setPartText } from '@orangery/ooxml-core'
+import { putCell, regionAround, freeTableName } from '@orangery/ooxml-spreadsheet'
 import type { Cell, Table } from '@orangery/ooxml-spreadsheet'
 import type { GridRange } from '@orangery/grid'
 import { shownText } from './shown'
 import { looksLikeHeader } from './sort'
 import { reshape } from './structure'
+import { writeTables } from './table-parts'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 
 /**
@@ -31,10 +17,6 @@ import type { OpenSheet, OpenWorkbook } from './workbook'
  * today. The engine already understands the last of those
  * (`crates/formula/src/table.rs`); this is what puts one in the file.
  */
-
-const TABLE_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml'
-const TABLE_RELATIONSHIP =
-  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table'
 
 /** Excel's own default, and the one every new table arrives wearing. */
 const STYLE = 'TableStyleMedium2'
@@ -110,7 +92,7 @@ export function makeTable(open: OpenWorkbook, sheet: OpenSheet, range: GridRange
   })
 
   if (!headed) {
-    reshape(sheet, { axis: 'row', at: bounds.top, by: 1 })
+    reshape(open, sheet, { axis: 'row', at: bounds.top, by: 1 })
     bounds.bottom += 1
   }
 
@@ -158,7 +140,7 @@ export function makeTable(open: OpenWorkbook, sheet: OpenSheet, range: GridRange
   }
 
   sheet.tables.push(table)
-  write(open, sheet)
+  writeTables(open, sheet)
 
   return table
 }
@@ -189,7 +171,7 @@ export function toggleTotals(open: OpenWorkbook, sheet: OpenSheet, table: Table)
       totalsLabel: null,
     }))
 
-    write(open, sheet)
+    writeTables(open, sheet)
     return true
   }
 
@@ -213,7 +195,7 @@ export function toggleTotals(open: OpenWorkbook, sheet: OpenSheet, table: Table)
     return { ...one, totalsFunction: 'sum', totalsLabel: null }
   })
 
-  write(open, sheet)
+  writeTables(open, sheet)
   return true
 }
 
@@ -270,64 +252,4 @@ function boundsOf(
 
   // One row is a header with nothing under it, which is not a table.
   return bottom === top ? null : { top, bottom, left, right }
-}
-
-/**
- * Every table of a sheet written into the package.
- *
- * All of them rather than the one that changed: a sheet has a handful, the
- * parts are small, and the alternative is remembering which part each table
- * came from — a second thing to keep in step for no gain.
- */
-function write(open: OpenWorkbook, sheet: OpenSheet): void {
-  const relationshipsPath = relationshipsOf(sheet.path)
-  const relationships = parseRelationships(getPartText(open.pkg, relationshipsPath) ?? '')
-
-  // The ones that were there are replaced, so a table taken away leaves no
-  // part behind pointing at nothing.
-  for (const [id, one] of [...relationships]) {
-    if (one.type === TABLE_RELATIONSHIP) relationships.delete(id)
-  }
-
-  const ids: string[] = []
-
-  for (const [at, table] of sheet.tables.entries()) {
-    const path = `xl/tables/table${String(nextNumber(open, at))}.xml`
-    setPartText(open.pkg, path, writeTable(table, at + 1))
-    ensureOverride(open.pkg, path, TABLE_TYPE)
-
-    const link = addRelationship(relationships, TABLE_RELATIONSHIP, relativeTo(sheet.path, path))
-    ids.push(link.id)
-  }
-
-  setPartText(open.pkg, relationshipsPath, serializeRelationships(relationships))
-  setPartText(open.pkg, sheet.path, replaceTableParts(getPartText(open.pkg, sheet.path) ?? '', ids))
-}
-
-/** The part number a table gets: its own if it has one, the next free if not. */
-function nextNumber(open: OpenWorkbook, at: number): number {
-  let number = at + 1
-  const used = new Set(
-    [...open.pkg.parts.keys()]
-      .map((path) => /^xl\/tables\/table(\d+)\.xml$/u.exec(path)?.[1])
-      .filter((one): one is string => one !== undefined),
-  )
-
-  while (used.has(String(number)) && number <= at) number += 1
-  return number
-}
-
-const relationshipsOf = (path: string): string => {
-  const directory = partDirectory(path)
-  return `${directory}/_rels/${path.slice(directory.length + 1)}.rels`
-}
-
-function relativeTo(from: string, to: string): string {
-  const here = partDirectory(from).split('/')
-  const there = to.split('/')
-
-  let same = 0
-  while (same < here.length && here[same] === there[same]) same += 1
-
-  return [...here.slice(same).map(() => '..'), ...there.slice(same)].join('/')
 }

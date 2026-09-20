@@ -237,7 +237,7 @@ describe('things that are not cells', () => {
     // Row 2 is thirty points tall; inserting above it moves that down, and
     // undoing has to bring it back up.
     const history = recorded(emptyHistory(), {
-      changes: reshape(sheet, { axis: 'row', at: 0, by: 1 }),
+      changes: reshape(open, sheet, { axis: 'row', at: 0, by: 1 }),
       selection: singleCell({ row: 0, column: 0 }),
     })
     expect(sheet.cells.properties.get(2)?.height).toBe(30)

@@ -10,12 +10,16 @@ import type {
   Cell,
   CellRange,
   ColumnLook,
+  DefinedName,
+  FormulaPlace,
   RowProperties,
 } from '@orangery/ooxml-spreadsheet'
 import { cellChanges } from './history'
 import type { Change } from './history'
+import { movedShape, putShape, shapeOf, tablesMoved } from './shape'
+import { writeTables } from './table-parts'
 import type { CellChange } from './edit'
-import type { OpenSheet } from './workbook'
+import type { OpenSheet, OpenWorkbook } from './workbook'
 
 /**
  * Putting rows and columns in, and taking them out.
@@ -27,9 +31,15 @@ import type { OpenSheet } from './workbook'
  * and has to be rewritten to point at it where it is now.
  *
  * So this touches everything rather than a band. It is the one operation in
- * the app whose cost is the size of the sheet rather than the size of the
+ * the app whose cost is the size of the workbook rather than the size of the
  * selection, and there is no way round it: a sheet where half the formulas
  * were adjusted is worse than one where none were.
+ *
+ * The workbook rather than the sheet, because a formula on another sheet can
+ * name this one — `=Sheet1!A5` has to move when Sheet1 does, and it is not on
+ * Sheet1. The same goes for the workbook's names. What is on the sheet and is
+ * not a cell — the merges, the rules, the validations, the tables — is in
+ * `shape.ts`.
  */
 
 /** Where a cell ends up, or null when the band it was in has gone. */
@@ -52,8 +62,21 @@ function movedTo(cell: Cell, change: BandChange): { row: number; column: number 
  * walked the existing map in place would overwrite cells it had not visited
  * yet — and which ones depend on which direction the band moved.
  */
-export function reshape(sheet: OpenSheet, change: BandChange): Change[] {
+export function reshape(open: OpenWorkbook, sheet: OpenSheet, change: BandChange): Change[] {
   if (change.by === 0) return []
+
+  return [
+    ...movedCells(sheet, change),
+    ...adjustedElsewhere(open, sheet, change),
+    ...reshapeRows(sheet, change),
+    ...reshapedShape(open, sheet, change),
+    ...reshapedNames(open, sheet.name, change),
+  ]
+}
+
+/** The cells of the sheet that changed shape, moved and rewritten. */
+function movedCells(sheet: OpenSheet, change: BandChange): Change[] {
+  const place: FormulaPlace = { changed: sheet.name, own: sheet.name }
 
   const changes: CellChange[] = []
   const was = new Map<number, Cell>()
@@ -71,7 +94,7 @@ export function reshape(sheet: OpenSheet, change: BandChange): Change[] {
     const formula =
       cell.formula === null
         ? null
-        : { ...cell.formula, text: adjustFormula(cell.formula.text, change) }
+        : { ...cell.formula, text: adjustFormula(cell.formula.text, change, place) }
 
     now.set(to.row * 16_384 + to.column, { ...cell, row: to.row, column: to.column, formula })
   }
@@ -95,7 +118,86 @@ export function reshape(sheet: OpenSheet, change: BandChange): Change[] {
   sheet.cells.rows.clear()
   for (const cell of now.values()) putCell(sheet.cells, cell)
 
-  return [...cellChanges(changes), ...reshapeRows(sheet, change)]
+  return cellChanges(changes)
+}
+
+/**
+ * Formulas on the other sheets that were talking about this one.
+ *
+ * Nothing on them moves — their own rows are where they were — but a formula
+ * naming the reshaped sheet has to follow it, and one naming its own sheet
+ * must be left exactly alone. Which is which is `adjustFormula`'s to decide;
+ * this only walks.
+ */
+function adjustedElsewhere(open: OpenWorkbook, sheet: OpenSheet, change: BandChange): Change[] {
+  const changes: CellChange[] = []
+
+  for (const other of open.sheets) {
+    if (other === sheet) continue
+
+    const place: FormulaPlace = { changed: sheet.name, own: other.name }
+
+    for (const cells of other.cells.rows.values()) {
+      for (const cell of cells.values()) {
+        if (cell.formula === null) continue
+
+        const text = adjustFormula(cell.formula.text, change, place)
+        if (text === cell.formula.text) continue
+
+        const after: Cell = { ...cell, formula: { ...cell.formula, text } }
+        putCell(other.cells, after)
+        changes.push({
+          sheet: other.path,
+          row: cell.row,
+          column: cell.column,
+          before: cell,
+          after,
+        })
+      }
+    }
+  }
+
+  return cellChanges(changes)
+}
+
+/** The sheet's rectangles, moved together. */
+function reshapedShape(open: OpenWorkbook, sheet: OpenSheet, change: BandChange): Change[] {
+  const before = shapeOf(sheet)
+  const after = movedShape(before, change, { changed: sheet.name, own: sheet.name })
+
+  putShape(sheet, after)
+
+  // A table part carries the range in its own file, so a table that moved has
+  // to be written now: the sheet's other rectangles are written at save time
+  // from the model, and a table is not.
+  if (tablesMoved(before, after)) writeTables(open, sheet)
+
+  return [{ kind: 'shape', sheet: sheet.path, before, after }]
+}
+
+/**
+ * The workbook's names, which are formulas and move like them.
+ *
+ * A name scoped to a sheet may say `A1` and mean that sheet; a name scoped to
+ * the workbook that says `A1` means nothing in particular, so a bare
+ * reference is only followed when the name belongs to the sheet that changed.
+ */
+function reshapedNames(open: OpenWorkbook, changed: string, change: BandChange): Change[] {
+  const before = open.workbook.definedNames
+  const sheetNames = open.workbook.sheets.map((one) => one.name)
+
+  const after: DefinedName[] = before.map((name) => ({
+    ...name,
+    formula: adjustFormula(name.formula, change, {
+      changed,
+      own: name.sheet === null ? '' : (sheetNames[name.sheet] ?? ''),
+    }),
+  }))
+
+  if (after.every((name, at) => name.formula === before[at]?.formula)) return []
+
+  open.workbook.definedNames = after
+  return [{ kind: 'names', sheet: '', before, after }]
 }
 
 /** Whether two cells would be written identically, one of them possibly absent. */

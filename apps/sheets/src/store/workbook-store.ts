@@ -63,6 +63,7 @@ import {
 import type { Report } from '../document/formula'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
 import type { Change, History } from '../document/history'
+import { tablesMoved } from '../document/shape'
 import { openWorkbook, visibleSheets } from '../document/workbook'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -585,7 +586,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const to = Math.max(...bounds.map((one) => (axis === 'row' ? one.bottom : one.right)))
     const span = to - from + 1
 
-    const changes = reshape(sheet, { axis, at: from, by: insert ? span : -span })
+    const changes = reshape(open, sheet, { axis, at: from, by: insert ? span : -span })
     if (changes.length === 0) return
 
     set({
@@ -1234,6 +1235,16 @@ async function followUp(
     applyOutcome(session, report)
   }
 
+  // A table that moved and a name that moved are both things the engine was
+  // told once and has no other way of hearing about: `Table1[Amount]` means
+  // whatever range the engine was handed, and a row put above the table makes
+  // that range wrong in every formula that uses it. Reopening is the only way
+  // to say so, and it is only worth its cost for a workbook that has either.
+  if (movedRanges(changes) && (open.workbook.definedNames.length > 0 || hasTables(open))) {
+    await openEngine(session, open)
+    applyOutcome(session, await recalculate(session, open.workbook.date1904))
+  }
+
   // A row hidden, a row shown, a filter turned on: none of them change a
   // value, and all of them change what a `SUBTOTAL` over the column comes to.
   const moved = new Set(
@@ -1249,6 +1260,16 @@ async function followUp(
     applyOutcome(session, await sendOutOfSight(session, open, sheet))
   }
 }
+
+/** Whether a step moved anything the engine holds besides cells. */
+const movedRanges = (changes: readonly Change[]): boolean =>
+  changes.some(
+    (change) =>
+      change.kind === 'names' ||
+      (change.kind === 'shape' && tablesMoved(change.before, change.after)),
+  )
+
+const hasTables = (open: OpenWorkbook): boolean => open.sheets.some((one) => one.tables.length > 0)
 
 /**
  * What the engine worked out, put where it can be seen.

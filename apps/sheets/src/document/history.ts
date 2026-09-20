@@ -3,9 +3,13 @@ import type {
   AutoFilter,
   CellRange,
   ColumnRange,
+  DefinedName,
   Hyperlink,
   RowProperties,
 } from '@orangery/ooxml-spreadsheet'
+import { putShape } from './shape'
+import type { SheetShape } from './shape'
+import { writeTables } from './table-parts'
 import type { GridSelection } from '@orangery/grid'
 import type { CellChange } from './edit'
 import type { OpenSheet, OpenWorkbook } from './workbook'
@@ -47,6 +51,16 @@ export type Change =
   | { kind: 'merges'; sheet: string; before: CellRange[]; after: CellRange[] }
   | { kind: 'filter'; sheet: string; before: AutoFilter | null; after: AutoFilter | null }
   | { kind: 'links'; sheet: string; before: Hyperlink[]; after: Hyperlink[] }
+  /**
+   * Everything on a sheet that is a rectangle, taken together.
+   *
+   * One kind rather than seven because one event changes all of them: rows
+   * go in, and the merges, the rules, the validations, the filter, the links,
+   * the tables and the sparklines move together or not at all.
+   */
+  | { kind: 'shape'; sheet: string; before: SheetShape; after: SheetShape }
+  /** The workbook's names, which belong to no sheet and move with every one. */
+  | { kind: 'names'; sheet: string; before: DefinedName[]; after: DefinedName[] }
   | {
       kind: 'row'
       sheet: string
@@ -146,20 +160,45 @@ export function redo(open: OpenWorkbook, history: History): Moved {
 
 /** The parts a step touched, so only those are redrawn. */
 const sheetsOf = (step: Step): Set<string> =>
-  new Set(step.changes.map((change) => (change.kind === 'cell' ? change.cell.sheet : change.sheet)))
+  new Set(
+    step.changes.flatMap((change) => {
+      if (change.kind === 'names') return []
+      return [change.kind === 'cell' ? change.cell.sheet : change.sheet]
+    }),
+  )
 
 function put(open: OpenWorkbook, change: Change, to: 'before' | 'after'): void {
+  if (change.kind === 'names') {
+    open.workbook.definedNames = change[to]
+    return
+  }
+
   const path = change.kind === 'cell' ? change.cell.sheet : change.sheet
   const sheet = open.sheets.find((one) => one.path === path)
   // A step naming a sheet the workbook no longer has is one belonging to a
   // file that has since been closed; there is nothing to put it back into.
   if (sheet === undefined) return
 
-  restore(sheet, change, to)
+  restore(open, sheet, change, to)
 }
 
 /** Puts one change back the way it found things, or forward again. */
-function restore(sheet: OpenSheet, change: Change, to: 'before' | 'after'): void {
+function restore(
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+  change: Exclude<Change, { kind: 'names' }>,
+  to: 'before' | 'after',
+): void {
+  if (change.kind === 'shape') {
+    putShape(sheet, change[to])
+    // Tables are parts of their own and are written when they change rather
+    // than at save time, so putting them back has to put the parts back too.
+    if (change.before.tables.length > 0 || change.after.tables.length > 0) {
+      writeTables(open, sheet)
+    }
+    return
+  }
+
   if (change.kind === 'columns') {
     sheet.sheet.columns = change[to]
     return

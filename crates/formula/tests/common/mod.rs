@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 
+use formula::date::DateSystem;
 use formula::eval::{evaluate, Cells, Context};
 use formula::parser::parse;
 use formula::value::Value;
@@ -16,6 +17,9 @@ use formula::value::Value;
 #[derive(Default)]
 pub struct Sheet {
     cells: HashMap<(i64, i64), Value>,
+    /// What time the workbook is being worked out at; nought unless said.
+    moment: f64,
+    system: DateSystem,
 }
 
 impl Sheet {
@@ -25,6 +29,19 @@ impl Sheet {
             sheet.cells.insert(address(at), value.clone());
         }
         sheet
+    }
+
+    /// A workbook being worked out at a particular moment, so that the two
+    /// functions that ask what time it is can be tested at all.
+    pub fn at_moment(mut self, serial: f64) -> Self {
+        self.moment = serial;
+        self
+    }
+
+    /// A workbook written by Excel for Mac before 2011.
+    pub fn in_1904(mut self) -> Self {
+        self.system = DateSystem::Excel1904;
+        self
     }
 }
 
@@ -53,6 +70,14 @@ impl Cells for Sheet {
 
     fn extent(&self, _sheet: Option<&str>) -> (i64, i64) {
         (20, 20)
+    }
+
+    fn now(&self) -> f64 {
+        self.moment
+    }
+
+    fn date_system(&self) -> DateSystem {
+        self.system
     }
 }
 

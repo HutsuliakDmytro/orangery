@@ -13,6 +13,7 @@
 //! word.
 
 use crate::ast::{Expr, Operator};
+use crate::date::DateSystem;
 use crate::reference::{Reference, ReferenceKind};
 use crate::value::{compare, round_to_significant, Array, Error, Value};
 
@@ -32,6 +33,25 @@ pub trait Cells {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let _ = sheet;
         (0, 0)
+    }
+
+    /// What time it is, as a serial number in this workbook's date system.
+    ///
+    /// A pure library has no clock, so `NOW()` is worth exactly what the
+    /// caller says it is. That is not a compromise: it is what lets a
+    /// volatile function be asked twice in a test and answer the same way
+    /// both times, and what stops the engine from needing a platform.
+    fn now(&self) -> f64 {
+        0.0
+    }
+
+    /// Which morning this workbook counts its days from.
+    ///
+    /// Almost every file says 1900; the ones Excel for Mac wrote before 2011
+    /// say 1904, and the difference is four years and a day in every date on
+    /// the sheet.
+    fn date_system(&self) -> DateSystem {
+        DateSystem::Excel1900
     }
 }
 

@@ -10,6 +10,7 @@
 //! — a spreadsheet where `IF(A1=0,0,1/A1)` divides by nought anyway is a
 //! spreadsheet that is wrong about the one thing the formula was guarding.
 
+pub mod datetime;
 pub mod info;
 pub mod logical;
 pub mod lookup;
@@ -148,6 +149,29 @@ static FUNCTIONS: &[&Function] = &[
     &text::SEARCH,
     &text::SUBSTITUTE,
     &text::REPT,
+    &datetime::TODAY,
+    &datetime::NOW,
+    &datetime::DATE,
+    &datetime::TIME,
+    &datetime::YEAR,
+    &datetime::MONTH,
+    &datetime::DAY,
+    &datetime::HOUR,
+    &datetime::MINUTE,
+    &datetime::SECOND,
+    &datetime::WEEKDAY,
+    &datetime::WEEKNUM,
+    &datetime::ISOWEEKNUM,
+    &datetime::EDATE,
+    &datetime::EOMONTH,
+    &datetime::DAYS,
+    &datetime::DATEDIF,
+    &datetime::NETWORKDAYS,
+    &datetime::NETWORKDAYS_INTL,
+    &datetime::WORKDAY,
+    &datetime::WORKDAY_INTL,
+    &datetime::DATEVALUE,
+    &datetime::TIMEVALUE,
     &info::ISBLANK,
     &info::ISNUMBER,
     &info::ISTEXT,

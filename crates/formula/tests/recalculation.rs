@@ -569,3 +569,42 @@ fn a_formula_naming_another_workbook_keeps_the_number_it_came_with() {
     set(&mut engine, "B1", 1.0);
     assert_eq!(number(&engine, "A1"), 500.0);
 }
+
+#[test]
+fn a_name_is_a_formula_somebody_has_named() {
+    // Which is what makes `=Tax_Rate` readable where `=Sheet2!$B$1` is not.
+    let mut engine = engine();
+    engine.set_name("Tax_Rate", "0.2");
+    engine.set_name("Sales", "A1:A3");
+
+    set(&mut engine, "A1", 10.0);
+    set(&mut engine, "A2", 20.0);
+    set(&mut engine, "A3", 30.0);
+    formula(&mut engine, "B1", "SUM(Sales)*Tax_Rate");
+
+    assert_eq!(number(&engine, "B1"), 12.0);
+
+    // A name standing for a range is a range: what it reaches has to follow
+    // the cells rather than a copy of their values.
+    set(&mut engine, "A2", 50.0);
+    assert_eq!(number(&engine, "B1"), 18.0);
+}
+
+#[test]
+fn a_name_nobody_has_defined_still_says_so() {
+    // The formula keeps its text and the cell says plainly that this program
+    // did not know the word.
+    let mut engine = engine();
+    formula(&mut engine, "A1", "Nowhere+1");
+
+    assert_eq!(engine.value("Sheet1", 0, 0), Value::Error(Error::Name));
+}
+
+#[test]
+fn a_name_is_matched_whatever_case_it_was_written_in() {
+    let mut engine = engine();
+    engine.set_name("Tax_Rate", "0.2");
+    formula(&mut engine, "A1", "tax_rate*100");
+
+    assert_eq!(number(&engine, "A1"), 20.0);
+}

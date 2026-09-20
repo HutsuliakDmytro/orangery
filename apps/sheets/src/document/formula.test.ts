@@ -11,6 +11,7 @@ import {
   heldOf,
   inputsFor,
   moment,
+  namesOf,
   outOfSight,
   shownAs,
   tablesOf,
@@ -373,6 +374,20 @@ describe('the tables a formula can name', () => {
   it('reads the tables of the file it opened', () => {
     const found = open.sheets.flatMap((sheet) => sheet.tables)
     expect(tablesOf(open)).toHaveLength(found.length)
+  })
+})
+
+describe('the names a formula can use', () => {
+  it('leaves out the ones that are settings rather than names', () => {
+    // Excel writes `_xlnm.Print_Area` and its kind as defined names. No
+    // formula would ever say one.
+    open.workbook.definedNames = [
+      { name: 'Tax_Rate', formula: '0.2', sheet: null, hidden: false },
+      { name: '_xlnm.Print_Area', formula: 'Sheet1!$A$1:$C$9', sheet: 0, hidden: false },
+      { name: 'Hidden_One', formula: '1', sheet: null, hidden: true },
+    ]
+
+    expect(namesOf(open)).toEqual([{ name: 'Tax_Rate', formula: '0.2' }])
   })
 })
 

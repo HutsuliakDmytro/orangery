@@ -90,7 +90,11 @@ fn walk(expression: &Expr, sheet: &str, found: &mut Precedents) {
         // table moves when rows are put in around it — which is the reason
         // people write references this way. So nothing static can be said
         // about what it covers, and it is worked out every time instead.
-        Expr::Structured(_) => found.volatile = true,
+        //
+        // A defined name is the same problem said differently: what it stands
+        // for lives in the workbook rather than in the formula, and the graph
+        // is built from formulas alone.
+        Expr::Structured(_) | Expr::Name(_) => found.volatile = true,
         Expr::Call { name, arguments } => {
             if crate::functions::lookup(name).is_some_and(|function| function.volatile) {
                 found.volatile = true;

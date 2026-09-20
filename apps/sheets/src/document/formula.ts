@@ -47,6 +47,12 @@ export interface CellInput {
   value: Held
 }
 
+/** A formula somebody has given a name to. */
+export interface NameInput {
+  name: string
+  formula: string
+}
+
 /** A table, as the engine is told about one. */
 export interface TableInput {
   name: string
@@ -215,6 +221,21 @@ export function tablesOf(open: OpenWorkbook): TableInput[] {
       columns: table.columns.map((column) => column.name),
     })),
   )
+}
+
+/**
+ * The defined names of a workbook, as the engine is told about them.
+ *
+ * The hidden ones are left out: Excel writes `_xlnm.Print_Area` and its kind
+ * as names, and they are settings rather than something a formula would ever
+ * say. A name local to one sheet is sent as it is — the engine matches by
+ * name, and a local name that shadows a workbook one is rare enough to be
+ * worth getting wrong loudly rather than guessing at quietly.
+ */
+export function namesOf(open: OpenWorkbook): NameInput[] {
+  return open.workbook.definedNames
+    .filter((defined) => !defined.hidden && !defined.name.startsWith('_xlnm.'))
+    .map((defined) => ({ name: defined.name, formula: defined.formula }))
 }
 
 /** The name a formula would use for the sheet kept in that part. */
@@ -454,6 +475,7 @@ export async function openEngine(book: string, open: OpenWorkbook): Promise<void
     book,
     sheets: cellsOf(open),
     tables: tablesOf(open),
+    names: namesOf(open),
     moment: moment(open.workbook.date1904),
     date1904: open.workbook.date1904,
     // The seed is the session's, so the same workbook recalculated twice in

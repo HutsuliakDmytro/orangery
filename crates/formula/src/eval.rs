@@ -12,6 +12,8 @@
 //! between two kinds of value has an order that puts every number before every
 //! word.
 
+use std::sync::Arc;
+
 use crate::ast::{Expr, Operator, Structured};
 use crate::date::DateSystem;
 use crate::reference::{Reference, ReferenceKind};
@@ -33,6 +35,17 @@ pub trait Cells {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let _ = sheet;
         (0, 0)
+    }
+
+    /// What a defined name stands for.
+    ///
+    /// A name in a workbook is a formula somebody has given a name to —
+    /// usually a range, sometimes a number, occasionally a whole expression.
+    /// The engine is handed the tree rather than the text so that a name used
+    /// in ten thousand cells is parsed once.
+    fn defined(&self, name: &str) -> Option<Arc<Expr>> {
+        let _ = name;
+        None
     }
 
     /// Where a table's column is, in cells.
@@ -193,9 +206,18 @@ pub fn evaluate(expression: &Expr, context: &Context<'_>) -> Value {
 
         Expr::Implicit(inside) => implicit(inside, context),
 
+        // A defined name is a formula with a name on it, which is what makes
+        // `=Tax_Rate` readable where `=Sheet2!$B$1` is not. Worked out where
+        // it was used rather than where it was defined, because a name may be
+        // written relatively and then means something different in every cell
+        // that uses it — which is how a name like `ThisRowAbove` works at all.
+        //
         // A name nothing has defined is `#NAME?`: the formula is kept, and
         // the answer says plainly that this program did not know the word.
-        Expr::Name(_) => Value::Error(Error::Name),
+        Expr::Name(name) => match context.cells.defined(name) {
+            Some(meaning) => evaluate(&meaning, context),
+            None => Value::Error(Error::Name),
+        },
 
         Expr::Call { name, arguments } => crate::functions::call(name, arguments, context),
 
@@ -447,6 +469,12 @@ pub fn reference_of(expression: &Expr, context: &Context<'_>) -> Option<Rect> {
     match expression {
         Expr::Reference(reference) => Some(rect_of(reference, context)),
         Expr::Structured(structured) => context.cells.area_of(structured, context.at),
+        // A name standing for a range is a range: `SUM(Sales)` has to reach
+        // the cells rather than a copy of their values.
+        Expr::Name(name) => {
+            let meaning = context.cells.defined(name)?;
+            reference_of(meaning.as_ref(), context)
+        }
         Expr::Parenthesised(inside) => reference_of(inside, context),
         Expr::Call { name, arguments } => crate::functions::reference(name, arguments, context),
         _ => None,

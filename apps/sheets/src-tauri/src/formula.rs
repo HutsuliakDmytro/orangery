@@ -139,6 +139,14 @@ impl From<TableInput> for formula::table::Table {
     }
 }
 
+/// A defined name: a formula somebody has given a name to.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NameInput {
+    pub name: String,
+    pub formula: String,
+}
+
 /// Where a cell is.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -230,6 +238,7 @@ pub fn formula_open(
     book: String,
     sheets: Vec<SheetInput>,
     tables: Vec<TableInput>,
+    names: Vec<NameInput>,
     moment: f64,
     date1904: bool,
     seed: u64,
@@ -243,6 +252,9 @@ pub fn formula_open(
     });
     engine.seed_random(seed);
     engine.set_tables(tables.into_iter().map(Into::into).collect());
+    for defined in names {
+        engine.set_name(&defined.name, &defined.formula);
+    }
 
     for sheet in sheets {
         engine.set_out_of_sight(&sheet.sheet, sheet.filtered, sheet.hidden);

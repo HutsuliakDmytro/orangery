@@ -51,6 +51,8 @@ pub struct Engine {
     spills: FastMap<CellId, Vec<CellId>>,
     /// And the other way round, so a cell can say whose answer it is showing.
     spilled_from: FastMap<CellId, CellId>,
+    /// What each defined name stands for, parsed once.
+    names: FastMap<String, Arc<Expr>>,
     /// The tables of the workbook, for the references written in their words.
     ///
     /// Of the workbook rather than of a sheet: a formula on one sheet can
@@ -128,6 +130,24 @@ impl Engine {
     /// Which morning this workbook counts days from — `date1904` in the file.
     pub fn set_date_system(&mut self, system: DateSystem) {
         self.system = system;
+    }
+
+    /// What a name in this workbook stands for, as the formula behind it.
+    ///
+    /// Parsed here and kept, because a name used in ten thousand cells would
+    /// otherwise be read ten thousand times. A name whose formula will not
+    /// parse is left out rather than stored broken: the cells that use it
+    /// then say `#NAME?`, which is true — this program does not know what
+    /// that word means.
+    pub fn set_name(&mut self, name: &str, formula: &str) {
+        if let Ok(tree) = parse(formula) {
+            self.names.insert(name.to_ascii_uppercase(), Arc::new(tree));
+        }
+    }
+
+    /// Every defined name forgotten, for a workbook being told them afresh.
+    pub fn clear_names(&mut self) {
+        self.names.clear();
     }
 
     /// The tables of the workbook, which is what `Table1[Amount]` is asking
@@ -683,6 +703,10 @@ impl Cells for View<'_> {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let on = sheet.unwrap_or(&self.sheet);
         self.engine.extents.get(on).copied().unwrap_or((0, 0))
+    }
+
+    fn defined(&self, name: &str) -> Option<Arc<Expr>> {
+        self.engine.names.get(&name.to_ascii_uppercase()).cloned()
     }
 
     fn area_of(&self, reference: &crate::ast::Structured, at: (i64, i64)) -> Option<Rect> {

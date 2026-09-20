@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
-import { selectedCount } from '@orangery/grid'
+import { boundsOf, selectedCount } from '@orangery/grid'
 import {
   cellAt,
   formatCodeOf,
@@ -27,11 +27,18 @@ import { Toolbar } from '../render/toolbar'
 import { FindPanel } from '../render/find-panel'
 import { FormatDialog } from '../render/format-dialog'
 import { GoalSeekDialog } from '../render/goal-seek-dialog'
+import { NamesDialog } from '../render/names-dialog'
 import { LinkDialog } from '../render/link-dialog'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
 import { SortDialog } from '../render/sort-dialog'
-import { seekGoal, sortTarget, useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
+import {
+  seekGoal,
+  setDefinedNames,
+  sortTarget,
+  useWorkbookStore,
+  visibleSheetsOf,
+} from '../store/workbook-store'
 import { useCommandSource } from './command-source'
 import { useExternalOpen } from './use-external-open'
 import { useAutosave } from './use-autosave'
@@ -189,6 +196,37 @@ function Shell() {
     window.addEventListener('orangery:sort-range', onAsk)
     return () => {
       window.removeEventListener('orangery:sort-range', onAsk)
+    }
+  }, [])
+
+  /** Whether the names dialog is open, and what to suggest in it. */
+  const [naming, setNaming] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onAsk = () => {
+      const { open: book, current, selection } = useWorkbookStore.getState()
+      const sheet = book === null ? undefined : visibleSheetsOf(book)[current]
+      const last = selection.ranges[selection.ranges.length - 1]
+      const bounds = boundsOf(last ?? { anchor: selection.active, focus: selection.active })
+
+      // What is selected, as a formula would name it: a name is usually put
+      // on the thing somebody has just chosen.
+      setNaming(
+        sheet === undefined
+          ? ''
+          : `${sheet.name}!$${formatReference({ row: bounds.top, column: bounds.left }).replace(
+              /(\d+)$/u,
+              '$$$1',
+            )}:$${formatReference({
+              row: bounds.bottom,
+              column: bounds.right,
+            }).replace(/(\d+)$/u, '$$$1')}`,
+      )
+    }
+
+    window.addEventListener('orangery:defined-names', onAsk)
+    return () => {
+      window.removeEventListener('orangery:defined-names', onAsk)
     }
   }, [])
 
@@ -430,6 +468,20 @@ function Shell() {
           }}
           onCancel={() => {
             setLinking(null)
+          }}
+        />
+      )}
+
+      {naming !== null && open !== null && (
+        <NamesDialog
+          names={open.workbook.definedNames}
+          suggested={naming}
+          onCancel={() => {
+            setNaming(null)
+          }}
+          onSave={(names) => {
+            setNaming(null)
+            setDefinedNames(names)
           }}
         />
       )}

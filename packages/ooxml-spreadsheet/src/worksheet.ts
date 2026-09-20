@@ -3,6 +3,8 @@ import type { XmlNode } from '@orangery/ooxml-core'
 import { parseRange } from './reference'
 import type { CellRange } from './reference'
 import { readConditionalFormats } from './conditional'
+import { readValidationsIn } from './validation'
+import type { DataValidation } from './validation'
 import type { ConditionalFormat } from './conditional'
 import { readAutoFilter } from './autofilter'
 import type { AutoFilter } from './autofilter'
@@ -106,6 +108,14 @@ export interface Worksheet {
    * it would be claiming to have checked it.
    */
   protection: SheetProtection | null
+  /**
+   * What its cells are allowed to hold.
+   *
+   * Read here rather than by whoever wants them, so that a sheet is read
+   * once: a worksheet part can hold a million cells, and walking it twice to
+   * find two small elements is a second walk over all of them.
+   */
+  validations: DataValidation[]
 }
 
 /** What a protected sheet allows anyway. */
@@ -271,6 +281,7 @@ export function readWorksheet(xml: string): Worksheet | null {
     autoFilter: readAutoFilter(filter),
     conditional: readConditionalFormats(root),
     protection: readProtection(root),
+    validations: readValidationsIn(root),
   }
 }
 

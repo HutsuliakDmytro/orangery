@@ -35,6 +35,8 @@ import { shownText } from '../document/shown'
 import { refusalFor } from '../document/validation'
 import { refusalForLocked } from '../document/protection'
 import { insertChart, insertPicture, refreshCharts } from '../document/charts'
+import { writeDefinedNames } from '@orangery/ooxml-spreadsheet'
+import type { DefinedName } from '@orangery/ooxml-spreadsheet'
 import type { NewChartKind } from '@orangery/charts'
 import {
   applyReport,
@@ -1299,6 +1301,28 @@ export function chartFromSelection(kind: NewChartKind): boolean {
 
   useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
   return true
+}
+
+/**
+ * The names of the workbook, replaced by the ones somebody has settled on.
+ *
+ * Written into the package and told to the engine in one go: a name the
+ * engine has not been told about is `#NAME?` in every cell that uses it, and
+ * a name in the file that the engine does not have is the same thing said by
+ * the file instead.
+ *
+ * Outside the history, like the sheets: a name is a property of the workbook
+ * rather than of its cells, and undo here means the dialog's own Cancel.
+ */
+export function setDefinedNames(names: DefinedName[]): void {
+  const { open, session } = useWorkbookStore.getState()
+  if (open === null) return
+
+  writeDefinedNames(open.pkg, names)
+  open.workbook.definedNames = names
+
+  void openEngine(session, open)
+  useWorkbookStore.setState({ open: { ...open }, edited: true })
 }
 
 /**

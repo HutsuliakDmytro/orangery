@@ -20,7 +20,7 @@ import type { OpenSheet, OpenWorkbook } from './workbook'
 
 /** The rule covering a cell, or null — which is most cells. */
 export function ruleAt(sheet: OpenSheet, cell: CellAddress): DataValidation | null {
-  return validationAt(sheet.validations, cell)
+  return validationAt(sheet.sheet.validations, cell)
 }
 
 /**

@@ -11,7 +11,6 @@ import {
   readSheetDrawings,
   readStyles,
   readTable,
-  readValidations,
   readWorkbook,
   readWorksheet,
 } from '@orangery/ooxml-spreadsheet'
@@ -22,7 +21,6 @@ import type {
   StyleChanges,
   SheetCells,
   SheetComments,
-  DataValidation,
   SheetDrawing,
   Styles,
   Table,
@@ -76,13 +74,6 @@ export interface OpenSheet {
    * says where that is.
    */
   tables: Table[]
-  /**
-   * What its cells are allowed to hold.
-   *
-   * A rule belongs to the sheet rather than to a cell — which is what makes
-   * a column of dropdowns survive somebody emptying it.
-   */
-  validations: DataValidation[]
   /** What has been said about its cells: threads, and the older notes. */
   comments: SheetComments
   /**
@@ -171,7 +162,6 @@ export function openSheetOf(pkg: OoxmlPackage, entry: SheetEntry): OpenSheet {
     cells: readSheetData(text),
     drawings: drawingsOf(pkg, entry.path, text),
     tables: tablesOf(pkg, entry.path),
-    validations: readValidations(text),
     comments: commentsOf(pkg, entry.path),
     links: readHyperlinks(
       text,
@@ -298,6 +288,7 @@ const EMPTY_SHEET: Worksheet = {
   autoFilter: null,
   conditional: [],
   protection: null,
+  validations: [],
 }
 
 /** The sheets a person sees, which is not all of them. */

@@ -99,11 +99,21 @@ const flag = (node: XmlNode, name: string, fallback = false): boolean => {
   return value === '1' || value === 'true'
 }
 
-/** The rules of a worksheet, in the order the file states them. */
+/**
+ * The rules of a worksheet, in the order the file states them.
+ *
+ * Parsing the whole sheet again to find them would be a second walk over a
+ * part that can hold a million cells, which is why `readWorksheet` calls the
+ * version below with the tree it already has. This one is for a caller that
+ * has only the text.
+ */
 export function readValidations(xml: string): DataValidation[] {
   const root = parseXml(xml).find((node) => tagName(node) === 'worksheet')
-  if (root === undefined) return []
+  return root === undefined ? [] : readValidationsIn(root)
+}
 
+/** The same, for whoever has already read the worksheet into a tree. */
+export function readValidationsIn(root: XmlNode): DataValidation[] {
   const list = children(root).find((node) => tagName(node) === 'dataValidations')
   if (list === undefined) return []
 

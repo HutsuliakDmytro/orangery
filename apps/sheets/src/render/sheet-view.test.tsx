@@ -376,7 +376,7 @@ describe('the values a cell is allowed to hold', () => {
   const withChoices = () => {
     const showed = showing()
     showed.sheet.cells.rows.get(0)?.delete(0)
-    showed.sheet.validations = readValidations(
+    showed.sheet.sheet.validations = readValidations(
       '<?xml version="1.0"?><worksheet><sheetData/><dataValidations>' +
         '<dataValidation type="list" sqref="A1:A9"><formula1>"North,South"</formula1>' +
         '</dataValidation></dataValidations></worksheet>',

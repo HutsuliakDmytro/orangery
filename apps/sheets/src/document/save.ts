@@ -40,7 +40,7 @@ export async function workbookBytes(
             merges: sheet.sheet.merges,
             filter: sheet.sheet.autoFilter,
             links: sheet.links,
-            validations: sheet.validations,
+            validations: sheet.sheet.validations,
           }
         : {}),
     })),

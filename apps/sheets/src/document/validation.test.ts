@@ -23,7 +23,7 @@ const sheetXml = (inside: string) =>
   `<?xml version="1.0"?><worksheet><sheetData/>${inside}</worksheet>`
 
 const withRules = (inside: string) => {
-  sheet.validations = readValidations(sheetXml(inside))
+  sheet.sheet.validations = readValidations(sheetXml(inside))
 }
 
 beforeEach(async () => {

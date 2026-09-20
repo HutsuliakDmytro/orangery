@@ -430,6 +430,16 @@ export const viewCommands: readonly Command[] = [
     },
   },
   {
+    id: 'data.names',
+    label: 'Defined Names…',
+    group: 'view',
+    keywords: ['name', 'range', 'named'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      window.dispatchEvent(new Event('orangery:defined-names'))
+    },
+  },
+  {
     id: 'data.goalSeek',
     label: 'Goal Seek…',
     group: 'view',

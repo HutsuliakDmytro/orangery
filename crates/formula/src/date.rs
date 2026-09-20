@@ -195,3 +195,44 @@ pub fn end_of_month(year: i64, month: i64) -> i64 {
 
     days_from_civil(next_year, next_month, 1) - days_from_civil(year, month, 1)
 }
+
+/// The time of day a serial's fraction stands for, to the millisecond.
+///
+/// Rounded rather than truncated, because a third of a day is eight in the
+/// morning and is kept as 0.333333333333333: truncating shows 07:59:59 for
+/// every time somebody typed.
+pub fn clock_of(serial: f64) -> (i64, i64, i64, i64) {
+    let fraction = serial - serial.floor();
+    let total = (fraction * 86_400_000.0).round() as i64;
+
+    (
+        (total / 3_600_000) % 24,
+        (total / 60_000) % 60,
+        (total / 1000) % 60,
+        total % 1000,
+    )
+}
+
+/// A serial as a length of time rather than as a moment.
+///
+/// `[h]:mm` on 1.5 is 36:00, not noon on the second day: the brackets say
+/// the unit does not wrap, which is how a workbook adds up a week of hours.
+pub struct Elapsed {
+    pub hours: i64,
+    pub minutes: i64,
+    pub seconds: i64,
+    pub milliseconds: i64,
+    pub negative: bool,
+}
+
+pub fn elapsed_of(serial: f64) -> Elapsed {
+    let total = (serial.abs() * 86_400_000.0).round() as i64;
+
+    Elapsed {
+        hours: total / 3_600_000,
+        minutes: total / 60_000,
+        seconds: total / 1000,
+        milliseconds: total % 1000,
+        negative: serial < 0.0,
+    }
+}

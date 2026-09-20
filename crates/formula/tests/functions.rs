@@ -107,7 +107,9 @@ fn average_is_over_the_numbers_that_are_there() {
     assert_eq!(on(&sheet, "AVERAGE(A1:A5)"), Value::Number(20.0));
     assert_eq!(number("AVERAGE(1,2,3,4)"), 2.5);
     assert_eq!(number("AVERAGE(2)"), 2.0);
-    assert_eq!(value("AVERAGE(\"a\")"), Value::Error(Error::DivideByZero));
+    // A word written into the formula is a word somebody meant as a number
+    // and got wrong, which is different from a word sitting in a column.
+    assert_eq!(value("AVERAGE(\"a\")"), Value::Error(Error::Value));
 
     let empty = Sheet::default();
     assert_eq!(
@@ -405,4 +407,57 @@ fn textbefore_and_textafter_split_on_a_delimiter_somebody_names() {
         value("TEXTAFTER(\"abc\",\",\")"),
         Value::Error(Error::NotAvailable)
     );
+}
+
+#[test]
+fn text_shows_a_number_the_way_a_cell_would() {
+    // The other half of a format: a cell shows 0.15 as "15%" because of the
+    // format on it, and `TEXT` does the same thing on purpose — which is how
+    // a number gets into the middle of a sentence.
+    assert_eq!(text("TEXT(0.15,\"0%\")"), "15%");
+    assert_eq!(text("TEXT(1234.5,\"#,##0.00\")"), "1,234.50");
+    assert_eq!(text("TEXT(45292,\"yyyy-mm-dd\")"), "2024-01-01");
+    assert_eq!(text("TEXT(0.75,\"h:mm AM/PM\")"), "6:00 PM");
+    assert_eq!(
+        text("\"Total: \"&TEXT(1234.5,\"#,##0.00\")"),
+        "Total: 1,234.50"
+    );
+}
+
+#[test]
+fn text_answers_in_text_even_about_a_number() {
+    // Which is the trap in it: the result is words, and a column of them
+    // will not add up however much it looks like figures.
+    assert_eq!(value("ISTEXT(TEXT(1,\"0\"))"), Value::Bool(true));
+    assert_eq!(value("ISNUMBER(TEXT(1,\"0\"))"), Value::Bool(false));
+    assert_eq!(number("SUM(TEXT(1,\"0\"),1)"), 2.0);
+    // Words given to it come back as the words they are.
+    assert_eq!(text("TEXT(\"abc\",\"0.00\")"), "abc");
+    assert_eq!(text("TEXT(45292,\"General\")"), "45292");
+}
+
+#[test]
+fn text_hands_an_error_back_rather_than_spelling_it_out() {
+    // `TEXT(#DIV/0!,"0")` is not the words "#DIV/0!": an error travels
+    // through a formula rather than being turned into a caption of itself.
+    assert_eq!(value("TEXT(1/0,\"0\")"), Value::Error(Error::DivideByZero));
+    assert_eq!(
+        value("IFERROR(TEXT(1/0,\"0\"),\"none\")"),
+        Value::Text("none".into())
+    );
+}
+
+#[test]
+fn a_number_written_into_a_formula_counts_even_as_text() {
+    // The rule nobody guesses, and the reason it exists: somebody who typed
+    // `"5"` meant five, while a column of part numbers that happen to look
+    // numeric must not quietly become a total.
+    let sheet = Sheet::with(&[("A1", Value::Text("5".into())), ("A2", Value::Number(1.0))]);
+
+    assert_eq!(number("SUM(\"5\",1)"), 6.0);
+    assert_eq!(on(&sheet, "SUM(A1:A2)"), Value::Number(1.0));
+    assert_eq!(number("SUM(TRUE,1)"), 2.0);
+    assert_eq!(number("AVERAGE(\"5\",1)"), 3.0);
+    assert_eq!(number("MAX(\"5\",1)"), 5.0);
+    assert_eq!(on(&sheet, "MAX(A1:A2)"), Value::Number(1.0));
 }

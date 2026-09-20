@@ -17,6 +17,7 @@ pub mod fast;
 pub mod functions;
 pub mod graph;
 pub mod lexer;
+pub mod numfmt;
 pub mod parser;
 pub mod reference;
 pub mod table;

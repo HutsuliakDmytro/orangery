@@ -21,6 +21,42 @@ macro_rules! function {
     };
 }
 
+function!(TEXT, "TEXT", 2, Some(2), |arguments, context| {
+    done((|| {
+        let value = crate::eval::evaluate(&arguments[0], context);
+        let code = string(arguments.get(1), context)?;
+
+        // A number is shown by the code; anything else is shown as the text
+        // it already is, which is what Excel does with `TEXT("abc","0.00")`.
+        let shown = match value {
+            Value::Error(error) => return Err(error),
+            Value::Number(number) => crate::numfmt::format_value(
+                crate::numfmt::Shown::Number(number),
+                &code,
+                context.cells.date_system(),
+            ),
+            Value::Bool(flag) => {
+                let written = if flag { "TRUE" } else { "FALSE" };
+                crate::numfmt::format_value(
+                    crate::numfmt::Shown::Text(written),
+                    &code,
+                    context.cells.date_system(),
+                )
+            }
+            other => {
+                let text = other.to_text()?;
+                crate::numfmt::format_value(
+                    crate::numfmt::Shown::Text(&text),
+                    &code,
+                    context.cells.date_system(),
+                )
+            }
+        };
+
+        Ok(Value::Text(shown))
+    })())
+});
+
 function!(REPLACE, "REPLACE", 4, Some(4), |arguments, context| {
     done((|| {
         let text = letters(&string(arguments.first(), context)?);

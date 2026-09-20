@@ -1,0 +1,141 @@
+# Value	Format code	What Excel shows
+#
+# The table both implementations of the number-format language are judged
+# by: packages/numfmt in TypeScript, which the grid uses while it draws a
+# cell, and crates/formula/src/numfmt in Rust, which TEXT uses in the
+# middle of a recalculation. Neither can call the other without crossing a
+# process boundary per cell, so both are held to this instead.
+#
+# Every row is a value, a format code and what Excel shows for the two of
+# them. Not what we think is reasonable — what the program the file came
+# from puts on screen, because a format is right when the cell looks like
+# it looked before we opened it.
+#
+# A text value is written in quotes and a number plain. Where a case is
+# known to be unsettled it is left out rather than guessed at: a row
+# invented here would look like evidence while being an opinion.
+
+# whole numbers
+0	0	0
+1	0	1
+-1	0	-1
+1234	0	1234
+1234	#,##0	1,234
+1234	#,###	1,234
+0	#	
+0	#,##0	0
+1000000	#,##0	1,000,000
+-1234	#,##0	-1,234
+
+# decimal places
+1.5	0	2
+1.4	0	1
+2.5	0	3
+-2.5	0	-3
+1.5	0.0	1.5
+1.25	0.0	1.3
+1.005	0.00	1.01
+0.5	0.00	0.50
+0.5	#.##	.5
+0.5	0.##	0.5
+123.456	0.00	123.46
+123.456	#,##0.0	123.5
+
+# percentages
+0	0%	0%
+0.15	0%	15%
+0.155	0%	16%
+0.155	0.0%	15.5%
+1	0%	100%
+-0.05	0.0%	-5.0%
+12	0%	1200%
+
+# scaling by thousands
+1234	#,##0,	1
+1500	#,##0,	2
+1234567	#,##0,	1,235
+1234567	0.0,	1234.6
+1234567890	#,##0,,	1,235
+
+# sections
+5	0;-0	5
+-5	0;-0	-5
+-5	0;(0)	(5)
+0	0;-0;"zero"	zero
+5	0;-0;"zero"	5
+-5	0;-0;"zero"	-5
+1234.5	#,##0.00;[Red]-#,##0.00	1,234.50
+-1234.5	#,##0.00;[Red]-#,##0.00	-1,234.50
+
+# conditions
+150	[>=100]"high";[<=10]"low";0	high
+5	[>=100]"high";[<=10]"low";0	low
+50	[>=100]"high";[<=10]"low";0	50
+0	[=0]"nil";0	nil
+
+# words beside numbers
+5	0" kg"	5 kg
+5	"about "0	about 5
+5	0\%	5%
+1234.5	[$€-407]#,##0.00	€1,234.50
+1234.5	#,##0.00" €"	1,234.50 €
+
+# text
+"hello"	@	hello
+"hello"	@" there"	hello there
+"hello"	"["@"]"	[hello]
+"hello"	0.00	hello
+
+# dates
+45292	yyyy-mm-dd	2024-01-01
+45292	dd/mm/yyyy	01/01/2024
+45292	d/m/yy	1/1/24
+45292	d mmm yyyy	1 Jan 2024
+45292	mmmm d, yyyy	January 1, 2024
+45292	mmmmm	J
+45292	ddd	Mon
+45292	dddd, d mmmm	Monday, 1 January
+45292	mm-dd-yy	01-01-24
+45658	yyyy	2025
+1	yyyy-mm-dd	1900-01-01
+60	yyyy-mm-dd	1900-02-29
+61	yyyy-mm-dd	1900-03-01
+
+# times
+45292.5	h:mm	12:00
+45292.75	h:mm	18:00
+45292.75	h:mm AM/PM	6:00 PM
+45292.25	hh:mm AM/PM	06:00 AM
+45292.5	h:mm:ss	12:00:00
+45292	h:mm	0:00
+0.5	h:mm	12:00
+45292.5	yyyy-mm-dd h:mm	2024-01-01 12:00
+
+# elapsed time, which does not wrap
+1.5	[h]:mm	36:00
+0.5	[h]:mm	12:00
+1.5	[mm]	2160
+2	[h]	48
+
+# fractions
+1.25	# ?/?	1 1/4
+1.5	# ?/?	1 1/2
+2.75	# ?/?	2 3/4
+1.3333	# ??/??	1 1/3
+0.3125	# ?/16	5/16
+3	# ?/?	3
+
+# scientific notation
+1234.5	0.00E+00	1.23E+03
+0.00012	0.00E+00	1.20E-04
+1	0.00E+00	1.00E+00
+-1234.5	0.00E+00	-1.23E+03
+1e100	0E+000	1E+100
+
+# General, which every new cell has
+0	General	0
+1	General	1
+1.5	General	1.5
+-1.5	General	-1.5
+1234.5678	General	1234.5678
+"text"	General	text

@@ -200,6 +200,7 @@ static FUNCTIONS: &[&Function] = &[
     &text::SEARCH,
     &text::SUBSTITUTE,
     &text::REPT,
+    &text::TEXT,
     &text::REPLACE,
     &text::PROPER,
     &text::CLEAN,
@@ -321,6 +322,30 @@ pub fn flattened(arguments: &[Expr], context: &Context<'_>) -> Vec<Value> {
     }
 
     found
+}
+
+/// The numbers a list of arguments comes to, as the adding functions want
+/// them.
+///
+/// The rule nobody guesses: a number *written into the formula* counts even
+/// as text, and the same text inside a range does not. `SUM("5")` is five
+/// and `SUM(A1)` where A1 holds "5" is nought — because a column of part
+/// numbers that happen to look numeric must not quietly become a total,
+/// while somebody who typed `"5"` meant five.
+///
+/// Which is why this takes the arguments rather than their values: once a
+/// range has been opened out, nothing can tell where a value came from.
+pub fn numbers_given(arguments: &[Expr], context: &Context<'_>) -> Result<Vec<f64>, Error> {
+    let mut found = Vec::new();
+
+    for argument in arguments {
+        match evaluate(argument, context) {
+            Value::Array(array) => found.extend(numbers(&array.values, false)?),
+            value => found.extend(numbers(&[value], true)?),
+        }
+    }
+
+    Ok(found)
 }
 
 /// The numbers among a list of values, as the counting functions want them.

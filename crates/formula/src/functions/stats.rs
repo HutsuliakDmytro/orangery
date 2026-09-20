@@ -6,7 +6,7 @@
 //! nought. Both are here and neither is the default.
 
 use super::criteria::{all_matching, pairs};
-use super::{done, flattened, number, numbers, table, Function};
+use super::{done, flattened, number, numbers, numbers_given, table, Function};
 use crate::ast::Expr;
 use crate::eval::Context;
 use crate::value::{Error, Value};
@@ -25,7 +25,7 @@ macro_rules! function {
 
 function!(AVERAGE, "AVERAGE", 1, None, |arguments, context| {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         if found.is_empty() {
             // Nothing to average is not nought: it is the error that says the
             // question had no answer.
@@ -83,7 +83,7 @@ function!(
 
 function!(MIN, "MIN", 1, None, |arguments, context| {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         // No numbers is nought, as Excel has it — not an error, and not the
         // largest number there is.
         Ok(Value::Number(
@@ -99,7 +99,7 @@ function!(MIN, "MIN", 1, None, |arguments, context| {
 
 function!(MAX, "MAX", 1, None, |arguments, context| {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         Ok(Value::Number(
             found.iter().copied().fold(f64::NEG_INFINITY, f64::max),
         ))
@@ -109,7 +109,7 @@ function!(MAX, "MAX", 1, None, |arguments, context| {
 
 function!(MEDIAN, "MEDIAN", 1, None, |arguments, context| {
     done((|| {
-        let mut found = numbers(&flattened(arguments, context), false)?;
+        let mut found = numbers_given(arguments, context)?;
         if found.is_empty() {
             return Ok(Value::Error(Error::Number));
         }
@@ -232,7 +232,7 @@ function!(
 /// happens once has no most-common thing, and saying so is the answer.
 fn most_often(arguments: &[Expr], context: &Context<'_>) -> Value {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         match mode_of(&found) {
             Some(value) => Ok(Value::Number(value)),
             None => Ok(Value::Error(Error::NotAvailable)),
@@ -304,7 +304,7 @@ pub(crate) fn variance(found: &[f64], of_a_sample: bool) -> Result<f64, Error> {
 
 fn spread(arguments: &[Expr], context: &Context<'_>, of_a_sample: bool, root: bool) -> Value {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         let value = variance(&found, of_a_sample)?;
         Ok(Value::Number(if root { value.sqrt() } else { value }))
     })())

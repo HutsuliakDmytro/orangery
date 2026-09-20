@@ -6,7 +6,7 @@
 //! the wrong way is a column that disagrees with the invoice.
 
 use super::criteria::{all_matching, pairs};
-use super::{done, flattened, number, numbers, table, Function};
+use super::{done, number, numbers_given, table, Function};
 use crate::value::{Error, Value};
 
 macro_rules! function {
@@ -26,14 +26,14 @@ function!(SUM, "SUM", 1, None, |arguments, context| {
         // Text inside a range is skipped and text written into the formula is
         // read as a number: Excel's rule, and the reason `SUM(A1:A9)` over a
         // column with a heading is the total rather than `#VALUE!`.
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         Ok(Value::Number(found.iter().sum()))
     })())
 });
 
 function!(PRODUCT, "PRODUCT", 1, None, |arguments, context| {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         Ok(Value::Number(found.iter().product()))
     })())
 });
@@ -217,7 +217,7 @@ function!(FLOOR, "FLOOR", 2, Some(2), |arguments, context| {
 
 function!(SUMSQ, "SUMSQ", 1, None, |arguments, context| {
     done((|| {
-        let found = numbers(&flattened(arguments, context), false)?;
+        let found = numbers_given(arguments, context)?;
         Ok(Value::Number(found.iter().map(|value| value * value).sum()))
     })())
 });

@@ -32,6 +32,22 @@ export interface CellBar {
 }
 
 /**
+ * A chart the size of a cell.
+ *
+ * Numbers rather than a formula: which cells a sparkline is drawn from is a
+ * question about a workbook, and the grid draws what it is handed. The
+ * points are in the order they are to be drawn and null is a gap — a point
+ * with no number, which is not the same as a nought.
+ */
+export interface CellSpark {
+  kind: 'line' | 'column' | 'winLoss'
+  points: (number | null)[]
+  color: string
+  /** What a bar below the axis is drawn in, where that differs. */
+  negativeColor?: string
+}
+
+/**
  * A small mark at the left of a cell.
  *
  * Shapes rather than Excel's icon-set names: the grid knows how to draw an
@@ -107,6 +123,14 @@ export interface CellStyle {
   bar?: CellBar
   /** Drawn at the left, with the text moved along to make room. */
   icon?: CellIcon
+  /**
+   * A chart drawn across the whole cell, under the text.
+   *
+   * A cell with one usually has nothing in it — a sparkline sits in the cell
+   * beside its numbers rather than on top of them — but the two are drawn
+   * together where it does, because the file allows it.
+   */
+  spark?: CellSpark
   /**
    * The value in pieces, where the pieces are not all alike.
    *

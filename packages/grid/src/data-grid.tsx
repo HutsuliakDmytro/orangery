@@ -34,6 +34,7 @@ import {
 import type { Direction, GridRange, GridSelection, Order } from './selection'
 import type { CellBorders, CellStyle } from './cell-style'
 import { ICON_GUTTER, drawIcon } from './icon'
+import { drawSpark } from './spark'
 import { drawCellText } from './text'
 import { heightNeeded, widthNeeded } from './fit'
 import type { FitCell } from './fit'
@@ -578,6 +579,13 @@ export function DataGrid({
             Math.max(0, (rect.width - 2) * Math.min(1, style.bar.proportion)),
             Math.max(0, rect.height - 4),
           )
+        }
+
+        // A chart the size of the cell, under whatever is written in it: a
+        // sparkline usually sits in a cell of its own, and the file allows
+        // one that does not.
+        if (style?.spark !== undefined) {
+          drawSpark(context, style.spark, rect)
         }
 
         if (style?.icon !== undefined) {

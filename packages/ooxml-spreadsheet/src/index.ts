@@ -23,6 +23,8 @@ export { readNotes, readPeople, readSheetComments, readThreads } from './comment
 export type { Note, Reply, SheetComments, Thread } from './comments'
 export { differentialWith } from './styles-edit'
 export { isValidName, replaceDefinedNames, writeDefinedNames } from './names-edit'
+export { readSparklines, readSparklinesIn, sparklineAt } from './sparkline'
+export type { Sparkline, SparklineGroup } from './sparkline'
 export {
   DEFAULT_PAGE,
   paperSize,

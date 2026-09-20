@@ -7,6 +7,8 @@ import { readValidationsIn } from './validation'
 import type { DataValidation } from './validation'
 import { readPageSetupIn } from './page'
 import type { PageSetup } from './page'
+import { readSparklinesIn } from './sparkline'
+import type { SparklineGroup } from './sparkline'
 import type { ConditionalFormat } from './conditional'
 import { readAutoFilter } from './autofilter'
 import type { AutoFilter } from './autofilter'
@@ -120,6 +122,8 @@ export interface Worksheet {
   validations: DataValidation[]
   /** How it is meant to come out of a printer. */
   page: PageSetup
+  /** The charts that live in a cell, which the file keeps in its extensions. */
+  sparklines: SparklineGroup[]
 }
 
 /** What a protected sheet allows anyway. */
@@ -287,6 +291,7 @@ export function readWorksheet(xml: string): Worksheet | null {
     protection: readProtection(root),
     validations: readValidationsIn(root),
     page: readPageSetupIn(root),
+    sparklines: readSparklinesIn(root),
   }
 }
 

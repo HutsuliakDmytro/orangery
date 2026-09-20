@@ -291,6 +291,7 @@ const EMPTY_SHEET: Worksheet = {
   protection: null,
   validations: [],
   page: DEFAULT_PAGE,
+  sparklines: [],
 }
 
 /** The sheets a person sees, which is not all of them. */

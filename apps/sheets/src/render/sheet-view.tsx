@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DataGrid } from '@orangery/grid'
-import type { CellAddress, CellStyle, Editing, GridRange, GridSelection } from '@orangery/grid'
+import type {
+  CellAddress,
+  CellSpark,
+  CellStyle,
+  Editing,
+  GridRange,
+  GridSelection,
+} from '@orangery/grid'
 import {
   cellAt,
   extentOf,
@@ -9,8 +16,10 @@ import {
   indexToColumn,
   linkCovering,
   mergeAt,
+  parseRange,
   resolveColor,
   resolveStyle,
+  sparklineAt,
   isColumnHidden,
   widthOfColumn,
 } from '@orangery/ooxml-spreadsheet'
@@ -249,6 +258,58 @@ export function SheetView({
     [cellFor, open],
   )
 
+  /**
+   * The charts that live in a cell.
+   *
+   * Worked out here rather than in the grid because which cells a sparkline
+   * is drawn from is a question about a workbook — a range on this sheet or
+   * another one — and the grid draws what it is handed.
+   */
+  const sparkAt = useCallback(
+    (address: CellAddress): CellSpark | undefined => {
+      const groups = sheet.sheet.sparklines
+      if (groups.length === 0) return undefined
+
+      const found = sparklineAt(groups, address)
+      if (found === null) return undefined
+
+      const range = parseRange(found.sparkline.formula)
+      if (range === null) return undefined
+
+      const from =
+        range.sheet === null
+          ? sheet
+          : (open.sheets.find((one) => one.name === range.sheet?.replace(/^'|'$/gu, '')) ?? sheet)
+
+      const points: (number | null)[] = []
+      for (
+        let row = Math.min(range.from.row, range.to.row);
+        row <= Math.max(range.from.row, range.to.row);
+        row += 1
+      ) {
+        for (
+          let column = Math.min(range.from.column, range.to.column);
+          column <= Math.max(range.from.column, range.to.column);
+          column += 1
+        ) {
+          const cell = from.cells.rows.get(row)?.get(column) ?? null
+          const number = Number(cell?.value ?? '')
+          points.push(cell?.type === 'n' && Number.isFinite(number) ? number : null)
+        }
+      }
+
+      return {
+        kind: found.group.kind === 'stacked' ? 'winLoss' : found.group.kind,
+        points,
+        color: `#${(found.group.color ?? 'FF376092').slice(-6)}`,
+        ...(found.group.negativeColor === null
+          ? {}
+          : { negativeColor: `#${found.group.negativeColor.slice(-6)}` }),
+      }
+    },
+    [open.sheets, sheet],
+  )
+
   const styleAt = useCallback(
     (address: CellAddress): CellStyle | null => {
       const cell = cellFor(address)
@@ -358,6 +419,7 @@ export function SheetView({
         // two are different things and one of them can be replied to.
         corner: cornerOf(notes.at(address)),
         filter: filterArrow(sheet.sheet.autoFilter, address),
+        spark: sparkAt(address),
         borders: {
           left:
             hex(style.border.left.color) ?? (style.border.left.style === null ? null : '#B2B2B2'),
@@ -377,6 +439,7 @@ export function SheetView({
       palette,
       sheet.links,
       sheet.sheet.autoFilter,
+      sparkAt,
       strings,
       styleOf,
       styles,

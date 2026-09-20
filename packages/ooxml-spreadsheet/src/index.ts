@@ -41,14 +41,18 @@ export type {
   Styles,
 } from './styles'
 export {
+  borderIndex,
   cellFormatIndex,
+  fillIndex,
+  fontIndex,
   noStyleChanges,
   numberFormatId,
   patchStyles,
   sameCellFormat,
   styleShowing,
+  styleWith,
 } from './styles-edit'
-export type { StyleChanges } from './styles-edit'
+export type { LookChange, StyleChanges } from './styles-edit'
 export {
   blockFromHtml,
   blockFromText,

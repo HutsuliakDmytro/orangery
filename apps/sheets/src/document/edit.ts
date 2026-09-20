@@ -1,5 +1,5 @@
-import { putCell, styleShowing } from '@orangery/ooxml-spreadsheet'
-import type { Cell, CellType } from '@orangery/ooxml-spreadsheet'
+import { putCell, styleShowing, styleWith } from '@orangery/ooxml-spreadsheet'
+import type { Cell, CellType, LookChange } from '@orangery/ooxml-spreadsheet'
 import { parseInput } from '@orangery/numfmt'
 import type { CellAddress } from '@orangery/grid'
 import type { OpenSheet, OpenWorkbook } from './workbook'
@@ -120,6 +120,57 @@ export function clearCells(sheet: OpenSheet, cells: Iterable<CellAddress>): Cell
       column: address.column,
       before: existing,
       after: null,
+    })
+  }
+
+  return changes
+}
+
+/**
+ * Changes how the given cells look, and says what that changed.
+ *
+ * A cell that does not exist yet is made, empty. Formatting is one of the few
+ * things a spreadsheet lets you do to nothing: choosing a column and making it
+ * a date column before typing a single date into it is the ordinary way round,
+ * and a cell with a style and no value is exactly what the file writes for it.
+ */
+export function applyLook(
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+  cells: Iterable<CellAddress>,
+  look: LookChange,
+): CellChange[] {
+  const styles = open.styles
+  if (styles === null) return []
+
+  const changes: CellChange[] = []
+
+  for (const address of cells) {
+    const existing = sheet.cells.rows.get(address.row)?.get(address.column) ?? null
+    const style = styleWith(styles, open.styleChanges, existing?.style ?? null, look)
+    if (existing !== null && existing.style === style) continue
+
+    const cell: Cell =
+      existing === null
+        ? {
+            row: address.row,
+            column: address.column,
+            type: 'n',
+            value: null,
+            style,
+            formula: null,
+            rich: null,
+            carried: null,
+          }
+        : { ...existing, style }
+
+    putCell(sheet.cells, cell)
+    changes.push({
+      sheet: sheet.path,
+      row: address.row,
+      column: address.column,
+      before: existing,
+      after: cell,
     })
   }
 

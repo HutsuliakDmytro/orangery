@@ -5,6 +5,9 @@ import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
+import { resolveStyle } from '@orangery/ooxml-spreadsheet'
+import { openWorkbook } from '../document/workbook'
+import { workbookBytes } from '../document/save'
 import { recorded } from '../test-setup'
 import { App } from './app'
 import { useWorkbookStore } from '../store/workbook-store'
@@ -504,5 +507,104 @@ describe('copying cells and putting them back', () => {
 
     expect(cellAt(0, 0)).not.toBeNull()
     expect(cellAt(1, 0)).not.toBeNull()
+  })
+})
+
+describe('the strip of buttons above the sheet', () => {
+  const cellAt = (row: number, column: number) =>
+    useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+
+  /** What the cell the cursor is on actually looks like, after the cascade. */
+  const lookOf = (row: number, column: number) => {
+    const open = useWorkbookStore.getState().open
+    const styles = open?.styles ?? null
+    if (styles === null) throw new Error('the workbook has no styles')
+
+    return resolveStyle(styles, cellAt(row, column)?.style ?? null)
+  }
+
+  it('says what the cell under the cursor already is', async () => {
+    render(<App />)
+    await load()
+
+    // B1 is the header: bold, white on blue.
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'B1{Enter}')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+
+  it('bolds what is selected without changing anything else about it', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const before = lookOf(1, 1)
+    await typist.click(screen.getByRole('button', { name: 'Bold' }))
+
+    // A1 was a plain header cell; it is bold now and still the same font.
+    expect(lookOf(0, 0).font?.bold).toBe(true)
+    expect(lookOf(1, 1)).toEqual(before)
+  })
+
+  it('formats a whole selection as one thing to take back', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'A1:B2{Enter}')
+    await typist.click(screen.getByRole('button', { name: 'Italic' }))
+
+    expect(lookOf(0, 0).font?.italic).toBe(true)
+    expect(lookOf(1, 1).font?.italic).toBe(true)
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(lookOf(0, 0).font?.italic).toBe(false)
+    expect(lookOf(1, 1).font?.italic).toBe(false)
+  })
+
+  it('formats a cell that is not there yet, which is the usual way round', async () => {
+    // Making a column a date column before typing a date into it.
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'F9{Enter}')
+    await typist.click(screen.getByRole('button', { name: 'Align right' }))
+
+    expect(cellAt(8, 5)?.value).toBeNull()
+    expect(lookOf(8, 5).alignment?.horizontal).toBe('right')
+  })
+
+  it('carries a new look into the file it saves', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+    await typist.click(screen.getByRole('button', { name: 'Bold' }))
+
+    const bytes = await workbookBytes(
+      useWorkbookStore.getState().open ??
+        (() => {
+          throw new Error('nothing open')
+        })(),
+      { edited: true },
+    )
+    const again = await openWorkbook(bytes)
+    const styles = again.styles
+    if (styles === null) throw new Error('the saved workbook has no styles')
+
+    const cell = again.sheets[0]?.cells.rows.get(0)?.get(0) ?? null
+    expect(resolveStyle(styles, cell?.style ?? null).font?.bold).toBe(true)
   })
 })

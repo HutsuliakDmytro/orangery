@@ -5,6 +5,7 @@ import { selectedCount } from '@orangery/grid'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog } from '../document/file'
 import { ReferenceBox } from '../render/reference-box'
+import { Toolbar } from '../render/toolbar'
 import { SheetView } from '../render/sheet-view'
 import { useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
 import { useCommandSource } from './command-source'
@@ -39,6 +40,7 @@ function Shell() {
   const edit = useWorkbookStore((state) => state.edit)
   const clear = useWorkbookStore((state) => state.clear)
   const fill = useWorkbookStore((state) => state.fill)
+  const format = useWorkbookStore((state) => state.format)
   const size = useWindowSize()
 
   useEffect(() => {
@@ -48,7 +50,7 @@ function Shell() {
   const sheets = open === null ? [] : visibleSheetsOf(open)
   const sheet = sheets[current] ?? null
   const tabsHeight = sheets.length > 0 ? 32 : 0
-  const barHeight = sheet === null ? 0 : 33
+  const barHeight = sheet === null ? 0 : 33 + 37
   const selected = selectedCount(selection)
 
   return (
@@ -63,6 +65,10 @@ function Shell() {
             Dismiss
           </button>
         </div>
+      )}
+
+      {sheet !== null && open !== null && (
+        <Toolbar open={open} sheet={sheet} selection={selection} onFormat={format} />
       )}
 
       {sheet !== null && (

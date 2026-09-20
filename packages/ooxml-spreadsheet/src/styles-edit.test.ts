@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readStyles } from './styles'
 import type { Styles } from './styles'
-import { noStyleChanges, numberFormatId, patchStyles, styleShowing } from './styles-edit'
+import { noStyleChanges, numberFormatId, patchStyles, styleShowing, styleWith } from './styles-edit'
 
 /**
  * Giving a cell a look the file did not have.
@@ -156,5 +156,133 @@ describe('putting the additions back into the part', () => {
     const patched = patchStyles(bare, changes)
 
     expect(patched.indexOf('<numFmts')).toBeLessThan(patched.indexOf('<fonts'))
+  })
+})
+
+describe('changing how a cell looks', () => {
+  it('bolds it without resizing it', () => {
+    // The whole difference between a toolbar and a style picker: every part
+    // starts from what the cell already had.
+    const own = styles()
+    const index = styleWith(own, noStyleChanges(), 1, { font: { bold: true } })
+    const font = own.fonts[own.cellFormats[index]?.font ?? 0]
+
+    expect(font).toMatchObject({ bold: true })
+    expect(own.cellFormats[index]?.applies.font).toBe(true)
+  })
+
+  it('keeps the font it had when only the fill changes', () => {
+    const own = styles()
+    const index = styleWith(own, noStyleChanges(), 1, {
+      fill: { kind: 'rgb', hex: 'FFFFFF00' },
+    })
+
+    expect(own.cellFormats[index]?.font).toBe(1)
+    expect(own.fills[own.cellFormats[index]?.fill ?? 0]).toMatchObject({
+      pattern: 'solid',
+      foreground: { kind: 'rgb', hex: 'FFFFFF00' },
+    })
+  })
+
+  it('takes a fill away when asked for none', () => {
+    const own = styles()
+    const index = styleWith(own, noStyleChanges(), 1, { fill: null })
+
+    expect(own.fills[own.cellFormats[index]?.fill ?? 0]?.pattern).toBe('none')
+  })
+
+  it('sets the edges named and leaves the others where they were', () => {
+    const own = styles()
+    const index = styleWith(own, noStyleChanges(), 0, {
+      border: { bottom: { style: 'thin', color: { kind: 'rgb', hex: 'FF000000' } } },
+    })
+    const border = own.borders[own.cellFormats[index]?.border ?? 0]
+
+    expect(border?.bottom.style).toBe('thin')
+    expect(border?.top.style).toBeNull()
+  })
+
+  it('merges an alignment rather than replacing it', () => {
+    const own = styles()
+    const centred = styleWith(own, noStyleChanges(), 0, { alignment: { horizontal: 'center' } })
+    const wrapped = styleWith(own, noStyleChanges(), centred, { alignment: { wrapText: true } })
+
+    expect(own.cellFormats[wrapped]?.alignment).toMatchObject({
+      horizontal: 'center',
+      wrapText: true,
+    })
+  })
+
+  it('gives the same look the same index, however many cells ask', () => {
+    const own = styles()
+    const changes = noStyleChanges()
+
+    const first = styleWith(own, changes, 0, { font: { bold: true } })
+    const second = styleWith(own, changes, 0, { font: { bold: true } })
+
+    expect(second).toBe(first)
+    expect(changes.fonts).toHaveLength(1)
+    expect(changes.cellFormats).toHaveLength(1)
+  })
+
+  it('starts from the look a cell shows, not from the entry it points at', () => {
+    // An entry that states no font of its own takes one from the named style
+    // behind it; bolding that cell has to keep the font it was showing.
+    const based =
+      '<styleSheet xmlns="x">' +
+      '<fonts count="2"><font><sz val="11"/></font><font><sz val="18"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border/></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="1" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>' +
+      '</styleSheet>'
+    const own = readStyles(based)
+    if (own === null) throw new Error('the part holds no styles')
+
+    const index = styleWith(own, noStyleChanges(), 0, { font: { bold: true } })
+
+    expect(own.fonts[own.cellFormats[index]?.font ?? 0]).toMatchObject({ size: 18, bold: true })
+  })
+})
+
+describe('putting a new look back into the part', () => {
+  it('writes the font, the fill and the border it added', () => {
+    const own = styles()
+    const changes = noStyleChanges()
+    styleWith(own, changes, 0, {
+      font: { bold: true, color: { kind: 'rgb', hex: 'FFC00000' } },
+      fill: { kind: 'rgb', hex: 'FFFFFF00' },
+      border: { bottom: { style: 'thin', color: null } },
+    })
+
+    const patched = patchStyles(SHEET, changes)
+
+    expect(patched).toContain('<font><b/><sz val="11"/><color rgb="FFC00000"/></font>')
+    expect(patched).toContain('<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/>')
+    expect(patched).toContain('<bottom style="thin"/>')
+  })
+
+  it('counts them, and puts them after the ones that were there', () => {
+    const own = styles()
+    const changes = noStyleChanges()
+    styleWith(own, changes, 0, { font: { bold: true } })
+
+    const patched = patchStyles(SHEET, changes)
+    const inside = /<fonts[^>]*>([\s\S]*?)<\/fonts>/u.exec(patched)?.[1] ?? ''
+
+    expect(patched).toContain('<fonts count="3">')
+    // The two that were there keep their places, which is what their indexes
+    // mean.
+    expect(inside.indexOf('<sz val="11"/>')).toBeLessThan(inside.indexOf('<b/>'))
+  })
+
+  it('leaves the part alone when a look was already in it', () => {
+    const own = styles()
+    const changes = noStyleChanges()
+    // Font 1 of the fixture is already bold.
+    styleWith(own, changes, 1, { font: { bold: true } })
+
+    expect(changes.fonts).toHaveLength(0)
+    expect(patchStyles(SHEET, changes)).toContain('<fonts count="2">')
   })
 })

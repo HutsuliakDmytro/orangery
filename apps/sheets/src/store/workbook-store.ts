@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
+import type { LookChange } from '@orangery/ooxml-spreadsheet'
 import {
   blockFrom,
   copiedFrom,
@@ -9,7 +10,7 @@ import {
   readClipboard,
   writeClipboard,
 } from '../document/clipboard'
-import { applyEdit, clearCells } from '../document/edit'
+import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { shownText } from '../document/shown'
 import { emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
@@ -61,6 +62,8 @@ export interface WorkbookState {
   clear: () => void
   /** Puts one value into everything selected, likewise. */
   fill: (text: string) => void
+  /** Changes how everything selected looks, likewise. */
+  format: (look: LookChange) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   paste: () => Promise<void>
@@ -181,6 +184,23 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const changes = selectedCells(selection)
       .map((address) => applyEdit(open, sheet, address, text))
       .filter((change): change is NonNullable<typeof change> => change !== null)
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  format: (look) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const changes = applyLook(open, sheet, selectedCells(selection), look)
     if (changes.length === 0) return
 
     set({

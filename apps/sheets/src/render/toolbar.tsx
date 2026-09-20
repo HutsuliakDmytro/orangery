@@ -22,6 +22,52 @@ export interface ToolbarProps {
   onFormat: (look: LookChange) => void
 }
 
+/**
+ * The families a workbook is likely to name.
+ *
+ * The names a file states rather than the ones this machine has: a cell says
+ * `Calibri` whether or not Calibri is installed, and the suite ships a
+ * metric-compatible family to draw it with (`packages/fonts`). Offering
+ * whatever fonts happen to be on this computer would make a file that looks
+ * different on the next one.
+ */
+const FAMILIES = [
+  'Calibri',
+  'Arial',
+  'Times New Roman',
+  'Courier New',
+  'Verdana',
+  'Georgia',
+  'Inter',
+]
+
+/** The sizes Excel's own dropdown offers, which is the list people expect. */
+const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48]
+
+/**
+ * What the border dropdown can do to every selected cell alike.
+ *
+ * A box drawn round the outside of a selection is not here: it asks for a
+ * different edge on each cell of the boundary, which is a different shape of
+ * change from "the same look on all of them" and wants its own way in.
+ */
+const EDGES: { label: string; look: LookChange }[] = [
+  { label: 'All borders', look: { border: box('thin') } },
+  { label: 'Bottom border', look: { border: { bottom: line('thin') } } },
+  { label: 'Top border', look: { border: { top: line('thin') } } },
+  { label: 'Left border', look: { border: { left: line('thin') } } },
+  { label: 'Right border', look: { border: { right: line('thin') } } },
+  { label: 'No borders', look: { border: box(null) } },
+]
+
+function line(style: string | null) {
+  return { style, color: style === null ? null : { kind: 'rgb' as const, hex: 'FF000000' } }
+}
+
+function box(style: string | null) {
+  return { left: line(style), right: line(style), top: line(style), bottom: line(style) }
+}
+
 /** The formats the dropdown offers, in the order a person meets them. */
 const FORMATS: { label: string; code: string | null }[] = [
   { label: 'Automatic', code: 'General' },
@@ -83,6 +129,23 @@ export function Toolbar({ open, sheet, selection, onFormat }: ToolbarProps) {
         <span className="underline">U</span>
       </Toggle>
 
+      <Chooser
+        label="Font"
+        value={style?.font?.name ?? ''}
+        options={FAMILIES.map((one) => ({ label: one, value: one }))}
+        onPick={(value) => {
+          onFormat({ font: { name: value } })
+        }}
+      />
+      <Chooser
+        label="Font size"
+        value={style?.font?.size === null ? '' : String(style?.font?.size ?? '')}
+        options={SIZES.map((one) => ({ label: String(one), value: String(one) }))}
+        onPick={(value) => {
+          onFormat({ font: { size: Number(value) } })
+        }}
+      />
+
       <Divider />
 
       <Swatch
@@ -136,6 +199,19 @@ export function Toolbar({ open, sheet, selection, onFormat }: ToolbarProps) {
 
       <Divider />
 
+      <Chooser
+        label="Borders"
+        value=""
+        placeholder="Borders"
+        options={EDGES.map((one) => ({ label: one.label, value: one.label }))}
+        onPick={(value) => {
+          const chosen = EDGES.find((one) => one.label === value)
+          if (chosen !== undefined) onFormat(chosen.look)
+        }}
+      />
+
+      <Divider />
+
       <select
         aria-label="Number format"
         className="h-6 rounded border border-border bg-surface px-1 text-xs text-text outline-none focus:border-accent"
@@ -166,6 +242,47 @@ export function Toolbar({ open, sheet, selection, onFormat }: ToolbarProps) {
 }
 
 const Divider = () => <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+/**
+ * A dropdown that shows what is chosen, or asks when nothing is.
+ *
+ * A `placeholder` makes it a way to set something rather than a claim about
+ * what is set — which is what the borders need, since a cell's four edges do
+ * not add up to one entry in a list.
+ */
+function Chooser({
+  label,
+  value,
+  options,
+  placeholder,
+  onPick,
+}: {
+  label: string
+  value: string
+  options: { label: string; value: string }[]
+  placeholder?: string
+  onPick: (value: string) => void
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      className="h-6 max-w-28 rounded border border-border bg-surface px-1 text-xs text-text outline-none focus:border-accent"
+      onChange={(event) => {
+        onPick(event.target.value)
+      }}
+    >
+      <option value="" disabled>
+        {placeholder ?? label}
+      </option>
+      {options.map((one) => (
+        <option key={one.value} value={one.value}>
+          {one.label}
+        </option>
+      ))}
+    </select>
+  )
+}
 
 function Toggle({
   label,

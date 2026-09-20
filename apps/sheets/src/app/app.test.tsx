@@ -782,3 +782,82 @@ describe('taking back what was not a cell', () => {
     expect(sheetNow()?.cells.rows.get(0)?.get(0)?.value).toBe('Rent')
   })
 })
+
+describe('the rest of the toolbar', () => {
+  const lookOf = (row: number, column: number) => {
+    const styles = useWorkbookStore.getState().open?.styles ?? null
+    if (styles === null) throw new Error('the workbook has no styles')
+
+    const cell =
+      useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+    return resolveStyle(styles, cell?.style ?? null)
+  }
+
+  it('names a font without changing its size', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    // B1 is the header at twelve points.
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'B1{Enter}')
+    await typist.selectOptions(screen.getByLabelText('Font'), 'Georgia')
+
+    expect(lookOf(0, 1).font).toMatchObject({ name: 'Georgia', size: 12 })
+  })
+
+  it('resizes a font without renaming it', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'B1{Enter}')
+    await typist.selectOptions(screen.getByLabelText('Font size'), '18')
+
+    expect(lookOf(0, 1).font).toMatchObject({ name: 'Calibri', size: 18 })
+  })
+
+  it('draws a line under the cells that are selected', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'A1:B1{Enter}')
+    await typist.selectOptions(screen.getByLabelText('Borders'), 'Bottom border')
+
+    expect(lookOf(0, 0).border.bottom.style).toBe('thin')
+    expect(lookOf(0, 1).border.bottom.style).toBe('thin')
+    // And nowhere else.
+    expect(lookOf(0, 0).border.top.style).toBeNull()
+  })
+
+  it('takes every edge away again', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    await typist.selectOptions(screen.getByLabelText('Borders'), 'All borders')
+    expect(lookOf(0, 0).border.left.style).toBe('thin')
+
+    await typist.selectOptions(screen.getByLabelText('Borders'), 'No borders')
+    expect(lookOf(0, 0).border.left.style).toBeNull()
+  })
+
+  it('turns wrapping on for a value with a line break in it', async () => {
+    // `Alt+Enter` puts the break in; without wrapping the cell would show the
+    // first line and hide the rest, which looks like the break was lost.
+    render(<App />)
+    await load()
+
+    act(() => {
+      useWorkbookStore.getState().edit({ row: 8, column: 5 }, 'one\ntwo')
+    })
+
+    expect(lookOf(8, 5).alignment?.wrapText).toBe(true)
+  })
+})

@@ -78,10 +78,24 @@ export function applyEdit(
       ? { type: 'e' as CellType, value: String(parsed.value) }
       : held(parsed.value)
 
-  const style =
-    parsed.format === null || open.styles === null
+  const styles = open.styles
+  const formatted =
+    parsed.format === null || styles === null
       ? (existing?.style ?? null)
-      : styleShowing(open.styles, open.styleChanges, existing?.style ?? null, parsed.format)
+      : styleShowing(styles, open.styleChanges, existing?.style ?? null, parsed.format)
+
+  /**
+   * A value with a line break in it is one that has to be shown on more than
+   * one line.
+   *
+   * `Alt+Enter` puts the break in; wrapping is what makes it visible, and
+   * Excel turns it on for exactly this reason. A cell left unwrapped would
+   * show the first line and hide the rest, which looks like the break was lost.
+   */
+  const style =
+    styles === null || typeof parsed.value !== 'string' || !parsed.value.includes('\n')
+      ? formatted
+      : styleWith(styles, open.styleChanges, formatted, { alignment: { wrapText: true } })
 
   const cell: Cell = {
     row: address.row,

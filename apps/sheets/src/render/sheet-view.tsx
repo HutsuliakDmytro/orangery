@@ -484,13 +484,42 @@ function rowHeights(sheet: OpenSheet): number[] {
  */
 function fontShorthand(font: Partial<Font> | null | undefined): string {
   const size = font?.size ?? 11
-  const family = font?.name ?? 'Calibri'
 
   return (
     (font?.italic === true ? 'italic ' : '') +
     (font?.bold === true ? 'bold ' : '') +
-    `${String(size)}px ${family}`
+    `${String(size)}px ${familiesFor(font?.name ?? 'Calibri')}`
   )
+}
+
+/**
+ * What a font name is actually drawn with.
+ *
+ * A cell says `Calibri` whether or not Calibri is installed, so the name is
+ * followed by the metric-compatible family the suite ships (`packages/fonts`)
+ * and then by a generic. Without the chain a file written on Windows opens on
+ * a Mac in whatever the browser falls back to, with every column the wrong
+ * width for its contents.
+ */
+const STAND_INS: Readonly<Record<string, string>> = {
+  Calibri: 'Carlito',
+  Arial: 'Liberation Sans',
+  Helvetica: 'Liberation Sans',
+  'Times New Roman': 'Liberation Serif',
+  'Courier New': 'Liberation Mono',
+  Cambria: 'Liberation Serif',
+}
+
+function familiesFor(name: string): string {
+  const quoted = name.includes(' ') ? `"${name}"` : name
+  const standIn = STAND_INS[name]
+  const generic = /mono|courier|consol/iu.test(name)
+    ? 'monospace'
+    : /times|serif|georgia|cambria|garamond/iu.test(name)
+      ? 'serif'
+      : 'sans-serif'
+
+  return standIn === undefined ? `${quoted}, ${generic}` : `${quoted}, "${standIn}", ${generic}`
 }
 
 /** The runs a cell's value is made of, or null where it is all one piece. */

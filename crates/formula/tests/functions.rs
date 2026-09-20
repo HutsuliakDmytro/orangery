@@ -296,11 +296,14 @@ fn substitute_replaces_all_of_them_or_one_of_them() {
 
 #[test]
 fn a_function_nobody_here_has_implemented_says_so_rather_than_guessing() {
-    assert_eq!(value("XLOOKUP(1,A1:A2,B1:B2)"), Value::Error(Error::Name));
-    assert_eq!(
-        value("_xlfn.XLOOKUP(1,A1:A2,B1:B2)"),
-        Value::Error(Error::Name)
-    );
+    // The formula keeps its text and the cell says plainly that this program
+    // did not know the word — which is what lets a workbook using something
+    // unimplemented be saved without being damaged.
+    assert_eq!(value("BESSELJ(1,1)"), Value::Error(Error::Name));
+    assert_eq!(value("_xlfn.LAMBDA(1)"), Value::Error(Error::Name));
+    // And the prefix comes off the ones that are here: a file full of
+    // `_xlfn.XLOOKUP` is a file asking for `XLOOKUP`.
+    assert_eq!(value("_xlfn.XLOOKUP(1,{1;2},{10;20})"), Value::Number(10.0));
 }
 
 #[test]
@@ -315,4 +318,91 @@ fn a_name_is_matched_whatever_case_it_is_written_in() {
     assert_eq!(number("sum(1,2)"), 3.0);
     assert_eq!(number("Round(2.5,0)"), 3.0);
     assert_eq!(number("_xlfn.SUM(1,2)"), 3.0);
+}
+
+#[test]
+fn replace_swaps_a_run_of_letters_counted_from_one() {
+    assert_eq!(text("REPLACE(\"abcdef\",2,3,\"X\")"), "aXef");
+    assert_eq!(text("REPLACE(\"abc\",1,0,\"X\")"), "Xabc");
+    assert_eq!(text("REPLACE(\"abc\",1,3,\"\")"), "");
+    // A start past the end is an append rather than a mistake.
+    assert_eq!(text("REPLACE(\"ab\",9,1,\"c\")"), "abc");
+    assert_eq!(text("REPLACE(\"2024\",1,2,\"20\")"), "2024");
+}
+
+#[test]
+fn proper_begins_a_word_after_anything_that_is_not_a_letter() {
+    assert_eq!(text("PROPER(\"HELLO WORLD\")"), "Hello World");
+    assert_eq!(text("PROPER(\"mary-jane\")"), "Mary-Jane");
+    // Which is Excel's rule, wrong about this name and right about the one
+    // above it.
+    assert_eq!(text("PROPER(\"o'neill\")"), "O'Neill");
+    assert_eq!(text("PROPER(\"a1b\")"), "A1B");
+    assert_eq!(text("PROPER(\"київ\")"), "Київ");
+}
+
+#[test]
+fn clean_takes_out_what_nobody_can_see() {
+    // What a mainframe export leaves in a column, and what makes a lookup
+    // fail against a value that looks identical.
+    assert_eq!(text("CLEAN(CHAR(7)&\"abc\")"), "abc");
+    assert_eq!(text("CLEAN(\"a\"&CHAR(10)&\"b\")"), "ab");
+    assert_eq!(text("CLEAN(\"abc\")"), "abc");
+    assert_eq!(text("CLEAN(\"\")"), "");
+    assert_eq!(text("TRIM(\"  a  b  \")"), "a b");
+}
+
+#[test]
+fn value_reads_a_number_out_of_text_and_a_date_too() {
+    assert_eq!(number("VALUE(\"123\")"), 123.0);
+    assert_eq!(number("VALUE(\"12%\")"), 0.12);
+    // Brackets are how an accountant writes a negative.
+    assert_eq!(number("VALUE(\"(5)\")"), -5.0);
+    assert_eq!(number("VALUE(\"2024-01-15\")"), 45306.0);
+    assert_eq!(number("VALUE(\"12:00\")"), 0.5);
+    assert_eq!(number("VALUE(42)"), 42.0);
+    assert_eq!(value("VALUE(\"twelve\")"), Value::Error(Error::Value));
+}
+
+#[test]
+fn char_and_code_are_two_ways_round_the_same_table() {
+    assert_eq!(text("CHAR(65)"), "A");
+    assert_eq!(number("CODE(\"A\")"), 65.0);
+    assert_eq!(number("CODE(\"Abc\")"), 65.0);
+    assert_eq!(number("CODE(CHAR(233))"), 233.0);
+    assert_eq!(value("CHAR(0)"), Value::Error(Error::Value));
+    assert_eq!(value("CHAR(256)"), Value::Error(Error::Value));
+    assert_eq!(value("CODE(\"\")"), Value::Error(Error::Value));
+}
+
+#[test]
+fn the_unicode_pair_mean_the_same_thing_on_every_machine() {
+    // Unlike `CHAR`, which means whatever the machine's code page says.
+    assert_eq!(text("UNICHAR(65)"), "A");
+    assert_eq!(number("UNICODE(\"Ї\")"), 1031.0);
+    assert_eq!(number("UNICODE(UNICHAR(9731))"), 9731.0);
+    assert_eq!(number("UNICODE(\"€\")"), 8364.0);
+    // And in the code page the euro is one byte in the gap 1252 fills.
+    assert_eq!(number("CODE(\"€\")"), 128.0);
+    assert_eq!(value("UNICHAR(0)"), Value::Error(Error::Value));
+}
+
+#[test]
+fn textbefore_and_textafter_split_on_a_delimiter_somebody_names() {
+    assert_eq!(text("TEXTBEFORE(\"a,b,c\",\",\")"), "a");
+    assert_eq!(text("TEXTAFTER(\"a,b,c\",\",\")"), "b,c");
+    assert_eq!(text("TEXTBEFORE(\"a,b,c\",\",\",2)"), "a,b");
+    // A negative count is from the end, which is how you ask for the last one
+    // without counting them first.
+    assert_eq!(text("TEXTAFTER(\"a,b,c\",\",\",-1)"), "c");
+    // A delimiter that is not there has no answer, and either half would be
+    // a guess at which one was wanted.
+    assert_eq!(
+        value("TEXTBEFORE(\"abc\",\",\")"),
+        Value::Error(Error::NotAvailable)
+    );
+    assert_eq!(
+        value("TEXTAFTER(\"abc\",\",\")"),
+        Value::Error(Error::NotAvailable)
+    );
 }

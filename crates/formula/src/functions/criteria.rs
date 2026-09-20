@@ -134,7 +134,7 @@ fn split_criterion(text: &str) -> (Test, Value) {
 /// Walked rather than turned into a regular expression, because the crate
 /// carries no dependencies and this is the whole of what the pattern language
 /// is. Case is ignored, as everywhere else a spreadsheet compares words.
-fn glob(pattern: &str, text: &str) -> bool {
+pub fn glob(pattern: &str, text: &str) -> bool {
     let pattern: Vec<char> = pattern.to_lowercase().chars().collect();
     let text: Vec<char> = text.to_lowercase().chars().collect();
 

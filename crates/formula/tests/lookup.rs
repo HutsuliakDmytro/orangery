@@ -489,3 +489,135 @@ fn type_answers_in_excels_numbering() {
     assert_eq!(on(&sheet, "TYPE(A5)"), Value::Number(16.0));
     assert_eq!(on(&sheet, "TYPE({1,2})"), Value::Number(64.0));
 }
+
+#[test]
+fn xlookup_is_exact_by_default_and_says_what_to_do_when_it_is_not_there() {
+    assert_eq!(
+        answer("XLOOKUP(\"South\",A2:A5,B2:B5)"),
+        Value::Number(20.0)
+    );
+    assert_eq!(
+        answer("XLOOKUP(\"South\",A2:A5,C2:C5)"),
+        Value::Text("y".into())
+    );
+    assert_eq!(
+        answer("XLOOKUP(\"Nowhere\",A2:A5,B2:B5)"),
+        Value::Error(Error::NotAvailable)
+    );
+    // The fourth argument is the whole reason people moved to this one: "not
+    // found" becomes something you can answer rather than an error to be
+    // wrapped in `IFERROR`, which would swallow the mistakes you did want to
+    // hear about.
+    assert_eq!(
+        answer("XLOOKUP(\"Nowhere\",A2:A5,B2:B5,\"none\")"),
+        Value::Text("none".into())
+    );
+    assert_eq!(
+        answer("XLOOKUP(40,B2:B5,A2:A5)"),
+        Value::Text("West".into())
+    );
+}
+
+#[test]
+fn xlookup_can_be_asked_for_the_nearest_or_for_a_pattern() {
+    assert_eq!(
+        answer("XLOOKUP(150,E1:E3,F1:F3,\"none\",-1)"),
+        Value::Text("mid".into())
+    );
+    assert_eq!(
+        answer("XLOOKUP(150,E1:E3,F1:F3,\"none\",1)"),
+        Value::Text("high".into())
+    );
+    assert_eq!(
+        answer("XLOOKUP(\"Nor*\",A2:A5,B2:B5,\"none\",2)"),
+        Value::Number(10.0)
+    );
+    assert_eq!(
+        answer("XLOOKUP(-1,E1:E3,F1:F3,\"none\",-1)"),
+        Value::Text("none".into())
+    );
+    // Backwards, for the last of several matches rather than the first.
+    assert_eq!(
+        answer("XLOOKUP(\"*t\",A2:A5,A2:A5,\"none\",2,-1)"),
+        Value::Text("West".into())
+    );
+}
+
+#[test]
+fn xmatch_gives_the_place_and_is_exact_by_default() {
+    assert_eq!(answer("XMATCH(\"East\",A2:A5)"), Value::Number(3.0));
+    assert_eq!(answer("XMATCH(30,B2:B5)"), Value::Number(3.0));
+    assert_eq!(
+        answer("XMATCH(\"Nowhere\",A2:A5)"),
+        Value::Error(Error::NotAvailable)
+    );
+    // Which is the other half of why these two replaced `MATCH` and
+    // `VLOOKUP`: the default is the safe one.
+    assert_eq!(answer("XMATCH(150,E1:E3,-1)"), Value::Number(2.0));
+    assert_eq!(
+        answer("XMATCH(150,E1:E3)"),
+        Value::Error(Error::NotAvailable)
+    );
+}
+
+#[test]
+fn lookup_is_the_older_shape_and_always_approximate() {
+    // Written when a sorted column was the only kind anybody had.
+    assert_eq!(answer("LOOKUP(150,E1:E3,F1:F3)"), Value::Text("mid".into()));
+    assert_eq!(answer("LOOKUP(0,E1:E3,F1:F3)"), Value::Text("low".into()));
+    assert_eq!(
+        answer("LOOKUP(500,E1:E3,F1:F3)"),
+        Value::Text("high".into())
+    );
+    assert_eq!(
+        answer("LOOKUP(-1,E1:E3,F1:F3)"),
+        Value::Error(Error::NotAvailable)
+    );
+    // The array form searches the first column and answers from the last,
+    // which is a rule nobody remembers and every old sheet relies on.
+    assert_eq!(answer("LOOKUP(150,E1:F3)"), Value::Text("mid".into()));
+}
+
+#[test]
+fn address_writes_an_address_rather_than_following_one() {
+    assert_eq!(answer("ADDRESS(1,1)"), Value::Text("$A$1".into()));
+    assert_eq!(answer("ADDRESS(1,1,4)"), Value::Text("A1".into()));
+    assert_eq!(answer("ADDRESS(2,3,2)"), Value::Text("C$2".into()));
+    assert_eq!(answer("ADDRESS(2,3,3)"), Value::Text("$C2".into()));
+    // Not quite base twenty-six: there is no nought digit, which is why AA
+    // follows Z rather than BA.
+    assert_eq!(answer("ADDRESS(1,27)"), Value::Text("$AA$1".into()));
+    assert_eq!(answer("ADDRESS(1,702)"), Value::Text("$ZZ$1".into()));
+    assert_eq!(answer("ADDRESS(0,1)"), Value::Error(Error::Value));
+}
+
+#[test]
+fn address_can_write_the_other_notation_and_name_a_sheet() {
+    assert_eq!(answer("ADDRESS(1,1,1,FALSE)"), Value::Text("R1C1".into()));
+    assert_eq!(
+        answer("ADDRESS(1,1,4,FALSE)"),
+        Value::Text("R[1]C[1]".into())
+    );
+    assert_eq!(answer("ADDRESS(1,1,2,FALSE)"), Value::Text("R1C[1]".into()));
+    assert_eq!(
+        answer("ADDRESS(1,1,1,TRUE,\"Notes\")"),
+        Value::Text("Notes!$A$1".into())
+    );
+    // A name with a space in it has to be quoted, or it makes an address
+    // nothing can read back.
+    assert_eq!(
+        answer("ADDRESS(1,1,1,TRUE,\"Sheet 1\")"),
+        Value::Text("'Sheet 1'!$A$1".into())
+    );
+}
+
+#[test]
+fn an_address_written_out_can_be_followed_again() {
+    // Which is what `ADDRESS` is for: it makes text, and `INDIRECT` is what
+    // turns text back into a place.
+    assert_eq!(answer("INDIRECT(ADDRESS(3,2))"), Value::Number(20.0));
+    assert_eq!(
+        answer("SUM(INDIRECT(ADDRESS(2,2)&\":\"&ADDRESS(5,2)))"),
+        Value::Number(100.0)
+    );
+}

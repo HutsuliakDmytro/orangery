@@ -8,7 +8,7 @@
 //! Excel's; changing it here would be worse, because then the same workbook
 //! would say two different things.
 
-use super::criteria::matches;
+use super::criteria::{glob, matches};
 use super::{done, number, table, Function};
 use crate::ast::Expr;
 use crate::eval::{evaluate, reference_of, Context, Rect};
@@ -377,6 +377,334 @@ function!(AVERAGEIF, "AVERAGEIF", 2, Some(3), |arguments, context| {
         Ok(Value::Number(total / how_many as f64))
     })())
 });
+
+function!(XLOOKUP, "XLOOKUP", 3, Some(6), |arguments, context| {
+    done((|| {
+        let wanted = evaluate(&arguments[0], context);
+        if let Value::Error(error) = wanted {
+            return Err(error);
+        }
+
+        let over = table(arguments.get(1), context)?;
+        let giving = table(arguments.get(2), context)?;
+        let how = match arguments.get(4) {
+            None => 0.0,
+            Some(_) => number(arguments.get(4), context)?,
+        };
+        let backwards = match arguments.get(5) {
+            None => false,
+            Some(_) => number(arguments.get(5), context)? < 0.0,
+        };
+
+        let found = place_of(
+            &over.values.iter().collect::<Vec<_>>(),
+            &wanted,
+            how,
+            backwards,
+        );
+
+        let Some(index) = found else {
+            // The fourth argument is the whole reason people moved to this
+            // one: "not found" is a thing you can say something about rather
+            // than an error to be wrapped in `IFERROR`, which would also
+            // swallow the mistakes you did want to hear about.
+            return match arguments.get(3) {
+                Some(expression) => Ok(evaluate(expression, context)),
+                None => Ok(Value::Error(Error::NotAvailable)),
+            };
+        };
+
+        answer_at(&giving, &over, index)
+    })())
+});
+
+function!(XMATCH, "XMATCH", 2, Some(4), |arguments, context| {
+    done((|| {
+        let wanted = evaluate(&arguments[0], context);
+        if let Value::Error(error) = wanted {
+            return Err(error);
+        }
+
+        let over = table(arguments.get(1), context)?;
+        let how = match arguments.get(2) {
+            None => 0.0,
+            Some(_) => number(arguments.get(2), context)?,
+        };
+        let backwards = match arguments.get(3) {
+            None => false,
+            Some(_) => number(arguments.get(3), context)? < 0.0,
+        };
+
+        // Exact by default, which is the other half of why these two replaced
+        // `MATCH` and `VLOOKUP`: the default is the safe one.
+        match place_of(
+            &over.values.iter().collect::<Vec<_>>(),
+            &wanted,
+            how,
+            backwards,
+        ) {
+            Some(index) => Ok(Value::Number((index + 1) as f64)),
+            None => Ok(Value::Error(Error::NotAvailable)),
+        }
+    })())
+});
+
+function!(LOOKUP, "LOOKUP", 2, Some(3), |arguments, context| {
+    done((|| {
+        let wanted = evaluate(&arguments[0], context);
+        if let Value::Error(error) = wanted {
+            return Err(error);
+        }
+
+        let over = table(arguments.get(1), context)?;
+
+        // The older shape of the same idea, and always approximate: it was
+        // written when a sorted column was the only kind anybody had.
+        let (searched, giving) = match arguments.get(2) {
+            Some(_) => (over.clone(), table(arguments.get(2), context)?),
+            // The array form searches the first row or column and answers
+            // from the last, which is a rule nobody remembers and every old
+            // sheet relies on.
+            None => {
+                if over.columns > over.rows {
+                    (row_of_array(&over, 0), row_of_array(&over, over.rows - 1))
+                } else {
+                    (
+                        column_of_array(&over, 0),
+                        column_of_array(&over, over.columns - 1),
+                    )
+                }
+            }
+        };
+
+        let found = nearest_below(&searched.values.iter().collect::<Vec<_>>(), &wanted);
+        match found.and_then(|index| giving.values.get(index)) {
+            Some(value) => Ok(value.clone()),
+            None => Ok(Value::Error(Error::NotAvailable)),
+        }
+    })())
+});
+
+function!(ADDRESS, "ADDRESS", 2, Some(5), |arguments, context| {
+    done((|| {
+        let row = number(arguments.first(), context)?.trunc() as i64;
+        let column = number(arguments.get(1), context)?.trunc() as i64;
+        let pinning = match arguments.get(2) {
+            None => 1.0,
+            Some(_) => number(arguments.get(2), context)?.trunc(),
+        };
+        let a1 = match arguments.get(3) {
+            None => true,
+            Some(expression) => evaluate(expression, context).to_bool()?,
+        };
+
+        if row < 1 || column < 1 || !(1.0..=4.0).contains(&pinning) {
+            return Ok(Value::Error(Error::Value));
+        }
+
+        let pinned_row = matches!(pinning as i64, 1 | 2);
+        let pinned_column = matches!(pinning as i64, 1 | 3);
+
+        let address = if a1 {
+            format!(
+                "{}{}{}{}",
+                if pinned_column { "$" } else { "" },
+                column_name(column),
+                if pinned_row { "$" } else { "" },
+                row
+            )
+        } else {
+            // R1C1, which this engine does not read back but can certainly
+            // write: `ADDRESS` makes text, and text is all anybody does with
+            // it — usually to hand it to `INDIRECT`.
+            format!(
+                "R{}C{}",
+                if pinned_row {
+                    row.to_string()
+                } else {
+                    format!("[{row}]")
+                },
+                if pinned_column {
+                    column.to_string()
+                } else {
+                    format!("[{column}]")
+                }
+            )
+        };
+
+        match arguments.get(4) {
+            None => Ok(Value::Text(address)),
+            Some(expression) => {
+                let sheet = evaluate(expression, context).to_text()?;
+                // A name with a space in it has to be quoted, or the address
+                // it makes is one nothing can read back.
+                let quoted = if sheet.contains([' ', '\'']) {
+                    format!("'{}'", sheet.replace('\'', "''"))
+                } else {
+                    sheet
+                };
+                Ok(Value::Text(format!("{quoted}!{address}")))
+            }
+        }
+    })())
+});
+
+/// A column's letters, counting from one: 1 is A, 27 is AA.
+fn column_name(column: i64) -> String {
+    let mut letters = Vec::new();
+    let mut left = column;
+
+    // Not quite base twenty-six: there is no zero digit, so each step takes
+    // one away before dividing — which is why AA follows Z rather than BA.
+    while left > 0 {
+        let digit = (left - 1) % 26;
+        letters.push((b'A' + digit as u8) as char);
+        left = (left - 1) / 26;
+    }
+
+    letters.iter().rev().collect()
+}
+
+/// Where a value sits in a list, under whichever rule was asked for.
+///
+/// 0 is exact, -1 the largest that is not larger, 1 the smallest that is not
+/// smaller, 2 a pattern. Backwards is from the end, which is how somebody
+/// asks for the last of several matches.
+fn place_of(values: &[&Value], wanted: &Value, how: f64, backwards: bool) -> Option<usize> {
+    use std::cmp::Ordering;
+
+    let exact = |value: &&Value| compare(value, wanted) == Ok(Ordering::Equal);
+
+    let found = match how {
+        0.0 => {
+            if backwards {
+                values.iter().rposition(exact)
+            } else {
+                values.iter().position(exact)
+            }
+        }
+        2.0 => {
+            let pattern = match wanted {
+                Value::Text(text) => text.clone(),
+                other => other.to_text().unwrap_or_default(),
+            };
+            let same = |value: &&Value| {
+                glob(
+                    &pattern,
+                    &match value {
+                        Value::Text(text) => text.clone(),
+                        Value::Blank => String::new(),
+                        other => other.to_text().unwrap_or_default(),
+                    },
+                )
+            };
+            if backwards {
+                values.iter().rposition(same)
+            } else {
+                values.iter().position(same)
+            }
+        }
+        // The near-enough rules here are not `MATCH`'s. `MATCH` walks a
+        // sorted list and stops; these look at every value and keep the
+        // closest one on the asked-for side, which is what lets `XLOOKUP`
+        // answer about a column nobody sorted — the difference the newer
+        // function was added to make.
+        less if less < 0.0 => closest(values, wanted, false, backwards),
+        _ => closest(values, wanted, true, backwards),
+    };
+
+    found
+}
+
+/// The nearest value on one side of what was asked for, wherever it sits.
+fn closest(values: &[&Value], wanted: &Value, above: bool, backwards: bool) -> Option<usize> {
+    use std::cmp::Ordering;
+
+    let order: Vec<usize> = if backwards {
+        (0..values.len()).rev().collect()
+    } else {
+        (0..values.len()).collect()
+    };
+
+    let mut best: Option<(usize, &Value)> = None;
+
+    for index in order {
+        let value = values[index];
+        let Ok(against) = compare(value, wanted) else {
+            continue;
+        };
+
+        // An exact match is the closest there is, and falls out of this
+        // without being a case of its own.
+        let on_this_side = if above {
+            against != Ordering::Less
+        } else {
+            against != Ordering::Greater
+        };
+        if !on_this_side {
+            continue;
+        }
+
+        let better = match best {
+            None => true,
+            Some((_, so_far)) => {
+                let nearer = compare(value, so_far);
+                if above {
+                    nearer == Ok(Ordering::Less)
+                } else {
+                    nearer == Ok(Ordering::Greater)
+                }
+            }
+        };
+
+        if better {
+            best = Some((index, value));
+        }
+    }
+
+    best.map(|(index, _)| index)
+}
+
+/// What `XLOOKUP` hands back once it knows which one matched.
+///
+/// The return range is lined up against the one searched: a column for a
+/// column, a row for a row. Where it is wider than the list, the whole row of
+/// it comes back — which is the shape a spill will take when there is one.
+fn answer_at(giving: &Array, over: &Array, index: usize) -> Result<Value, Error> {
+    let down = over.columns == 1 || over.rows > 1;
+
+    if down {
+        if index >= giving.rows {
+            return Ok(Value::Error(Error::Value));
+        }
+        if giving.columns == 1 {
+            return Ok(giving.at(index, 0).clone());
+        }
+        return Ok(Value::Array(row_of_array(giving, index)));
+    }
+
+    if index >= giving.columns {
+        return Ok(Value::Error(Error::Value));
+    }
+    if giving.rows == 1 {
+        return Ok(giving.at(0, index).clone());
+    }
+    Ok(Value::Array(column_of_array(giving, index)))
+}
+
+fn row_of_array(grid: &Array, row: usize) -> Array {
+    let values = (0..grid.columns)
+        .map(|at| grid.at(row, at).clone())
+        .collect();
+    Array::new(1, grid.columns, values)
+}
+
+fn column_of_array(grid: &Array, column: usize) -> Array {
+    let values = (0..grid.rows)
+        .map(|at| grid.at(at, column).clone())
+        .collect();
+    Array::new(grid.rows, 1, values)
+}
 
 fn at(grid: &Array, row: usize, column: usize) -> Value {
     if row >= grid.rows || column >= grid.columns {

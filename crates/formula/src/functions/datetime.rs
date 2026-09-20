@@ -272,7 +272,7 @@ function!(
 function!(DATEVALUE, "DATEVALUE", 1, Some(1), |arguments, context| {
     done((|| {
         let text = string(arguments.first(), context)?;
-        match parse_date(&text, context.cells.date_system()) {
+        match date_from_text(&text, context.cells.date_system()) {
             Some(serial) => Ok(Value::Number(serial)),
             None => Ok(Value::Error(Error::Value)),
         }
@@ -282,7 +282,7 @@ function!(DATEVALUE, "DATEVALUE", 1, Some(1), |arguments, context| {
 function!(TIMEVALUE, "TIMEVALUE", 1, Some(1), |arguments, context| {
     done((|| {
         let text = string(arguments.first(), context)?;
-        match parse_time(&text) {
+        match time_from_text(&text) {
             Some(fraction) => Ok(Value::Number(fraction)),
             None => Ok(Value::Error(Error::Value)),
         }
@@ -555,7 +555,7 @@ fn working_day_after(
 /// the machine's own settings are — the same reason the stored formula says
 /// `TRUE` rather than `ІСТИНА`. What somebody types into a cell is a
 /// different question, answered where the typing happens.
-fn parse_date(text: &str, system: DateSystem) -> Option<f64> {
+pub fn date_from_text(text: &str, system: DateSystem) -> Option<f64> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return None;
@@ -672,7 +672,7 @@ fn month_named(word: &str) -> Option<i64> {
 }
 
 /// The fraction of a day a time names.
-fn parse_time(text: &str) -> Option<f64> {
+pub fn time_from_text(text: &str) -> Option<f64> {
     let trimmed = text.trim().to_ascii_uppercase();
 
     let (body, half) = if let Some(rest) = trimmed.strip_suffix("AM") {

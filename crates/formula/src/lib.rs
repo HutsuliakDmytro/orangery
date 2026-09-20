@@ -5,16 +5,20 @@
 //! around it and compiled to WASM for the web viewer
 //! (`apps/sheets/docs/adr/0003-formula-engine.md`).
 //!
-//! What is here so far is the front of the pipeline: text into tokens, tokens
-//! into a tree. Evaluation, the dependency graph and recalculation come after,
-//! and each is a stage that knows nothing about the next.
+//! What is here so far: text into tokens, tokens into a tree, and a tree into
+//! a value against cells somebody else holds. The dependency graph and
+//! recalculation come after, and each stage knows nothing about the next.
 
 pub mod ast;
+pub mod eval;
 pub mod lexer;
 pub mod parser;
 pub mod reference;
+pub mod value;
 
 pub use ast::{Expr, Operator};
+pub use eval::{evaluate, Cells, Context};
 pub use lexer::{lex, Token, TokenKind};
 pub use parser::{parse, ParseError};
 pub use reference::{Reference, ReferenceKind};
+pub use value::{Array, Error, Value};

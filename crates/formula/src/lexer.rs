@@ -294,7 +294,11 @@ fn lex_reference_or_name(text: &[char], from: usize) -> Result<Option<(TokenKind
     // A sheet name and then something that is not a reference is a mistake
     // worth naming: `Sheet1!` on its own says nothing.
     if let Some((kind, next)) = lex_reference_body(text, after_sheet, sheet.clone()) {
-        return Ok(Some((kind, next)));
+        // `LOG10(` is the function, not the cell in column LOG: a bracket
+        // straight after it settles an ambiguity the spelling cannot.
+        if !opens_a_call(text, next) {
+            return Ok(Some((kind, next)));
+        }
     }
 
     if sheet.is_some() {
@@ -307,14 +311,23 @@ fn lex_reference_or_name(text: &[char], from: usize) -> Result<Option<(TokenKind
     }
 
     let upper = word.to_ascii_uppercase();
-    if upper == "TRUE" {
-        return Ok(Some((TokenKind::Bool(true), next)));
-    }
-    if upper == "FALSE" {
-        return Ok(Some((TokenKind::Bool(false), next)));
+    // `TRUE` is a value and `TRUE()` is a function, and they are the same four
+    // letters: the bracket is the only thing that tells them apart.
+    if !opens_a_call(text, next) {
+        if upper == "TRUE" {
+            return Ok(Some((TokenKind::Bool(true), next)));
+        }
+        if upper == "FALSE" {
+            return Ok(Some((TokenKind::Bool(false), next)));
+        }
     }
 
     Ok(Some((TokenKind::Name(word), next)))
+}
+
+/// Whether what follows is a bracket, which makes whatever came before a call.
+fn opens_a_call(text: &[char], from: usize) -> bool {
+    text.get(from) == Some(&'(')
 }
 
 /// `Sheet1!`, `'Two words'!`, `Sheet1:Sheet3!` — the part before the cells.

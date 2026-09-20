@@ -117,16 +117,16 @@
 - [ ] Бенчмарки: 1M формул — повний recalc < 2 с, одна правка з 10k залежних < 50 ms
 
 ### 3.2 Функції (кожна з ≥ 5 Excel-верифікованими тестами)
-- [ ] Math: SUM, SUMIF/S, PRODUCT, ROUND/UP/DOWN, INT, MOD, ABS, SQRT, POWER, EXP, LN, LOG, PI, RAND/BETWEEN, CEILING/FLOOR (.MATH), TRUNC, SUMPRODUCT, SUBTOTAL, AGGREGATE (базово), SEQUENCE
-- [ ] Stats: AVERAGE/IF/S, COUNT/A/BLANK/IF/S, MIN/MAX/IFS, MEDIAN, MODE, STDEV.S/P, VAR.S/P, RANK, LARGE, SMALL, PERCENTILE, QUARTILE, CORREL, FORECAST.LINEAR
-- [ ] Logical: IF, IFS, AND, OR, NOT, XOR, IFERROR, IFNA, SWITCH, TRUE/FALSE, LET, LAMBDA (базово)
+- [~] Math: SUM ✔, PRODUCT ✔, ROUND/UP/DOWN ✔, INT ✔, TRUNC ✔, MOD ✔, ABS ✔, SIGN ✔, SQRT ✔, POWER ✔, EXP ✔, LN ✔, LOG ✔, LOG10 ✔, PI ✔. Округлення — half away from zero, а не банківське, і по п'ятнадцяти значущих цифрах, а не по двійковому значенню: `ROUND(1.005,2)` це 1,01, бо 1.005 у двійковому це 1.00499999999999989, і різниця тут — між «збігається з рахунком» і ні. `MOD` бере знак дільника: `MOD(-3,2)` це 1. `INT` округлює вниз завжди. Лишилось: SUMIF/S, RAND/BETWEEN, CEILING/FLOOR, SUMPRODUCT, SUBTOTAL, AGGREGATE, SEQUENCE
+- [~] Stats: AVERAGE ✔, COUNT ✔, COUNTA ✔, COUNTBLANK ✔, MIN ✔, MAX ✔, MEDIAN ✔. `COUNT` рахує числа, `COUNTA` — усе непорожнє: стовпець артикулів, порахований першим, дає нуль. Порожній `MAX` це нуль, а порожній `AVERAGE` це `#DIV/0!` — як в Excel. Лишилось: *IF/S-варіанти, MODE, STDEV, VAR, RANK, LARGE, SMALL, PERCENTILE, QUARTILE, CORREL, FORECAST.LINEAR
+- [~] Logical: IF ✔, IFS ✔, AND ✔, OR ✔, NOT ✔, XOR ✔, IFERROR ✔, IFNA ✔, TRUE/FALSE ✔. Аргументи приходять **нерозібраними**: `IF(A1=0,0,1/A1)` не має ділити на нуль, інакше формула помиляється саме в тому, від чого її написали захищати. `IFNA` ловить тільки `#N/A`, бо «не знайшлося» і «зламалося» — різні речі. Лишилось: SWITCH, LET, LAMBDA
 - [ ] Lookup: VLOOKUP, HLOOKUP, XLOOKUP, INDEX, MATCH, XMATCH, LOOKUP, OFFSET, INDIRECT, CHOOSE, ROW/S, COLUMN/S, ADDRESS, FILTER, SORT, SORTBY, UNIQUE, TRANSPOSE
-- [ ] Text: LEFT/RIGHT/MID, LEN, FIND/SEARCH, SUBSTITUTE, REPLACE, TRIM, CLEAN, UPPER/LOWER/PROPER, TEXT (через `numfmt`), VALUE, CONCAT/TEXTJOIN, REPT, CHAR/CODE/UNICODE, TEXTSPLIT/BEFORE/AFTER, EXACT, T, N
+- [~] Text: LEFT ✔, RIGHT ✔, MID ✔, LEN ✔, FIND ✔, SEARCH ✔, SUBSTITUTE ✔, TRIM ✔, UPPER ✔, LOWER ✔, CONCAT ✔, CONCATENATE ✔, TEXTJOIN ✔, REPT ✔, EXACT ✔. Рахується літерами, а не байтами: `LEN("Київ")` це 4. `FIND` розрізняє регістр, `SEARCH` — ні; `EXACT` — єдине порівняння тексту, яке регістр помічає. Лишилось: REPLACE, CLEAN, PROPER, TEXT, VALUE, CHAR/CODE/UNICODE, TEXTSPLIT/BEFORE/AFTER, T, N
 - [ ] Date/Time: TODAY, NOW, DATE, TIME, YEAR/MONTH/DAY, HOUR/MINUTE/SECOND, WEEKDAY, WEEKNUM, EOMONTH, EDATE, DATEDIF, NETWORKDAYS(.INTL), WORKDAY(.INTL), DAYS, DATEVALUE, TIMEVALUE
 - [ ] Financial: PMT, IPMT, PPMT, PV, FV, NPER, RATE, NPV, IRR, XNPV, XIRR, SLN, DB
 - [ ] Info: ISBLANK/NUMBER/TEXT/ERROR/NA/LOGICAL/FORMULA, TYPE, CELL (частково), NA, ERROR.TYPE, SHEET/S
 - [ ] Engineering/DB — `[-]` до запиту
-- [ ] Реєстр: невідома функція → `#NAME?`, але формула зберігається verbatim
+- [x] Реєстр ✔ (`crates/formula/src/functions/mod.rs`): функція — це ім'я, скільки аргументів бере, чи летка вона, і що робить; додати нову означає додати рядок у список категорії й функцію поруч. Невідома функція → `#NAME?`, формула лишається текстом як була. Ім'я матчиться без регістру і без префікса `_xlfn.`; дужка вирішує суперечку між `LOG10` як коміркою і як функцією
 
 ### 3.3 UI формул
 - [ ] Formula bar: підсвітка посилань кольорами на гриді під час редагування, клік/drag вибирає діапазон

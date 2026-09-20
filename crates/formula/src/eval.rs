@@ -59,11 +59,11 @@ pub fn evaluate(expression: &Expr, context: &Context<'_>) -> Value {
 
         Expr::Reference(reference) => resolve(reference, context),
 
-        // A name nothing has defined is `#NAME?`, which is also what an
-        // unimplemented function comes to: the formula is kept, the answer
-        // says plainly that this program did not know the word.
+        // A name nothing has defined is `#NAME?`: the formula is kept, and
+        // the answer says plainly that this program did not know the word.
         Expr::Name(_) => Value::Error(Error::Name),
-        Expr::Call { .. } => Value::Error(Error::Name),
+
+        Expr::Call { name, arguments } => crate::functions::call(name, arguments, context),
 
         Expr::Unary { negative, operand } => {
             let value = evaluate(operand, context);

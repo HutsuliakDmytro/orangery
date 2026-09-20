@@ -11,6 +11,8 @@ import { replaceMerges } from './merges'
 import { replaceAutoFilter } from './autofilter'
 import type { AutoFilter } from './autofilter'
 import { replaceHyperlinks, writeHyperlinks } from './hyperlinks'
+import { replaceValidations, writeValidations } from './validation'
+import type { DataValidation } from './validation'
 import type { Hyperlink } from './hyperlinks'
 import type { SheetCells } from './cells'
 import type { CellRange } from './reference'
@@ -47,6 +49,8 @@ export interface SheetToWrite {
   merges?: readonly CellRange[]
   /** The autofilter, likewise; null takes it away, undefined leaves it. */
   filter?: AutoFilter | null
+  /** What the cells are allowed to hold, where that may have changed. */
+  validations?: readonly DataValidation[]
   /**
    * The links, where they may have changed.
    *
@@ -101,6 +105,9 @@ export function writeWorkbook(
     if (sheet.columns !== undefined) written = replaceColumns(written, sheet.columns)
     if (sheet.merges !== undefined) written = replaceMerges(written, sheet.merges)
     if (sheet.filter !== undefined) written = replaceAutoFilter(written, sheet.filter)
+    if (sheet.validations !== undefined) {
+      written = replaceValidations(written, writeValidations(sheet.validations))
+    }
 
     if (sheet.links !== undefined) {
       const path = relationshipsOf(sheet.path)

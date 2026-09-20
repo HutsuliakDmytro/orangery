@@ -22,6 +22,13 @@ export type { DefinedName, SheetEntry, Workbook } from './workbook'
 export { readNotes, readPeople, readSheetComments, readThreads } from './comments'
 export type { Note, Reply, SheetComments, Thread } from './comments'
 export { readTable, readTables, tableAt } from './tables'
+export { readValidations, replaceValidations, validationAt, writeValidations } from './validation'
+export type {
+  DataValidation,
+  ValidationKind,
+  ValidationOperator,
+  ValidationSeverity,
+} from './validation'
 export type { Table, TableColumn, TableStyle } from './tables'
 export { applyTint, paletteOf, resolveColor } from './colors'
 export type { ColorPalette } from './colors'

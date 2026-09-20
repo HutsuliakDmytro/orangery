@@ -1,42 +1,52 @@
 import type { CSSProperties } from 'react'
-import { shape } from '../document/suggest'
-import type { KnownFunction } from '../document/suggest'
 
 /**
- * The functions a half-typed name could become.
+ * A short list of things the cell could hold, offered while somebody types.
  *
- * One list, shown in two places: under the formula bar and under the cell
- * being edited. They are the same question asked from two keyboards, and two
- * lists that drifted apart would be two answers to it.
+ * Two of them so far, and they are the same list to look at: the functions a
+ * half-typed name could become, and the values a column is allowed to hold.
+ * One component, because they are one gesture — a list under the caret,
+ * walked with the arrows and taken with Enter.
  */
 
-export interface FunctionListProps {
-  matches: readonly KnownFunction[]
+export interface Suggested {
+  /** What goes into the cell when it is taken. */
+  value: string
+  /** What is shown, where that is not the value itself. */
+  label?: string
+  /** A word or two on the right: how many arguments, what kind of thing. */
+  hint?: string
+}
+
+export interface SuggestionListProps {
+  label: string
+  items: readonly Suggested[]
   /** Which one the keyboard is on. */
   highlighted: number
-  onChoose: (name: string) => void
+  onChoose: (value: string) => void
   onHighlight: (at: number) => void
   /** Where to put it, for the caller that knows where the editor is. */
   style?: CSSProperties
 }
 
-export function FunctionList({
-  matches,
+export function SuggestionList({
+  label,
+  items,
   highlighted,
   onChoose,
   onHighlight,
   style,
-}: FunctionListProps) {
-  if (matches.length === 0) return null
+}: SuggestionListProps) {
+  if (items.length === 0) return null
 
   return (
     <ul
-      aria-label="Functions"
+      aria-label={label}
       className="z-20 max-h-64 w-72 overflow-auto rounded border border-border bg-surface py-1 shadow-lg"
       style={style}
     >
-      {matches.map((one, at) => (
-        <li key={one.name}>
+      {items.map((one, at) => (
+        <li key={one.value}>
           <button
             type="button"
             className={`flex w-full items-baseline justify-between gap-3 px-2 py-1 text-left text-xs ${
@@ -49,14 +59,14 @@ export function FunctionList({
               event.preventDefault()
             }}
             onClick={() => {
-              onChoose(one.name)
+              onChoose(one.value)
             }}
             onMouseEnter={() => {
               onHighlight(at)
             }}
           >
-            <span className="font-mono">{one.name}</span>
-            <span className="text-muted">{shape(one)}</span>
+            <span className="font-mono">{one.label ?? one.value}</span>
+            {one.hint !== undefined && <span className="text-muted">{one.hint}</span>}
           </button>
         </li>
       ))}

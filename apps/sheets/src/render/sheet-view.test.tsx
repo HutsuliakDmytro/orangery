@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { recorded } from '../test-setup'
+import { readValidations } from '@orangery/ooxml-spreadsheet'
 import { applyLook } from '../document/edit'
 import { openWorkbook } from '../document/workbook'
 import type { OpenWorkbook } from '../document/workbook'
@@ -367,5 +368,49 @@ describe('the functions offered while a formula is typed into a cell', () => {
     await user.keyboard('=SUM(A1){Enter}')
 
     expect(edited).toHaveBeenCalled()
+  })
+})
+
+describe('the values a cell is allowed to hold', () => {
+  /** The sheet with a list rule on A1, and A1 empty for somebody to fill. */
+  const withChoices = () => {
+    const showed = showing()
+    showed.sheet.cells.rows.get(0)?.delete(0)
+    showed.sheet.validations = readValidations(
+      '<?xml version="1.0"?><worksheet><sheetData/><dataValidations>' +
+        '<dataValidation type="list" sqref="A1:A9"><formula1>"North,South"</formula1>' +
+        '</dataValidation></dataValidations></worksheet>',
+    )
+
+    return showed
+  }
+
+  it('offers them while the cell is being edited', async () => {
+    // A cell with a dropdown on it is a cell where the answer is one of
+    // those, whatever else the letters could become.
+    const user = userEvent.setup()
+    render(<SheetView {...withChoices()} onEdit={vi.fn()} />)
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('{F2}')
+
+    expect(screen.getByRole('list', { name: 'Choices' }).textContent).toBe('NorthSouth')
+  })
+
+  it('narrows them to what has been typed so far', async () => {
+    const user = userEvent.setup()
+    render(<SheetView {...withChoices()} onEdit={vi.fn()} />)
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('So')
+
+    expect(screen.getByRole('list', { name: 'Choices' }).textContent).toBe('South')
+  })
+
+  it('puts the chosen one in the cell', async () => {
+    const user = userEvent.setup()
+    render(<SheetView {...withChoices()} onEdit={vi.fn()} />)
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('{F2}{ArrowDown}{Enter}')
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('South')
   })
 })

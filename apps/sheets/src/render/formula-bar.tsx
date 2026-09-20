@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { chosen, functionsKnownSoFar, knownFunctions, suggest } from '../document/suggest'
+import { chosen, functionsKnownSoFar, knownFunctions, shape, suggest } from '../document/suggest'
 import type { KnownFunction } from '../document/suggest'
-import { FunctionList } from './function-list'
+import { SuggestionList } from './suggestion-list'
 
 /**
  * The strip that shows what is in the cell rather than what it looks like.
@@ -155,8 +155,9 @@ export function FormulaBar({ text, editable = true, functions, onCommit }: Formu
       />
 
       {picked !== undefined && (
-        <FunctionList
-          matches={showing}
+        <SuggestionList
+          label="Functions"
+          items={showing.map((one) => ({ value: one.name, hint: shape(one) }))}
           highlighted={showing.indexOf(picked)}
           onChoose={take}
           onHighlight={setHighlighted}

@@ -32,6 +32,7 @@ import { columnNamesIn, looksLikeHeader, sortRows, tableToSort } from '../docume
 import type { SortKey } from '../document/sort'
 import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
+import { refusalFor } from '../document/validation'
 import {
   applyReport,
   closeEngine,
@@ -423,6 +424,20 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const sheet = visibleSheets(open)[current]
     if (sheet === undefined) return
 
+    /**
+     * What the cell is allowed to hold.
+     *
+     * A rule that says `stop` keeps the value out; the other two let it in
+     * and say something. That is Excel's arrangement and it matters — a
+     * warning that refused the value would be a stop with a friendlier face,
+     * and the people who choose `warning` choose it on purpose.
+     */
+    const refusal = refusalFor(open, sheet, address, text)
+    if (refusal !== null && refusal.rule.severity === 'stop') {
+      set({ notice: refusal.message })
+      return
+    }
+
     const change = applyEdit(open, sheet, address, text)
     if (change === null) return
 
@@ -430,6 +445,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       open: redrawn(open, [sheet.path]),
       edited: true,
       history: recorded(history, { changes: cellChanges([change]), selection }),
+      ...(refusal === null ? {} : { notice: refusal.message }),
     })
   },
 

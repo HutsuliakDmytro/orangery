@@ -32,9 +32,11 @@ import { iconOf } from './icon-sets'
 import { SheetDrawings } from './sheet-drawings'
 import { NoteBox } from './note-box'
 import { notesOf } from './sheet-notes'
-import { FunctionList } from './function-list'
-import { chosen, functionsKnownSoFar, knownFunctions, suggest } from '../document/suggest'
+import { SuggestionList } from './suggestion-list'
+import type { Suggested } from './suggestion-list'
+import { chosen, functionsKnownSoFar, knownFunctions, shape, suggest } from '../document/suggest'
 import type { KnownFunction } from '../document/suggest'
+import { choicesOf, ruleAt } from '../document/validation'
 import { editableText } from '../document/shown'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -476,18 +478,53 @@ export function SheetView({
     return suggest(editing.text, editing.caret, functions ?? functionsKnownSoFar())
   }, [editing, functions])
 
+  /**
+   * The values a cell is allowed to hold, where somebody has said.
+   *
+   * A list rule is the other thing worth offering while a cell is being
+   * edited, and it comes first: a cell with a dropdown on it is a cell where
+   * the answer is one of those, whatever else the letters could become.
+   */
+  const choices = useMemo(() => {
+    if (editing === null) return []
+
+    const rule = ruleAt(sheet, editing.cell)
+    if (rule === null || rule.kind !== 'list') return []
+
+    const typed = editing.text.trim().toLowerCase()
+    return choicesOf(open, sheet, rule).filter(
+      (one) => typed === '' || one.toLowerCase().startsWith(typed),
+    )
+  }, [editing, open, sheet])
+
   const matches = offered?.matches ?? []
-  const picked = Math.min(highlighted, Math.max(matches.length - 1, 0))
+  const items: Suggested[] =
+    choices.length > 0
+      ? choices.map((one) => ({ value: one }))
+      : matches.map((one) => ({ value: one.name, hint: shape(one) }))
+  const picked = Math.min(highlighted, Math.max(items.length - 1, 0))
 
-  const takeSuggestion = useCallback(
-    (name: string) => {
-      if (editing === null || offered === null) return
+  /**
+   * What taking one does.
+   *
+   * A choice replaces the cell; a function goes in where the name was being
+   * typed. Neither commits — Enter and looking elsewhere still do that, as
+   * they do for anything else typed into a cell.
+   */
+  const take = useCallback(
+    (value: string) => {
+      if (editing === null) return
 
-      const made = chosen(editing.text, offered, name)
-      editing.replace(made.text, made.caret)
+      if (choices.length > 0) {
+        editing.replace(value, value.length)
+      } else if (offered !== null) {
+        const made = chosen(editing.text, offered, value)
+        editing.replace(made.text, made.caret)
+      }
+
       setHighlighted(0)
     },
-    [editing, offered],
+    [choices.length, editing, offered],
   )
 
   const frozen = useMemo(() => {
@@ -549,22 +586,20 @@ export function SheetView({
         styleAt={styleAt}
         mergeAt={merged}
         onEditing={setEditing}
-        onEditingKey={(event, state) => {
-          if (matches.length === 0) return false
+        onEditingKey={(event) => {
+          if (items.length === 0) return false
 
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            const step = event.key === 'ArrowDown' ? 1 : matches.length - 1
-            setHighlighted((was) => (was + step) % matches.length)
+            const step = event.key === 'ArrowDown' ? 1 : items.length - 1
+            setHighlighted((was) => (was + step) % items.length)
             return true
           }
 
           if (event.key === 'Enter' || event.key === 'Tab') {
-            const name = matches[picked]?.name
-            if (name === undefined || offered === null) return false
+            const value = items[picked]?.value
+            if (value === undefined) return false
 
-            const made = chosen(state.text, offered, name)
-            state.replace(made.text, made.caret)
-            setHighlighted(0)
+            take(value)
             return true
           }
 
@@ -579,11 +614,12 @@ export function SheetView({
         }}
       />
 
-      {editing !== null && matches.length > 0 && (
-        <FunctionList
-          matches={matches}
+      {editing !== null && items.length > 0 && (
+        <SuggestionList
+          label={choices.length > 0 ? 'Choices' : 'Functions'}
+          items={items}
           highlighted={picked}
-          onChoose={takeSuggestion}
+          onChoose={take}
           onHighlight={setHighlighted}
           style={{
             position: 'absolute',

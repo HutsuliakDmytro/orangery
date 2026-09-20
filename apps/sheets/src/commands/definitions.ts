@@ -15,11 +15,13 @@ import { TEMPLATES } from '../document/templates'
 import { exportOds, exportSheet } from '../document/file'
 import {
   chartFromSelection,
+  clearTrace,
   outlineRows,
   pictureAtCursor,
   tableFromSelection,
   totalsRowHere,
   recalculateWorkbook,
+  traceHere,
   useWorkbookStore,
 } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
@@ -478,6 +480,31 @@ export const viewCommands: readonly Command[] = [
     isEnabled: hasWorkbook,
     run: () => {
       window.dispatchEvent(new Event('orangery:goal-seek'))
+    },
+  },
+  {
+    id: 'formula.trace',
+    label: 'Trace precedents and dependents',
+    group: 'view',
+    keywords: ['arrows', 'audit', 'depends', 'precedent', 'dependent', 'where from'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      // A toggle, because the arrows are drawn until somebody is done with
+      // them and there is nowhere else to turn them off.
+      const shown = useWorkbookStore.getState().traced
+      const where = useWorkbookStore.getState().selection.active
+
+      if (
+        shown !== null &&
+        shown.arrows &&
+        shown.cell.row === where.row &&
+        shown.cell.column === where.column
+      ) {
+        clearTrace()
+        return
+      }
+
+      void traceHere(true)
     },
   },
   {

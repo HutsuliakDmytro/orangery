@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
-import { boundsOf, selectedCount } from '@orangery/grid'
+import { boundsOf, selectedCount, singleCell } from '@orangery/grid'
 import {
   cellAt,
   formatCodeOf,
@@ -21,6 +21,8 @@ import { valuesIn } from '../document/filter'
 import { linkAt } from '../document/links'
 import { FilterMenu } from '../render/filter-menu'
 import { editableText } from '../document/shown'
+import { ErrorStrip, STRIP_HEIGHT } from '../render/error-strip'
+import { explanationOf } from '../document/trace'
 import { FormulaBar } from '../render/formula-bar'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
@@ -38,8 +40,10 @@ import {
   addRuleToSelection,
   removeRuleHere,
   rulesHere,
+  clearTrace,
   seekGoal,
   setDefinedNames,
+  traceHere,
   sortTarget,
   useWorkbookStore,
   visibleSheetsOf,
@@ -96,6 +100,7 @@ function Shell() {
   const followLink = useWorkbookStore((state) => state.followLink)
   const replaceOne = useWorkbookStore((state) => state.replaceOne)
   const replaceEverywhere = useWorkbookStore((state) => state.replaceEverywhere)
+  const traced = useWorkbookStore((state) => state.traced)
 
   /** The header cell whose filter list is open, if one is. */
   const [filtering, setFiltering] = useState<CellAddress | null>(null)
@@ -301,8 +306,43 @@ function Shell() {
   const sheets = open === null ? [] : visibleSheetsOf(open)
   const sheet = sheets[current] ?? null
   const tabsHeight = sheets.length > 0 ? 32 : 0
-  const barHeight = (sheet === null ? 0 : 33 + 37) + (finding ? 30 : 0)
   const selected = selectedCount(selection)
+
+  /**
+   * What the cell under the cursor says, when what it says is an error.
+   *
+   * Read off the cell rather than fetched: whether a cell is an error is
+   * something the window already knows, and only *why* has to be asked.
+   */
+  const errorHere =
+    open === null || sheet === null
+      ? null
+      : (() => {
+          const cell = cellAt(sheet.cells, selection.active)
+          return cell !== null && cell.type === 'e' ? cell.value : null
+        })()
+
+  const explanation = errorHere === null ? null : explanationOf(errorHere)
+  const showingError = sheet !== null && errorHere !== null && explanation !== null
+  const barHeight =
+    (sheet === null ? 0 : 33 + 37) + (finding ? 30 : 0) + (showingError ? STRIP_HEIGHT : 0)
+
+  /**
+   * The trace for a cell that is an error, asked for as soon as one is under
+   * the cursor.
+   *
+   * An error is worth one round trip and a number is not: landing on a figure
+   * is what somebody does a hundred times a minute, and landing on a
+   * `#DIV/0!` is a thing that happens when something has gone wrong.
+   */
+  useEffect(() => {
+    if (errorHere === null) {
+      clearTrace()
+      return
+    }
+
+    void traceHere(false)
+  }, [errorHere, selection.active.row, selection.active.column, current])
 
   /**
    * The filter list that is open, with the column it belongs to worked out
@@ -405,6 +445,25 @@ function Shell() {
         </div>
       )}
 
+      {showingError && (
+        <ErrorStrip
+          error={errorHere}
+          explanation={explanation}
+          blame={
+            traced?.cell.row === selection.active.row &&
+            traced.cell.column === selection.active.column
+              ? traced.blame
+              : null
+          }
+          sheet={sheet.name}
+          onGo={(blame) => {
+            const at = sheets.findIndex((one) => one.name === blame.sheet)
+            if (at >= 0 && at !== current) select(at)
+            choose(singleCell({ row: blame.row, column: blame.column }))
+          }}
+        />
+      )}
+
       <main className="min-h-0 flex-1 print:hidden">
         {sheet === null || open === null ? (
           <Welcome />
@@ -425,6 +484,7 @@ function Shell() {
             onFilterClick={setFiltering}
             onFillSeries={fillSeries}
             onCellClick={followLink}
+            traced={traced !== null && traced.arrows && traced.sheet === sheet.path ? traced : null}
             onResize={(axis, index, size) => {
               // Points on the screen, characters in the file: a column's width
               // is counted in the widest digit of the default font, which is

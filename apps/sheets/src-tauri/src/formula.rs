@@ -439,6 +439,81 @@ pub fn formula_value(
     Ok(Held::from(&engine.value(&sheet, row, column)))
 }
 
+/// A rectangle on a sheet, which is how a precedent is drawn.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rect {
+    pub sheet: String,
+    pub top: i64,
+    pub bottom: i64,
+    pub left: i64,
+    pub right: i64,
+}
+
+/// Why a cell says what it says.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Traced {
+    /// What the formula reads, as rectangles: a single cell is a small one.
+    pub precedents: Vec<Rect>,
+    /// The formulas that read this cell, directly.
+    pub dependents: Vec<Place>,
+    /// Whether it names a column whose end is a fact about the sheet.
+    pub whole_columns: bool,
+    /// Whether it reaches into a workbook this one does not have.
+    pub external: bool,
+    pub volatile: bool,
+    /// Where the error this cell shows began, when it began elsewhere.
+    pub blame: Option<Place>,
+}
+
+/// What a cell reads, what reads it, and where its error started.
+///
+/// One command for three questions because they are one walk of the graph and
+/// because the window asks all three at once: what it draws is arrows, and a
+/// trace with the precedents but not the dependents would be half a picture.
+#[tauri::command]
+pub fn formula_trace(
+    books: tauri::State<'_, Workbooks>,
+    book: String,
+    sheet: String,
+    row: i64,
+    column: i64,
+) -> Result<Traced, String> {
+    let engines = books.engines()?;
+    let engine = engines.get(&book).ok_or_else(unopened)?;
+
+    let found = engine.trace(&sheet, row, column);
+
+    Ok(Traced {
+        precedents: found
+            .precedents
+            .into_iter()
+            .map(|area| Rect {
+                sheet: area.sheet,
+                top: area.top,
+                bottom: area.bottom,
+                left: area.left,
+                right: area.right,
+            })
+            .collect(),
+        dependents: found.dependents.into_iter().map(placed).collect(),
+        whole_columns: found.whole_columns,
+        external: found.external,
+        volatile: found.volatile,
+        blame: found.blame.map(placed),
+    })
+}
+
+/// A cell the engine names, as the window names one.
+fn placed(cell: formula::graph::CellId) -> Place {
+    Place {
+        sheet: cell.0,
+        row: cell.1,
+        column: cell.2,
+    }
+}
+
 /// What a Goal Seek came to.
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

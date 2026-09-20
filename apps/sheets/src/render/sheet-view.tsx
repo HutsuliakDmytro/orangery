@@ -40,6 +40,7 @@ import { formatValue } from '@orangery/numfmt'
 import { iconOf } from './icon-sets'
 import { SheetDrawings } from './sheet-drawings'
 import { NoteBox } from './note-box'
+import { TraceArrows } from './trace-arrows'
 import { notesOf } from './sheet-notes'
 import { SuggestionList } from './suggestion-list'
 import type { Suggested } from './suggestion-list'
@@ -49,6 +50,7 @@ import { choicesOf, ruleAt } from '../document/validation'
 import { isLocked } from '../document/protection'
 import { editableText } from '../document/shown'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
+import type { ShownTrace } from '../store/workbook-store'
 
 /**
  * A worksheet, drawn.
@@ -93,6 +95,14 @@ export interface SheetViewProps {
   onFillSeries?: (from: GridRange, to: GridRange) => void
   /** The functions to offer, for a caller with its own list — a test. */
   functions?: readonly KnownFunction[]
+  /**
+   * The arrows that say where a number came from, when somebody asked.
+   *
+   * Handed in already settled — which cell, on which sheet, and whether the
+   * arrows are wanted at all — because all three are the window's answers and
+   * none of them is the sheet's.
+   */
+  traced?: ShownTrace | null
 }
 
 export function SheetView({
@@ -110,6 +120,7 @@ export function SheetView({
   onFillSeries,
   functions,
   onCellClick,
+  traced = null,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -621,7 +632,7 @@ export function SheetView({
         {...(onCellClick === undefined ? {} : { onCellClick })}
         onHoverCell={notes.any ? setHovered : undefined}
         overlay={
-          sheet.drawings.length === 0 && !notes.any
+          sheet.drawings.length === 0 && !notes.any && traced === null
             ? undefined
             : (view) => (
                 <>
@@ -640,6 +651,16 @@ export function SheetView({
                     scrollX={view.scrollX}
                     scrollY={view.scrollY}
                   />
+                  {traced !== null && (
+                    <TraceArrows
+                      traced={traced}
+                      cell={traced.cell}
+                      sheet={sheet.name}
+                      metrics={view.metrics}
+                      scrollX={view.scrollX}
+                      scrollY={view.scrollY}
+                    />
+                  )}
                 </>
               )
         }

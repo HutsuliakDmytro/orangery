@@ -63,6 +63,21 @@ import {
 import type { Report } from '../document/formula'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
 import type { Change, History } from '../document/history'
+import { traceCell } from '../document/trace'
+import type { Traced } from '../document/trace'
+
+/**
+ * A trace, and what it is about.
+ *
+ * The sheet by part path rather than by name: everything drawn on screen is
+ * keyed by path, and the name is what the engine was asked with.
+ */
+export interface ShownTrace extends Traced {
+  sheet: string
+  cell: CellAddress
+  /** Whether the arrows are drawn, or only the sentence under the toolbar. */
+  arrows: boolean
+}
 import { tablesMoved } from '../document/shape'
 import { openWorkbook, visibleSheets } from '../document/workbook'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
@@ -108,6 +123,18 @@ export interface WorkbookState {
    * rather than that this program is not Excel.
    */
   notice: string | null
+  /**
+   * Why the cell under the cursor says what it says.
+   *
+   * Fetched when the cursor lands on an error, because explaining one is the
+   * commonest question anybody asks a spreadsheet and the answer is two
+   * clicks away in Excel. Fetched again, with `arrows`, when somebody asks
+   * for the arrows outright.
+   *
+   * Null the rest of the time, which is almost always: a trace is about one
+   * cell and stops being about it the moment the cursor moves.
+   */
+  traced: ShownTrace | null
   /**
    * The editing session, which the autosave is keyed by.
    *
@@ -243,6 +270,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   history: emptyHistory(),
   problem: null,
   notice: null,
+  traced: null,
   session: newSession(),
   busy: false,
 
@@ -1300,6 +1328,10 @@ useWorkbookStore.subscribe((state, previous) => {
   const step = stepTaken(previous.history, state.history)
   if (step === null) return
 
+  // A trace is about the sheet as it was a moment ago. Anything typed can
+  // have moved what it points at, so it goes rather than lies.
+  clearTrace()
+
   void followUp(state.session, state.open, step.changes, step.direction)
 })
 
@@ -1543,6 +1575,40 @@ export function pictureAtCursor(file: { name: string; bytes: Uint8Array }): bool
 
   useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
   return true
+}
+
+/**
+ * Why the cell under the cursor says what it says.
+ *
+ * Asked of the engine rather than worked out here: the dependency graph that
+ * decides what to recalculate is the same knowledge read backwards, and a
+ * second answer computed in the window would be a second answer to disagree
+ * with.
+ *
+ * The answer arrives a moment after the question, and in that moment the
+ * cursor may have moved — a trace about a cell nobody is looking at any more
+ * is one to drop.
+ */
+export async function traceHere(arrows: boolean): Promise<void> {
+  const { open, current, session, selection } = useWorkbookStore.getState()
+  if (open === null) return
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return
+
+  const cell = selection.active
+  const found = await traceCell(session, sheet.name, cell.row, cell.column)
+
+  const now = useWorkbookStore.getState()
+  if (now.session !== session) return
+  if (now.selection.active.row !== cell.row || now.selection.active.column !== cell.column) return
+
+  useWorkbookStore.setState({ traced: { ...found, sheet: sheet.path, cell, arrows } })
+}
+
+/** The arrows and the sentence taken away, for a cursor that has moved on. */
+export function clearTrace(): void {
+  if (useWorkbookStore.getState().traced !== null) useWorkbookStore.setState({ traced: null })
 }
 
 /**

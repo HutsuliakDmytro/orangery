@@ -1098,10 +1098,27 @@ function newSession(): string {
  * never run, and a person who did not know that would think the file had come
  * out broken rather than that this is not Excel.
  */
+/**
+ * What is worth saying about a workbook the moment it opens.
+ *
+ * Both of these are the same kind of thing: something in the file this
+ * program keeps and does not work. Saying so is what stops somebody thinking
+ * the file is broken rather than that this is not Excel — and both are said
+ * once, on opening, rather than every time the thing is looked at.
+ */
 function noticeFor(open: OpenWorkbook): string | null {
-  return open.pkg.parts.has('xl/vbaProject.bin')
-    ? 'This workbook contains macros. They are kept when you save, and they are not run.'
-    : null
+  if (open.pkg.parts.has('xl/vbaProject.bin')) {
+    return 'This workbook contains macros. They are kept when you save, and they are not run.'
+  }
+
+  // A pivot table's cells hold the figures it last showed, so the sheet reads
+  // correctly — what cannot happen here is refreshing it against its source.
+  const pivots = [...open.pkg.parts.keys()].some((path) => path.startsWith('xl/pivotTables/'))
+  if (pivots) {
+    return 'This workbook has a pivot table. Its figures are shown as they were last refreshed, and refreshing it needs Excel.'
+  }
+
+  return null
 }
 
 /**

@@ -13,6 +13,8 @@ import { exportOds, exportSheet } from '../document/file'
 import {
   chartFromSelection,
   pictureAtCursor,
+  tableFromSelection,
+  totalsRowHere,
   recalculateWorkbook,
   useWorkbookStore,
 } from '../store/workbook-store'
@@ -501,6 +503,29 @@ export const chartCommands: readonly Command[] = (
   },
 }))
 
+export const tableCommands: readonly Command[] = [
+  {
+    id: 'insert.table',
+    label: 'Table',
+    group: 'insert',
+    keywords: ['format as table', 'list', 'range'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      tableFromSelection()
+    },
+  },
+  {
+    id: 'insert.table.totals',
+    label: 'Total Row',
+    group: 'insert',
+    keywords: ['table', 'sum', 'subtotal'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      totalsRowHere()
+    },
+  },
+]
+
 export const pictureCommands: readonly Command[] = [
   {
     id: 'insert.picture',
@@ -554,6 +579,7 @@ export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(chartCommands)
   registerAll(pictureCommands)
+  registerAll(tableCommands)
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(dataCommands)

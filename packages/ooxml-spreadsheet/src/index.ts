@@ -22,7 +22,14 @@ export type { DefinedName, SheetEntry, Workbook } from './workbook'
 export { readNotes, readPeople, readSheetComments, readThreads } from './comments'
 export type { Note, Reply, SheetComments, Thread } from './comments'
 export { isValidName, replaceDefinedNames, writeDefinedNames } from './names-edit'
-export { readTable, readTables, tableAt } from './tables'
+export {
+  freeTableName,
+  readTable,
+  readTables,
+  replaceTableParts,
+  tableAt,
+  writeTable,
+} from './tables'
 export { readValidations, replaceValidations, validationAt, writeValidations } from './validation'
 export type {
   DataValidation,

@@ -35,6 +35,7 @@ import { shownText } from '../document/shown'
 import { refusalFor } from '../document/validation'
 import { refusalForLocked } from '../document/protection'
 import { insertChart, insertPicture, refreshCharts } from '../document/charts'
+import { makeTable, toggleTotals } from '../document/tables'
 import { writeDefinedNames } from '@orangery/ooxml-spreadsheet'
 import type { DefinedName } from '@orangery/ooxml-spreadsheet'
 import type { NewChartKind } from '@orangery/charts'
@@ -1299,6 +1300,65 @@ export function chartFromSelection(kind: NewChartKind): boolean {
     return false
   }
 
+  useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
+  return true
+}
+
+/**
+ * A table made over what is selected, or the totals row of the one the
+ * cursor is in.
+ *
+ * Both are one command in Excel's terms and two here, because "make a table"
+ * and "total it" are different answers to different questions — but both end
+ * the same way: the engine is told, because `Table1[Amount]` means nothing to
+ * it until it knows where Table1 is.
+ */
+export function tableFromSelection(): boolean {
+  const { open, current, selection, session } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return false
+
+  const last = selection.ranges[selection.ranges.length - 1]
+  const range = last ?? { anchor: selection.active, focus: selection.active }
+
+  const made = makeTable(open, sheet, range)
+  if (made === null) {
+    useWorkbookStore.setState({
+      notice: 'A table needs a block of cells that is not already part of one.',
+    })
+    return false
+  }
+
+  void openEngine(session, open)
+  useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
+  return true
+}
+
+/** The totals row of the table the cursor is in, put on or taken off. */
+export function totalsRowHere(): boolean {
+  const { open, current, selection, session } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return false
+
+  const table = sheet.tables.find(
+    (one) =>
+      selection.active.row >= Math.min(one.range.from.row, one.range.to.row) &&
+      selection.active.row <= Math.max(one.range.from.row, one.range.to.row) &&
+      selection.active.column >= Math.min(one.range.from.column, one.range.to.column) &&
+      selection.active.column <= Math.max(one.range.from.column, one.range.to.column),
+  )
+
+  if (table === undefined) {
+    useWorkbookStore.setState({ notice: 'The cursor is not in a table.' })
+    return false
+  }
+
+  toggleTotals(open, sheet, table)
+  void openEngine(session, open)
   useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
   return true
 }

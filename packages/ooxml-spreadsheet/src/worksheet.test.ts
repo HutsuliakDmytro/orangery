@@ -80,7 +80,12 @@ describe('what a sheet says about itself', () => {
   })
 
   it('reads the range an autofilter covers', () => {
-    expect(sheet().autoFilter?.to).toEqual({ row: 0, column: 5 })
+    expect(sheet().autoFilter?.range.to).toEqual({ row: 0, column: 5 })
+  })
+
+  it('reads arrows with nothing filtered as arrows with nothing filtered', () => {
+    // The ordinary state of a table somebody has turned filtering on for.
+    expect(sheet().autoFilter?.columns).toEqual([])
   })
 })
 

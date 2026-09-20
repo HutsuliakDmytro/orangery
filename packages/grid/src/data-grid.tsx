@@ -129,6 +129,8 @@ export interface DataGridProps {
    * tell whether the first one worked.
    */
   onResize?: (axis: 'row' | 'column', index: number, size: number) => void
+  /** Called when a filter arrow is clicked, with the cell it is on. */
+  onFilterClick?: (cell: CellAddress) => void
   /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
@@ -240,6 +242,15 @@ function holdPointer(element: Element, pointerId: number, hold: boolean): void {
   else if (target.hasPointerCapture?.(pointerId) === true) target.releasePointerCapture?.(pointerId)
 }
 
+/** Where a filter arrow sits in a cell, which is also where it is clicked. */
+function arrowBox(
+  rect: { x: number; y: number; width: number; height: number },
+  zoom: number,
+): { x: number; y: number; size: number } {
+  const size = Math.min(14 * zoom, rect.height - 2, rect.width - 2)
+  return { x: rect.x + rect.width - size - 1, y: rect.y + (rect.height - size) / 2, size }
+}
+
 /** A, B, … Z, AA — the names a spreadsheet gives its columns. */
 export function columnName(index: number): string {
   const letters: string[] = []
@@ -273,6 +284,7 @@ export function DataGrid({
   onDelete,
   onFill,
   onResize,
+  onFilterClick,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -431,6 +443,25 @@ export function DataGrid({
         // Outside the text, because a bordered cell with nothing in it is
         // still a bordered cell — a ruled form is mostly those.
         if (style?.borders !== undefined) drawBorders(context, rect, style.borders)
+
+        // A filter arrow sits at the right of the cell, over the value: it is
+        // a control, and a control a long value hid would be one nobody could
+        // find.
+        if (style?.filter !== undefined) {
+          const box = arrowBox(rect, zoom)
+          context.fillStyle = COLORS.header
+          context.fillRect(box.x, box.y, box.size, box.size)
+          context.strokeStyle = COLORS.grid
+          context.strokeRect(box.x, box.y, box.size, box.size)
+
+          context.fillStyle = style.filter.on ? COLORS.selection : COLORS.headerText
+          context.beginPath()
+          context.moveTo(box.x + box.size * 0.25, box.y + box.size * 0.4)
+          context.lineTo(box.x + box.size * 0.75, box.y + box.size * 0.4)
+          context.lineTo(box.x + box.size * 0.5, box.y + box.size * 0.68)
+          context.closePath()
+          context.fill()
+        }
 
         // Last of all, so nothing in the cell is drawn over it: a corner mark
         // that a wide value painted over would be a mark nobody sees.
@@ -920,6 +951,21 @@ export function DataGrid({
 
           const cell = cellAtPoint(metrics, viewport, point, counts, frozen)
           if (cell === null) return
+
+          // The arrow before the cell under it: clicking a control is not
+          // clicking the thing the control is sitting on.
+          if (onFilterClick !== undefined && styleAt?.(cell)?.filter !== undefined) {
+            const box = arrowBox(rectangleOfCell(metrics, viewport, cell, frozen), zoom)
+            if (
+              point.x >= box.x &&
+              point.x <= box.x + box.size &&
+              point.y >= box.y &&
+              point.y <= box.y + box.size
+            ) {
+              onFilterClick(cell)
+              return
+            }
+          }
 
           dragging.current = true
           holdPointer(event.currentTarget, event.pointerId, true)

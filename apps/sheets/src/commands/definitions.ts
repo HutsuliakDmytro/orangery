@@ -145,6 +145,16 @@ export const dataCommands: readonly Command[] = [
 
 export const structureCommands: readonly Command[] = [
   {
+    id: 'data.filter',
+    label: 'Filter',
+    group: 'view',
+    keywords: ['autofilter', 'arrows'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().toggleFilter()
+    },
+  },
+  {
     id: 'sheet.insertRows',
     label: 'Insert Rows',
     group: 'insert',

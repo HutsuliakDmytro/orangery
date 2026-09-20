@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
+import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
 import { selectedCount } from '@orangery/grid'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog } from '../document/file'
+import { valuesIn } from '../document/filter'
+import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
 import { SheetView } from '../render/sheet-view'
@@ -43,6 +46,10 @@ function Shell() {
   const format = useWorkbookStore((state) => state.format)
   const resize = useWorkbookStore((state) => state.resize)
   const join = useWorkbookStore((state) => state.merge)
+  const filterBy = useWorkbookStore((state) => state.filterBy)
+
+  /** The header cell whose filter list is open, if one is. */
+  const [filtering, setFiltering] = useState<CellAddress | null>(null)
   const size = useWindowSize()
 
   useEffect(() => {
@@ -54,6 +61,25 @@ function Shell() {
   const tabsHeight = sheets.length > 0 ? 32 : 0
   const barHeight = sheet === null ? 0 : 33 + 37
   const selected = selectedCount(selection)
+
+  /**
+   * The filter list that is open, with the column it belongs to worked out
+   * once.
+   *
+   * A filter counts its columns from the left of its own range and the grid
+   * counts from the left of the sheet; getting the two mixed up filters the
+   * wrong column, which is exactly the kind of thing that only shows up on a
+   * table that does not start at A.
+   */
+  const filter = sheet?.sheet.autoFilter ?? null
+  const openFilter =
+    filtering === null || filter === null || sheet === null || open === null
+      ? null
+      : (() => {
+          const column =
+            filtering.column - Math.min(filter.range.from.column, filter.range.to.column)
+          return { filter, column, choices: valuesIn(open, sheet, filter, column) }
+        })()
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
@@ -103,6 +129,7 @@ function Shell() {
             onEdit={edit}
             onClear={clear}
             onFill={fill}
+            onFilterClick={setFiltering}
             onResize={(axis, index, size) => {
               // Points on the screen, characters in the file: a column's width
               // is counted in the widest digit of the default font, which is
@@ -112,6 +139,22 @@ function Shell() {
           />
         )}
       </main>
+
+      {openFilter !== null && (
+        <FilterMenu
+          filter={openFilter.filter}
+          column={openFilter.column}
+          choices={openFilter.choices}
+          at={{ left: 8, top: barHeight + 40 }}
+          onApply={(criteria) => {
+            filterBy(openFilter.column, criteria)
+            setFiltering(null)
+          }}
+          onClose={() => {
+            setFiltering(null)
+          }}
+        />
+      )}
 
       {sheets.length > 0 && (
         <nav aria-label="Sheets" className="flex h-8 items-stretch gap-px border-t border-border">

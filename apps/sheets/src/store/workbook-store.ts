@@ -14,6 +14,7 @@ import {
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
 import { looksLikeHeader, sortRows } from '../document/sort'
+import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
@@ -77,6 +78,10 @@ export interface WorkbookState {
   merge: (join: boolean) => void
   /** Puts the rows of the table under the cursor in order of one column. */
   sort: (ascending: boolean) => void
+  /** Turns the filter arrows on over the table under the cursor, or off. */
+  toggleFilter: () => void
+  /** What one filtered column keeps; null lets everything through again. */
+  filterBy: (column: number, criteria: { values: string[]; blanks: boolean } | null) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   paste: () => Promise<void>
@@ -342,6 +347,40 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       [{ column: selection.active.column, ascending }],
       looksLikeHeader(open, sheet, range),
     )
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  toggleFilter: () => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const changes = toggleFilter(open, sheet, selection.active)
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  filterBy: (column, criteria) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const changes = filterColumn(open, sheet, column, criteria)
     if (changes.length === 0) return
 
     set({

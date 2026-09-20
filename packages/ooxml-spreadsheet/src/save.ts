@@ -8,6 +8,8 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { replaceSheetData } from './sheet-data'
 import { replaceColumns } from './columns'
 import { replaceMerges } from './merges'
+import { replaceAutoFilter } from './autofilter'
+import type { AutoFilter } from './autofilter'
 import type { SheetCells } from './cells'
 import type { CellRange } from './reference'
 import type { ColumnRange } from './worksheet'
@@ -41,6 +43,8 @@ export interface SheetToWrite {
   columns?: readonly ColumnRange[]
   /** The merged ranges, where they may have changed; left out for none. */
   merges?: readonly CellRange[]
+  /** The autofilter, likewise; null takes it away, undefined leaves it. */
+  filter?: AutoFilter | null
 }
 
 const CALC_CHAIN_PART = 'xl/calcChain.xml'
@@ -80,6 +84,7 @@ export function writeWorkbook(
     let written = replaceSheetData(xml, sheet.cells)
     if (sheet.columns !== undefined) written = replaceColumns(written, sheet.columns)
     if (sheet.merges !== undefined) written = replaceMerges(written, sheet.merges)
+    if (sheet.filter !== undefined) written = replaceAutoFilter(written, sheet.filter)
 
     setPartText(pkg, sheet.path, written)
   }

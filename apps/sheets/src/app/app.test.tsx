@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -995,5 +995,73 @@ describe('putting a table in order', () => {
     })
 
     expect([cellAt(1, 0)?.value, cellAt(2, 0)?.value]).toEqual(before)
+  })
+})
+
+describe('filtering a table', () => {
+  const sheetNow = () => useWorkbookStore.getState().open?.sheets[0]
+  const hidden = (row: number) => sheetNow()?.cells.properties.get(row)?.hidden ?? false
+
+  const goTo = async (range: string) => {
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, `${range}{Enter}`)
+  }
+
+  it('puts the arrows on the table the cursor is in', async () => {
+    render(<App />)
+    await load()
+    await goTo('A2')
+
+    act(() => {
+      runCommand('data.filter', {})
+    })
+
+    expect(sheetNow()?.sheet.autoFilter?.range.to).toEqual({ row: 3, column: 2 })
+  })
+
+  it('offers the values of a column and hides what is unticked', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+    await goTo('A2')
+
+    act(() => {
+      runCommand('data.filter', {})
+    })
+
+    // The arrow lives on the header cell, A1.
+    const grid = screen.getByRole('grid', { name: 'Budget' })
+    const surface = grid.querySelector(':scope > div')
+    if (surface === null) throw new Error('the grid has no surface')
+
+    // 44 across for the row numbers, 22 down for the letters; A1 is 140 wide.
+    fireEvent.pointerDown(surface, { clientX: 44 + 140 - 8, clientY: 22 + 10 })
+
+    const list = await screen.findByRole('dialog', { name: 'Filter' })
+    expect(list).toBeInTheDocument()
+
+    await typist.click(within(list).getByLabelText('January'))
+    await typist.click(within(list).getByText('Apply'))
+
+    expect(hidden(1)).toBe(true)
+    expect(hidden(2)).toBe(false)
+  })
+
+  it('carries a filter into the file it saves', async () => {
+    render(<App />)
+    await load()
+    await goTo('A2')
+
+    act(() => {
+      runCommand('data.filter', {})
+    })
+
+    const open = useWorkbookStore.getState().open
+    if (open === null) throw new Error('nothing open')
+
+    const again = await openWorkbook(await workbookBytes(open, { edited: true }))
+    expect(again.sheets[0]?.sheet.autoFilter?.range.to).toEqual({ row: 3, column: 2 })
   })
 })

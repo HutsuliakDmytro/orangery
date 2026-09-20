@@ -4,6 +4,8 @@ import { parseRange } from './reference'
 import type { CellRange } from './reference'
 import { readConditionalFormats } from './conditional'
 import type { ConditionalFormat } from './conditional'
+import { readAutoFilter } from './autofilter'
+import type { AutoFilter } from './autofilter'
 
 /**
  * A worksheet, apart from its cells.
@@ -78,8 +80,13 @@ export interface Worksheet {
   format: SheetFormat
   /** `a:srgbClr` of the tab, as written; themes are resolved by the renderer. */
   tabColor: string | null
-  /** The range an autofilter covers, for the arrows the grid draws on it. */
-  autoFilter: CellRange | null
+  /**
+   * The autofilter: the range its arrows sit on, and what each column keeps.
+   *
+   * Which rows are actually hidden is not here — that is written on the rows
+   * themselves, and the criteria are the reason rather than the result.
+   */
+  autoFilter: AutoFilter | null
   /**
    * The rules that change how a cell looks because of what is in it.
    *
@@ -209,7 +216,7 @@ export function readWorksheet(xml: string): Worksheet | null {
       customHeight: flag(format, 'customHeight', false),
     },
     tabColor: attribute(tab ?? {}, 'rgb') ?? null,
-    autoFilter: parseRange(attribute(filter ?? {}, 'ref') ?? ''),
+    autoFilter: readAutoFilter(filter),
     conditional: readConditionalFormats(root),
   }
 }

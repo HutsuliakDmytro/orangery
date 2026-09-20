@@ -14,6 +14,7 @@ import {
   widthOfColumn,
 } from '@orangery/ooxml-spreadsheet'
 import type {
+  AutoFilter,
   BorderEdge,
   Cell,
   CellHighlight,
@@ -67,6 +68,8 @@ export interface SheetViewProps {
   onFill?: (text: string) => void
   /** Called while a header edge is dragged, in points. */
   onResize?: (axis: 'row' | 'column', index: number, size: number) => void
+  /** Called when a filter arrow is clicked, with the cell it sits on. */
+  onFilterClick?: (cell: CellAddress) => void
 }
 
 export function SheetView({
@@ -80,6 +83,7 @@ export function SheetView({
   onClear,
   onFill,
   onResize,
+  onFilterClick,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -303,6 +307,7 @@ export function SheetView({
         // Purple for a thread and red for a note, as Excel marks them: the
         // two are different things and one of them can be replied to.
         corner: cornerOf(notes.at(address)),
+        filter: filterArrow(sheet.sheet.autoFilter, address),
         borders: {
           left:
             hex(style.border.left.color) ?? (style.border.left.style === null ? null : '#B2B2B2'),
@@ -315,7 +320,7 @@ export function SheetView({
         },
       }
     },
-    [cellFor, highlight, notes, palette, strings, styleOf, styles],
+    [cellFor, highlight, notes, palette, sheet.sheet.autoFilter, strings, styleOf, styles],
   )
 
   const merged = useCallback(
@@ -417,6 +422,7 @@ export function SheetView({
       {...(onClear === undefined ? {} : { onDelete: onClear })}
       {...(filled === undefined ? {} : { onFill: filled })}
       {...(onResize === undefined ? {} : { onResize })}
+      {...(onFilterClick === undefined ? {} : { onFilterClick })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any
@@ -528,6 +534,23 @@ function runsOf(cell: Cell | null, strings: readonly RichText[]): TextRun[] | nu
   if (cell.type === 's') return strings[Number(cell.value)]?.runs ?? null
 
   return cell.type === 'inlineStr' ? (cell.rich?.runs ?? null) : null
+}
+
+/**
+ * Whether a cell carries a filter arrow, and whether that column is filtering.
+ *
+ * The arrows sit on the top row of the filter's range, which is the header:
+ * that is where Excel puts them and where a person looks for them.
+ */
+function filterArrow(filter: AutoFilter | null, address: CellAddress): { on: boolean } | undefined {
+  if (filter === null) return undefined
+
+  const top = Math.min(filter.range.from.row, filter.range.to.row)
+  const left = Math.min(filter.range.from.column, filter.range.to.column)
+  const right = Math.max(filter.range.from.column, filter.range.to.column)
+  if (address.row !== top || address.column < left || address.column > right) return undefined
+
+  return { on: filter.columns.some((one) => one.column === address.column - left) }
 }
 
 /** The colour of the mark on a cell with something said about it. */

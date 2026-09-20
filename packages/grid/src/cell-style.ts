@@ -113,6 +113,13 @@ export interface CellStyle {
    * draws the corner; what it means is the caller's.
    */
   corner?: string
+  /**
+   * A filter arrow at the right of the cell.
+   *
+   * `on` when the column is filtering something, which is what tells somebody
+   * that the rows they cannot see are missing on purpose.
+   */
+  filter?: { on: boolean }
 }
 
 /**

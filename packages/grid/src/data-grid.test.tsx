@@ -915,3 +915,79 @@ describe('what Enter does while a cell is being edited', () => {
     expect(changed).toHaveBeenCalledWith({ row: 0, column: 0 }, 'Q1')
   })
 })
+
+describe('an edge somebody double-clicks', () => {
+  const surfaceOf = (container: HTMLElement) => {
+    const surface = container.querySelector('[role="grid"] > div')
+    if (surface === null) throw new Error('the grid has no surface')
+    return surface
+  }
+
+  /** The boundary at the right of a column, where the header is. */
+  const edgeOf = (column: number) => ({ clientX: 44 + (column + 1) * 84, clientY: 10 })
+
+  it('fits the column to the values in it', () => {
+    const sized = vi.fn()
+    const { container } = grid({ onResize: sized, valueAt: () => 'a much longer value' })
+
+    fireEvent.doubleClick(surfaceOf(container), edgeOf(0))
+
+    expect(sized).toHaveBeenCalledTimes(1)
+    expect(sized.mock.calls[0]?.[0]).toBe('column')
+    expect(sized.mock.calls[0]?.[1]).toBe(0)
+    // Nineteen letters at seven points each, and room beside them.
+    expect(sized.mock.calls[0]?.[2]).toBeGreaterThan(19 * 7)
+  })
+
+  it('fits a narrow column to a narrow value', () => {
+    const sized = vi.fn()
+    const { container } = grid({ onResize: sized, valueAt: () => 'x' })
+
+    fireEvent.doubleClick(surfaceOf(container), edgeOf(0))
+    expect(sized.mock.calls[0]?.[2]).toBeLessThan(30)
+  })
+
+  it('leaves an empty column the width it was', () => {
+    // A column of blanks has no opinion about its width, and collapsing it
+    // would hide it.
+    const sized = vi.fn()
+    const { container } = grid({ onResize: sized, valueAt: () => null })
+
+    fireEvent.doubleClick(surfaceOf(container), edgeOf(0))
+    expect(sized).not.toHaveBeenCalled()
+  })
+
+  it('never makes a column wider than the window', () => {
+    const sized = vi.fn()
+    const { container } = grid({ onResize: sized, valueAt: () => 'x'.repeat(500) })
+
+    fireEvent.doubleClick(surfaceOf(container), edgeOf(0))
+    expect(sized.mock.calls[0]?.[2]).toBeLessThanOrEqual(340)
+  })
+
+  it('fits a row to a value that wraps', () => {
+    // The wrap is the whole reason a row has a height worth fitting: a cell
+    // told to fold its words needs as many lines as the words come to.
+    const sized = vi.fn()
+    const { container } = grid({
+      onResize: sized,
+      valueAt: () => 'one two three four five six seven eight nine ten',
+      styleAt: () => ({ wrap: true }),
+    })
+
+    fireEvent.doubleClick(surfaceOf(container), { clientX: 10, clientY: 22 + 22 })
+
+    expect(sized.mock.calls[0]?.[0]).toBe('row')
+    expect(sized.mock.calls[0]?.[2]).toBeGreaterThan(22)
+  })
+
+  it('opens the editor where there is no edge under it, as it always did', async () => {
+    const sized = vi.fn()
+    const { container } = grid({ onResize: sized, onChange: vi.fn() })
+
+    fireEvent.doubleClick(surfaceOf(container), { clientX: 44 + 10, clientY: 22 + 10 })
+
+    expect(sized).not.toHaveBeenCalled()
+    expect(await screen.findByRole('textbox')).toBeDefined()
+  })
+})

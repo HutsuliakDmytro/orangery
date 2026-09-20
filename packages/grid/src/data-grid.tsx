@@ -34,6 +34,8 @@ import type { Direction, GridSelection, Order } from './selection'
 import type { CellBorders, CellStyle } from './cell-style'
 import { ICON_GUTTER, drawIcon } from './icon'
 import { drawCellText } from './text'
+import { heightNeeded, widthNeeded } from './fit'
+import type { FitCell } from './fit'
 
 /**
  * A grid of cells, drawn rather than built.
@@ -127,6 +129,12 @@ export interface DataGridProps {
    * Continuously rather than at the end, so the sheet follows the pointer: a
    * drag with no feedback is a drag people do twice because they could not
    * tell whether the first one worked.
+   *
+   * The size is unzoomed. A width ends up written into a file, and a file has
+   * no idea what anybody was zoomed to when they dragged the edge.
+   *
+   * A double click on the same edge calls this once, with the size the values
+   * in that row or column actually need.
    */
   onResize?: (axis: 'row' | 'column', index: number, size: number) => void
   /** Called when a filter arrow is clicked, with the cell it is on. */
@@ -145,6 +153,18 @@ export interface DataGridProps {
   label: string
   metrics?: Partial<GridMetrics>
 }
+
+/** The font the grid writes in where a cell does not say otherwise. */
+const BASE_FONT = '12px -apple-system, system-ui, sans-serif'
+
+/**
+ * How many filled cells an auto-fit looks at.
+ *
+ * A column with five thousand values in it has already said how wide it needs
+ * to be; measuring the other million would only make the gesture slow enough
+ * to look broken.
+ */
+const FIT_SAMPLE = 5000
 
 const DEFAULTS: GridMetrics = {
   rowHeight: 22,
@@ -334,7 +354,7 @@ export function DataGrid({
     }
 
     const held = frozen ?? { rows: 0, columns: 0 }
-    const DEFAULT_FONT = resized('12px -apple-system, system-ui, sans-serif', zoom)
+    const DEFAULT_FONT = resized(BASE_FONT, zoom)
 
     context.font = DEFAULT_FONT
     context.textBaseline = 'middle'
@@ -431,7 +451,7 @@ export function DataGrid({
             context,
             text,
             rect,
-            style === null ? null : { ...style, font: resized(style.font ?? DEFAULT_FONT, zoom) },
+            style === null ? null : { ...style, font: resized(style.font ?? BASE_FONT, zoom) },
             {
               font: DEFAULT_FONT,
               color: COLORS.text,
@@ -580,7 +600,7 @@ export function DataGrid({
           context,
           text,
           activeRect,
-          style === null ? null : { ...style, font: resized(style.font ?? DEFAULT_FONT, zoom) },
+          style === null ? null : { ...style, font: resized(style.font ?? BASE_FONT, zoom) },
           { font: DEFAULT_FONT, color: COLORS.text, gutter: 0 },
         )
       }
@@ -709,6 +729,63 @@ export function DataGrid({
   const canEdit = useCallback(
     (cell: CellAddress) => onChange !== undefined && (editable?.(cell) ?? true),
     [editable, onChange],
+  )
+
+  /**
+   * A row or a column made the size its own values need.
+   *
+   * The gesture is a double click on the edge somebody would otherwise drag,
+   * which is where every spreadsheet puts it. What it needs is measured here
+   * rather than by the caller: the font, the canvas and the metrics are all
+   * in this component, and the width of a string in a font is not a question
+   * a workbook can answer.
+   *
+   * Merged cells are left out. A heading merged across four columns says
+   * nothing about how wide the first of them should be, and fitting to it
+   * would make one column as wide as the four.
+   */
+  const fit = useCallback(
+    (axis: 'row' | 'column', index: number) => {
+      const context = canvas.current?.getContext('2d')
+      if (!context || onResize === undefined) return
+
+      const along = axis === 'column' ? rows : columns
+      const cells: FitCell[] = []
+
+      for (let at = 0; at < along && cells.length < FIT_SAMPLE; at += 1) {
+        const cell = axis === 'column' ? { row: at, column: index } : { row: index, column: at }
+
+        const text = valueAt(cell)
+        if (text === null || text === '') continue
+
+        const merge = mergeAt?.(cell)
+        if (merge !== null && merge !== undefined && (merge.rows > 1 || merge.columns > 1)) continue
+
+        cells.push({
+          text,
+          style: styleAt?.(cell) ?? null,
+          width: widthOfColumn(metrics, cell.column) / zoom,
+        })
+      }
+
+      // Measured in the font as the file states it rather than as the screen
+      // shows it: what comes out is written into a row or a column.
+      const wanted =
+        axis === 'column'
+          ? widthNeeded(context, cells, BASE_FONT)
+          : heightNeeded(context, cells, BASE_FONT)
+
+      // Nothing to fit to leaves the size alone: a column of blanks has no
+      // opinion about its width, and collapsing it would hide it.
+      if (wanted <= 0) return
+
+      // No wider than the window. One cell holding a paragraph would otherwise
+      // widen a column past the edge of the screen, which is not what anybody
+      // double-clicking an edge was asking for.
+      const room = (axis === 'column' ? width - metrics.headerWidth : height) / zoom
+      onResize(axis, index, Math.min(wanted, room))
+    },
+    [columns, height, mergeAt, metrics, onResize, rows, styleAt, valueAt, width, zoom],
   )
 
   /** Announced and kept, so a caller that controls the selection still hears. */
@@ -979,7 +1056,23 @@ export function DataGrid({
           resizing.current = null
           holdPointer(event.currentTarget, event.pointerId, false)
         }}
-        onDoubleClick={() => {
+        onDoubleClick={(event) => {
+          const box = event.currentTarget.parentElement?.getBoundingClientRect()
+          if (box === undefined) return
+
+          // The edge before the header, as on the way down: the two gestures
+          // start a few points apart, and this is the more particular of them.
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+          const handle =
+            onResize === undefined
+              ? null
+              : resizeHandleAt(metrics, viewport, point, { rows, columns }, frozen)
+
+          if (handle !== null) {
+            fit(handle.axis, handle.index)
+            return
+          }
+
           if (canEdit(selected)) setEditing({ cell: selected, text: valueAt(selected) ?? '' })
         }}
         onPointerMove={(event) => {
@@ -998,7 +1091,7 @@ export function DataGrid({
 
             // Never to nothing: a column dragged to no width is one nobody can
             // find again, which is what hiding is for and is reversible.
-            onResize(held.axis, held.index, Math.max(8, was + moved))
+            onResize(held.axis, held.index, Math.max(8, (was + moved) / zoom))
             resizing.current = { ...held, from: held.axis === 'column' ? point.x : point.y }
             return
           }
@@ -1147,7 +1240,7 @@ export function DataGrid({
             top: editor.y,
             width: widthOfColumn(metrics, editing.cell.column),
             height: heightOfRow(metrics, editing.cell.row),
-            font: resized('12px -apple-system, system-ui, sans-serif', zoom),
+            font: resized(BASE_FONT, zoom),
             border: `2px solid ${COLORS.selection}`,
             padding: '0 2px',
             outline: 'none',

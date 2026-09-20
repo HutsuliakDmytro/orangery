@@ -12,10 +12,10 @@ import type { Rectangle } from './layout'
  */
 
 /** The space a cell keeps between its edge and its text. */
-const PADDING = 4
+export const PADDING = 4
 
 /** An indent is counted in characters, each about three spaces wide. */
-const INDENT = 9
+export const INDENT = 9
 
 /**
  * The letters of a value, as a reader counts them.
@@ -25,7 +25,8 @@ const INDENT = 9
  * half a letter on top of the other half.
  */
 const segmenter = new Intl.Segmenter()
-const lettersOf = (text: string): string[] => [...segmenter.segment(text)].map((one) => one.segment)
+export const lettersOf = (text: string): string[] =>
+  [...segmenter.segment(text)].map((one) => one.segment)
 
 export interface TextOptions {
   font: string

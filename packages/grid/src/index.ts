@@ -47,6 +47,7 @@ export {
   everything,
   extendedTo,
   lastRange,
+  nextInSelection,
   selectedCount,
   singleCell,
   stepFrom,
@@ -54,4 +55,4 @@ export {
   wholeRows,
   withRange,
 } from './selection'
-export type { Bounds, Direction, GridRange, GridSelection } from './selection'
+export type { Bounds, Direction, GridRange, GridSelection, Order } from './selection'

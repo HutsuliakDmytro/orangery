@@ -38,6 +38,7 @@ function Shell() {
   const choose = useWorkbookStore((state) => state.choose)
   const edit = useWorkbookStore((state) => state.edit)
   const clear = useWorkbookStore((state) => state.clear)
+  const fill = useWorkbookStore((state) => state.fill)
   const size = useWindowSize()
 
   useEffect(() => {
@@ -93,6 +94,7 @@ function Shell() {
             onSelectionChange={choose}
             onEdit={edit}
             onClear={clear}
+            onFill={fill}
           />
         )}
       </main>

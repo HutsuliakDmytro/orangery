@@ -812,3 +812,106 @@ describe('a selection the caller owns', () => {
     expect(recorded.fills.some((one) => one.style === 'rgba(255, 122, 0, 0.12)')).toBe(true)
   })
 })
+
+describe('typing into a block of cells', () => {
+  const block = {
+    ranges: [{ anchor: { row: 0, column: 0 }, focus: { row: 1, column: 1 } }],
+    active: { row: 0, column: 0 },
+  }
+
+  it('moves the cursor inside the selection and leaves the selection alone', () => {
+    const chosen = vi.fn()
+    grid({ selection: block, onSelectionChange: chosen })
+
+    fireEvent.keyDown(screen.getByRole('grid'), { key: 'Enter' })
+
+    const last = chosen.mock.calls.at(-1)?.[0] as { active: unknown; ranges: unknown[] }
+    expect(last.active).toEqual({ row: 1, column: 0 })
+    expect(last.ranges).toEqual(block.ranges)
+  })
+
+  it('turns the corner rather than walking out of the block', () => {
+    const chosen = vi.fn()
+    grid({ selection: { ...block, active: { row: 1, column: 0 } }, onSelectionChange: chosen })
+
+    fireEvent.keyDown(screen.getByRole('grid'), { key: 'Enter' })
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({ active: { row: 0, column: 1 } }),
+    )
+  })
+
+  it('moves the cursor and the selection when only one cell is selected', () => {
+    const chosen = vi.fn()
+    grid({ onSelectionChange: chosen })
+
+    fireEvent.keyDown(screen.getByRole('grid'), { key: 'Enter' })
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({ active: { row: 1, column: 0 } }),
+    )
+  })
+
+  it('goes back up on Shift and Enter', () => {
+    const chosen = vi.fn()
+    grid({ selection: { ...block, active: { row: 1, column: 1 } }, onSelectionChange: chosen })
+
+    fireEvent.keyDown(screen.getByRole('grid'), { key: 'Enter', shiftKey: true })
+
+    expect(chosen).toHaveBeenLastCalledWith(
+      expect.objectContaining({ active: { row: 0, column: 1 } }),
+    )
+  })
+})
+
+describe('what Enter does while a cell is being edited', () => {
+  const open = async () => {
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('{F2}')
+    return { user, field: screen.getByRole('textbox') }
+  }
+
+  it('puts a line break in the cell on Alt and Enter, rather than finishing', async () => {
+    const changed = vi.fn()
+    grid({ onChange: changed })
+
+    const { field } = await open()
+    fireEvent.keyDown(field, { key: 'Enter', altKey: true })
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('Q1\n')
+    expect(changed).not.toHaveBeenCalled()
+  })
+
+  it('fills everything selected on Mod and Enter', async () => {
+    const filled = vi.fn()
+    const changed = vi.fn()
+    grid({
+      onChange: changed,
+      onFill: filled,
+      selection: {
+        ranges: [{ anchor: { row: 0, column: 0 }, focus: { row: 1, column: 1 } }],
+        active: { row: 0, column: 0 },
+      },
+    })
+
+    const { field } = await open()
+    fireEvent.keyDown(field, { key: 'Enter', metaKey: true })
+
+    // One call with the whole selection, not one per cell: filling a block is
+    // one thing somebody did.
+    expect(filled).toHaveBeenCalledTimes(1)
+    expect(filled.mock.calls[0]?.[1]).toBe('Q1')
+    expect(changed).not.toHaveBeenCalled()
+  })
+
+  it('finishes the edit on a plain Enter, as it always did', async () => {
+    const changed = vi.fn()
+    grid({ onChange: changed })
+
+    const { field } = await open()
+    fireEvent.keyDown(field, { key: 'Enter' })
+
+    expect(changed).toHaveBeenCalledWith({ row: 0, column: 0 }, 'Q1')
+  })
+})

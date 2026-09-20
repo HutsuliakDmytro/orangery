@@ -50,6 +50,8 @@ export interface WorkbookState {
   edit: (address: CellAddress, text: string) => void
   /** Empties everything selected, as one thing that can be taken back. */
   clear: () => void
+  /** Puts one value into everything selected, likewise. */
+  fill: (text: string) => void
   undo: () => void
   redo: () => void
   /** A workbook that has just been written, and now belongs to that path. */
@@ -147,26 +149,26 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const sheet = visibleSheets(open)[current]
     if (sheet === undefined) return
 
-    // Every cell of every range, once: `Mod`-clicking a cell that is already
-    // selected would otherwise clear it twice, and the second change would
-    // record an empty cell as what the first one found.
-    const seen = new Set<number>()
-    const cells: CellAddress[] = []
+    const changes = clearCells(sheet, selectedCells(selection))
+    if (changes.length === 0) return
 
-    for (const range of selection.ranges) {
-      const bounds = boundsOf(range)
-      for (let row = bounds.top; row <= bounds.bottom; row += 1) {
-        for (let column = bounds.left; column <= bounds.right; column += 1) {
-          const key = row * 16_384 + column
-          if (seen.has(key)) continue
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
 
-          seen.add(key)
-          cells.push({ row, column })
-        }
-      }
-    }
+  fill: (text) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
 
-    const changes = clearCells(sheet, cells)
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const changes = selectedCells(selection)
+      .map((address) => applyEdit(open, sheet, address, text))
+      .filter((change): change is NonNullable<typeof change> => change !== null)
     if (changes.length === 0) return
 
     set({
@@ -206,6 +208,34 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     })
   },
 }))
+
+/**
+ * Every cell of every range, once.
+ *
+ * `Mod`-clicking a cell that is already selected puts it in two ranges, and
+ * acting on it twice would make the second change record what the first one
+ * left rather than what was there to begin with — which undo would then put
+ * back wrong.
+ */
+function selectedCells(selection: GridSelection): CellAddress[] {
+  const seen = new Set<number>()
+  const cells: CellAddress[] = []
+
+  for (const range of selection.ranges) {
+    const bounds = boundsOf(range)
+    for (let row = bounds.top; row <= bounds.bottom; row += 1) {
+      for (let column = bounds.left; column <= bounds.right; column += 1) {
+        const key = row * 16_384 + column
+        if (seen.has(key)) continue
+
+        seen.add(key)
+        cells.push({ row, column })
+      }
+    }
+  }
+
+  return cells
+}
 
 /**
  * The workbook, with the sheets that changed handed over in new wrappers.

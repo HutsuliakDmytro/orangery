@@ -21,14 +21,15 @@ import {
   everything,
   extendedTo,
   lastRange,
+  nextInSelection,
+  selectedCount,
   singleCell,
   stepFrom,
-  selectedCount,
   wholeColumns,
   wholeRows,
   withRange,
 } from './selection'
-import type { Direction, GridSelection } from './selection'
+import type { Direction, GridSelection, Order } from './selection'
 import type { CellBorders, CellStyle } from './cell-style'
 import { ICON_GUTTER, drawIcon } from './icon'
 import { drawCellText } from './text'
@@ -111,6 +112,14 @@ export interface DataGridProps {
    * thing the caller can record as one thing.
    */
   onDelete?: (selection: GridSelection) => void
+  /**
+   * Called on `Mod+Enter` with everything selected and what was typed.
+   *
+   * Filling a block with one value is one thing somebody did; handing over the
+   * selection rather than a cell at a time is what lets the caller record it
+   * as one.
+   */
+  onFill?: (selection: GridSelection, text: string) => void
   /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
@@ -253,6 +262,7 @@ export function DataGrid({
   selection: given,
   onSelectionChange,
   onDelete,
+  onFill,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -679,6 +689,32 @@ export function DataGrid({
     [choose, inside],
   )
 
+  /**
+   * Where `Enter` and `Tab` go.
+   *
+   * Inside the selection when there is one to be inside, which is what stops
+   * the cursor wandering off the end of a block somebody selected in order to
+   * fill it. With one cell selected there is nothing to stay inside, and the
+   * key moves the cursor as it always did.
+   */
+  const advance = useCallback(
+    (order: Order, backward: boolean) => {
+      if (selectedCells > 1) {
+        const to = nextInSelection(selection, selected, order, backward)
+        choose({ ...selection, active: to }, to)
+        return
+      }
+
+      const step = backward ? -1 : 1
+      move(
+        order === 'down'
+          ? { row: selected.row + step, column: selected.column }
+          : { row: selected.row, column: selected.column + step },
+      )
+    },
+    [choose, move, selected, selectedCells, selection],
+  )
+
   /** Whether a cell holds anything, which is what `Mod` and an arrow follow. */
   const filled = useCallback(
     (cell: CellAddress) => {
@@ -756,15 +792,9 @@ export function DataGrid({
       return
     }
 
-    const along: Record<string, CellAddress> = {
-      Enter: { row: selected.row + 1, column: selected.column },
-      Tab: { row: selected.row, column: selected.column + (event.shiftKey ? -1 : 1) },
-    }
-
-    const wanted = along[event.key]
-    if (wanted !== undefined) {
+    if (event.key === 'Enter' || event.key === 'Tab') {
       event.preventDefault()
-      move(wanted)
+      advance(event.key === 'Enter' ? 'down' : 'across', event.shiftKey)
       return
     }
 
@@ -936,10 +966,23 @@ export function DataGrid({
       </div>
 
       {editing !== null && editor !== null && (
-        <input
+        // A textarea rather than an input, for one key: `Alt+Enter` puts a
+        // line break inside a cell, and a single-line field has nowhere to put
+        // one. It is made to look like an input — no resize handle, no
+        // scrollbars, no wrapping it did not ask for.
+        <textarea
           autoFocus
+          rows={1}
+          wrap="off"
           aria-label={`${columnHeader(editing.cell.column)}${String(editing.cell.row + 1)}`}
           value={editing.text}
+          onFocus={(event) => {
+            // At the end, not the start. A textarea puts the caret at nought
+            // where an input puts it after the value, which would make the
+            // second character of anything typed land in front of the first.
+            const end = event.currentTarget.value.length
+            event.currentTarget.setSelectionRange(end, end)
+          }}
           onChange={(event) => {
             setEditing({ cell: editing.cell, text: event.target.value })
           }}
@@ -951,22 +994,46 @@ export function DataGrid({
             commit(editing.text, editing.cell)
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              commit(editing.text, editing.cell)
-              move({ row: editing.cell.row + 1, column: editing.cell.column })
-            }
             if (event.key === 'Escape') {
               event.preventDefault()
               stopEditing()
+              return
             }
+
+            if (event.key === 'Enter') {
+              event.preventDefault()
+
+              // A line break inside the cell rather than the end of the edit.
+              if (event.altKey) {
+                const field = event.currentTarget
+                const at = field.selectionStart
+                const to = field.selectionEnd
+                setEditing({
+                  cell: editing.cell,
+                  text: `${editing.text.slice(0, at)}\n${editing.text.slice(to)}`,
+                })
+                return
+              }
+
+              // The same value into everything selected, which is one thing
+              // done and has to be one thing the caller can take back.
+              if ((event.metaKey || event.ctrlKey) && onFill !== undefined) {
+                closing.current = true
+                setEditing(null)
+                surface.current?.focus()
+                onFill(selection, editing.text)
+                return
+              }
+
+              commit(editing.text, editing.cell)
+              advance('down', event.shiftKey)
+              return
+            }
+
             if (event.key === 'Tab') {
               event.preventDefault()
               commit(editing.text, editing.cell)
-              move({
-                row: editing.cell.row,
-                column: editing.cell.column + (event.shiftKey ? -1 : 1),
-              })
+              advance('across', event.shiftKey)
             }
           }}
           style={{
@@ -981,6 +1048,9 @@ export function DataGrid({
             outline: 'none',
             background: COLORS.background,
             color: COLORS.text,
+            resize: 'none',
+            overflow: 'hidden',
+            whiteSpace: 'pre',
           }}
         />
       )}

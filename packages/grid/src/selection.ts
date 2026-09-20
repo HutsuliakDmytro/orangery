@@ -200,3 +200,62 @@ export function stepFrom(
     column: Math.max(0, Math.min(cell.column + step.column, counts.columns - 1)),
   }
 }
+
+/** Which way `Enter` and `Tab` walk a range. */
+export type Order = 'down' | 'across'
+
+/**
+ * The next cell inside the selection, wrapping at its edges.
+ *
+ * What `Enter` and `Tab` do once more than one cell is selected: the cursor
+ * walks the selection and the selection itself does not move. That is the
+ * whole reason anybody selects a block before typing into it — the keys stop
+ * wandering off the end of what they meant to fill.
+ *
+ * Arithmetic rather than a walk over a list, because a selected column is a
+ * million cells and the answer is always the neighbour of one of them.
+ */
+export function nextInSelection(
+  selection: GridSelection,
+  from: CellAddress,
+  order: Order,
+  backward = false,
+): CellAddress {
+  const ranges = selection.ranges
+  const at = ranges.findIndex((range) => within(boundsOf(range), from))
+  if (at === -1) return from
+
+  const bounds = boundsOf(ranges[at] ?? lastRange(selection))
+  const step = backward ? -1 : 1
+
+  const moved =
+    order === 'down'
+      ? { row: from.row + step, column: from.column }
+      : { row: from.row, column: from.column + step }
+
+  if (order === 'down' && moved.row >= bounds.top && moved.row <= bounds.bottom) return moved
+  if (order === 'across' && moved.column >= bounds.left && moved.column <= bounds.right)
+    return moved
+
+  // Off the end of this column or row: over to the next one, and off the end
+  // of the range itself, into the range after it.
+  const turned =
+    order === 'down'
+      ? { row: backward ? bounds.bottom : bounds.top, column: from.column + step }
+      : { row: from.row + step, column: backward ? bounds.right : bounds.left }
+
+  if (order === 'down' && turned.column >= bounds.left && turned.column <= bounds.right) {
+    return turned
+  }
+  if (order === 'across' && turned.row >= bounds.top && turned.row <= bounds.bottom) {
+    return turned
+  }
+
+  // `Mod`-clicking makes more than one range, and the cursor visits them in
+  // the order they were made, coming back to the first at the end.
+  const nextRange = ranges[(at + step + ranges.length) % ranges.length]
+  if (nextRange === undefined) return from
+
+  const over = boundsOf(nextRange)
+  return backward ? { row: over.bottom, column: over.right } : { row: over.top, column: over.left }
+}

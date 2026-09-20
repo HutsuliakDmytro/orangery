@@ -7,6 +7,7 @@ import {
   edgeFrom,
   everything,
   extendedTo,
+  nextInSelection,
   selectedCount,
   singleCell,
   stepFrom,
@@ -152,5 +153,56 @@ describe('Mod and an arrow', () => {
 
   it('stays put at the edge it is already on', () => {
     expect(edgeFrom({ row: 0, column: 0 }, 'up', counts, filled)).toEqual({ row: 0, column: 0 })
+  })
+})
+
+describe('walking inside a selection', () => {
+  /** B2 to D4: three columns by three rows. */
+  const block = extendedTo(singleCell({ row: 1, column: 1 }), { row: 3, column: 3 })
+
+  it('goes down a column and then over to the top of the next', () => {
+    expect(nextInSelection(block, { row: 1, column: 1 }, 'down')).toEqual({ row: 2, column: 1 })
+    expect(nextInSelection(block, { row: 3, column: 1 }, 'down')).toEqual({ row: 1, column: 2 })
+  })
+
+  it('goes across a row and then down to the start of the next', () => {
+    expect(nextInSelection(block, { row: 1, column: 1 }, 'across')).toEqual({ row: 1, column: 2 })
+    expect(nextInSelection(block, { row: 1, column: 3 }, 'across')).toEqual({ row: 2, column: 1 })
+  })
+
+  it('comes back to the beginning off the end, rather than leaving', () => {
+    // The whole reason for selecting a block before typing is that the keys
+    // stop wandering out of it.
+    expect(nextInSelection(block, { row: 3, column: 3 }, 'down')).toEqual({ row: 1, column: 1 })
+    expect(nextInSelection(block, { row: 3, column: 3 }, 'across')).toEqual({ row: 1, column: 1 })
+  })
+
+  it('walks backwards the same way', () => {
+    expect(nextInSelection(block, { row: 2, column: 1 }, 'down', true)).toEqual({
+      row: 1,
+      column: 1,
+    })
+    expect(nextInSelection(block, { row: 1, column: 2 }, 'down', true)).toEqual({
+      row: 3,
+      column: 1,
+    })
+    expect(nextInSelection(block, { row: 1, column: 1 }, 'down', true)).toEqual({
+      row: 3,
+      column: 3,
+    })
+  })
+
+  it('visits the next range when there is more than one', () => {
+    const two = withRange(singleCell({ row: 0, column: 0 }), {
+      anchor: { row: 5, column: 5 },
+      focus: { row: 6, column: 5 },
+    })
+
+    expect(nextInSelection(two, { row: 0, column: 0 }, 'down')).toEqual({ row: 5, column: 5 })
+    expect(nextInSelection(two, { row: 6, column: 5 }, 'down')).toEqual({ row: 0, column: 0 })
+  })
+
+  it('leaves a cell that is not in the selection where it is', () => {
+    expect(nextInSelection(block, { row: 9, column: 9 }, 'down')).toEqual({ row: 9, column: 9 })
   })
 })

@@ -342,3 +342,56 @@ describe('taking back what was typed', () => {
     expect(getCommand('edit.undo')?.isEnabled?.({})).toBe(false)
   })
 })
+
+describe('filling a block with one value', () => {
+  const cellAt = (row: number, column: number) =>
+    useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+
+  /** Selects a range through the name box, then fills it from the editor. */
+  const selectAndType = async (range: string, at: string, text: string) => {
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, `${range}{Enter}`)
+
+    fireEvent.keyDown(screen.getByRole('grid', { name: 'Budget' }), { key: 'F2' })
+
+    // The editor is labelled after the cell it is over, which is what tells it
+    // apart from the name box.
+    const field = screen.getByLabelText(at)
+    fireEvent.change(field, { target: { value: text } })
+    fireEvent.keyDown(field, { key: 'Enter', metaKey: true })
+  }
+
+  it('puts it in every selected cell', async () => {
+    render(<App />)
+    await load()
+    await selectAndType('E8:F9', 'E8', 'Rent')
+
+    expect(cellAt(7, 4)?.value).toBe('Rent')
+    expect(cellAt(8, 5)?.value).toBe('Rent')
+  })
+
+  it('takes all four back in one press', async () => {
+    render(<App />)
+    await load()
+    await selectAndType('E8:F9', 'E8', 'Rent')
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(cellAt(7, 4)).toBeNull()
+    expect(cellAt(8, 5)).toBeNull()
+    expect(getCommand('edit.undo')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('leaves the cells around it alone', async () => {
+    render(<App />)
+    await load()
+    await selectAndType('E8:F9', 'E8', 'Rent')
+
+    expect(cellAt(7, 6)).toBeNull()
+    expect(cellAt(1, 1)?.value).toBe('1234.5')
+  })
+})

@@ -62,6 +62,8 @@ export interface SheetViewProps {
   onEdit?: (address: CellAddress, text: string) => void
   /** Called when Delete is pressed, with everything selected. */
   onClear?: () => void
+  /** Called on `Mod+Enter`, to put one value into everything selected. */
+  onFill?: (text: string) => void
 }
 
 export function SheetView({
@@ -73,6 +75,7 @@ export function SheetView({
   onSelectionChange,
   onEdit,
   onClear,
+  onFill,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -145,6 +148,23 @@ export function SheetView({
       return made
     }
   }, [palette, sheet.cells, sheet.sheet.conditional, strings])
+
+  /**
+   * `Mod+Enter`, with the selection dropped.
+   *
+   * The grid hands over what is selected because it is the grid that knows;
+   * the store has the same selection already, and taking it twice would leave
+   * two answers to one question.
+   */
+  const filled = useMemo(
+    () =>
+      onFill === undefined
+        ? undefined
+        : (_: GridSelection, text: string) => {
+            onFill(text)
+          },
+    [onFill],
+  )
 
   /** What has been said about the cells, indexed once for the whole sheet. */
   const notes = useMemo(() => notesOf(sheet.comments), [sheet.comments])
@@ -386,6 +406,7 @@ export function SheetView({
       {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
       {...(onEdit === undefined ? {} : { onChange: onEdit })}
       {...(onClear === undefined ? {} : { onDelete: onClear })}
+      {...(filled === undefined ? {} : { onFill: filled })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any

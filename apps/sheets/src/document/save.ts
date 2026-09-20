@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
-import { writePackage } from '@orangery/ooxml-core'
-import { writeWorkbook } from '@orangery/ooxml-spreadsheet'
+import { getPartText, setPartText, writePackage } from '@orangery/ooxml-core'
+import { patchStyles, writeWorkbook } from '@orangery/ooxml-spreadsheet'
 import { isTauri } from '@orangery/platform'
 import type { OpenWorkbook } from './workbook'
 
@@ -32,6 +32,13 @@ export async function workbookBytes(
     open.sheets.map((sheet) => ({ path: sheet.path, cells: sheet.cells })),
     { edited: options.edited ?? false },
   )
+
+  // Only when editing has asked for a look the file did not have; a workbook
+  // nobody touched leaves `styles.xml` byte for byte as it arrived.
+  const styles = getPartText(open.pkg, 'xl/styles.xml')
+  if (styles !== undefined) {
+    setPartText(open.pkg, 'xl/styles.xml', patchStyles(styles, open.styleChanges))
+  }
 
   return writePackage(open.pkg)
 }

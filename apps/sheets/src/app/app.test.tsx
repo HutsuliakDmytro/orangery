@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
+import { recorded } from '../test-setup'
 import { App } from './app'
 import { useWorkbookStore } from '../store/workbook-store'
 
@@ -27,6 +28,7 @@ const load = async () => {
 
 beforeEach(() => {
   useWorkbookStore.getState().close()
+  recorded.reset()
 })
 
 describe('a window with nothing in it', () => {
@@ -210,5 +212,48 @@ describe('the box that says where you are', () => {
 
     // A selection belongs to the sheet it was made on.
     expect(await screen.findByLabelText('Name box')).toHaveValue('A1')
+  })
+})
+
+describe('typing into a sheet', () => {
+  it('puts what was typed into the cell, and shows it there', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const grid = await screen.findByRole('grid', { name: 'Budget' })
+    await user.click(grid)
+    await user.keyboard('Rent{Enter}')
+
+    // A1 held "Month"; it holds what was typed over it now.
+    expect(useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(0)?.get(0)?.value).toBe(
+      'Rent',
+    )
+  })
+
+  it('marks the workbook as having changed, which decides what a save does', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    expect(useWorkbookStore.getState().edited).toBe(false)
+
+    await user.click(await screen.findByRole('grid', { name: 'Budget' }))
+    await user.keyboard('42{Enter}')
+
+    expect(useWorkbookStore.getState().edited).toBe(true)
+  })
+
+  it('redraws the sheet, rather than leaving the old value painted', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await load()
+
+    await user.click(await screen.findByRole('grid', { name: 'Budget' }))
+    await user.keyboard('Rent{Enter}')
+
+    await waitFor(() => {
+      expect(recorded.texts.some((one) => one.text === 'Rent')).toBe(true)
+    })
   })
 })

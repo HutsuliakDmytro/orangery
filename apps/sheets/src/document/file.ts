@@ -74,14 +74,14 @@ export async function openWorkbookFromDialog(): Promise<boolean> {
  * reported the same way an open's is, because it is the same kind of news.
  */
 export async function saveWorkbook(): Promise<boolean> {
-  const { open, path } = useWorkbookStore.getState()
+  const { open, path, edited } = useWorkbookStore.getState()
   if (open === null) return false
 
   const to = path ?? (await pickSavePath())
   if (to === null) return false
 
   try {
-    await saveWorkbookTo(open, to, { edited: true })
+    await saveWorkbookTo(open, to, { edited })
     useWorkbookStore.getState().saved(to)
     return true
   } catch (error) {

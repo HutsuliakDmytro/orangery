@@ -3,6 +3,7 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
   drawingRelationshipId,
   paletteOf,
+  noStyleChanges,
   readRichStrings,
   readSheetComments,
   readSheetData,
@@ -13,6 +14,7 @@ import {
 } from '@orangery/ooxml-spreadsheet'
 import type {
   RichText,
+  StyleChanges,
   SheetCells,
   SheetComments,
   SheetDrawing,
@@ -69,6 +71,14 @@ export interface OpenWorkbook {
   sheets: OpenSheet[]
   styles: Styles | null
   /**
+   * What the styles have gained since the file was read.
+   *
+   * `styles.xml` is patched rather than regenerated, so the writer has to be
+   * told what to put in it — and only editing can add anything, which is why
+   * this starts empty and stays that way for a workbook nobody touches.
+   */
+  styleChanges: StyleChanges
+  /**
    * The shared string table, which most text cells are an index into.
    *
    * Read with the formatting each entry carries: a cell has one style and
@@ -119,6 +129,7 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
     },
     sheets,
     styles: readStyles(getPartText(pkg, 'xl/styles.xml') ?? ''),
+    styleChanges: noStyleChanges(),
     strings: readRichStrings(pkg),
     palette,
   }

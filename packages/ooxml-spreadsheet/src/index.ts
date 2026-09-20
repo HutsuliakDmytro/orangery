@@ -40,6 +40,15 @@ export type {
   StyleColor,
   Styles,
 } from './styles'
+export {
+  cellFormatIndex,
+  noStyleChanges,
+  numberFormatId,
+  patchStyles,
+  sameCellFormat,
+  styleShowing,
+} from './styles-edit'
+export type { StyleChanges } from './styles-edit'
 export { removeCalcChain, writeWorkbook } from './save'
 export type { SaveOptions, SheetToWrite } from './save'
 export { collapsedFormula, expandFormulas, sharedMasters, shiftFormula } from './formulas'

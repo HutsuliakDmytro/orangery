@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { singleCell } from '@orangery/grid'
-import type { GridSelection } from '@orangery/grid'
+import type { CellAddress, GridSelection } from '@orangery/grid'
+import { applyEdit } from '../document/edit'
 import { openWorkbook, visibleSheets } from '../document/workbook'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -26,6 +27,13 @@ export interface WorkbookState {
    * every sheet, as a workbook does when it is opened.
    */
   selection: GridSelection
+  /**
+   * Whether anything has been typed since the file was opened or saved.
+   *
+   * What decides the fate of `calcChain`, and what a "you have unsaved
+   * changes" will ask when there is one to ask.
+   */
+  edited: boolean
   /** What went wrong the last time something was opened, for the banner. */
   problem: string | null
   busy: boolean
@@ -35,6 +43,7 @@ export interface WorkbookState {
   close: () => void
   select: (index: number) => void
   choose: (selection: GridSelection) => void
+  edit: (address: CellAddress, text: string) => void
   /** A workbook that has just been written, and now belongs to that path. */
   saved: (path: string) => void
 }
@@ -44,6 +53,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   path: null,
   current: 0,
   selection: singleCell({ row: 0, column: 0 }),
+  edited: false,
   problem: null,
   busy: false,
 
@@ -60,6 +70,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       path,
       current: active,
       selection: singleCell({ row: 0, column: 0 }),
+      edited: false,
       problem: null,
       busy: false,
     })
@@ -81,6 +92,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       path: null,
       current: 0,
       selection: singleCell({ row: 0, column: 0 }),
+      edited: false,
       problem: null,
       busy: false,
     })
@@ -97,7 +109,31 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   },
 
   saved: (path) => {
-    set({ path, problem: null })
+    set({ path, edited: false, problem: null })
+  },
+
+  edit: (address, text) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    applyEdit(open, sheet, address, text)
+
+    /**
+     * The cells are changed in place and then handed over in a new wrapper.
+     *
+     * A sparse map of a million cells is not copied to change one string, but
+     * something has to tell the window that what it is holding is no longer
+     * what it drew. Shallow copies of the sheet and of the workbook around it
+     * cost three objects and say exactly that.
+     */
+    const changed: OpenSheet = { ...sheet, cells: { ...sheet.cells } }
+    set({
+      open: { ...open, sheets: open.sheets.map((one) => (one === sheet ? changed : one)) },
+      edited: true,
+    })
   },
 }))
 

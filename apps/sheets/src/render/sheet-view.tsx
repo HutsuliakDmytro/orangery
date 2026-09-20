@@ -58,6 +58,8 @@ export interface SheetViewProps {
   /** What is selected, which the name box outside the grid shows too. */
   selection?: GridSelection
   onSelectionChange?: (selection: GridSelection) => void
+  /** Called with what was typed; without it the sheet is read-only. */
+  onEdit?: (address: CellAddress, text: string) => void
 }
 
 export function SheetView({
@@ -67,6 +69,7 @@ export function SheetView({
   height,
   selection,
   onSelectionChange,
+  onEdit,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -79,11 +82,12 @@ export function SheetView({
    */
   const resolved = useRef(new Map<number, ResolvedStyle>())
 
-  // Emptied when the styles themselves change, which is the only time an
-  // answer already worked out could be the wrong one.
+  // Emptied when the styles themselves change, and after an edit: typing a
+  // percentage into a cell can add an entry, and an answer worked out before
+  // it was added would be an answer about a style that no longer applies.
   useEffect(() => {
     resolved.current = new Map()
-  }, [styles])
+  }, [sheet.cells, styles])
 
   const styleOf = useCallback(
     (index: number | null): ResolvedStyle | null => {
@@ -377,6 +381,7 @@ export function SheetView({
       zoom={zoom}
       {...(selection === undefined ? {} : { selection })}
       {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
+      {...(onEdit === undefined ? {} : { onChange: onEdit })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any

@@ -3,7 +3,13 @@ import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
 import { selectedCount } from '@orangery/grid'
-import { cellAt, formatCodeOf, resolveStyle } from '@orangery/ooxml-spreadsheet'
+import {
+  cellAt,
+  formatCodeOf,
+  formatReference,
+  parseReference,
+  resolveStyle,
+} from '@orangery/ooxml-spreadsheet'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog, recoverWorkbook } from '../document/file'
 import { recoverable } from '../document/autosave'
@@ -20,11 +26,12 @@ import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
 import { FindPanel } from '../render/find-panel'
 import { FormatDialog } from '../render/format-dialog'
+import { GoalSeekDialog } from '../render/goal-seek-dialog'
 import { LinkDialog } from '../render/link-dialog'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
 import { SortDialog } from '../render/sort-dialog'
-import { sortTarget, useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
+import { seekGoal, sortTarget, useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
 import { useCommandSource } from './command-source'
 import { useExternalOpen } from './use-external-open'
 import { useAutosave } from './use-autosave'
@@ -182,6 +189,20 @@ function Shell() {
     window.addEventListener('orangery:sort-range', onAsk)
     return () => {
       window.removeEventListener('orangery:sort-range', onAsk)
+    }
+  }, [])
+
+  /** Whether the Goal Seek dialog is open, and over which cell. */
+  const [seeking, setSeeking] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onAsk = () => {
+      setSeeking(formatReference(useWorkbookStore.getState().selection.active))
+    }
+
+    window.addEventListener('orangery:goal-seek', onAsk)
+    return () => {
+      window.removeEventListener('orangery:goal-seek', onAsk)
     }
   }, [])
 
@@ -409,6 +430,37 @@ function Shell() {
           }}
           onCancel={() => {
             setLinking(null)
+          }}
+        />
+      )}
+
+      {seeking !== null && (
+        <GoalSeekDialog
+          target={seeking}
+          onCancel={() => {
+            setSeeking(null)
+          }}
+          onSeek={(asked) => {
+            setSeeking(null)
+            void (async () => {
+              const target = parseReference(asked.target)
+              const changing = parseReference(asked.changing)
+              const wanted = Number(asked.wanted)
+
+              if (target === null || changing === null || !Number.isFinite(wanted)) {
+                useWorkbookStore.setState({
+                  notice: 'Goal Seek needs two cell addresses and a number.',
+                })
+                return
+              }
+
+              const found = await seekGoal({ target, wanted, changing })
+              if (found === null) {
+                useWorkbookStore.setState({
+                  notice: `No value for ${asked.changing} makes ${asked.target} come to ${asked.wanted}.`,
+                })
+              }
+            })()
           }}
         />
       )}

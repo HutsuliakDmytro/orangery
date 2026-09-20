@@ -40,6 +40,7 @@ pub fn run() {
             formula::formula_recalculate,
             formula::formula_value,
             formula::formula_functions,
+            formula::formula_goal_seek,
             formula::formula_close,
         ])
         .setup(|app| {

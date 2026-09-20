@@ -148,7 +148,7 @@ pub struct NameInput {
 }
 
 /// Where a cell is.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Place {
     pub sheet: String,
@@ -437,6 +437,51 @@ pub fn formula_value(
     let engine = engines.get(&book).ok_or_else(unopened)?;
 
     Ok(Held::from(&engine.value(&sheet, row, column)))
+}
+
+/// What a Goal Seek came to.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sought {
+    /// The value the changing cell needed, or nothing when none was found.
+    pub value: Option<f64>,
+    /// What changed on the way, so the window can show the sheet as it
+    /// stands — or put it back.
+    pub report: Report,
+}
+
+/// The value one cell needs for another to come out at a number.
+///
+/// There is no way to run a spreadsheet backwards, so this is done by trying:
+/// the cell is set, the sheet recalculated, and the distance from the wanted
+/// number used to guess again. A search that finds nothing says so and puts
+/// the cell back.
+#[tauri::command]
+pub fn formula_goal_seek(
+    books: tauri::State<'_, Workbooks>,
+    book: String,
+    sheet: String,
+    target: Place,
+    wanted: f64,
+    changing: Place,
+) -> Result<Sought, String> {
+    let mut engines = books.engines()?;
+    let engine = engines.get_mut(&book).ok_or_else(unopened)?;
+
+    let value = engine.goal_seek(
+        (&sheet, target.row, target.column),
+        wanted,
+        (&sheet, changing.row, changing.column),
+    );
+
+    // Whatever the search left behind, the window has to be told: the cell it
+    // was changing and everything that followed from it.
+    let changed = engine.recalculate();
+
+    Ok(Sought {
+        value,
+        report: Report::of(changed),
+    })
 }
 
 /// One function, as a window offering it to somebody needs it.

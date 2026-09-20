@@ -608,3 +608,45 @@ fn a_name_is_matched_whatever_case_it_was_written_in() {
 
     assert_eq!(number(&engine, "A1"), 20.0);
 }
+
+#[test]
+fn goal_seek_finds_the_number_that_makes_a_formula_come_out() {
+    // There is no way to run a spreadsheet backwards, so it is done by
+    // trying: set the cell, recalculate, and use the distance to guess again.
+    let mut engine = engine();
+    set(&mut engine, "A1", 1.0);
+    formula(&mut engine, "B1", "A1*3+2");
+
+    let found = engine.goal_seek(("Sheet1", 0, 1), 20.0, ("Sheet1", 0, 0));
+
+    assert!(found.is_some());
+    assert!((number(&engine, "A1") - 6.0).abs() < 1e-6);
+    assert!((number(&engine, "B1") - 20.0).abs() < 1e-6);
+}
+
+#[test]
+fn goal_seek_works_where_the_arithmetic_is_not_a_straight_line() {
+    let mut engine = engine();
+    set(&mut engine, "A1", 2.0);
+    formula(&mut engine, "B1", "A1^2");
+
+    let found = engine.goal_seek(("Sheet1", 0, 1), 9.0, ("Sheet1", 0, 0));
+
+    assert!(found.is_some());
+    assert!((number(&engine, "A1") - 3.0).abs() < 1e-4);
+}
+
+#[test]
+fn a_search_that_found_nothing_puts_the_cell_back() {
+    // A sheet left holding the last guess of a failed search would be a
+    // sheet somebody had to notice and undo.
+    let mut engine = engine();
+    set(&mut engine, "A1", 5.0);
+    formula(&mut engine, "B1", "7");
+
+    assert_eq!(
+        engine.goal_seek(("Sheet1", 0, 1), 20.0, ("Sheet1", 0, 0)),
+        None
+    );
+    assert_eq!(number(&engine, "A1"), 5.0);
+}

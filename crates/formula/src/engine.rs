@@ -413,6 +413,79 @@ impl Engine {
         self.recalculate_from(&formulas)
     }
 
+    /// The value one cell needs for another to come out at a number.
+    ///
+    /// Excel's Goal Seek, and it works the only way it can: by trying. There
+    /// is no way to run a spreadsheet backwards — a formula is a program, and
+    /// the question "what input gives this output" has no general answer — so
+    /// the cell is set, the sheet is recalculated, and the distance from the
+    /// wanted number is used to guess again.
+    ///
+    /// A secant search, as the financial functions use: two points, the line
+    /// between them, and where that line crosses. It finds a rate, a price or
+    /// a quantity in a dozen tries where the relationship is smooth, and says
+    /// nothing at all where it is not — a `None` here is honest, and a number
+    /// that did not arrive would be worse than no answer in a column of
+    /// money.
+    ///
+    /// The cell is left holding whatever was found, so that the caller can
+    /// show the sheet as it now stands; putting it back is the caller's to
+    /// do, and the history it already keeps is how.
+    pub fn goal_seek(
+        &mut self,
+        target: (&str, i64, i64),
+        wanted: f64,
+        changing: (&str, i64, i64),
+    ) -> Option<f64> {
+        let at = |engine: &mut Engine, guess: f64| -> Option<f64> {
+            engine.set_value(changing.0, changing.1, changing.2, Value::Number(guess));
+            match engine.value(target.0, target.1, target.2) {
+                Value::Number(number) if number.is_finite() => Some(number - wanted),
+                _ => None,
+            }
+        };
+
+        let started = match self.value(changing.0, changing.1, changing.2) {
+            Value::Number(number) => number,
+            _ => 0.0,
+        };
+
+        let mut here = started;
+        let mut there = if started == 0.0 { 1.0 } else { started * 1.1 };
+
+        let mut value_here = at(self, here)?;
+        let mut value_there = at(self, there)?;
+
+        for _ in 0..128 {
+            // A thousandth, as Excel's own tolerance is: the answer is a
+            // number somebody is going to act on rather than a proof.
+            if value_there.abs() < 1e-6 {
+                return Some(there);
+            }
+
+            let step = value_there - value_here;
+            if step == 0.0 {
+                break;
+            }
+
+            let next = there - value_there * (there - here) / step;
+            if !next.is_finite() {
+                break;
+            }
+
+            here = there;
+            value_here = value_there;
+            there = next;
+            value_there = at(self, there)?;
+        }
+
+        // Nothing was found, so the cell goes back to what it held: a search
+        // that failed must not leave the sheet holding its last guess.
+        self.set_value(changing.0, changing.1, changing.2, Value::Number(started));
+
+        None
+    }
+
     /// Everything that depends on which rows are in sight, worked out again.
     ///
     /// What a filter changes. Only the totals are seeded — nothing else on a

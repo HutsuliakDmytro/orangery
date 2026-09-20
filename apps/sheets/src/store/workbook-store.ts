@@ -36,6 +36,7 @@ import { refusalFor } from '../document/validation'
 import {
   applyReport,
   closeEngine,
+  goalSeek,
   inputsFor,
   openEngine,
   recalculate,
@@ -1214,6 +1215,47 @@ useWorkbookStore.subscribe((state, previous) => {
 
   void followUp(state.session, state.open, step.changes, step.direction)
 })
+
+/**
+ * The value one cell needs for another to come out at a number.
+ *
+ * The search happens in the engine; what happens here is what to do with the
+ * answer. It goes in as an ordinary edit, which is what it is — somebody
+ * typed a number into a cell, and the fact that a search found it rather than
+ * a person is not something the history needs to know. So it can be undone
+ * like anything else.
+ *
+ * Hands back what it found, or null, so that whoever asked can say so.
+ */
+export async function seekGoal(asked: {
+  target: CellAddress
+  wanted: number
+  changing: CellAddress
+}): Promise<number | null> {
+  const { open, current, session } = useWorkbookStore.getState()
+  if (open === null) return null
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return null
+
+  const found = await goalSeek(
+    session,
+    sheet.name,
+    { sheet: sheet.name, row: asked.target.row, column: asked.target.column },
+    asked.wanted,
+    { sheet: sheet.name, row: asked.changing.row, column: asked.changing.column },
+  )
+
+  if (found.value === null) return null
+
+  // The whole sheet as the search left it, and then the cell itself as an
+  // edit: the report brings the formulas into line and the edit is what the
+  // history remembers.
+  applyOutcome(session, found.report)
+  useWorkbookStore.getState().edit(asked.changing, String(found.value))
+
+  return found.value
+}
 
 /**
  * Everything worked out again — `F9`, and what somebody asks for when they

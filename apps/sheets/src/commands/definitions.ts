@@ -424,6 +424,16 @@ export const viewCommands: readonly Command[] = [
     },
   },
   {
+    id: 'data.goalSeek',
+    label: 'Goal Seek…',
+    group: 'view',
+    keywords: ['what if', 'solve', 'backwards', 'target'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      window.dispatchEvent(new Event('orangery:goal-seek'))
+    },
+  },
+  {
     id: 'view.recalculate',
     label: 'Recalculate',
     group: 'view',

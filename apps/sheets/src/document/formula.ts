@@ -554,6 +554,32 @@ export async function sendOutOfSight(
   })
 }
 
+/** What a Goal Seek came to. */
+export interface Sought {
+  /** The value the changing cell needed, or null when none was found. */
+  value: number | null
+  report: Report
+}
+
+/**
+ * The value one cell needs for another to come out at a number.
+ *
+ * There is no running a spreadsheet backwards, so the engine does it by
+ * trying: it sets the cell, recalculates, and uses the distance from the
+ * wanted number to guess again.
+ */
+export async function goalSeek(
+  book: string,
+  sheet: string,
+  target: Place,
+  wanted: number,
+  changing: Place,
+): Promise<Sought> {
+  if (!isTauri()) return { value: null, report: nothing }
+
+  return await invoke<Sought>('formula_goal_seek', { book, sheet, target, wanted, changing })
+}
+
 export async function recalculate(book: string, date1904: boolean): Promise<Report> {
   if (!isTauri()) return nothing
   return await invoke<Report>('formula_recalculate', { book, moment: moment(date1904) })

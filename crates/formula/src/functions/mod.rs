@@ -10,6 +10,7 @@
 //! — a spreadsheet where `IF(A1=0,0,1/A1)` divides by nought anyway is a
 //! spreadsheet that is wrong about the one thing the formula was guarding.
 
+pub mod criteria;
 pub mod datetime;
 pub mod info;
 pub mod logical;
@@ -20,7 +21,7 @@ pub mod text;
 
 use crate::ast::Expr;
 use crate::eval::{evaluate, Context, Rect};
-use crate::value::{Error, Value};
+use crate::value::{Array, Error, Value};
 
 /// What a function is, as far as the evaluator is concerned.
 pub struct Function {
@@ -103,6 +104,13 @@ static FUNCTIONS: &[&Function] = &[
     &math::LOG10,
     &math::SIGN,
     &math::PI,
+    &math::CEILING,
+    &math::FLOOR,
+    &math::SUMSQ,
+    &math::SUMPRODUCT,
+    &math::SUMIFS,
+    &math::RAND,
+    &math::RANDBETWEEN,
     &stats::AVERAGE,
     &stats::COUNT,
     &stats::COUNTA,
@@ -110,6 +118,32 @@ static FUNCTIONS: &[&Function] = &[
     &stats::MIN,
     &stats::MAX,
     &stats::MEDIAN,
+    &stats::COUNTIFS,
+    &stats::AVERAGEIFS,
+    &stats::MODE,
+    &stats::MODE_SNGL,
+    &stats::VAR,
+    &stats::VAR_S,
+    &stats::VARP,
+    &stats::VAR_P,
+    &stats::STDEV,
+    &stats::STDEV_S,
+    &stats::STDEVP,
+    &stats::STDEV_P,
+    &stats::RANK,
+    &stats::RANK_EQ,
+    &stats::RANK_AVG,
+    &stats::LARGE,
+    &stats::SMALL,
+    &stats::PERCENTILE,
+    &stats::PERCENTILE_INC,
+    &stats::PERCENTILE_EXC,
+    &stats::QUARTILE,
+    &stats::QUARTILE_INC,
+    &stats::QUARTILE_EXC,
+    &stats::CORREL,
+    &stats::FORECAST,
+    &stats::FORECAST_LINEAR,
     &lookup::VLOOKUP,
     &lookup::HLOOKUP,
     &lookup::INDEX,
@@ -184,6 +218,18 @@ static FUNCTIONS: &[&Function] = &[
     &info::T,
     &info::TYPE,
 ];
+
+/// One argument as a rectangle, whatever shape it arrived in.
+pub fn table(argument: Option<&Expr>, context: &Context<'_>) -> Result<Array, Error> {
+    match argument.map(|expression| evaluate(expression, context)) {
+        Some(Value::Array(array)) => Ok(array),
+        Some(Value::Error(error)) => Err(error),
+        // A single value is a table of one, which is what makes `MATCH(x, A1)`
+        // answer rather than fail.
+        Some(value) => Ok(Array::new(1, 1, vec![value])),
+        None => Err(Error::Value),
+    }
+}
 
 /// Every argument, worked out.
 pub fn values(arguments: &[Expr], context: &Context<'_>) -> Vec<Value> {

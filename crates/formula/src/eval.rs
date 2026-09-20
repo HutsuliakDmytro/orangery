@@ -45,6 +45,16 @@ pub trait Cells {
         0.0
     }
 
+    /// A number from nought up to but not including one.
+    ///
+    /// The same seam as the clock, for the same reason: a library that made
+    /// its own randomness could not be asked twice and given the same answer,
+    /// and a spreadsheet's randomness belongs to the workbook that is being
+    /// recalculated rather than to the arithmetic.
+    fn random(&self) -> f64 {
+        0.0
+    }
+
     /// Which morning this workbook counts its days from.
     ///
     /// Almost every file says 1900; the ones Excel for Mac wrote before 2011

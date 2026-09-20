@@ -19,6 +19,7 @@ pub struct Sheet {
     cells: HashMap<(i64, i64), Value>,
     /// What time the workbook is being worked out at; nought unless said.
     moment: f64,
+    chance: f64,
     system: DateSystem,
 }
 
@@ -35,6 +36,13 @@ impl Sheet {
     /// functions that ask what time it is can be tested at all.
     pub fn at_moment(mut self, serial: f64) -> Self {
         self.moment = serial;
+        self
+    }
+
+    /// A workbook whose randomness is decided in advance, which is the only
+    /// way to test a function whose whole purpose is to be unpredictable.
+    pub fn with_random(mut self, value: f64) -> Self {
+        self.chance = value;
         self
     }
 
@@ -74,6 +82,10 @@ impl Cells for Sheet {
 
     fn now(&self) -> f64 {
         self.moment
+    }
+
+    fn random(&self) -> f64 {
+        self.chance
     }
 
     fn date_system(&self) -> DateSystem {

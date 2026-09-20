@@ -5,7 +5,8 @@
 //! `ROUND(2.5,0)` is 3 here and 2 in Rust — and a column of invoices rounded
 //! the wrong way is a column that disagrees with the invoice.
 
-use super::{done, flattened, number, numbers, Function};
+use super::criteria::{all_matching, pairs};
+use super::{done, flattened, number, numbers, table, Function};
 use crate::value::{Error, Value};
 
 macro_rules! function {
@@ -176,6 +177,144 @@ function!(LOG, "LOG", 1, Some(2), |arguments, context| {
 function!(PI, "PI", 0, Some(0), |_arguments, _context| {
     Value::Number(std::f64::consts::PI)
 });
+
+function!(CEILING, "CEILING", 2, Some(2), |arguments, context| {
+    done((|| {
+        let value = number(arguments.first(), context)?;
+        let step = number(arguments.get(1), context)?;
+
+        // A step of nothing rounds to nothing, which is Excel's answer and
+        // not the one `FLOOR` gives to the same question.
+        if step == 0.0 {
+            return Ok(Value::Number(0.0));
+        }
+        if value > 0.0 && step < 0.0 {
+            return Ok(Value::Error(Error::Number));
+        }
+
+        Ok(Value::Number((value / step).ceil() * step))
+    })())
+});
+
+function!(FLOOR, "FLOOR", 2, Some(2), |arguments, context| {
+    done((|| {
+        let value = number(arguments.first(), context)?;
+        let step = number(arguments.get(1), context)?;
+
+        // And here a step of nothing is a division by it. The pair have
+        // disagreed about this since 1993; a reader that tidied it up would
+        // disagree with the sheet.
+        if step == 0.0 {
+            return Ok(Value::Error(Error::DivideByZero));
+        }
+        if value > 0.0 && step < 0.0 {
+            return Ok(Value::Error(Error::Number));
+        }
+
+        Ok(Value::Number((value / step).floor() * step))
+    })())
+});
+
+function!(SUMSQ, "SUMSQ", 1, None, |arguments, context| {
+    done((|| {
+        let found = numbers(&flattened(arguments, context), false)?;
+        Ok(Value::Number(found.iter().map(|value| value * value).sum()))
+    })())
+});
+
+function!(SUMPRODUCT, "SUMPRODUCT", 1, None, |arguments, context| {
+    done((|| {
+        let mut columns: Vec<Vec<f64>> = Vec::new();
+
+        for argument in arguments {
+            let grid = table(Some(argument), context)?;
+            // Anything that is not a number counts as nought rather than
+            // stopping the total: a column of prices with a heading over it
+            // is the ordinary case, not a mistake.
+            columns.push(
+                grid.values
+                    .iter()
+                    .map(|value| match value {
+                        Value::Number(number) => *number,
+                        _ => 0.0,
+                    })
+                    .collect(),
+            );
+        }
+
+        let size = columns.first().map_or(0, Vec::len);
+        if columns.iter().any(|column| column.len() != size) {
+            // Lined up by position, so ranges of different shapes have no
+            // answer rather than a short one.
+            return Ok(Value::Error(Error::Value));
+        }
+
+        let mut total = 0.0;
+        for index in 0..size {
+            total += columns.iter().map(|column| column[index]).product::<f64>();
+        }
+
+        Ok(Value::Number(total))
+    })())
+});
+
+function!(SUMIFS, "SUMIFS", 3, None, |arguments, context| {
+    done((|| {
+        // The range to add comes first here and last in `SUMIF`. Excel has
+        // both orders and this is not the place to improve on it.
+        let added = table(arguments.first(), context)?;
+        let tests = pairs(arguments, 1, context)?;
+
+        if tests
+            .first()
+            .is_some_and(|(range, _)| range.values.len() != added.values.len())
+        {
+            return Ok(Value::Error(Error::Value));
+        }
+
+        let mut total = 0.0;
+        for index in all_matching(&tests)? {
+            if let Some(Value::Number(number)) = added.values.get(index) {
+                total += number;
+            }
+        }
+
+        Ok(Value::Number(total))
+    })())
+});
+
+/// The two that make up a different answer every time they are asked.
+pub static RAND: Function = Function {
+    name: "RAND",
+    min_arguments: 0,
+    max_arguments: Some(0),
+    volatile: true,
+    call: |_arguments, context| Value::Number(context.cells.random()),
+};
+
+pub static RANDBETWEEN: Function = Function {
+    name: "RANDBETWEEN",
+    min_arguments: 2,
+    max_arguments: Some(2),
+    volatile: true,
+    call: |arguments, context| {
+        done((|| {
+            let least = number(arguments.first(), context)?.ceil();
+            let most = number(arguments.get(1), context)?.floor();
+
+            if least > most {
+                return Ok(Value::Error(Error::Number));
+            }
+
+            // Both ends included, as Excel has it: `RANDBETWEEN(1,6)` is a
+            // die, not a die that never shows a six.
+            let span = most - least + 1.0;
+            let landed = least + (context.cells.random() * span).floor();
+
+            Ok(Value::Number(landed.min(most)))
+        })())
+    },
+};
 
 enum Rounding {
     Nearest,

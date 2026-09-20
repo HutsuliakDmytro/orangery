@@ -41,6 +41,7 @@ export async function workbookBytes(
             filter: sheet.sheet.autoFilter,
             links: sheet.links,
             validations: sheet.sheet.validations,
+            conditional: sheet.sheet.conditional,
           }
         : {}),
     })),

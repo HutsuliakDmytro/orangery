@@ -13,6 +13,8 @@ import type { AutoFilter } from './autofilter'
 import { replaceHyperlinks, writeHyperlinks } from './hyperlinks'
 import { replaceValidations, writeValidations } from './validation'
 import type { DataValidation } from './validation'
+import { replaceConditionalFormats, writeConditionalFormats } from './conditional'
+import type { ConditionalFormat } from './conditional'
 import type { Hyperlink } from './hyperlinks'
 import type { SheetCells } from './cells'
 import type { CellRange } from './reference'
@@ -51,6 +53,8 @@ export interface SheetToWrite {
   filter?: AutoFilter | null
   /** What the cells are allowed to hold, where that may have changed. */
   validations?: readonly DataValidation[]
+  /** The rules that change how a cell looks, likewise. */
+  conditional?: readonly ConditionalFormat[]
   /**
    * The links, where they may have changed.
    *
@@ -107,6 +111,9 @@ export function writeWorkbook(
     if (sheet.filter !== undefined) written = replaceAutoFilter(written, sheet.filter)
     if (sheet.validations !== undefined) {
       written = replaceValidations(written, writeValidations(sheet.validations))
+    }
+    if (sheet.conditional !== undefined) {
+      written = replaceConditionalFormats(written, writeConditionalFormats(sheet.conditional))
     }
 
     if (sheet.links !== undefined) {

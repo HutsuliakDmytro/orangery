@@ -21,6 +21,7 @@ export { readSharedStrings, readWorkbook, sheetPath, textOf } from './workbook'
 export type { DefinedName, SheetEntry, Workbook } from './workbook'
 export { readNotes, readPeople, readSheetComments, readThreads } from './comments'
 export type { Note, Reply, SheetComments, Thread } from './comments'
+export { differentialWith } from './styles-edit'
 export { isValidName, replaceDefinedNames, writeDefinedNames } from './names-edit'
 export {
   DEFAULT_PAGE,
@@ -105,7 +106,12 @@ export {
   writeSheetDrawings,
 } from './drawing'
 export type { AnchorPoint, DrawingAnchor, DrawingContent, SheetDrawing } from './drawing'
-export { readConditionalFormats, rangeCovers } from './conditional'
+export {
+  readConditionalFormats,
+  rangeCovers,
+  replaceConditionalFormats,
+  writeConditionalFormats,
+} from './conditional'
 export type {
   ColorScale,
   ConditionalFormat,

@@ -1,6 +1,6 @@
 import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
-import { columnToIndex, parseRange } from './reference'
+import { columnToIndex, indexToColumn, parseRange } from './reference'
 import type { CellRange } from './reference'
 import type { StyleColor } from './styles'
 import { textOf } from './workbook'
@@ -307,3 +307,158 @@ export const rangeCovers = (range: CellRange, cell: { row: number; column: numbe
   cell.row <= Math.max(range.from.row, range.to.row) &&
   cell.column >= Math.min(range.from.column, range.to.column) &&
   cell.column <= Math.max(range.from.column, range.to.column)
+
+const escapedText = (text: string): string =>
+  text
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+
+const referenceOf = (range: CellRange): string => {
+  const from = `${indexToColumn(range.from.column)}${String(range.from.row + 1)}`
+  const to = `${indexToColumn(range.to.column)}${String(range.to.row + 1)}`
+  return from === to ? from : `${from}:${to}`
+}
+
+/**
+ * A rule as the file states one.
+ *
+ * Only the kinds this program makes are written in full; a rule read from
+ * somebody else's file keeps the pieces it was read with, which is why the
+ * model holds all of them rather than the few a dialog offers. A rule whose
+ * type this does not know is still written back with its formulas and its
+ * `dxfId` — losing it would be losing somebody's colours.
+ */
+function ruleXml(rule: ConditionalRule): string {
+  const attributes = [
+    `type="${escapedText(rule.type)}"`,
+    rule.dxfId === null ? '' : `dxfId="${String(rule.dxfId)}"`,
+    `priority="${String(rule.priority)}"`,
+    rule.operator === null ? '' : `operator="${escapedText(rule.operator)}"`,
+    rule.text === null ? '' : `text="${escapedText(rule.text)}"`,
+    rule.stopIfTrue ? 'stopIfTrue="1"' : '',
+    rule.rank === null ? '' : `rank="${String(rule.rank)}"`,
+    rule.percent ? 'percent="1"' : '',
+    rule.bottom ? 'bottom="1"' : '',
+    rule.type === 'aboveAverage' && !rule.above ? 'aboveAverage="0"' : '',
+    rule.equalAverage ? 'equalAverage="1"' : '',
+    rule.timePeriod === null ? '' : `timePeriod="${escapedText(rule.timePeriod)}"`,
+  ].filter((one) => one !== '')
+
+  const formulas = rule.formulas.map((one) => `<formula>${escapedText(one)}</formula>`).join('')
+
+  const scale =
+    rule.colorScale === null
+      ? ''
+      : `<colorScale>${rule.colorScale.values
+          .map((value) => valueObjectXml(value))
+          .join('')}${rule.colorScale.colors
+          .map((color) => colorObjectXml(color))
+          .join('')}</colorScale>`
+
+  const bar =
+    rule.dataBar === null
+      ? ''
+      : `<dataBar${rule.dataBar.showValue ? '' : ' showValue="0"'}>` +
+        `${valueObjectXml(rule.dataBar.lower)}${valueObjectXml(rule.dataBar.upper)}` +
+        `${colorObjectXml(rule.dataBar.color)}</dataBar>`
+
+  const icons =
+    rule.iconSet === null
+      ? ''
+      : `<iconSet iconSet="${escapedText(rule.iconSet.name)}"` +
+        (rule.iconSet.showValue ? '' : ' showValue="0"') +
+        (rule.iconSet.reverse ? ' reverse="1"' : '') +
+        '>' +
+        rule.iconSet.values.map((value) => valueObjectXml(value)).join('') +
+        '</iconSet>'
+
+  const inside = formulas + scale + bar + icons
+  return inside === ''
+    ? `<cfRule ${attributes.join(' ')}/>`
+    : `<cfRule ${attributes.join(' ')}>${inside}</cfRule>`
+}
+
+const valueObjectXml = (value: ConditionalValue): string => {
+  const inclusive = value.inclusive ? '' : ' gte="0"'
+
+  return value.value === null
+    ? `<cfvo type="${escapedText(value.type)}"${inclusive}/>`
+    : `<cfvo type="${escapedText(value.type)}" val="${escapedText(value.value)}"${inclusive}/>`
+}
+
+/**
+ * A colour as a rule states one.
+ *
+ * The same three shapes a cell's colours come in, because they are the same
+ * colours: a rule that named its red differently from the way a fill names
+ * one would be a rule whose colour changed when the theme did and a fill's
+ * did not.
+ */
+function colorObjectXml(color: StyleColor | null): string {
+  if (color === null) return ''
+
+  switch (color.kind) {
+    case 'rgb':
+      return `<color rgb="${escapedText(color.hex)}"/>`
+    case 'theme':
+      return `<color theme="${String(color.index)}"${
+        color.tint === 0 ? '' : ` tint="${String(color.tint)}"`
+      }/>`
+    case 'indexed':
+      return `<color indexed="${String(color.index)}"/>`
+    default:
+      return '<color auto="1"/>'
+  }
+}
+
+/** The conditional formatting of a sheet, as the elements that hold it. */
+export function writeConditionalFormats(formats: readonly ConditionalFormat[]): string {
+  return formats
+    .filter((format) => format.rules.length > 0)
+    .map(
+      (format) =>
+        `<conditionalFormatting sqref="${format.ranges.map(referenceOf).join(' ')}">` +
+        `${format.rules.map((rule) => ruleXml(rule)).join('')}</conditionalFormatting>`,
+    )
+    .join('')
+}
+
+/**
+ * The rules put back into a worksheet.
+ *
+ * After the merges and before the data validations, which is where the schema
+ * puts them. Every existing block is replaced at once rather than one at a
+ * time: they are one list as far as a sheet is concerned, and rewriting half
+ * of it would leave the other half in whatever order it was read.
+ */
+export function replaceConditionalFormats(xml: string, written: string): string {
+  const pattern = /<conditionalFormatting(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/conditionalFormatting>)/gu
+  const found = [...xml.matchAll(pattern)]
+
+  if (found.length > 0) {
+    const first = found[0]
+    const last = found[found.length - 1]
+    if (first === undefined || last === undefined) return xml
+
+    return xml.slice(0, first.index) + written + xml.slice(last.index + last[0].length)
+  }
+
+  if (written === '') return xml
+
+  const before =
+    /<dataValidations|<hyperlinks|<printOptions|<pageMargins|<pageSetup|<headerFooter|<drawing|<legacyDrawing|<tableParts|<extLst/u.exec(
+      xml,
+    )
+  if (before !== null) return xml.slice(0, before.index) + written + xml.slice(before.index)
+
+  const after =
+    /<\/mergeCells>|<autoFilter(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/autoFilter>)|<\/sheetData>|<sheetData(?:\s[^>]*)?\/>/gu
+  let last: RegExpExecArray | null = null
+  for (const match of xml.matchAll(after)) last = match
+  if (last === null) return xml
+
+  const at = last.index + last[0].length
+  return xml.slice(0, at) + written + xml.slice(at)
+}

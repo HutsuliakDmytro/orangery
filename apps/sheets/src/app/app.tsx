@@ -28,12 +28,16 @@ import { FindPanel } from '../render/find-panel'
 import { FormatDialog } from '../render/format-dialog'
 import { GoalSeekDialog } from '../render/goal-seek-dialog'
 import { NamesDialog } from '../render/names-dialog'
+import { RulesDialog } from '../render/rules-dialog'
 import { PrintView } from '../render/print-view'
 import { LinkDialog } from '../render/link-dialog'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
 import { SortDialog } from '../render/sort-dialog'
 import {
+  addRuleToSelection,
+  removeRuleHere,
+  rulesHere,
   seekGoal,
   setDefinedNames,
   sortTarget,
@@ -197,6 +201,20 @@ function Shell() {
     window.addEventListener('orangery:sort-range', onAsk)
     return () => {
       window.removeEventListener('orangery:sort-range', onAsk)
+    }
+  }, [])
+
+  /** Whether the conditional formatting dialog is open. */
+  const [ruling, setRuling] = useState(false)
+
+  useEffect(() => {
+    const onAsk = () => {
+      setRuling(true)
+    }
+
+    window.addEventListener('orangery:rules', onAsk)
+    return () => {
+      window.removeEventListener('orangery:rules', onAsk)
     }
   }, [])
 
@@ -475,6 +493,21 @@ function Shell() {
 
       {open !== null && sheet !== null && (
         <PrintView open={open} sheet={sheet} setup={sheet.sheet.page} />
+      )}
+
+      {ruling && open !== null && (
+        <RulesDialog
+          rules={rulesHere()}
+          onAdd={(asked) => {
+            addRuleToSelection(asked)
+          }}
+          onRemove={(rule) => {
+            removeRuleHere(rule)
+          }}
+          onClose={() => {
+            setRuling(false)
+          }}
+        />
       )}
 
       {naming !== null && open !== null && (

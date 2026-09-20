@@ -448,6 +448,16 @@ export const viewCommands: readonly Command[] = [
     },
   },
   {
+    id: 'format.rules',
+    label: 'Conditional Formatting…',
+    group: 'format',
+    keywords: ['highlight', 'colour', 'color', 'rule'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      window.dispatchEvent(new Event('orangery:rules'))
+    },
+  },
+  {
     id: 'data.names',
     label: 'Defined Names…',
     group: 'view',

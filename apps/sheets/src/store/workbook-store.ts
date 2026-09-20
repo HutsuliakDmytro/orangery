@@ -36,6 +36,8 @@ import { refusalFor } from '../document/validation'
 import { refusalForLocked } from '../document/protection'
 import { insertChart, insertPicture, refreshCharts } from '../document/charts'
 import { makeTable, toggleTotals } from '../document/tables'
+import { addRule, removeRule, rulesAt } from '../document/rules'
+import type { LookName, RuleKind } from '../document/rules'
 import { writeDefinedNames } from '@orangery/ooxml-spreadsheet'
 import type { DefinedName } from '@orangery/ooxml-spreadsheet'
 import type { NewChartKind } from '@orangery/charts'
@@ -1302,6 +1304,55 @@ export function chartFromSelection(kind: NewChartKind): boolean {
 
   useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
   return true
+}
+
+/** The rules on the cell the cursor is in, for the dialog that lists them. */
+export function rulesHere() {
+  const { open, current, selection } = useWorkbookStore.getState()
+  if (open === null) return []
+
+  const sheet = visibleSheets(open)[current]
+  return sheet === undefined ? [] : rulesAt(sheet, selection.active).map((one) => one.rule)
+}
+
+/**
+ * A rule made over what is selected, and one taken off.
+ *
+ * Outside the history, like the other things that belong to the sheet rather
+ * than to its cells: the dialog's own list is where a rule is taken back,
+ * which is a shorter way round than undo and the one people reach for.
+ */
+export function addRuleToSelection(asked: {
+  kind: RuleKind
+  first: string
+  second: string
+  look: LookName
+}): boolean {
+  const { open, current, selection } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return false
+
+  if (addRule(open, sheet, selection, asked) === null) {
+    useWorkbookStore.setState({ notice: 'That rule needs something to compare against.' })
+    return false
+  }
+
+  useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
+  return true
+}
+
+export function removeRuleHere(rule: Parameters<typeof removeRule>[1]): void {
+  const { open, current } = useWorkbookStore.getState()
+  if (open === null) return
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return
+
+  if (removeRule(sheet, rule)) {
+    useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
+  }
 }
 
 /**

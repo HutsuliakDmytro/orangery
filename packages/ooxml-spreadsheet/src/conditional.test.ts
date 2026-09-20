@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { parseXml, tagName } from '@orangery/ooxml-core'
-import { rangeCovers, readConditionalFormats } from './conditional'
+import {
+  rangeCovers,
+  readConditionalFormats,
+  replaceConditionalFormats,
+  writeConditionalFormats,
+} from './conditional'
 
 /**
  * The rules, as the file states them.
@@ -168,5 +173,79 @@ describe('whether a range covers a cell', () => {
   it('reads a range written backwards the same way', () => {
     const backwards = { sheet: null, from: { row: 3, column: 4 }, to: { row: 1, column: 1 } }
     expect(rangeCovers(backwards, { row: 2, column: 2 })).toBe(true)
+  })
+})
+
+describe('writing the rules back', () => {
+  const sheetWith = (inside: string) =>
+    `<?xml version="1.0"?><worksheet><sheetData/>${inside}</worksheet>`
+
+  const read = (inside: string) =>
+    readConditionalFormats(
+      parseXml(sheetWith(inside)).find((node) => tagName(node) === 'worksheet') ?? {},
+    )
+
+  it('comes back the same through a round trip', () => {
+    const before = read(
+      '<conditionalFormatting sqref="B2:B9">' +
+        '<cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan">' +
+        '<formula>100</formula></cfRule></conditionalFormatting>',
+    )
+
+    expect(read(writeConditionalFormats(before))).toEqual(before)
+  })
+
+  it('keeps a colour scale, stops and colours both', () => {
+    const before = read(
+      '<conditionalFormatting sqref="A1:A9"><cfRule type="colorScale" priority="2"><colorScale>' +
+        '<cfvo type="min"/><cfvo type="max"/>' +
+        '<color rgb="FFF8696B"/><color theme="4" tint="0.4"/>' +
+        '</colorScale></cfRule></conditionalFormatting>',
+    )
+
+    expect(read(writeConditionalFormats(before))).toEqual(before)
+  })
+
+  it('keeps a rule of a kind nothing here understands', () => {
+    // Losing it would be losing somebody's colours.
+    const before = read(
+      '<conditionalFormatting sqref="A1"><cfRule type="expression" dxfId="3" priority="1">' +
+        '<formula>MOD(ROW(),2)=0</formula></cfRule></conditionalFormatting>',
+    )
+
+    const again = read(writeConditionalFormats(before))
+    expect(again[0]?.rules[0]).toMatchObject({ type: 'expression', dxfId: 3 })
+    expect(again[0]?.rules[0]?.formulas).toEqual(['MOD(ROW(),2)=0'])
+  })
+
+  it('writes nothing for a sheet with no rules', () => {
+    expect(writeConditionalFormats([])).toBe('')
+  })
+
+  it('puts them where the schema says they go', () => {
+    // After the merges and before the validations: an element out of order
+    // is a file Excel offers to repair.
+    const sheet = sheetWith('<mergeCells count="0"/><dataValidations count="0"/>')
+    const written = replaceConditionalFormats(sheet, '<conditionalFormatting/>')
+
+    expect(written.indexOf('<conditionalFormatting/>')).toBeGreaterThan(
+      written.indexOf('<mergeCells'),
+    )
+    expect(written.indexOf('<conditionalFormatting/>')).toBeLessThan(
+      written.indexOf('<dataValidations'),
+    )
+  })
+
+  it('replaces every block a sheet had, not only the first', () => {
+    // They are one list as far as a sheet is concerned.
+    const sheet = sheetWith(
+      '<conditionalFormatting sqref="A1"><cfRule type="cellIs" priority="1"/></conditionalFormatting>' +
+        '<conditionalFormatting sqref="B1"><cfRule type="cellIs" priority="2"/></conditionalFormatting>',
+    )
+
+    const written = replaceConditionalFormats(sheet, '<conditionalFormatting sqref="C1"/>')
+    expect(written).toContain('sqref="C1"')
+    expect(written).not.toContain('sqref="A1"')
+    expect(written).not.toContain('sqref="B1"')
   })
 })

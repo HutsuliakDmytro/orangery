@@ -1,6 +1,7 @@
 import { formatCodeOf, resolveStyle } from './styles'
 import type {
   Alignment,
+  DifferentialFormat,
   Border,
   BorderEdge,
   CellFormat,
@@ -35,6 +36,16 @@ export interface StyleChanges {
   fonts: Font[]
   fills: Fill[]
   borders: Border[]
+  /**
+   * Looks appended to `dxfs`, which is where conditional formatting keeps
+   * what it puts on a cell.
+   *
+   * A different list from the rest, and a different kind of thing: a `dxf`
+   * states only what it changes — red text, a yellow fill — and is laid over
+   * whatever the cell already looks like. That is why a rule can colour a
+   * column without touching the formats of the cells in it.
+   */
+  differentials: DifferentialFormat[]
 }
 
 export const noStyleChanges = (): StyleChanges => ({
@@ -43,6 +54,7 @@ export const noStyleChanges = (): StyleChanges => ({
   fonts: [],
   fills: [],
   borders: [],
+  differentials: [],
 })
 
 /** Where custom format ids start; everything below is Excel's own. */
@@ -285,7 +297,8 @@ export function patchStyles(xml: string, changes: StyleChanges): string {
     changes.cellFormats.length === 0 &&
     changes.fonts.length === 0 &&
     changes.fills.length === 0 &&
-    changes.borders.length === 0
+    changes.borders.length === 0 &&
+    changes.differentials.length === 0
   if (nothing) return xml
 
   let patched = xml
@@ -346,6 +359,15 @@ export function patchStyles(xml: string, changes: StyleChanges): string {
     'cellXfs',
     'xf',
     changes.cellFormats.map((format) => cellFormatXml(format)),
+  )
+
+  // After the cell formats, which is where the schema puts the list a rule
+  // points into.
+  patched = appended(
+    patched,
+    'dxfs',
+    'dxf',
+    changes.differentials.map((one) => differentialXml(one)),
   )
 
   return patched
@@ -533,4 +555,55 @@ export function styleWith(
   }
 
   return cellFormatIndex(styles, changes, wanted)
+}
+
+/**
+ * A `dxf` as the file states one.
+ *
+ * Only what it changes, in schema order. A `dxf` with everything in it would
+ * be a cell format in the wrong list — the point of this one is that it is
+ * laid over a cell rather than replacing what the cell says about itself.
+ */
+function differentialXml(look: DifferentialFormat): string {
+  const font =
+    look.font === null
+      ? ''
+      : '<font>' +
+        (look.font.bold === true ? '<b/>' : '') +
+        (look.font.italic === true ? '<i/>' : '') +
+        (look.font.strike === true ? '<strike/>' : '') +
+        (look.font.underline == null ? '' : `<u val="${escaped(look.font.underline)}"/>`) +
+        (look.font.color == null ? '' : colorXml('color', look.font.color)) +
+        '</font>'
+
+  const format =
+    look.numberFormat === null
+      ? ''
+      : `<numFmt numFmtId="0" formatCode="${escaped(look.numberFormat)}"/>`
+
+  return `<dxf>${font}${look.fill === null ? '' : fillXml(look.fill)}${
+    look.border === null ? '' : borderXml(look.border)
+  }${format}</dxf>`
+}
+
+/**
+ * The id of a look, adding it to the list if it is not there.
+ *
+ * The same find-or-add the cell formats use, for the same reason: a rule
+ * coloured the same way as another rule should point at the same `dxf`
+ * rather than growing the list by one every time somebody makes a rule.
+ */
+export function differentialWith(
+  styles: Styles,
+  changes: StyleChanges,
+  look: DifferentialFormat,
+): number {
+  const all = [...styles.differential, ...changes.differentials]
+  const written = differentialXml(look)
+
+  const found = all.findIndex((one) => differentialXml(one) === written)
+  if (found !== -1) return found
+
+  changes.differentials.push(look)
+  return all.length
 }

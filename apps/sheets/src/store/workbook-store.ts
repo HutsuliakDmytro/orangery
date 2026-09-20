@@ -34,6 +34,8 @@ import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
 import { refusalFor } from '../document/validation'
 import { refusalForLocked } from '../document/protection'
+import { insertChart } from '../document/charts'
+import type { NewChartKind } from '@orangery/charts'
 import {
   applyReport,
   closeEngine,
@@ -1248,6 +1250,39 @@ useWorkbookStore.subscribe((state, previous) => {
 
   void followUp(state.session, state.open, step.changes, step.direction)
 })
+
+/**
+ * A chart made from what is selected.
+ *
+ * Not something the history can take back, as adding a sheet is not: a step
+ * able to undo it would have to hold the chart part, the drawing part and the
+ * relationships between them, where every other step holds a few cells.
+ * Deleting the chart is what takes its place, and a chart is a visible thing
+ * to delete — unlike a sheet, which is why that one asks first.
+ *
+ * Hands back whether anything was made, so that whoever asked can say why not.
+ */
+export function chartFromSelection(kind: NewChartKind): boolean {
+  const { open, current, selection } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return false
+
+  const last = selection.ranges[selection.ranges.length - 1]
+  const range = last ?? { anchor: selection.active, focus: selection.active }
+
+  const added = insertChart(open, sheet, range, kind)
+  if (added === null) {
+    useWorkbookStore.setState({
+      notice: 'A chart needs a block of cells: names down one column and numbers beside them.',
+    })
+    return false
+  }
+
+  useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
+  return true
+}
 
 /**
  * The value one cell needs for another to come out at a number.

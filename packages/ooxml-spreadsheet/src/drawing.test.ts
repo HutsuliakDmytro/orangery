@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { drawingRelationshipId, readSheetDrawings } from './drawing'
+import {
+  drawingRelationshipId,
+  readSheetDrawings,
+  replaceDrawingReference,
+  writeSheetDrawings,
+} from './drawing'
+import type { SheetDrawing } from './drawing'
 
 /**
  * The things on a sheet, as the drawing part states them.
@@ -134,5 +140,70 @@ describe('the drawing part a sheet points at', () => {
 
   it('is nothing for a sheet with nothing on it', () => {
     expect(drawingRelationshipId('<worksheet xmlns="x"><sheetData/></worksheet>')).toBeNull()
+  })
+})
+
+describe('writing the drawings of a sheet back', () => {
+  const chart = (relationshipId: string): SheetDrawing => ({
+    anchor: {
+      kind: 'two',
+      from: { column: 1, columnOffset: 0, row: 2, rowOffset: 0 },
+      to: { column: 8, columnOffset: 0, row: 17, rowOffset: 0 },
+    },
+    content: { kind: 'chart', relationshipId },
+    name: 'Chart 1',
+    editAs: 'oneCell',
+  })
+
+  it('comes back the same through a round trip', () => {
+    const before = [chart('rId1')]
+    expect(readSheetDrawings(writeSheetDrawings(before))).toEqual(before)
+  })
+
+  it('writes a picture as a picture and a chart as a frame', () => {
+    const picture: SheetDrawing = {
+      ...chart('rId2'),
+      content: { kind: 'picture', relationshipId: 'rId2' },
+    }
+
+    expect(writeSheetDrawings([picture])).toContain('<xdr:pic>')
+    expect(writeSheetDrawings([chart('rId1')])).toContain('<xdr:graphicFrame')
+  })
+
+  it('keeps the three ways of anchoring apart', () => {
+    const one: SheetDrawing = {
+      ...chart('rId1'),
+      anchor: {
+        kind: 'one',
+        from: { column: 0, columnOffset: 0, row: 0, rowOffset: 0 },
+        width: 1000,
+        height: 500,
+      },
+    }
+    const fixed: SheetDrawing = {
+      ...chart('rId1'),
+      anchor: { kind: 'absolute', x: 100, y: 200, width: 1000, height: 500 },
+    }
+
+    expect(readSheetDrawings(writeSheetDrawings([one]))[0]?.anchor).toEqual(one.anchor)
+    expect(readSheetDrawings(writeSheetDrawings([fixed]))[0]?.anchor).toEqual(fixed.anchor)
+  })
+
+  it('tells a worksheet which drawing part is its own', () => {
+    const sheet = '<?xml version="1.0"?><worksheet><sheetData/></worksheet>'
+    expect(replaceDrawingReference(sheet, 'rId3')).toContain('<drawing r:id="rId3"/>')
+
+    // Before the extension list, which is where the schema puts it.
+    const extended = '<?xml version="1.0"?><worksheet><sheetData/><extLst/></worksheet>'
+    const written = replaceDrawingReference(extended, 'rId3')
+    expect(written.indexOf('<drawing')).toBeLessThan(written.indexOf('<extLst'))
+  })
+
+  it('replaces the reference a sheet already had rather than adding another', () => {
+    const sheet = '<?xml version="1.0"?><worksheet><sheetData/><drawing r:id="rId9"/></worksheet>'
+    const written = replaceDrawingReference(sheet, 'rId3')
+
+    expect(written).toContain('rId3')
+    expect(written).not.toContain('rId9')
   })
 })

@@ -33,7 +33,7 @@ export type { TypedNumber } from './typed-number'
 export { applyChartEdits } from './chart-edit'
 export { ChartProperties } from './chart-properties'
 export { chartTitleFor, defaultChartData, newChartPart, newChartWorkbook } from './chart-template'
-export type { ChartData, NewChartKind } from './chart-template'
+export type { ChartData, NewChartKind, SheetSource } from './chart-template'
 export type { ChartPropertiesProps } from './chart-properties'
 export type { ChartEdit, LabelFlags } from './chart-edit'
 export {

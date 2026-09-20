@@ -24,6 +24,27 @@ export interface ChartData {
   series: readonly { name: string; values: readonly number[] }[]
 }
 
+/**
+ * Where a chart's numbers live, when they live on a sheet.
+ *
+ * A chart in a document or a slide carries its own little workbook beside it,
+ * because there is no sheet to point at. A chart on a sheet points at the
+ * sheet — and that is the whole difference between the two: the same part,
+ * with `c:f` naming real cells and no `c:externalData` at the end of it.
+ *
+ * The caches are written all the same. A reader that has not recalculated
+ * shows them, which is what makes a chart appear the moment a file opens.
+ */
+export interface SheetSource {
+  /** `'Sheet1'!$A$2:$A$9` — where the names along the bottom are. */
+  categories: string
+  series: readonly {
+    /** Where the series takes its name from; a cell, usually a heading. */
+    name: string
+    values: string
+  }[]
+}
+
 const COLUMNS: ChartData = {
   categories: ['Category 1', 'Category 2', 'Category 3', 'Category 4'],
   series: [
@@ -83,19 +104,25 @@ const reference = (
 ): string =>
   `<c:${element}><c:${kind}Ref><c:f>${formula}</c:f>${cache(kind, values)}</c:${kind}Ref></c:${element}>`
 
-function seriesXml(data: ChartData, index: number, kind: NewChartKind): string {
+function seriesXml(
+  data: ChartData,
+  index: number,
+  kind: NewChartKind,
+  source: SheetSource | null,
+): string {
   const one = data.series[index]
   if (one === undefined) return ''
 
   const at = String(index)
   const letter = column(index)
   const rows = data.categories.length + 1
+  const from = source?.series[index]
 
-  const name = reference('tx', 'str', `Sheet1!$${letter}$1`, [one.name])
+  const name = reference('tx', 'str', from?.name ?? `Sheet1!$${letter}$1`, [one.name])
   const values = reference(
     kind === 'scatter' ? 'yVal' : 'val',
     'num',
-    `Sheet1!$${letter}$2:$${letter}$${String(rows)}`,
+    from?.values ?? `Sheet1!$${letter}$2:$${letter}$${String(rows)}`,
     one.values,
   )
 
@@ -104,7 +131,7 @@ function seriesXml(data: ChartData, index: number, kind: NewChartKind): string {
   const categories = reference(
     kind === 'scatter' ? 'xVal' : 'cat',
     kind === 'scatter' ? 'num' : 'str',
-    `Sheet1!$A$2:$A$${String(rows)}`,
+    source?.categories ?? `Sheet1!$A$2:$A$${String(rows)}`,
     data.categories,
   )
 
@@ -130,8 +157,8 @@ const SCATTER_AXES =
   `<c:valAx><c:axId val="${VALUE_AXIS}"/><c:scaling><c:orientation val="minMax"/></c:scaling>` +
   `<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="${CATEGORY_AXIS}"/></c:valAx>`
 
-function groupXml(kind: NewChartKind, data: ChartData): string {
-  const series = data.series.map((_, index) => seriesXml(data, index, kind)).join('')
+function groupXml(kind: NewChartKind, data: ChartData, source: SheetSource | null): string {
+  const series = data.series.map((_, index) => seriesXml(data, index, kind, source)).join('')
   const axes = `<c:axId val="${CATEGORY_AXIS}"/><c:axId val="${VALUE_AXIS}"/>`
 
   switch (kind) {
@@ -164,17 +191,27 @@ function groupXml(kind: NewChartKind, data: ChartData): string {
  * Data" follows. A chart written without it opens, draws from its cache, and
  * offers no way back to the numbers.
  */
-export function newChartPart(kind: NewChartKind, data: ChartData = defaultChartData(kind)): string {
+export function newChartPart(
+  kind: NewChartKind,
+  data: ChartData = defaultChartData(kind),
+  source: SheetSource | null = null,
+): string {
   const round = kind === 'pie'
   const axes = round ? '' : kind === 'scatter' ? SCATTER_AXES : AXES
+
+  // A chart pointing at a sheet has no workbook of its own to point at, and
+  // `c:externalData` naming a part that is not there is a file Excel offers
+  // to repair.
+  const embedded =
+    source === null ? '<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData>' : ''
 
   return (
     `${DECLARATION}<c:chartSpace ${NAMESPACES}><c:date1904 val="0"/><c:roundedCorners val="0"/>` +
     '<c:chart><c:plotArea><c:layout/>' +
-    `${groupXml(kind, data)}${axes}</c:plotArea>` +
+    `${groupXml(kind, data, source)}${axes}</c:plotArea>` +
     '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' +
     '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>' +
-    '<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>'
+    `${embedded}</c:chartSpace>`
   )
 }
 

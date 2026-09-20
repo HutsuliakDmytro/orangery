@@ -9,7 +9,7 @@ import {
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
 import { exportOds, exportSheet } from '../document/file'
-import { recalculateWorkbook, useWorkbookStore } from '../store/workbook-store'
+import { chartFromSelection, recalculateWorkbook, useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
 /**
@@ -459,6 +459,32 @@ export const viewCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * A chart from what is selected.
+ *
+ * Five commands rather than one with a menu, because the palette is where
+ * people look for them and a palette entry called "Chart…" that opens another
+ * list is two searches for one thing.
+ */
+export const chartCommands: readonly Command[] = (
+  [
+    ['bar', 'Column Chart'],
+    ['line', 'Line Chart'],
+    ['pie', 'Pie Chart'],
+    ['area', 'Area Chart'],
+    ['scatter', 'Scatter Chart'],
+  ] as const
+).map(([kind, label]) => ({
+  id: `insert.chart.${kind}`,
+  label,
+  group: 'insert' as const,
+  keywords: ['chart', 'graph', 'plot', 'data'],
+  isEnabled: hasWorkbook,
+  run: () => {
+    chartFromSelection(kind)
+  },
+}))
+
 export const sheetCommands: readonly Command[] = [
   {
     id: 'sheet.next',
@@ -494,6 +520,7 @@ export const sheetCommands: readonly Command[] = [
  */
 export function registerBuiltinCommands(): void {
   resetRegistry()
+  registerAll(chartCommands)
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(dataCommands)

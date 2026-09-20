@@ -218,3 +218,130 @@ export function drawingRelationshipId(sheetXml: string): string | null {
   const drawing = findChild(root, 'drawing')
   return drawing === undefined ? null : (attribute(drawing, 'r:id') ?? null)
 }
+
+const escaped = (text: string): string =>
+  text
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+
+const point = (tag: 'from' | 'to', at: AnchorPoint): string =>
+  `<xdr:${tag}><xdr:col>${String(at.column)}</xdr:col>` +
+  `<xdr:colOff>${String(Math.round(at.columnOffset))}</xdr:colOff>` +
+  `<xdr:row>${String(at.row)}</xdr:row>` +
+  `<xdr:rowOff>${String(Math.round(at.rowOffset))}</xdr:rowOff></xdr:${tag}>`
+
+const extent = (width: number, height: number): string =>
+  `<xdr:ext cx="${String(Math.round(width))}" cy="${String(Math.round(height))}"/>`
+
+/**
+ * What goes inside an anchor: the thing being anchored.
+ *
+ * A chart is a `graphicFrame` naming the chart part through a relationship;
+ * a picture is a `pic` naming an image the same way. Anything this does not
+ * model is written back as the empty frame it was read as — which never
+ * happens, because a drawing that was read as `other` is written from the
+ * bytes it arrived in rather than from here.
+ */
+function contentXml(drawing: SheetDrawing, at: number): string {
+  const id = String(at + 2)
+  const name = escaped(drawing.name === '' ? `Drawing ${id}` : drawing.name)
+
+  if (drawing.content.kind === 'chart') {
+    return (
+      `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>` +
+      `<xdr:cNvPr id="${id}" name="${name}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>` +
+      '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">' +
+      `<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ` +
+      `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
+      `r:id="${escaped(drawing.content.relationshipId)}"/>` +
+      '</a:graphicData></a:graphic></xdr:graphicFrame>'
+    )
+  }
+
+  if (drawing.content.kind === 'picture') {
+    return (
+      '<xdr:pic><xdr:nvPicPr>' +
+      `<xdr:cNvPr id="${id}" name="${name}"/><xdr:cNvPicPr/></xdr:nvPicPr>` +
+      `<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
+      `r:embed="${escaped(drawing.content.relationshipId)}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+      '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>'
+    )
+  }
+
+  // A shape or a group this does not model. It is written as an empty frame
+  // so that the anchors around it keep their places rather than shuffling up.
+  return (
+    `<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="${id}" name="${name}"/>` +
+    '<xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/></xdr:sp>'
+  )
+}
+
+/**
+ * The drawings of a sheet as the part that holds them.
+ *
+ * Written rather than patched, unlike everything else in a worksheet: a
+ * drawing part is ours from the moment we make one, and a sheet that had none
+ * has no bytes to keep. A sheet that *did* have one keeps its own part
+ * untouched unless a drawing was added — the caller decides that, because
+ * only the caller knows whether anything moved.
+ */
+export function writeSheetDrawings(drawings: readonly SheetDrawing[]): string {
+  const anchors = drawings
+    .map((drawing, at) => {
+      const inside = contentXml(drawing, at) + '<xdr:clientData/>'
+      const anchor = drawing.anchor
+
+      if (anchor.kind === 'two') {
+        const editAs = drawing.editAs === null ? '' : ` editAs="${escaped(drawing.editAs)}"`
+        return (
+          `<xdr:twoCellAnchor${editAs}>${point('from', anchor.from)}${point('to', anchor.to)}` +
+          `${inside}</xdr:twoCellAnchor>`
+        )
+      }
+
+      if (anchor.kind === 'one') {
+        return (
+          `<xdr:oneCellAnchor>${point('from', anchor.from)}` +
+          `${extent(anchor.width, anchor.height)}${inside}</xdr:oneCellAnchor>`
+        )
+      }
+
+      return (
+        `<xdr:absoluteAnchor><xdr:pos x="${String(Math.round(anchor.x))}" ` +
+        `y="${String(Math.round(anchor.y))}"/>${extent(anchor.width, anchor.height)}` +
+        `${inside}</xdr:absoluteAnchor>`
+      )
+    })
+    .join('')
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
+    `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${anchors}</xdr:wsDr>`
+  )
+}
+
+/**
+ * A worksheet told which drawing part belongs to it.
+ *
+ * `<drawing>` goes last but one, after everything else the schema allows and
+ * before the extension list — an element out of order is a file Excel offers
+ * to repair.
+ */
+export function replaceDrawingReference(xml: string, relationshipId: string): string {
+  const written = `<drawing r:id="${escaped(relationshipId)}"/>`
+  const existing = /<drawing\s[^>]*\/>/u.exec(xml)
+
+  if (existing !== null) {
+    return xml.slice(0, existing.index) + written + xml.slice(existing.index + existing[0].length)
+  }
+
+  const before = /<legacyDrawing|<tableParts|<extLst/u.exec(xml)
+  if (before !== null) return xml.slice(0, before.index) + written + xml.slice(before.index)
+
+  const at = xml.lastIndexOf('</worksheet>')
+  return at === -1 ? xml : xml.slice(0, at) + written + xml.slice(at)
+}

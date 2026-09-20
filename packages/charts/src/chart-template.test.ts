@@ -133,3 +133,47 @@ describe('a new chart as something to edit', () => {
     expect(readChart(written ?? '')?.plots[0]?.kind).toBe('pie')
   })
 })
+
+describe('a chart that points at a sheet', () => {
+  const source = {
+    categories: "'Budget'!$A$2:$A$4",
+    series: [{ name: "'Budget'!$B$1", values: "'Budget'!$B$2:$B$4" }],
+  }
+
+  const data = {
+    categories: ['Rent', 'Food', 'Travel'],
+    series: [{ name: 'Amount', values: [1200, 300, 90] }],
+  }
+
+  it('names the cells it came from rather than a workbook of its own', () => {
+    const part = newChartPart('bar', data, source)
+
+    expect(part).toContain("<c:f>'Budget'!$B$2:$B$4</c:f>")
+    expect(part).toContain("<c:f>'Budget'!$A$2:$A$4</c:f>")
+  })
+
+  it('carries no embedded workbook, because there is none to carry', () => {
+    // `c:externalData` naming a part that is not there is a file Excel
+    // offers to repair.
+    expect(newChartPart('bar', data, source)).not.toContain('externalData')
+    expect(newChartPart('bar', data)).toContain('externalData')
+  })
+
+  it('writes the cached values all the same', () => {
+    // A reader that has not recalculated shows them, which is what makes a
+    // chart appear the moment a file opens.
+    const part = newChartPart('bar', data, source)
+
+    expect(part).toContain('<c:v>1200</c:v>')
+    expect(part).toContain('<c:v>Rent</c:v>')
+  })
+
+  it('is read back as the chart it describes', () => {
+    const chart = readChart(newChartPart('bar', data, source))
+
+    expect(chart.plots[0]?.kind).toBe('bar')
+    expect(chart.plots[0]?.series[0]?.valuesRef).toBe("'Budget'!$B$2:$B$4")
+    expect(chart.plots[0]?.series[0]?.values).toEqual([1200, 300, 90])
+    expect(chart.plots[0]?.series[0]?.name).toBe('Amount')
+  })
+})

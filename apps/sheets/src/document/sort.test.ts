@@ -6,7 +6,7 @@ import { singleCell } from '@orangery/grid'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 import { applyEdit } from './edit'
-import { looksLikeHeader, sortRows } from './sort'
+import { CUSTOM_LISTS, columnNamesIn, looksLikeHeader, sortRows, tableToSort } from './sort'
 import { emptyHistory, recorded, undo } from './history'
 
 /**
@@ -186,5 +186,120 @@ describe('taking a sort back', () => {
 
     undo(open, history)
     expect([at(10, 0), at(11, 0), at(12, 0)]).toEqual(before)
+  })
+})
+
+describe('sorting by more than one column', () => {
+  it('uses the second key only where the first says nothing', () => {
+    const where = table([
+      ['north', 'b'],
+      ['south', 'a'],
+      ['north', 'a'],
+    ])
+
+    sortRows(
+      open,
+      sheet,
+      where,
+      [
+        { column: 0, ascending: true },
+        { column: 1, ascending: true },
+      ],
+      false,
+    )
+
+    expect([at(10, 0)?.value, at(10, 1)?.value]).toEqual(['north', 'a'])
+    expect([at(11, 0)?.value, at(11, 1)?.value]).toEqual(['north', 'b'])
+    expect(at(12, 0)?.value).toBe('south')
+  })
+
+  it('lets the two keys run opposite ways', () => {
+    const where = table([
+      ['a', '1'],
+      ['a', '2'],
+    ])
+
+    sortRows(
+      open,
+      sheet,
+      where,
+      [
+        { column: 0, ascending: true },
+        { column: 1, ascending: false },
+      ],
+      false,
+    )
+
+    expect(at(10, 1)?.value).toBe('2')
+  })
+})
+
+describe('an order of somebody’s own', () => {
+  const MONTHS = CUSTOM_LISTS[0]?.values ?? []
+
+  it('puts January before February, which the alphabet does not', () => {
+    const where = table([['February'], ['January'], ['March']])
+    sortRows(open, sheet, where, [{ column: 0, ascending: true, order: MONTHS }], false)
+
+    expect([at(10, 0)?.value, at(11, 0)?.value, at(12, 0)?.value]).toEqual([
+      'January',
+      'February',
+      'March',
+    ])
+  })
+
+  it('reads a short month as the month', () => {
+    // Real columns hold `Jan` and `January` in the same place.
+    const where = table([['Mar'], ['Jan'], ['Feb']])
+    sortRows(open, sheet, where, [{ column: 0, ascending: true, order: MONTHS }], false)
+
+    expect([at(10, 0)?.value, at(11, 0)?.value]).toEqual(['Jan', 'Feb'])
+  })
+
+  it('leaves what the list does not name at the end, whichever way it runs', () => {
+    // A column of months with a `Total` in it keeps the total where somebody
+    // put it.
+    const where = table([['Total'], ['February'], ['January']])
+    sortRows(open, sheet, where, [{ column: 0, ascending: false, order: MONTHS }], false)
+
+    expect(at(12, 0)?.value).toBe('Total')
+    expect(at(10, 0)?.value).toBe('February')
+  })
+})
+
+describe('what the dialog is asking about', () => {
+  it('is the table the cursor is in, not the one cell it is on', () => {
+    const found = tableToSort(
+      sheet,
+      { top: 1, bottom: 1, left: 1, right: 1 },
+      { row: 1, column: 1 },
+    )
+
+    expect(found.from).toEqual({ row: 0, column: 0 })
+  })
+
+  it('is exactly what was chosen where somebody chose a rectangle', () => {
+    const found = tableToSort(
+      sheet,
+      { top: 1, bottom: 2, left: 0, right: 1 },
+      { row: 1, column: 0 },
+    )
+
+    expect(found.to).toEqual({ row: 2, column: 1 })
+  })
+
+  it('names the columns by their headers where there are headers', () => {
+    const names = columnNamesIn(open, sheet, range('A1:C4'), true)
+    expect(names[0]).toBe('Month')
+  })
+
+  it('names them by their letters where there are none', () => {
+    const names = columnNamesIn(open, sheet, range('A1:C4'), false)
+    expect(names).toEqual(['Column A', 'Column B', 'Column C'])
+  })
+
+  it('falls back to the letter for a header with nothing in it', () => {
+    const names = columnNamesIn(open, sheet, range('A1:C4'), true)
+    expect(names[2]).toBe('Column C')
   })
 })

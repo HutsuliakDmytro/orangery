@@ -1,4 +1,4 @@
-import { putCell, shiftFormula } from '@orangery/ooxml-spreadsheet'
+import { indexToColumn, putCell, regionAround, shiftFormula } from '@orangery/ooxml-spreadsheet'
 import type { Cell, CellRange } from '@orangery/ooxml-spreadsheet'
 import { cellChanges } from './history'
 import type { Change } from './history'
@@ -26,7 +26,41 @@ import { shownText } from './shown'
 export interface SortKey {
   column: number
   ascending: boolean
+  /**
+   * An order of somebody's own, for values that have one.
+   *
+   * January before February is not something the alphabet knows, and neither
+   * is small before large. A list says what the order is; anything not on it
+   * follows the things that are, in the ordinary order, because a list nobody
+   * thought to extend should not silently reorder the rest.
+   */
+  order?: readonly string[]
 }
+
+/** The orders a spreadsheet offers before anybody writes their own. */
+export const CUSTOM_LISTS: readonly { label: string; values: readonly string[] }[] = [
+  {
+    label: 'January, February, March…',
+    values: [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ],
+  },
+  {
+    label: 'Monday, Tuesday, Wednesday…',
+    values: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+  },
+]
 
 /**
  * Where a value sits in a spreadsheet's order.
@@ -42,6 +76,22 @@ interface Sortable {
   rank: number
   number: number
   text: string
+}
+
+/**
+ * Where a value sits in a list of somebody's own, or nowhere.
+ *
+ * Matched on the front of the word so that `Jan` and `January` are the same
+ * month, which is how the two are written in the same column of real files.
+ */
+function placeIn(order: readonly string[], text: string): number {
+  const looked = text.trim().toLocaleUpperCase()
+  if (looked === '') return -1
+
+  return order.findIndex((one) => {
+    const name = one.toLocaleUpperCase()
+    return name.startsWith(looked) || looked.startsWith(name)
+  })
 }
 
 function sortable(open: OpenWorkbook, cell: Cell | null): Sortable {
@@ -63,20 +113,36 @@ function sortable(open: OpenWorkbook, cell: Cell | null): Sortable {
   return { rank: RANK.text, number: 0, text: shownText(open, cell).toLocaleUpperCase() }
 }
 
-function compare(a: Sortable, b: Sortable, ascending: boolean): number {
+function compare(
+  a: Sortable,
+  b: Sortable,
+  ascending: boolean,
+  order: readonly string[] | undefined,
+): number {
   // Blanks sink whichever way the rest is going.
   if (a.rank === RANK.blank || b.rank === RANK.blank) {
     return a.rank === b.rank ? 0 : a.rank === RANK.blank ? 1 : -1
   }
 
-  const order =
+  if (order !== undefined) {
+    const first = placeIn(order, a.text)
+    const second = placeIn(order, b.text)
+
+    // Anything the list does not name follows everything it does, whichever
+    // way the sort runs: a column of months with a `Total` in it keeps the
+    // total at the end, where somebody put it.
+    if (first !== second && (first < 0 || second < 0)) return first < 0 ? 1 : -1
+    if (first >= 0 && first !== second) return ascending ? first - second : second - first
+  }
+
+  const decided =
     a.rank !== b.rank
       ? a.rank - b.rank
       : a.rank === RANK.number || a.rank === RANK.boolean
         ? a.number - b.number
         : a.text.localeCompare(b.text)
 
-  return ascending ? order : -order
+  return ascending ? decided : -decided
 }
 
 /**
@@ -116,6 +182,7 @@ export function sortRows(
         sortable(open, a.cells.get(key.column) ?? null),
         sortable(open, b.cells.get(key.column) ?? null),
         key.ascending,
+        key.order,
       )
       if (order !== 0) return order
     }
@@ -202,4 +269,53 @@ export function looksLikeHeader(open: OpenWorkbook, sheet: OpenSheet, range: Cel
   }
 
   return false
+}
+
+/**
+ * The table a sort would work on.
+ *
+ * One cell means the table it sits in, which is what Excel does and what a
+ * person means by "sort this": the alternative is sorting one column out of
+ * step with the rows beside it. A rectangle chosen deliberately is taken as
+ * chosen deliberately.
+ */
+export function tableToSort(
+  sheet: OpenSheet,
+  selection: { top: number; bottom: number; left: number; right: number },
+  active: { row: number; column: number },
+): CellRange {
+  if (selection.top === selection.bottom && selection.left === selection.right) {
+    return regionAround(sheet.cells, active)
+  }
+
+  return {
+    sheet: null,
+    from: { row: selection.top, column: selection.left },
+    to: { row: selection.bottom, column: selection.right },
+  }
+}
+
+/**
+ * What to call each column of a table, for somebody choosing one.
+ *
+ * The header where there is one, because that is the name people know the
+ * column by; the letter otherwise, because the letter is the other name and
+ * the only one a headerless table has.
+ */
+export function columnNamesIn(
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+  range: CellRange,
+  header: boolean,
+): string[] {
+  const top = Math.min(range.from.row, range.to.row)
+  const left = Math.min(range.from.column, range.to.column)
+  const right = Math.max(range.from.column, range.to.column)
+
+  return Array.from({ length: right - left + 1 }, (_, offset) => {
+    const column = left + offset
+    const named = header ? shownText(open, sheet.cells.rows.get(top)?.get(column) ?? null) : ''
+
+    return named === '' ? `Column ${indexToColumn(column)}` : named
+  })
 }

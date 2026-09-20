@@ -15,7 +15,8 @@ import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
 import { SheetView } from '../render/sheet-view'
-import { useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
+import { SortDialog } from '../render/sort-dialog'
+import { sortTarget, useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
 import { useCommandSource } from './command-source'
 import { useExternalOpen } from './use-external-open'
 import { useAutosave } from './use-autosave'
@@ -73,6 +74,24 @@ function Shell() {
     void recoverable().then(setLost, () => {
       // Nothing to offer, which is the ordinary case and not a failure.
     })
+  }, [])
+
+  /** The table a sort dialog is open over, with its columns named. */
+  const [sorting, setSorting] = useState<{
+    columns: string[]
+    header: boolean
+    left: number
+  } | null>(null)
+
+  useEffect(() => {
+    const onAsk = () => {
+      setSorting(sortTarget())
+    }
+
+    window.addEventListener('orangery:sort-range', onAsk)
+    return () => {
+      window.removeEventListener('orangery:sort-range', onAsk)
+    }
   }, [])
 
   /** The text file somebody chose, while they answer what it is. */
@@ -247,6 +266,27 @@ function Shell() {
           }}
           onCancel={() => {
             setImporting(null)
+          }}
+        />
+      )}
+
+      {sorting !== null && (
+        <SortDialog
+          columns={sorting.columns}
+          header={sorting.header}
+          onSort={(keys, header) => {
+            const where = sorting
+            setSorting(null)
+            // The dialog counts columns from the left of the table and the
+            // sheet counts from the left of the sheet; a table that does not
+            // start at A is where the difference shows.
+            useWorkbookStore.getState().sortWith(
+              keys.map((key) => ({ ...key, column: where.left + key.column })),
+              header,
+            )
+          }}
+          onCancel={() => {
+            setSorting(null)
           }}
         />
       )}

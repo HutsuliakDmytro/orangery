@@ -212,6 +212,18 @@ export const dataCommands: readonly Command[] = [
     },
   },
   {
+    id: 'data.sortRange',
+    label: 'Sort Range…',
+    group: 'edit',
+    keywords: ['order', 'custom', 'columns', 'levels'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      // The dialog belongs to the window rather than to the command, which
+      // knows nothing about what is on screen; the window is listening.
+      window.dispatchEvent(new Event('orangery:sort-range'))
+    },
+  },
+  {
     id: 'data.sortDescending',
     label: 'Sort Z to A',
     group: 'edit',

@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { regionAround } from '@orangery/ooxml-spreadsheet'
 import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
 import type { BandChange, LookChange } from '@orangery/ooxml-spreadsheet'
@@ -15,7 +14,8 @@ import {
 import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
-import { looksLikeHeader, sortRows } from '../document/sort'
+import { columnNamesIn, looksLikeHeader, sortRows, tableToSort } from '../document/sort'
+import type { SortKey } from '../document/sort'
 import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
@@ -96,6 +96,14 @@ export interface WorkbookState {
   merge: (join: boolean) => void
   /** Puts the rows of the table under the cursor in order of one column. */
   sort: (ascending: boolean) => void
+  /**
+   * Puts them in order of several columns at once, and says so plainly.
+   *
+   * The one-column sort above is the button on the toolbar; this is the
+   * dialog, where somebody has said which columns, which way round, in what
+   * order, and whether the top row is names.
+   */
+  sortWith: (keys: readonly SortKey[], header: boolean) => void
   /** Turns the filter arrows on over the table under the cursor, or off. */
   toggleFilter: () => void
   /** What one filtered column keeps; null lets everything through again. */
@@ -359,17 +367,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
 
     const last = selection.ranges[selection.ranges.length - 1]
     const bounds = boundsOf(last ?? { anchor: selection.active, focus: selection.active })
-
-    // One cell means the table it is in; Excel does the same, and the
-    // alternative is sorting a column out of step with the rows beside it.
-    const range =
-      bounds.top === bounds.bottom && bounds.left === bounds.right
-        ? regionAround(sheet.cells, selection.active)
-        : {
-            sheet: null,
-            from: { row: bounds.top, column: bounds.left },
-            to: { row: bounds.bottom, column: bounds.right },
-          }
+    const range = tableToSort(sheet, bounds, selection.active)
 
     const changes = sortRows(
       open,
@@ -377,6 +375,32 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       range,
       [{ column: selection.active.column, ascending }],
       looksLikeHeader(open, sheet, range),
+    )
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  sortWith: (keys, header) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const last = selection.ranges[selection.ranges.length - 1]
+    const bounds = boundsOf(last ?? { anchor: selection.active, focus: selection.active })
+
+    const changes = sortRows(
+      open,
+      sheet,
+      tableToSort(sheet, bounds, selection.active),
+      keys,
+      header,
     )
     if (changes.length === 0) return
 
@@ -586,4 +610,30 @@ function noticeFor(open: OpenWorkbook): string | null {
   return open.pkg.parts.has('xl/vbaProject.bin')
     ? 'This workbook contains macros. They are kept when you save, and they are not run.'
     : null
+}
+
+/**
+ * The table a sort dialog should be asking about.
+ *
+ * Worked out here rather than in the dialog because it is the same question
+ * the sort itself asks, and two answers to it would be two different tables
+ * — one shown and one sorted.
+ */
+export function sortTarget(): { columns: string[]; header: boolean; left: number } | null {
+  const { open, current, selection } = useWorkbookStore.getState()
+  if (open === null) return null
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return null
+
+  const last = selection.ranges[selection.ranges.length - 1]
+  const bounds = boundsOf(last ?? { anchor: selection.active, focus: selection.active })
+  const range = tableToSort(sheet, bounds, selection.active)
+  const header = looksLikeHeader(open, sheet, range)
+
+  return {
+    columns: columnNamesIn(open, sheet, range, header),
+    header,
+    left: Math.min(range.from.column, range.to.column),
+  }
 }

@@ -7,6 +7,7 @@ import {
   formatCodeOf,
   highlightsOf,
   indexToColumn,
+  linkCovering,
   mergeAt,
   resolveColor,
   resolveStyle,
@@ -70,6 +71,8 @@ export interface SheetViewProps {
   onResize?: (axis: 'row' | 'column', index: number, size: number) => void
   /** Called when a filter arrow is clicked, with the cell it sits on. */
   onFilterClick?: (cell: CellAddress) => void
+  /** Called when a cell is clicked, which is how a link is followed. */
+  onCellClick?: (cell: CellAddress) => void
   /** Called when the fill handle is dragged, with what and how far. */
   onFillSeries?: (from: GridRange, to: GridRange) => void
 }
@@ -87,6 +90,7 @@ export function SheetView({
   onResize,
   onFilterClick,
   onFillSeries,
+  onCellClick,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -277,9 +281,30 @@ export function SheetView({
               color: hex(run.font.color ?? font?.color ?? null),
             }))
 
+      /**
+       * A link looks like a link.
+       *
+       * Blue and underlined unless the cell says otherwise, which is what
+       * every program that has ever shown one does — and the only sign there
+       * is, since a link is a rectangle in a list rather than anything the
+       * cell itself carries.
+       */
+      const link = linkCovering(sheet.links, address)
+      const linked =
+        link === null
+          ? {}
+          : {
+              color: hex(font?.color ?? null) ?? LINK_COLOR,
+              underline: underlineOf(font?.underline ?? 'single'),
+            }
+
       return {
         font: fontShorthand(font),
+        // Lines a font shorthand cannot carry, which the grid draws itself.
+        ...(font?.underline == null ? {} : { underline: underlineOf(font.underline) }),
+        ...(font?.strike === true ? { strike: true } : {}),
         color: hex(font?.color ?? null),
+        ...linked,
         background,
         runs,
         bar:
@@ -323,7 +348,17 @@ export function SheetView({
         },
       }
     },
-    [cellFor, highlight, notes, palette, sheet.sheet.autoFilter, strings, styleOf, styles],
+    [
+      cellFor,
+      highlight,
+      notes,
+      palette,
+      sheet.links,
+      sheet.sheet.autoFilter,
+      strings,
+      styleOf,
+      styles,
+    ],
   )
 
   const merged = useCallback(
@@ -428,6 +463,7 @@ export function SheetView({
       {...(onResize === undefined ? {} : { onResize })}
       {...(onFilterClick === undefined ? {} : { onFilterClick })}
       {...(onFillSeries === undefined ? {} : { onFillSeries })}
+      {...(onCellClick === undefined ? {} : { onCellClick })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any
@@ -490,9 +526,22 @@ function rowHeights(sheet: OpenSheet): number[] {
  * A font as a canvas takes one.
  *
  * Weight and slant and nothing else: a canvas shorthand has no room for an
- * underline or a strikethrough, which are lines the renderer would have to
- * draw itself and does not yet.
+ * underline or a strikethrough. Those are lines rather than letters, and the
+ * grid draws them from `underline` and `strike` beside the font.
  */
+/**
+ * Excel's four underlines as the two a renderer can draw.
+ *
+ * `singleAccounting` and `doubleAccounting` differ in where the line sits —
+ * under the whole cell rather than under the letters — which is a detail of
+ * the box, not of the text.
+ */
+/** The blue every program has shown a link in since 1993. */
+const LINK_COLOR = '#0563C1'
+
+const underlineOf = (stated: string): 'single' | 'double' =>
+  stated === 'double' || stated === 'doubleAccounting' ? 'double' : 'single'
+
 function fontShorthand(font: Partial<Font> | null | undefined): string {
   const size = font?.size ?? 11
 

@@ -15,6 +15,7 @@ import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { fillCells } from '../document/fill'
 import { findAll, nextAfter, replaceAll, replaceIn } from '../document/find'
+import { clearLinks, followLink, linkAt, linkFor, putLink } from '../document/links'
 import { freezeAt, showGridlines, unfreeze, zoomTo } from '../document/view'
 import type { SearchOptions } from '../document/find'
 import {
@@ -165,6 +166,16 @@ export interface WorkbookState {
   replaceOne: (term: string, replacement: string, options: SearchOptions) => void
   /** Replaces every match as one step, and says how many that was. */
   replaceEverywhere: (term: string, replacement: string, options: SearchOptions) => number
+  /**
+   * A cell that is also a way somewhere else.
+   *
+   * The address is read as what it looks like: a reference is a place in this
+   * workbook, and anything else is an address for the system to open.
+   */
+  putLink: (address: string, tooltip: string | null) => void
+  removeLink: () => void
+  /** Follows the link on a cell, if it has one, and goes where it says. */
+  followLink: (cell: CellAddress) => void
   /**
    * How the sheet is looked at, which is not what it says.
    *
@@ -633,6 +644,91 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       open: redrawn(open, [sheet.path]),
       edited: true,
       history: recorded(history, { changes, selection }),
+    })
+  },
+
+  putLink: (address, tooltip) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const bounds = boundsOf(
+      selection.ranges[selection.ranges.length - 1] ?? {
+        anchor: selection.active,
+        focus: selection.active,
+      },
+    )
+
+    const link = linkFor(
+      {
+        sheet: null,
+        from: { row: bounds.top, column: bounds.left },
+        to: { row: bounds.bottom, column: bounds.right },
+      },
+      address,
+      tooltip,
+    )
+    if (link === null) return
+
+    const change = putLink(sheet, link)
+    set({
+      open: { ...open, sheets: [...open.sheets] },
+      edited: true,
+      history: recorded(history, { changes: [change], selection }),
+    })
+  },
+
+  removeLink: () => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const bounds = boundsOf(
+      selection.ranges[selection.ranges.length - 1] ?? {
+        anchor: selection.active,
+        focus: selection.active,
+      },
+    )
+
+    const change = clearLinks(sheet, {
+      sheet: null,
+      from: { row: bounds.top, column: bounds.left },
+      to: { row: bounds.bottom, column: bounds.right },
+    })
+    if (change === null) return
+
+    set({
+      open: { ...open, sheets: [...open.sheets] },
+      edited: true,
+      history: recorded(history, { changes: [change], selection }),
+    })
+  },
+
+  followLink: (cell) => {
+    const { open, current } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const shown = visibleSheets(open)
+    const sheet = shown[current]
+    if (sheet === undefined) return
+
+    const link = linkAt(sheet, cell)
+    if (link === null) return
+
+    const went = followLink(open, link)
+    if (went === null) return
+
+    // A link inside the workbook moves the cursor, which is the same thing
+    // the name box does; one outside it has already gone to the system.
+    const landed = went.sheet === null ? current : shown.findIndex((one) => one.name === went.sheet)
+
+    set({
+      ...(landed >= 0 && landed !== current ? { current: landed } : {}),
+      selection: singleCell(went.cell),
     })
   },
 

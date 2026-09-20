@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { recorded } from '../test-setup'
+import { applyLook } from '../document/edit'
 import { openWorkbook } from '../document/workbook'
 import type { OpenWorkbook } from '../document/workbook'
 import { SheetView } from './sheet-view'
@@ -276,5 +277,47 @@ describe('a cell whose words are not all alike', () => {
 
   it('still says the whole thing to a screen reader', () => {
     expect(drawn().textContent).toContain('A, row 1: Month')
+  })
+})
+
+describe('the lines a font cannot carry', () => {
+  /**
+   * A workbook of its own: this one is formatted, and the fixture is shared
+   * with every other test in the file.
+   */
+  const underlined = async (look: Parameters<typeof applyLook>[3]) => {
+    const open = await openWorkbook(new Uint8Array(await readFile(FIXTURE)))
+    const sheet = open.sheets[0]
+    if (sheet === undefined) throw new Error('the fixture has no sheets')
+
+    applyLook(open, sheet, [{ row: 1, column: 0 }], look)
+    render(<SheetView open={open} sheet={sheet} width={800} height={400} />)
+  }
+
+  it('draws a line under a cell the file says is underlined', async () => {
+    // A canvas font shorthand has no room for one, so it is drawn or it is
+    // nowhere — and a toolbar button that changes nothing is worse than none.
+    await underlined({ font: { underline: 'single' } })
+
+    const word = recorded.texts.find((one) => one.text === 'January')
+    const line = recorded.lines.find(
+      (one) => one.from[1] === one.to[1] && one.from[1] > (word?.y ?? 0),
+    )
+
+    expect(line).toBeDefined()
+  })
+
+  it('draws nothing under an ordinary cell', async () => {
+    await underlined({ font: { bold: true } })
+
+    const word = recorded.texts.find((one) => one.text === 'January')
+    const below = recorded.lines.filter(
+      (one) =>
+        one.from[1] === one.to[1] &&
+        one.from[1] > (word?.y ?? 0) &&
+        one.from[1] < (word?.y ?? 0) + 6,
+    )
+
+    expect(below).toHaveLength(0)
   })
 })

@@ -11,10 +11,12 @@ import type { ImportOptions } from '../document/csv-file'
 import { CsvWizard } from '../render/csv-wizard'
 import type { Recoverable } from '../document/autosave'
 import { valuesIn } from '../document/filter'
+import { linkAt } from '../document/links'
 import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
 import { FindPanel } from '../render/find-panel'
+import { LinkDialog } from '../render/link-dialog'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
 import { SortDialog } from '../render/sort-dialog'
@@ -66,6 +68,9 @@ function Shell() {
   const hideSheet = useWorkbookStore((state) => state.hideSheet)
   const colorTab = useWorkbookStore((state) => state.colorTab)
   const findNext = useWorkbookStore((state) => state.findNext)
+  const putLink = useWorkbookStore((state) => state.putLink)
+  const removeLink = useWorkbookStore((state) => state.removeLink)
+  const followLink = useWorkbookStore((state) => state.followLink)
   const replaceOne = useWorkbookStore((state) => state.replaceOne)
   const replaceEverywhere = useWorkbookStore((state) => state.replaceEverywhere)
 
@@ -86,6 +91,29 @@ function Shell() {
     void recoverable().then(setLost, () => {
       // Nothing to offer, which is the ordinary case and not a failure.
     })
+  }, [])
+
+  /** The link dialog, and what the cell under the cursor already links to. */
+  const [linking, setLinking] = useState<{ address: string; tooltip: string } | null>(null)
+
+  useEffect(() => {
+    const onAsk = () => {
+      const { open: workbook, current: at, selection: where } = useWorkbookStore.getState()
+      if (workbook === null) return
+
+      const sheet = visibleSheetsOf(workbook)[at]
+      const link = sheet === undefined ? null : linkAt(sheet, where.active)
+
+      setLinking({
+        address: link === null ? '' : (link.target ?? link.location ?? ''),
+        tooltip: link?.tooltip ?? '',
+      })
+    }
+
+    window.addEventListener('orangery:link', onAsk)
+    return () => {
+      window.removeEventListener('orangery:link', onAsk)
+    }
   }, [])
 
   /** Whether the find strip is showing, which `Mod+F` turns on. */
@@ -275,6 +303,7 @@ function Shell() {
             onFill={fill}
             onFilterClick={setFiltering}
             onFillSeries={fillSeries}
+            onCellClick={followLink}
             onResize={(axis, index, size) => {
               // Points on the screen, characters in the file: a column's width
               // is counted in the widest digit of the default font, which is
@@ -304,6 +333,24 @@ function Shell() {
           }}
           onCancel={() => {
             setImporting(null)
+          }}
+        />
+      )}
+
+      {linking !== null && (
+        <LinkDialog
+          address={linking.address}
+          tooltip={linking.tooltip}
+          onApply={(address, tooltip) => {
+            setLinking(null)
+            putLink(address, tooltip)
+          }}
+          onRemove={() => {
+            setLinking(null)
+            removeLink()
+          }}
+          onCancel={() => {
+            setLinking(null)
           }}
         />
       )}

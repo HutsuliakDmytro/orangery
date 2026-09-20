@@ -80,6 +80,15 @@ export interface StyledRun {
 export interface CellStyle {
   /** A CSS font shorthand, because that is what a canvas takes. */
   font?: string
+  /**
+   * Lines a font shorthand has no room for.
+   *
+   * A canvas draws text and nothing under or through it, so an underline and
+   * a strikethrough are lines this has to draw itself — which means they
+   * have to be said separately from the font they belong to.
+   */
+  underline?: 'single' | 'double'
+  strike?: boolean
   color?: string
   background?: string
   borders?: CellBorders

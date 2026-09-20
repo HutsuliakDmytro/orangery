@@ -1,5 +1,11 @@
 import { putCell } from '@orangery/ooxml-spreadsheet'
-import type { AutoFilter, CellRange, ColumnRange, RowProperties } from '@orangery/ooxml-spreadsheet'
+import type {
+  AutoFilter,
+  CellRange,
+  ColumnRange,
+  Hyperlink,
+  RowProperties,
+} from '@orangery/ooxml-spreadsheet'
 import type { GridSelection } from '@orangery/grid'
 import type { CellChange } from './edit'
 import type { OpenSheet, OpenWorkbook } from './workbook'
@@ -40,6 +46,7 @@ export type Change =
   | { kind: 'columns'; sheet: string; before: ColumnRange[]; after: ColumnRange[] }
   | { kind: 'merges'; sheet: string; before: CellRange[]; after: CellRange[] }
   | { kind: 'filter'; sheet: string; before: AutoFilter | null; after: AutoFilter | null }
+  | { kind: 'links'; sheet: string; before: Hyperlink[]; after: Hyperlink[] }
   | {
       kind: 'row'
       sheet: string
@@ -160,6 +167,11 @@ function restore(sheet: OpenSheet, change: Change, to: 'before' | 'after'): void
 
   if (change.kind === 'merges') {
     sheet.sheet.merges = change[to]
+    return
+  }
+
+  if (change.kind === 'links') {
+    sheet.links = change[to]
     return
   }
 

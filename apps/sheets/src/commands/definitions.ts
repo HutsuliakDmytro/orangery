@@ -177,6 +177,17 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.link',
+    label: 'Link…',
+    group: 'edit',
+    shortcut: 'Mod+K',
+    keywords: ['hyperlink', 'url', 'address'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      window.dispatchEvent(new Event('orangery:link'))
+    },
+  },
+  {
     id: 'edit.find',
     label: 'Find and Replace…',
     group: 'edit',

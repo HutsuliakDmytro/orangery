@@ -140,6 +140,14 @@ export interface DataGridProps {
   /** Called when a filter arrow is clicked, with the cell it is on. */
   onFilterClick?: (cell: CellAddress) => void
   /**
+   * Called when a cell is clicked, after it has been selected.
+   *
+   * A click is not the same event as a selection change: the keyboard moves a
+   * selection too, and following a link on an arrow key would be a spreadsheet
+   * nobody could get out of. So the pointer says so itself.
+   */
+  onCellClick?: (cell: CellAddress) => void
+  /**
    * Called when the fill handle is dragged, with what was dragged and how far.
    *
    * The little square at the corner of a selection. The grid owns the gesture
@@ -383,6 +391,7 @@ export function DataGrid({
   onResize,
   onFilterClick,
   onFillSeries,
+  onCellClick,
   gridLines = true,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
@@ -1181,7 +1190,12 @@ export function DataGrid({
 
           if (event.shiftKey) choose(extendedTo(selection, cell), cell)
           else if (adding) choose(withRange(selection, { anchor: cell, focus: cell }), cell)
-          else move(cell)
+          else {
+            move(cell)
+            // After the selection, so whatever a click does next happens on a
+            // cell that is already the current one.
+            onCellClick?.(cell)
+          }
         }}
         onPointerUp={(event) => {
           const reaching = filling.current

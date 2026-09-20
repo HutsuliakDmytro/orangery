@@ -4,6 +4,7 @@ import {
   drawingRelationshipId,
   paletteOf,
   noStyleChanges,
+  readHyperlinks,
   readRichStrings,
   readSheetComments,
   readSheetData,
@@ -13,6 +14,7 @@ import {
   readWorksheet,
 } from '@orangery/ooxml-spreadsheet'
 import type {
+  Hyperlink,
   RichText,
   SheetEntry,
   StyleChanges,
@@ -64,6 +66,13 @@ export interface OpenSheet {
   drawings: AnchoredDrawing[]
   /** What has been said about its cells: threads, and the older notes. */
   comments: SheetComments
+  /**
+   * The cells that are also a way somewhere else.
+   *
+   * A list of rectangles rather than anything on a cell, which is how the
+   * file has it: a cell can be a link with nothing in the cell saying so.
+   */
+  links: Hyperlink[]
 }
 
 export interface OpenWorkbook {
@@ -143,6 +152,10 @@ export function openSheetOf(pkg: OoxmlPackage, entry: SheetEntry): OpenSheet {
     cells: readSheetData(text),
     drawings: drawingsOf(pkg, entry.path, text),
     comments: commentsOf(pkg, entry.path),
+    links: readHyperlinks(
+      text,
+      parseRelationships(getPartText(pkg, relationshipsOf(entry.path)) ?? ''),
+    ),
   }
 }
 

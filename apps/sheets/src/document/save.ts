@@ -39,6 +39,7 @@ export async function workbookBytes(
             columns: sheet.sheet.columns,
             merges: sheet.sheet.merges,
             filter: sheet.sheet.autoFilter,
+            links: sheet.links,
           }
         : {}),
     })),

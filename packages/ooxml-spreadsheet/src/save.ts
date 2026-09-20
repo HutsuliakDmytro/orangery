@@ -10,6 +10,8 @@ import { replaceColumns } from './columns'
 import { replaceMerges } from './merges'
 import { replaceAutoFilter } from './autofilter'
 import type { AutoFilter } from './autofilter'
+import { replaceHyperlinks, writeHyperlinks } from './hyperlinks'
+import type { Hyperlink } from './hyperlinks'
 import type { SheetCells } from './cells'
 import type { CellRange } from './reference'
 import type { ColumnRange } from './worksheet'
@@ -45,6 +47,20 @@ export interface SheetToWrite {
   merges?: readonly CellRange[]
   /** The autofilter, likewise; null takes it away, undefined leaves it. */
   filter?: AutoFilter | null
+  /**
+   * The links, where they may have changed.
+   *
+   * Written here rather than by the caller because half of a link lives in
+   * the part's own relationships, and the two have to be written together or
+   * the file has a link pointing at a relationship that is not there.
+   */
+  links?: readonly Hyperlink[]
+}
+
+/** Where a part keeps its relationships, which is beside it and under `_rels`. */
+function relationshipsOf(path: string): string {
+  const at = path.lastIndexOf('/')
+  return `${path.slice(0, at)}/_rels/${path.slice(at + 1)}.rels`
 }
 
 const CALC_CHAIN_PART = 'xl/calcChain.xml'
@@ -85,6 +101,16 @@ export function writeWorkbook(
     if (sheet.columns !== undefined) written = replaceColumns(written, sheet.columns)
     if (sheet.merges !== undefined) written = replaceMerges(written, sheet.merges)
     if (sheet.filter !== undefined) written = replaceAutoFilter(written, sheet.filter)
+
+    if (sheet.links !== undefined) {
+      const path = relationshipsOf(sheet.path)
+      const relationships = parseRelationships(getPartText(pkg, path) ?? '')
+
+      written = replaceHyperlinks(written, writeHyperlinks(sheet.links, relationships))
+      // Written even where the list is empty: a part with no relationships
+      // left is still a part Excel expects to find if the sheet names one.
+      if (relationships.size > 0) setPartText(pkg, path, serializeRelationships(relationships))
+    }
 
     setPartText(pkg, sheet.path, written)
   }

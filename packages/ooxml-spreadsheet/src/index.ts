@@ -142,3 +142,13 @@ export {
 
 export { changeView } from './view-edit'
 export type { ViewChange } from './view-edit'
+
+export {
+  linkCovering,
+  readHyperlinks,
+  replaceHyperlinks,
+  withLink,
+  withoutLinks,
+  writeHyperlinks,
+} from './hyperlinks'
+export type { Hyperlink } from './hyperlinks'

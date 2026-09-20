@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/keys.test.ts","./src/keys.ts","./src/os.ts","./src/paths.ts","./src/recent-files.test.ts","./src/recent-files.ts","./src/urls.ts","./vitest.config.ts"],"version":"5.9.3"}

@@ -113,9 +113,50 @@ function along(
   options: TextOptions,
 ): void {
   const { align, x } = acrossOf(text, rect, style, options.gutter)
+  const down = downOf(rect, style)
 
   context.textAlign = canvasAlign(align)
-  context.fillText(text, x, downOf(rect, style))
+  context.fillText(text, x, down)
+  ruled(context, text, x, down, align, style)
+}
+
+/**
+ * The lines a font cannot carry: an underline, a strikethrough.
+ *
+ * Drawn rather than asked for, because a canvas font shorthand has no room
+ * for either. Measured from the same string that was just written, so the
+ * line is exactly as long as the text is — which is what makes an underline
+ * under a right-aligned number end where the number does.
+ */
+function ruled(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  down: number,
+  align: 'left' | 'center' | 'right',
+  style: CellStyle | null,
+): void {
+  if (style?.underline === undefined && style?.strike !== true) return
+
+  const width = context.measureText(text).width
+  const from = align === 'right' ? x - width : align === 'center' ? x - width / 2 : x
+  const step = lineHeightOf(context.font)
+
+  context.strokeStyle = context.fillStyle
+  context.lineWidth = 1
+
+  const at = (y: number) => {
+    context.beginPath()
+    context.moveTo(from, y)
+    context.lineTo(from + width, y)
+    context.stroke()
+  }
+
+  if (style.strike === true) at(Math.round(down) + 0.5)
+  if (style.underline !== undefined) at(Math.round(down + step * 0.36) + 0.5)
+  // A double underline is two lines, which is what accountants mean by it:
+  // the second is the total under the total.
+  if (style.underline === 'double') at(Math.round(down + step * 0.36) + 2.5)
 }
 
 /**
@@ -149,6 +190,7 @@ function wrapped(
     const { align, x } = acrossOf(line, rect, style, options.gutter)
     context.textAlign = canvasAlign(align)
     context.fillText(line, x, first + index * step)
+    ruled(context, line, x, first + index * step, align, style)
   }
 }
 
@@ -303,6 +345,7 @@ function inPieces(
       context.font = run.font ?? base
       context.fillStyle = run.color ?? style?.color ?? options.color
       context.fillText(run.text, x, first + index * step)
+      ruled(context, run.text, x, first + index * step, 'left', style)
       x += context.measureText(run.text).width
     }
   }

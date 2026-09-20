@@ -1114,3 +1114,48 @@ describe('a sheet that wants no grid', () => {
     expect(recorded.lines.some((one) => one.style === '#FF0000')).toBe(true)
   })
 })
+
+describe('the lines a font cannot carry', () => {
+  /** Lines the length of a value, which is what an underline is. */
+  const under = (text: string) =>
+    recorded.lines.filter((one) => one.to[0] - one.from[0] === text.length * 7)
+
+  /** One cell with something in it, so the count is the count of its lines. */
+  const alone = (props: Partial<React.ComponentProps<typeof DataGrid>>) =>
+    grid({
+      valueAt: ({ row, column }) => (row === 0 && column === 0 ? 'Total' : null),
+      ...props,
+    })
+
+  it('draws none for an ordinary cell', () => {
+    alone({})
+    expect(under('Total')).toHaveLength(0)
+  })
+
+  it('draws one under an underlined value', () => {
+    alone({ styleAt: () => ({ underline: 'single' }) })
+    expect(under('Total')).toHaveLength(1)
+  })
+
+  it('draws two for a double underline, as accountants mean it', () => {
+    alone({ styleAt: () => ({ underline: 'double' }) })
+    expect(under('Total')).toHaveLength(2)
+  })
+
+  it('draws a strikethrough through the middle rather than below', () => {
+    alone({ styleAt: () => ({ strike: true }) })
+
+    const line = under('Total')[0]
+    const text = recorded.texts.find((one) => one.text === 'Total')
+
+    expect(line).toBeDefined()
+    expect(Math.abs((line?.from[1] ?? 0) - (text?.y ?? 0))).toBeLessThan(2)
+  })
+
+  it('makes the line as long as the value, not as wide as the cell', () => {
+    alone({ styleAt: () => ({ underline: 'single' }) })
+
+    // Five letters at seven points each, in a cell eighty-four wide.
+    expect(under('Total')[0]?.to[0]).toBeLessThan(44 + 84)
+  })
+})

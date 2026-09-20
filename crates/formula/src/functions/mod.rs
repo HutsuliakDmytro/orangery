@@ -10,7 +10,9 @@
 //! — a spreadsheet where `IF(A1=0,0,1/A1)` divides by nought anyway is a
 //! spreadsheet that is wrong about the one thing the formula was guarding.
 
+pub mod info;
 pub mod logical;
+pub mod lookup;
 pub mod math;
 pub mod stats;
 pub mod text;
@@ -93,6 +95,18 @@ static FUNCTIONS: &[&Function] = &[
     &stats::MIN,
     &stats::MAX,
     &stats::MEDIAN,
+    &lookup::VLOOKUP,
+    &lookup::HLOOKUP,
+    &lookup::INDEX,
+    &lookup::MATCH,
+    &lookup::CHOOSE,
+    &lookup::ROW,
+    &lookup::COLUMN,
+    &lookup::ROWS,
+    &lookup::COLUMNS,
+    &lookup::SUMIF,
+    &lookup::COUNTIF,
+    &lookup::AVERAGEIF,
     &logical::IF,
     &logical::IFS,
     &logical::AND,
@@ -118,6 +132,17 @@ static FUNCTIONS: &[&Function] = &[
     &text::SEARCH,
     &text::SUBSTITUTE,
     &text::REPT,
+    &info::ISBLANK,
+    &info::ISNUMBER,
+    &info::ISTEXT,
+    &info::ISLOGICAL,
+    &info::ISERROR,
+    &info::ISERR,
+    &info::ISNA,
+    &info::NA,
+    &info::N,
+    &info::T,
+    &info::TYPE,
 ];
 
 /// Every argument, worked out.

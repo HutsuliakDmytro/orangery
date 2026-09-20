@@ -6,94 +6,10 @@
 //! `INT(-2.5)` is -3 rather than -2, and `SUM` over a range ignores the words
 //! in it while `SUM("5")` adds five.
 
-use std::collections::HashMap;
+mod common;
 
-use formula::eval::{evaluate, Cells, Context};
-use formula::parser::parse;
+use common::{column, number, on, text, value, Sheet};
 use formula::value::{Error, Value};
-
-#[derive(Default)]
-struct Sheet {
-    cells: HashMap<(i64, i64), Value>,
-}
-
-impl Sheet {
-    fn with(cells: &[(&str, Value)]) -> Self {
-        let mut sheet = Sheet::default();
-        for (at, value) in cells {
-            sheet.cells.insert(address(at), value.clone());
-        }
-        sheet
-    }
-}
-
-fn address(reference: &str) -> (i64, i64) {
-    let letters: String = reference
-        .chars()
-        .take_while(char::is_ascii_alphabetic)
-        .collect();
-    let digits: String = reference.chars().skip(letters.len()).collect();
-
-    let mut column: i64 = 0;
-    for letter in letters.chars() {
-        column = column * 26 + (letter.to_ascii_uppercase() as i64 - 'A' as i64) + 1;
-    }
-
-    (digits.parse::<i64>().unwrap_or(1) - 1, column - 1)
-}
-
-impl Cells for Sheet {
-    fn value_at(&self, _sheet: Option<&str>, row: i64, column: i64) -> Value {
-        self.cells
-            .get(&(row, column))
-            .cloned()
-            .unwrap_or(Value::Blank)
-    }
-
-    fn extent(&self, _sheet: Option<&str>) -> (i64, i64) {
-        (20, 20)
-    }
-}
-
-fn on(sheet: &Sheet, formula: &str) -> Value {
-    let tree = parse(formula).unwrap_or_else(|error| panic!("{formula} did not parse: {error}"));
-    evaluate(
-        &tree,
-        &Context {
-            cells: sheet,
-            at: (0, 0),
-        },
-    )
-}
-
-fn value(formula: &str) -> Value {
-    on(&Sheet::default(), formula)
-}
-
-fn number(formula: &str) -> f64 {
-    match value(formula) {
-        Value::Number(value) => value,
-        other => panic!("{formula} is not a number: {other:?}"),
-    }
-}
-
-fn text(formula: &str) -> String {
-    match value(formula) {
-        Value::Text(value) => value,
-        other => panic!("{formula} is not text: {other:?}"),
-    }
-}
-
-/// A column of numbers with a heading over it, which is what people pass.
-fn column() -> Sheet {
-    Sheet::with(&[
-        ("A1", Value::Text("Amount".into())),
-        ("A2", Value::Number(10.0)),
-        ("A3", Value::Number(20.0)),
-        ("A4", Value::Blank),
-        ("A5", Value::Number(30.0)),
-    ])
-}
 
 #[test]
 fn sum_adds_the_numbers_and_ignores_the_heading() {

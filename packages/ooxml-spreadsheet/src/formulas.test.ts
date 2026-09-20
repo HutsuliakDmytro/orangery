@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shiftFormula } from './formulas'
+import { adjustFormula, shiftFormula } from './formulas'
 import { readSheetData, writeSheetData } from './sheet-data'
 import { cellAt } from './cells'
 
@@ -176,5 +176,49 @@ describe('a sheet with nothing shared in it', () => {
 
     const written = writeSheetData(readSheetData(orphan))
     expect(written).toContain('<f t="shared" si="4"/>')
+  })
+})
+
+describe('a formula after rows or columns move under it', () => {
+  it('pushes down what was below the insertion and leaves what was above', () => {
+    // The formula stays where it is; the sheet under it changes shape.
+    expect(adjustFormula('SUM(A1:A9)', { axis: 'row', at: 4, by: 2 })).toBe('SUM(A1:A11)')
+    expect(adjustFormula('A1+A9', { axis: 'row', at: 4, by: 2 })).toBe('A1+A11')
+  })
+
+  it('moves a pinned reference too, because the cell it is pinned to moved', () => {
+    // The dollar has nothing to say here: it pins a reference to a cell, and
+    // it is the cell that has been pushed down.
+    expect(adjustFormula('$A$9', { axis: 'row', at: 0, by: 1 })).toBe('$A$10')
+  })
+
+  it('does the same across, for columns', () => {
+    expect(adjustFormula('SUM(A1:D1)', { axis: 'column', at: 1, by: 1 })).toBe('SUM(A1:E1)')
+    expect(adjustFormula('A1', { axis: 'column', at: 1, by: 1 })).toBe('A1')
+  })
+
+  it('pulls things back when a band is taken away', () => {
+    expect(adjustFormula('A9', { axis: 'row', at: 2, by: -3 })).toBe('A6')
+    // Above the band, so untouched.
+    expect(adjustFormula('A2', { axis: 'row', at: 2, by: -3 })).toBe('A2')
+  })
+
+  it('says #REF! for a reference to something that was deleted', () => {
+    // The cell it named is gone; answering with whatever moved into its place
+    // would be an answer about a different cell.
+    expect(adjustFormula('A3', { axis: 'row', at: 2, by: -1 })).toBe('#REF!')
+    // Rows 3 and 4 go: the start of the range was one of them, and the end
+    // was below them and comes back up.
+    expect(adjustFormula('SUM(A3:A5)', { axis: 'row', at: 2, by: -2 })).toBe('SUM(#REF!:A3)')
+  })
+
+  it('leaves the words of a string alone, as ever', () => {
+    expect(adjustFormula('IF(A9>0,"A9 is big","")', { axis: 'row', at: 0, by: 1 })).toBe(
+      'IF(A10>0,"A9 is big","")',
+    )
+  })
+
+  it('changes nothing when nothing moved', () => {
+    expect(adjustFormula('SUM(A1:A9)', { axis: 'row', at: 4, by: 0 })).toBe('SUM(A1:A9)')
   })
 })

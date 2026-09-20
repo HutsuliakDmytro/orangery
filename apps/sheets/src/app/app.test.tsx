@@ -608,3 +608,65 @@ describe('the strip of buttons above the sheet', () => {
     expect(resolveStyle(styles, cell?.style ?? null).font?.bold).toBe(true)
   })
 })
+
+describe('rows and columns', () => {
+  const cellAt = (row: number, column: number) =>
+    useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+
+  const goTo = async (range: string) => {
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, `${range}{Enter}`)
+  }
+
+  it('puts in as many rows as are selected', async () => {
+    render(<App />)
+    await load()
+    await goTo('A2:A4')
+
+    act(() => {
+      runCommand('sheet.insertRows', {})
+    })
+
+    // What was in row 2 is in row 5 now.
+    expect(cellAt(1, 0)).toBeNull()
+    expect(cellAt(4, 0)?.value).toBe('2')
+  })
+
+  it('takes rows out, and takes the deletion back in one press', async () => {
+    render(<App />)
+    await load()
+    await goTo('A2')
+
+    const before = cellAt(1, 1)?.value
+    act(() => {
+      runCommand('sheet.deleteRows', {})
+    })
+
+    expect(cellAt(1, 1)?.value).not.toBe(before)
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(cellAt(1, 1)?.value).toBe(before)
+  })
+
+  it('moves columns across the same way', async () => {
+    render(<App />)
+    await load()
+    await goTo('B1')
+
+    act(() => {
+      runCommand('sheet.insertColumns', {})
+    })
+
+    expect(cellAt(1, 2)?.value).toBe('1234.5')
+  })
+
+  it('is offered only when a workbook is open', () => {
+    render(<App />)
+    expect(getCommand('sheet.insertRows')?.isEnabled?.({})).toBe(false)
+  })
+})

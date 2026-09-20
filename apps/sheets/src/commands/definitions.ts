@@ -120,6 +120,49 @@ export const editCommands: readonly Command[] = [
   },
 ]
 
+export const structureCommands: readonly Command[] = [
+  {
+    id: 'sheet.insertRows',
+    label: 'Insert Rows',
+    group: 'insert',
+    keywords: ['add', 'row'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().reshape('row', true)
+    },
+  },
+  {
+    id: 'sheet.insertColumns',
+    label: 'Insert Columns',
+    group: 'insert',
+    keywords: ['add', 'column'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().reshape('column', true)
+    },
+  },
+  {
+    id: 'sheet.deleteRows',
+    label: 'Delete Rows',
+    group: 'edit',
+    keywords: ['remove', 'row'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().reshape('row', false)
+    },
+  },
+  {
+    id: 'sheet.deleteColumns',
+    label: 'Delete Columns',
+    group: 'edit',
+    keywords: ['remove', 'column'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().reshape('column', false)
+    },
+  },
+]
+
 export const sheetCommands: readonly Command[] = [
   {
     id: 'sheet.next',
@@ -157,5 +200,6 @@ export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(fileCommands)
   registerAll(editCommands)
+  registerAll(structureCommands)
   registerAll(sheetCommands)
 }

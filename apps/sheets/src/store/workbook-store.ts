@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
-import type { LookChange } from '@orangery/ooxml-spreadsheet'
+import type { BandChange, LookChange } from '@orangery/ooxml-spreadsheet'
 import {
   blockFrom,
   copiedFrom,
@@ -11,6 +11,7 @@ import {
   writeClipboard,
 } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
+import { reshape } from '../document/structure'
 import { shownText } from '../document/shown'
 import { emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
@@ -64,6 +65,8 @@ export interface WorkbookState {
   fill: (text: string) => void
   /** Changes how everything selected looks, likewise. */
   format: (look: LookChange) => void
+  /** Puts rows or columns in where the selection is, or takes them out. */
+  reshape: (axis: BandChange['axis'], insert: boolean) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   paste: () => Promise<void>
@@ -201,6 +204,30 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     if (sheet === undefined) return
 
     const changes = applyLook(open, sheet, selectedCells(selection), look)
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  reshape: (axis, insert) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    // As many as are selected: choosing three rows and asking for an
+    // insertion puts three in, which is what every spreadsheet does.
+    const bounds = selection.ranges.map((range) => boundsOf(range))
+    const from = Math.min(...bounds.map((one) => (axis === 'row' ? one.top : one.left)))
+    const to = Math.max(...bounds.map((one) => (axis === 'row' ? one.bottom : one.right)))
+    const span = to - from + 1
+
+    const changes = reshape(sheet, { axis, at: from, by: insert ? span : -span })
     if (changes.length === 0) return
 
     set({

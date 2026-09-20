@@ -65,8 +65,14 @@ export {
 export type { CellBlock } from './clipboard'
 export { removeCalcChain, writeWorkbook } from './save'
 export type { SaveOptions, SheetToWrite } from './save'
-export { collapsedFormula, expandFormulas, sharedMasters, shiftFormula } from './formulas'
-export type { SharedMaster } from './formulas'
+export {
+  adjustFormula,
+  collapsedFormula,
+  expandFormulas,
+  sharedMasters,
+  shiftFormula,
+} from './formulas'
+export type { BandChange, SharedMaster } from './formulas'
 export { EMU_PER_POINT, drawingRelationshipId, readSheetDrawings } from './drawing'
 export type { AnchorPoint, DrawingAnchor, DrawingContent, SheetDrawing } from './drawing'
 export { readConditionalFormats, rangeCovers } from './conditional'

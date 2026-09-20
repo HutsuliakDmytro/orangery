@@ -34,7 +34,21 @@ import type { Cell, Formula, SheetCells } from './cells'
  * formula that had its own text rewritten would say something else.
  */
 export function shiftFormula(text: string, by: { rows: number; columns: number }): string {
-  if (text === '' || (by.rows === 0 && by.columns === 0)) return text
+  if (by.rows === 0 && by.columns === 0) return text
+
+  return mapReferences(text, (reference) => moved(reference, by))
+}
+
+/**
+ * Every A1 reference in a formula, rewritten.
+ *
+ * The walk that both kinds of move share, and the only part of either that is
+ * difficult. Almost all of it is about what must *not* be rewritten: the words
+ * of a string, the column names inside a structured reference, a function that
+ * happens to be three letters and a number.
+ */
+function mapReferences(text: string, rewrite: (reference: FoundReference) => string): string {
+  if (text === '') return text
 
   const out: string[] = []
   let at = 0
@@ -65,12 +79,62 @@ export function shiftFormula(text: string, by: { rows: number; columns: number }
       continue
     }
 
-    out.push(moved(reference, by))
+    out.push(rewrite(reference))
     at = reference.end
   }
 
   return out.join('')
 }
+
+/** Rows or columns inserted at a place, or taken away from it. */
+export interface BandChange {
+  axis: 'row' | 'column'
+  /** The first index of the band, counting from nought. */
+  at: number
+  /** How many were put in; negative for how many were taken out. */
+  by: number
+}
+
+/**
+ * A formula seen from after rows or columns were added or removed.
+ *
+ * A different question from moving a formula, and answered differently: here
+ * the formula stays where it is and the sheet under it changes shape. A
+ * reference below the insertion moves down; one above it does not; and the
+ * dollar has nothing to say about either, because pinning a reference pins it
+ * to a cell and it is the cell that has moved.
+ *
+ * A reference to a row that was deleted is `#REF!`, which is what Excel puts
+ * there and the only honest answer: the cell it named is gone.
+ */
+export function adjustFormula(text: string, change: BandChange): string {
+  if (change.by === 0) return text
+
+  return mapReferences(text, (reference) => {
+    const index = change.axis === 'row' ? reference.row : reference.column
+    if (index < change.at) return written(reference)
+
+    // Inside the band that was taken away: the cell this named no longer
+    // exists, and pretending it is the one that moved into its place would be
+    // an answer about a different cell.
+    if (change.by < 0 && index < change.at - change.by) return '#REF!'
+
+    const moved = index + change.by
+    const limit = change.axis === 'row' ? LAST_ROW : 16_384
+    if (moved < 0 || moved >= limit) return '#REF!'
+
+    return written(
+      change.axis === 'row' ? { ...reference, row: moved } : { ...reference, column: moved },
+    )
+  })
+}
+
+/** A reference as it is written, dollars and all. */
+const written = (reference: FoundReference): string =>
+  (reference.columnFixed ? '$' : '') +
+  indexToColumn(reference.column) +
+  (reference.rowFixed ? '$' : '') +
+  String(reference.row + 1)
 
 /** Past the closing quote of a literal, doubled quotes inside it included. */
 function closingQuote(text: string, from: number, quote: string): number {
@@ -162,12 +226,7 @@ function moved(reference: FoundReference, by: { rows: number; columns: number })
   // the answer rather than a crash: the formula is still a formula.
   if (column < 0 || column > 16_383 || row < 0 || row >= LAST_ROW) return '#REF!'
 
-  return (
-    (reference.columnFixed ? '$' : '') +
-    indexToColumn(column) +
-    (reference.rowFixed ? '$' : '') +
-    String(row + 1)
-  )
+  return written({ ...reference, row, column })
 }
 
 /** Where a group of shared cells gets its formula from. */

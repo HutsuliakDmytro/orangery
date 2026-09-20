@@ -16,7 +16,7 @@ use std::sync::Arc;
 use crate::ast::Expr;
 use crate::date::DateSystem;
 use crate::eval::{evaluate, Cells, Context, Rect, Standing};
-use crate::graph::{precedents_of, CellId, Graph};
+use crate::graph::{precedents_of, Area, CellId, Graph};
 use crate::parser::{parse, ParseError};
 use crate::table::Table;
 use crate::value::{Error, Value};
@@ -95,6 +95,26 @@ pub struct Applied {
     /// The cells whose formula could not be read at all.
     pub refused: Vec<CellId>,
 }
+
+/// What a cell reads, what reads it, and where its error began.
+#[derive(Debug, Default, PartialEq)]
+pub struct Trace {
+    /// What the formula names, as rectangles — a single cell is a small one.
+    pub precedents: Vec<Area>,
+    /// The formulas that name this cell, directly. Sorted, so a list of them
+    /// reads in the order a sheet does rather than in the order a map does.
+    pub dependents: Vec<CellId>,
+    /// Whether it names something whose extent is a fact about the sheet.
+    pub whole_columns: bool,
+    /// Whether it reaches into a workbook this one does not have.
+    pub external: bool,
+    pub volatile: bool,
+    /// The cell an error in this one came from, when it came from elsewhere.
+    pub blame: Option<CellId>,
+}
+
+/// How many cells a search for the source of an error will look through.
+const SCANNED: i64 = 50_000;
 
 /// What a change came to: the cells that now show something else.
 #[derive(Debug, Default, PartialEq)]
@@ -394,6 +414,123 @@ impl Engine {
             Some(Content::Formula { text, .. }) => Some(text),
             _ => None,
         }
+    }
+
+    /// What a cell reads, what reads it, and where an error in it began.
+    ///
+    /// The arrows Excel draws when somebody asks why a cell says what it
+    /// says. Three questions that look like one, and all three are the
+    /// graph's rather than the evaluator's: the graph is what the engine
+    /// keeps so that it knows what to work out again, and this is the same
+    /// knowledge asked the other way round.
+    ///
+    /// Precedents come back as rectangles even when they are single cells,
+    /// because that is how they are drawn — a box round the cells, one arrow
+    /// to the box — and because a formula that names `B2` and one that names
+    /// `B2:B2` are asking about the same thing.
+    pub fn trace(&self, sheet: &str, row: i64, column: i64) -> Trace {
+        let cell: CellId = (sheet.to_string(), row, column);
+        let mut trace = Trace {
+            dependents: self.graph.dependents_of(&cell),
+            blame: self.blame(&cell),
+            ..Trace::default()
+        };
+
+        if let Some(found) = self.graph.precedents_of(&cell) {
+            trace.whole_columns = found.whole_columns;
+            trace.external = found.external;
+            trace.volatile = found.volatile;
+
+            trace.precedents = found
+                .cells
+                .iter()
+                .map(|one| Area {
+                    sheet: one.0.clone(),
+                    top: one.1,
+                    bottom: one.1,
+                    left: one.2,
+                    right: one.2,
+                })
+                .chain(found.areas.iter().cloned())
+                .collect();
+        }
+
+        trace.dependents.sort();
+        trace
+    }
+
+    /// Where the error a cell shows actually began.
+    ///
+    /// A `#DIV/0!` that has travelled through six sums is shown six times and
+    /// caused once, and the cell worth looking at is the one that caused it.
+    /// So this walks back through the precedents while each of them is an
+    /// error too, and stops at the first that is an error with nothing wrong
+    /// underneath it.
+    ///
+    /// Null when the cell is not an error, and null when the error is its
+    /// own: a formula that divides by a nought somebody typed has nowhere
+    /// further back to point, and pointing at itself would be an arrow that
+    /// says nothing.
+    fn blame(&self, cell: &CellId) -> Option<CellId> {
+        if !matches!(self.values.get(cell), Some(Value::Error(_))) {
+            return None;
+        }
+
+        let mut at = cell.clone();
+        let mut seen: FastSet<CellId> = FastSet::default();
+
+        loop {
+            // A circular reference is reported as itself; walking it here
+            // would be walking it for ever.
+            if !seen.insert(at.clone()) {
+                return None;
+            }
+
+            match self.erroring_precedent(&at) {
+                None => return if &at == cell { None } else { Some(at) },
+                Some(one) => at = one,
+            }
+        }
+    }
+
+    /// A cell this formula reads that is an error itself.
+    ///
+    /// The areas are walked as well as the named cells, up to a point: a
+    /// `SUM` over a column has the same error as the one cell in it that is
+    /// wrong, and that cell is exactly what somebody is looking for. The
+    /// point is `SCANNED` — a formula over a whole column is not worth
+    /// searching a million cells for, and the answer would be an arrow to a
+    /// cell nobody can see anyway.
+    fn erroring_precedent(&self, cell: &CellId) -> Option<CellId> {
+        let found = self.graph.precedents_of(cell)?;
+
+        for one in &found.cells {
+            if matches!(self.values.get(one), Some(Value::Error(_))) {
+                return Some(one.clone());
+            }
+        }
+
+        let mut left = SCANNED;
+
+        for area in &found.areas {
+            let rows = area.bottom.saturating_sub(area.top).saturating_add(1);
+            let columns = area.right.saturating_sub(area.left).saturating_add(1);
+            if rows.saturating_mul(columns) > left {
+                continue;
+            }
+            left -= rows * columns;
+
+            for row in area.top..=area.bottom {
+                for column in area.left..=area.right {
+                    let one = (area.sheet.clone(), row, column);
+                    if matches!(self.values.get(&one), Some(Value::Error(_))) {
+                        return Some(one);
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Everything worked out again, in order — what a file asks for on open.

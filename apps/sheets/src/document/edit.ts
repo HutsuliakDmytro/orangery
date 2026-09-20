@@ -2,6 +2,7 @@ import { putCell, styleShowing, styleWith } from '@orangery/ooxml-spreadsheet'
 import type { Cell, CellType, LookChange } from '@orangery/ooxml-spreadsheet'
 import { parseInput } from '@orangery/numfmt'
 import type { CellAddress } from '@orangery/grid'
+import { typedFormula } from './formula'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 
 /**
@@ -60,8 +61,36 @@ export function applyEdit(
   text: string,
 ): CellChange | null {
   const existing = sheet.cells.rows.get(address.row)?.get(address.column) ?? null
-  const parsed = parseInput(text, { date1904: open.workbook.date1904 })
   const was = { sheet: sheet.path, row: address.row, column: address.column, before: existing }
+
+  /**
+   * A formula is not parsed here, and not worked out here.
+   *
+   * What it comes to is the engine's answer (`document/formula.ts`), and it
+   * has not been asked yet when this returns: the cell is written with its
+   * formula and no value, and the value arrives a moment later. Everything
+   * about the cell that is not its value — its style, its format, the number
+   * of decimals somebody chose — is left exactly as it was, because typing a
+   * formula into a currency column is filling it in rather than restyling it.
+   */
+  const formula = typedFormula(text)
+  if (formula !== null) {
+    const cell: Cell = {
+      row: address.row,
+      column: address.column,
+      type: 'n',
+      value: null,
+      style: existing?.style ?? null,
+      formula: { text: formula, kind: 'normal', shared: null, ref: null },
+      rich: null,
+      carried: existing?.carried ?? null,
+    }
+
+    putCell(sheet.cells, cell)
+    return { ...was, after: cell }
+  }
+
+  const parsed = parseInput(text, { date1904: open.workbook.date1904 })
 
   // An empty cell is absent rather than blank: a `<c>` with no `<v>` is an
   // empty string to some readers and nothing to others, and absent is the one

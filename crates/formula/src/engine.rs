@@ -10,8 +10,10 @@
 //! the other million would be the slowest possible way to be right.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::ast::Expr;
+use crate::date::DateSystem;
 use crate::eval::{evaluate, Cells, Context};
 use crate::graph::{precedents_of, CellId, Graph};
 use crate::parser::{parse, ParseError};
@@ -32,6 +34,34 @@ pub struct Engine {
     graph: Graph,
     /// How far each sheet reaches, for `A:A` and its kind.
     extents: HashMap<String, (i64, i64)>,
+    /// What time it is, as the workbook counts time.
+    moment: f64,
+    /// Which morning the workbook counts days from.
+    system: DateSystem,
+    /// Where `RAND` gets its answers.
+    ///
+    /// A sequence rather than a source of entropy: the seed comes from
+    /// outside, so a workbook recalculated twice from the same seed comes out
+    /// the same twice, and nothing in the library has to ask the operating
+    /// system for anything.
+    chance: AtomicU64,
+}
+
+/// What one cell is being made into.
+#[derive(Debug, Clone)]
+pub enum Edit {
+    Value(Value),
+    /// A formula, without its leading `=`.
+    Formula(String),
+    Empty,
+}
+
+/// What a batch of edits came to.
+#[derive(Debug, Default, PartialEq)]
+pub struct Applied {
+    pub changed: Changed,
+    /// The cells whose formula could not be read at all.
+    pub refused: Vec<CellId>,
 }
 
 /// What a change came to: the cells that now show something else.
@@ -44,7 +74,44 @@ pub struct Changed {
 
 impl Engine {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            chance: AtomicU64::new(0x2545_f491_4f6c_dd1d),
+            ..Default::default()
+        }
+    }
+
+    /// What time the workbook is being worked out at, for `NOW` and `TODAY`.
+    ///
+    /// Told rather than read off a clock: the engine is a library, and a
+    /// library that knew the time could not be asked the same question twice.
+    pub fn set_moment(&mut self, serial: f64) {
+        self.moment = serial;
+    }
+
+    /// Which morning this workbook counts days from — `date1904` in the file.
+    pub fn set_date_system(&mut self, system: DateSystem) {
+        self.system = system;
+    }
+
+    /// Where the random numbers start from.
+    pub fn seed_random(&mut self, seed: u64) {
+        self.chance = AtomicU64::new(if seed == 0 { 1 } else { seed });
+    }
+
+    /// The next number in the sequence, from nought up to but not one.
+    fn next_chance(&self) -> f64 {
+        // xorshift64*: three shifts and a multiply, no dependencies, and the
+        // same sequence on every platform — which is what makes a workbook
+        // recalculated on a Mac and on Windows agree about a column of
+        // `RANDBETWEEN`.
+        let mut state = self.chance.load(Ordering::Relaxed);
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        self.chance.store(state, Ordering::Relaxed);
+
+        let scrambled = state.wrapping_mul(0x2545_f491_4f6c_dd1d);
+        (scrambled >> 11) as f64 / (1u64 << 53) as f64
     }
 
     /// A cell with something typed in it.
@@ -86,6 +153,109 @@ impl Engine {
         self.grow(sheet, row, column);
 
         Ok(self.recalculate_from(&[cell]))
+    }
+
+    /// A cell put in place without working anything out.
+    ///
+    /// What opening a file is. The values in a workbook are the ones the
+    /// program that wrote it worked out, and they are trusted until somebody
+    /// types — so loading a hundred thousand formulas must not be a hundred
+    /// thousand recalculations, each of them reading cells that have not
+    /// arrived yet. The caller says when to work it all out, if it ever does.
+    pub fn load_value(&mut self, sheet: &str, row: i64, column: i64, value: Value) {
+        let cell = (sheet.to_string(), row, column);
+
+        self.graph.remove(&cell);
+        self.contents
+            .insert(cell.clone(), Content::Value(value.clone()));
+        self.values.insert(cell, value);
+        self.grow(sheet, row, column);
+    }
+
+    /// A formula put in place with the value the file said it came to.
+    pub fn load_formula(
+        &mut self,
+        sheet: &str,
+        row: i64,
+        column: i64,
+        text: &str,
+        cached: Value,
+    ) -> Result<(), ParseError> {
+        let tree = parse(text)?;
+        let cell = (sheet.to_string(), row, column);
+
+        self.graph.set(cell.clone(), precedents_of(&tree, sheet));
+        self.contents.insert(
+            cell.clone(),
+            Content::Formula {
+                text: text.to_string(),
+                tree,
+            },
+        );
+        self.values.insert(cell, cached);
+        self.grow(sheet, row, column);
+
+        Ok(())
+    }
+
+    /// Many cells at once, worked out once at the end.
+    ///
+    /// What a paste is, and a fill, and an undo of either. A hundred thousand
+    /// cells arriving one at a time would be a hundred thousand walks of the
+    /// graph, most of them over ground the next one covers again; this stages
+    /// them all and then walks it once from everything that moved.
+    ///
+    /// A formula that will not parse is named rather than stored. The caller
+    /// keeps what was typed — it is the person's own text, and a cell holding
+    /// something this program could not read is better than a cell quietly
+    /// holding something else.
+    pub fn set_many(&mut self, edits: Vec<(CellId, Edit)>) -> Applied {
+        let mut moved: Vec<CellId> = Vec::new();
+        let mut refused: Vec<CellId> = Vec::new();
+
+        for (cell, edit) in edits {
+            match edit {
+                Edit::Value(value) => {
+                    self.graph.remove(&cell);
+                    self.contents
+                        .insert(cell.clone(), Content::Value(value.clone()));
+                    self.values.insert(cell.clone(), value);
+                    self.grow(&cell.0, cell.1, cell.2);
+                }
+
+                Edit::Formula(text) => match parse(&text) {
+                    Ok(tree) => {
+                        self.graph.set(cell.clone(), precedents_of(&tree, &cell.0));
+                        self.contents
+                            .insert(cell.clone(), Content::Formula { text, tree });
+                        self.grow(&cell.0, cell.1, cell.2);
+                    }
+                    Err(_) => {
+                        // Somebody's own text, kept as text.
+                        self.graph.remove(&cell);
+                        let value = Value::Text(text);
+                        self.contents
+                            .insert(cell.clone(), Content::Value(value.clone()));
+                        self.values.insert(cell.clone(), value);
+                        self.grow(&cell.0, cell.1, cell.2);
+                        refused.push(cell.clone());
+                    }
+                },
+
+                Edit::Empty => {
+                    self.graph.remove(&cell);
+                    self.contents.remove(&cell);
+                    self.values.remove(&cell);
+                }
+            }
+
+            moved.push(cell);
+        }
+
+        Applied {
+            changed: self.recalculate_from(&moved),
+            refused,
+        }
     }
 
     /// A cell emptied.
@@ -224,5 +394,17 @@ impl Cells for View<'_> {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let on = sheet.unwrap_or(&self.sheet);
         self.engine.extents.get(on).copied().unwrap_or((0, 0))
+    }
+
+    fn now(&self) -> f64 {
+        self.engine.moment
+    }
+
+    fn random(&self) -> f64 {
+        self.engine.next_chance()
+    }
+
+    fn date_system(&self) -> DateSystem {
+        self.engine.system
     }
 }

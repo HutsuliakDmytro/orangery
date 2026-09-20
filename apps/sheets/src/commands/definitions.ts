@@ -9,7 +9,7 @@ import {
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
 import { exportOds, exportSheet } from '../document/file'
-import { useWorkbookStore } from '../store/workbook-store'
+import { recalculateWorkbook, useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
 /**
@@ -421,6 +421,20 @@ export const viewCommands: readonly Command[] = [
     isEnabled: hasWorkbook,
     run: () => {
       useWorkbookStore.getState().zoom(100)
+    },
+  },
+  {
+    id: 'view.recalculate',
+    label: 'Recalculate',
+    group: 'view',
+    shortcut: 'F9',
+    keywords: ['formula', 'calculate', 'refresh'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      // What somebody asks for when they have stopped trusting what is on
+      // screen — so it starts from the values as they were typed rather than
+      // from another pass over the same suspicion.
+      void recalculateWorkbook()
     },
   },
   {

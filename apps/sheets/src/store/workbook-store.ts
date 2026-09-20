@@ -32,8 +32,17 @@ import { columnNamesIn, looksLikeHeader, sortRows, tableToSort } from '../docume
 import type { SortKey } from '../document/sort'
 import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
+import {
+  applyReport,
+  closeEngine,
+  inputsFor,
+  openEngine,
+  recalculate,
+  setCells,
+} from '../document/formula'
+import type { Report } from '../document/formula'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
-import type { History } from '../document/history'
+import type { Change, History } from '../document/history'
 import { openWorkbook, visibleSheets } from '../document/workbook'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -224,6 +233,14 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     // The sheet the workbook was left on, as far as it is one a person can
     // see: a file can be saved with a hidden sheet active.
     const active = Math.min(Math.max(open.workbook.activeSheet, 0), Math.max(sheets.length - 1, 0))
+    const session = newSession()
+
+    // The cells go to the engine without anything being worked out: the
+    // numbers in a file are the ones the program that wrote it arrived at,
+    // and they are trusted until somebody types. What that buys is a workbook
+    // that opens at once rather than after a recalculation nobody asked for.
+    await openEngine(session, open)
+
     set({
       open,
       path,
@@ -233,7 +250,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       history: emptyHistory(),
       problem: null,
       notice: noticeFor(open),
-      session: newSession(),
+      session,
       busy: false,
     })
   },
@@ -247,6 +264,9 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
    * saying so.
    */
   converted: (open, notice) => {
+    const session = newSession()
+    void openEngine(session, open)
+
     set({
       open,
       path: null,
@@ -256,7 +276,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       history: emptyHistory(),
       problem: null,
       notice,
-      session: newSession(),
+      session,
       busy: false,
     })
   },
@@ -272,6 +292,8 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   },
 
   close: () => {
+    void closeEngine(useWorkbookStore.getState().session)
+
     set({
       open: null,
       path: null,
@@ -314,6 +336,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       current: made === undefined ? current : visibleSheets(open).indexOf(made),
       selection: singleCell({ row: 0, column: 0 }),
     })
+    reopenEngine()
   },
 
   removeSheet: (path) => {
@@ -329,6 +352,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       current: Math.min(current, Math.max(visibleSheets(open).length - 1, 0)),
       selection: singleCell({ row: 0, column: 0 }),
     })
+    reopenEngine()
   },
 
   renameSheet: (path, name) => {
@@ -338,6 +362,9 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     if (renameSheet(open, indexOfSheet(open, path), name) === null) return
 
     set({ open: { ...open, sheets: [...open.sheets] }, edited: true })
+    // A formula names a sheet by its name, so a rename is a rename of
+    // something the engine was told about.
+    reopenEngine()
   },
 
   moveSheet: (path, before) => {
@@ -1067,4 +1094,102 @@ export function sortTarget(): { columns: string[]; header: boolean; left: number
     header,
     left: Math.min(range.from.column, range.to.column),
   }
+}
+
+/**
+ * The engine told about the workbook again, from the beginning.
+ *
+ * Adding, removing or renaming a sheet changes what there is to be asked
+ * about, and none of the three goes through the history — they are not
+ * undoable, as in Excel. Handing the whole workbook over again is the
+ * simplest thing that is certainly right, and it happens when somebody clicks
+ * a tab rather than when they type.
+ */
+function reopenEngine(): void {
+  const { open, session } = useWorkbookStore.getState()
+  if (open === null) return
+
+  void openEngine(session, open)
+}
+
+/**
+ * Keeping the engine in step with what somebody did.
+ *
+ * One place rather than seventeen. Every edit in this store ends by recording
+ * a step of history, so the history is where "what a person did to the cells"
+ * is written down — and following it means an undo and a redo are handled by
+ * the same three lines as a keystroke, rather than by three more call sites
+ * that will be forgotten the next time one is added.
+ *
+ * Which way round depends on which way the history moved: a step recorded or
+ * put back tells the engine what the cells became, and a step taken back
+ * tells it what they were.
+ */
+function stepTaken(
+  before: History,
+  after: History,
+): { changes: Change[]; direction: 'before' | 'after' } | null {
+  if (after.past.length > before.past.length) {
+    const step = after.past[after.past.length - 1]
+    return step === undefined ? null : { changes: step.changes, direction: 'after' }
+  }
+
+  if (after.past.length < before.past.length) {
+    const step = after.future[0]
+    return step === undefined ? null : { changes: step.changes, direction: 'before' }
+  }
+
+  return null
+}
+
+async function followUp(
+  session: string,
+  open: OpenWorkbook,
+  changes: Change[],
+  direction: 'before' | 'after',
+): Promise<void> {
+  const cells = inputsFor(open, changes, direction)
+  if (cells.length === 0) return
+
+  const report: Report = await setCells(session, cells)
+  applyOutcome(session, report)
+}
+
+/**
+ * What the engine worked out, put where it can be seen.
+ *
+ * The state is read again rather than captured: the answer arrives a moment
+ * after the question, and in that moment somebody may have typed into another
+ * cell, closed the workbook, or opened a different one. A report belonging to
+ * a workbook that is no longer open is one to drop.
+ */
+function applyOutcome(session: string, report: Report): void {
+  const state = useWorkbookStore.getState()
+  if (state.open === null || state.session !== session) return
+  if (report.cells.length === 0 && report.circular.length === 0) return
+
+  const touched = applyReport(state.open, report)
+  if (touched.length === 0) return
+
+  useWorkbookStore.setState({ open: redrawn(state.open, touched) })
+}
+
+useWorkbookStore.subscribe((state, previous) => {
+  if (state.open === null || state.history === previous.history) return
+
+  const step = stepTaken(previous.history, state.history)
+  if (step === null) return
+
+  void followUp(state.session, state.open, step.changes, step.direction)
+})
+
+/**
+ * Everything worked out again — `F9`, and what somebody asks for when they
+ * have stopped trusting what is on screen.
+ */
+export async function recalculateWorkbook(): Promise<void> {
+  const { open, session } = useWorkbookStore.getState()
+  if (open === null) return
+
+  applyOutcome(session, await recalculate(session, open.workbook.date1904))
 }

@@ -1,0 +1,325 @@
+import { invoke } from '@tauri-apps/api/core'
+import { isTauri } from '@orangery/platform'
+import { putCell } from '@orangery/ooxml-spreadsheet'
+import type { Cell, CellType } from '@orangery/ooxml-spreadsheet'
+import type { Change } from './history'
+import type { OpenSheet, OpenWorkbook } from './workbook'
+
+/**
+ * Keeping the numbers on screen in step with the formulas behind them.
+ *
+ * The engine is Rust (`crates/formula`) and is a pure library: it is handed
+ * cells and asked for values, and it has never heard of a file or a window.
+ * This is the other half of that decision — the only place in the app that
+ * knows both the workbook on screen and the one in memory.
+ *
+ * Three rules shape everything here.
+ *
+ * The file's numbers are trusted until somebody types. A workbook was written
+ * by a program that worked its formulas out, and recalculating two hundred
+ * thousand cells to arrive at the same answers would be a slow way to open a
+ * file. So opening loads the cells without working anything out, and the
+ * first edit is what sets the graph walking.
+ *
+ * Only what changed comes back. One keystroke in a workbook of a million
+ * formulas touches a handful of cells, and the window repaints those.
+ *
+ * And a formula the engine cannot read is left exactly as the file wrote it.
+ * A workbook that uses something unimplemented must not become a workbook
+ * this program has damaged.
+ */
+
+/** A value, in the shapes that survive the trip to Rust and back. */
+export type Held =
+  | { kind: 'number'; number: number }
+  | { kind: 'text'; text: string }
+  | { kind: 'boolean'; boolean: boolean }
+  | { kind: 'error'; text: string }
+  | { kind: 'blank' }
+
+/** A cell as the engine is told about one. */
+export interface CellInput {
+  row: number
+  column: number
+  /** Without the leading `=`; absent for a cell somebody typed a value into. */
+  formula?: string
+  value: Held
+}
+
+export interface SheetInput {
+  sheet: string
+  cells: CellInput[]
+}
+
+export interface Outcome {
+  sheet: string
+  row: number
+  column: number
+  value: Held
+}
+
+export interface Place {
+  sheet: string
+  row: number
+  column: number
+}
+
+/** What a change came to, as the engine reports it. */
+export interface Report {
+  cells: Outcome[]
+  /** Cells that depend on themselves; Excel warns and leaves them at nought. */
+  circular: Place[]
+  /** Why a formula was refused, when it was. */
+  refused: string | null
+}
+
+const nothing: Report = { cells: [], circular: [], refused: null }
+
+/**
+ * The formula somebody typed, without its `=`.
+ *
+ * A lone `=` is not one: it is somebody who has begun and stopped, and
+ * storing it as a formula would mean storing something with nothing in it.
+ */
+export function typedFormula(text: string): string | null {
+  if (!text.startsWith('=')) return null
+
+  const body = text.slice(1).trim()
+  return body === '' ? null : text.slice(1)
+}
+
+/** What a cell holds, as a value the engine understands. */
+export function heldOf(open: OpenWorkbook, cell: Cell | null): Held {
+  if (cell === null || cell.value === null) return { kind: 'blank' }
+
+  if (cell.type === 's') {
+    return { kind: 'text', text: open.strings[Number(cell.value)]?.text ?? '' }
+  }
+  if (cell.type === 'inlineStr' || cell.type === 'str') return { kind: 'text', text: cell.value }
+  if (cell.type === 'b') return { kind: 'boolean', boolean: cell.value === '1' }
+  if (cell.type === 'e') return { kind: 'error', text: cell.value }
+
+  const number = Number(cell.value)
+  return Number.isFinite(number) ? { kind: 'number', number } : { kind: 'text', text: cell.value }
+}
+
+/**
+ * What a cell becomes when the engine has worked it out.
+ *
+ * A formula that comes to nothing shows nought, which is what Excel shows for
+ * `=A1` over an empty A1: the cell it points at is empty, and the sum of
+ * nothing is nought. Anywhere else in this program a blank stays a blank —
+ * here it is the answer to a question somebody asked.
+ */
+export function shownAs(value: Held): { type: CellType; value: string } {
+  switch (value.kind) {
+    case 'number':
+      return { type: 'n', value: String(value.number) }
+    // `str` rather than `inlineStr`: a formula's text result is what the file
+    // calls a string result, and it is written back as one.
+    case 'text':
+      return { type: 'str', value: value.text }
+    case 'boolean':
+      return { type: 'b', value: value.boolean ? '1' : '0' }
+    case 'error':
+      return { type: 'e', value: value.text }
+    case 'blank':
+      return { type: 'n', value: '0' }
+  }
+}
+
+/**
+ * Every cell of a workbook, as the engine is told about them on open.
+ *
+ * Named by the sheet's name rather than by its part. Everywhere else in this
+ * app a sheet is its path, because a name can change and a part cannot — but
+ * a formula says `Sheet2!A1`, and the engine has to find the sheet the
+ * formula names. Renaming is what keeps the two in step, and it is rare
+ * enough to be worth a reload.
+ */
+export function cellsOf(open: OpenWorkbook): SheetInput[] {
+  return open.sheets.map((sheet) => ({
+    sheet: sheet.name,
+    cells: inputsOf(open, sheet),
+  }))
+}
+
+/** The name a formula would use for the sheet kept in that part. */
+function nameOfPart(open: OpenWorkbook, path: string): string | null {
+  return open.sheets.find((one) => one.path === path)?.name ?? null
+}
+
+function inputsOf(open: OpenWorkbook, sheet: OpenSheet): CellInput[] {
+  const cells: CellInput[] = []
+
+  for (const row of sheet.cells.rows.values()) {
+    for (const cell of row.values()) {
+      const input: CellInput = { row: cell.row, column: cell.column, value: heldOf(open, cell) }
+      if (cell.formula !== null) input.formula = cell.formula.text
+      cells.push(input)
+    }
+  }
+
+  return cells
+}
+
+/**
+ * The cells a step of history touched, told to the engine.
+ *
+ * Which way round depends on which way the history is being walked: undo puts
+ * back what a cell was, redo puts back what it became, and the engine has to
+ * be told the same thing the sheet was told.
+ */
+export function inputsFor(
+  open: OpenWorkbook,
+  changes: readonly Change[],
+  direction: 'before' | 'after',
+): Placed[] {
+  const wanted: Placed[] = []
+
+  for (const change of changes) {
+    // Column widths, row heights, merges and filters change what a sheet
+    // looks like rather than what it comes to.
+    if (change.kind !== 'cell') continue
+
+    const name = nameOfPart(open, change.cell.sheet)
+    if (name === null) continue
+
+    const cell = direction === 'before' ? change.cell.before : change.cell.after
+    const where = { sheet: name, row: change.cell.row, column: change.cell.column }
+
+    if (cell === null) {
+      wanted.push(where)
+      continue
+    }
+
+    wanted.push({
+      ...where,
+      input: {
+        row: cell.row,
+        column: cell.column,
+        value: heldOf(open, cell),
+        ...(cell.formula === null ? {} : { formula: cell.formula.text }),
+      },
+    })
+  }
+
+  return wanted
+}
+
+/**
+ * Writes what the engine worked out into the cells that hold the formulas.
+ *
+ * The formula stays; only what it comes to is replaced. A cell whose text the
+ * engine has never been given is left alone — it belongs to a sheet this
+ * report is not about.
+ *
+ * Hands back the sheets that have to be redrawn, which is what the store does
+ * with it.
+ */
+export function applyReport(open: OpenWorkbook, report: Report): string[] {
+  const touched = new Set<string>()
+
+  for (const outcome of report.cells) {
+    const sheet = open.sheets.find((one) => one.name === outcome.sheet)
+    if (sheet === undefined) continue
+
+    const existing = sheet.cells.rows.get(outcome.row)?.get(outcome.column) ?? null
+    // A cell with nothing in it is not made to hold a nought: the engine
+    // reports the cell that was typed into as well as the ones that follow
+    // from it, and the typed one has already been written.
+    if (existing === null) continue
+
+    const { type, value } = shownAs(outcome.value)
+    if (existing.type === type && existing.value === value) continue
+
+    putCell(sheet.cells, { ...existing, type, value })
+    touched.add(sheet.path)
+  }
+
+  return [...touched]
+}
+
+/**
+ * A serial number for right now, in the workbook's own date system.
+ *
+ * Worked out here rather than in Rust because the workbook's calendar is a
+ * fact about the file, and because a library that read a clock could not be
+ * asked the same question twice.
+ */
+export function moment(date1904: boolean): number {
+  const now = new Date()
+  const days = Math.floor(now.getTime() / 86_400_000)
+  const fraction = (now.getTime() % 86_400_000) / 86_400_000
+  const offset = now.getTimezoneOffset() / (24 * 60)
+
+  // 25569 days from 1970 back to the 1900 system's own beginning, and 1462
+  // fewer for the workbook Excel for Mac wrote before 2011.
+  return days + 25_569 - (date1904 ? 1462 : 0) + fraction - offset
+}
+
+export async function openEngine(book: string, open: OpenWorkbook): Promise<void> {
+  if (!isTauri()) return
+
+  await invoke('formula_open', {
+    book,
+    sheets: cellsOf(open),
+    moment: moment(open.workbook.date1904),
+    date1904: open.workbook.date1904,
+    // The seed is the session's, so the same workbook recalculated twice in
+    // one sitting does not invent a different column of random numbers.
+    seed: Math.floor(Math.random() * 2 ** 32) + 1,
+  })
+}
+
+export async function closeEngine(book: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('formula_close', { book })
+}
+
+/** A cell as it is named when many of them go over at once. */
+export interface Placed {
+  sheet: string
+  row: number
+  column: number
+  /** Absent for a cell that was emptied. */
+  input?: CellInput
+}
+
+/**
+ * Many cells at once, worked out once at the end.
+ *
+ * A paste of a hundred thousand cells is one call rather than a hundred
+ * thousand, and one walk of the dependency graph rather than a hundred
+ * thousand walks over ground the next one covers again.
+ */
+export async function setCells(book: string, cells: Placed[]): Promise<Report> {
+  if (!isTauri() || cells.length === 0) return nothing
+  return await invoke<Report>('formula_set_many', { book, cells })
+}
+
+export async function setCell(
+  book: string,
+  sheet: string,
+  row: number,
+  column: number,
+  input: CellInput,
+): Promise<Report> {
+  if (!isTauri()) return nothing
+  return await invoke<Report>('formula_set', { book, sheet, row, column, input })
+}
+
+export async function clearCell(
+  book: string,
+  sheet: string,
+  row: number,
+  column: number,
+): Promise<Report> {
+  if (!isTauri()) return nothing
+  return await invoke<Report>('formula_clear', { book, sheet, row, column })
+}
+
+export async function recalculate(book: string, date1904: boolean): Promise<Report> {
+  if (!isTauri()) return nothing
+  return await invoke<Report>('formula_recalculate', { book, moment: moment(date1904) })
+}

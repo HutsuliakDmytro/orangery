@@ -2144,6 +2144,7 @@ dependencies = [
 name = "orangery-sheets"
 version = "0.1.0"
 dependencies = [
+ "formula",
  "orangery-tauri-shared",
  "serde",
  "serde_json",

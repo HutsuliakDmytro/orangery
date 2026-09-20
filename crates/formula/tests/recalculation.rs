@@ -6,7 +6,7 @@
 //! from the end that changed, and a cell that depends on itself has to be
 //! reported rather than looped over for ever.
 
-use formula::engine::Engine;
+use formula::engine::{self, Engine};
 use formula::value::{Error, Value};
 
 fn engine() -> Engine {
@@ -305,4 +305,82 @@ fn an_address_written_as_text_is_followed_when_the_text_changes() {
     // And the cell it landed on is followed too, though no edge says so.
     set(&mut engine, "A2", 30.0);
     assert_eq!(number(&engine, "C1"), 30.0);
+}
+
+#[test]
+fn a_workbook_loaded_keeps_the_values_the_file_came_with() {
+    // A file's numbers were worked out by whatever wrote it, and they are
+    // trusted until somebody types. Loading must not recalculate: a hundred
+    // thousand formulas arriving one at a time would be a hundred thousand
+    // recalculations over cells that have not arrived yet.
+    let mut engine = engine();
+    engine.load_value("Sheet1", 0, 0, Value::Number(2.0));
+    engine
+        .load_formula("Sheet1", 0, 1, "A1*3", Value::Number(99.0))
+        .expect("the formula should parse");
+
+    assert_eq!(number(&engine, "B1"), 99.0);
+
+    // And when it is asked, everything is worked out in order.
+    let changed = engine.recalculate();
+    assert_eq!(number(&engine, "B1"), 6.0);
+    assert!(
+        changed
+            .cells
+            .iter()
+            .any(|(cell, value)| cell == &("Sheet1".to_string(), 0, 1)
+                && *value == Value::Number(6.0))
+    );
+}
+
+#[test]
+fn a_loaded_workbook_reaches_the_whole_chain_from_one_edit() {
+    let mut engine = engine();
+    engine.load_value("Sheet1", 0, 0, Value::Number(2.0));
+    engine
+        .load_formula("Sheet1", 0, 1, "A1*3", Value::Number(6.0))
+        .expect("the formula should parse");
+    engine
+        .load_formula("Sheet1", 0, 2, "B1+1", Value::Number(7.0))
+        .expect("the formula should parse");
+
+    set(&mut engine, "A1", 5.0);
+    assert_eq!(number(&engine, "B1"), 15.0);
+    assert_eq!(number(&engine, "C1"), 16.0);
+}
+
+#[test]
+fn the_same_seed_gives_the_same_column_of_random_numbers() {
+    // Which is what makes a workbook recalculated on two machines agree, and
+    // what makes this testable at all.
+    let mut first = engine();
+    first.seed_random(7);
+    formula(&mut first, "A1", "RAND()");
+    formula(&mut first, "A2", "RANDBETWEEN(1,6)");
+
+    let mut second = engine();
+    second.seed_random(7);
+    formula(&mut second, "A1", "RAND()");
+    formula(&mut second, "A2", "RANDBETWEEN(1,6)");
+
+    assert_eq!(number(&first, "A1"), number(&second, "A1"));
+    assert_eq!(number(&first, "A2"), number(&second, "A2"));
+    assert!((0.0..1.0).contains(&number(&first, "A1")));
+    assert!((1.0..=6.0).contains(&number(&first, "A2")));
+}
+
+#[test]
+fn the_time_and_the_date_system_are_the_workbooks_own() {
+    let mut engine = engine();
+    engine.set_moment(45292.75);
+    formula(&mut engine, "A1", "TODAY()");
+    formula(&mut engine, "A2", "YEAR(NOW())");
+    assert_eq!(number(&engine, "A1"), 45292.0);
+    assert_eq!(number(&engine, "A2"), 2024.0);
+
+    let mut mac = engine::Engine::new();
+    mac.set_date_system(formula::date::DateSystem::Excel1904);
+    mac.set_formula("Sheet1", 0, 0, "DATE(2024,1,1)")
+        .expect("the formula should parse");
+    assert_eq!(mac.value("Sheet1", 0, 0), Value::Number(43830.0));
 }

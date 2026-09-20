@@ -2,15 +2,20 @@
 //!
 //! Everything that is not about spreadsheets — atomic writes, autosave, the
 //! menu builder, diagnostics — comes from `orangery-tauri-shared`, the same as
-//! the other two apps. What is here is this app's own wiring, which for now is
-//! almost nothing: a workbook is opened, shown, and saved through the shared
-//! document commands.
+//! the other two apps. What is here is this app's own: the formula engine,
+//! which is a spreadsheet's own question and nobody else's.
+
+mod formula;
 
 use orangery_tauri_shared::{diagnostics, document, menu};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // One formula engine per open workbook, kept between calls: sending a
+        // sheet across for every keystroke would rebuild the dependency graph
+        // for every keystroke, and a graph is built once and walked often.
+        .manage(formula::Workbooks::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
@@ -27,6 +32,13 @@ pub fn run() {
             diagnostics::write_diagnostic,
             diagnostics::read_diagnostics,
             diagnostics::clear_diagnostics,
+            formula::formula_open,
+            formula::formula_set,
+            formula::formula_set_many,
+            formula::formula_clear,
+            formula::formula_recalculate,
+            formula::formula_value,
+            formula::formula_close,
         ])
         .setup(|app| {
             document::emit_launch_paths(app.handle());

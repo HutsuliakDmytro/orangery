@@ -47,7 +47,10 @@ export function shiftFormula(text: string, by: { rows: number; columns: number }
  * of a string, the column names inside a structured reference, a function that
  * happens to be three letters and a number.
  */
-function mapReferences(text: string, rewrite: (reference: FoundReference) => string): string {
+function mapReferences(
+  text: string,
+  rewrite: (reference: FoundReference, on: SheetPrefix | null) => string,
+): string {
   if (text === '') return text
 
   const out: string[] = []
@@ -55,6 +58,31 @@ function mapReferences(text: string, rewrite: (reference: FoundReference) => str
 
   while (at < text.length) {
     const here = text[at] ?? ''
+
+    // `Sheet2!`, `'My Sheet'!`, `[1]Book!`, `Sheet1:Sheet3!` — pushed through
+    // untouched, and remembered, because what a reference after one means
+    // depends on it.
+    const prefix = sheetPrefixAt(text, at)
+    if (prefix !== null) {
+      out.push(text.slice(at, prefix.end))
+      at = prefix.end
+
+      const reference = referenceAt(text, at)
+      if (reference !== null) {
+        out.push(rewrite(reference, prefix))
+        at = reference.end
+
+        // `Sheet2!A1:B2` names the sheet once. The far end of the range is on
+        // the same sheet as the near one, and a walk that forgot the prefix at
+        // the colon would decide it was on this one.
+        const far = text[at] === ':' ? referenceAt(text, at + 1) : null
+        if (far !== null) {
+          out.push(':', rewrite(far, prefix))
+          at = far.end
+        }
+      }
+      continue
+    }
 
     if (here === '"' || here === "'") {
       const end = closingQuote(text, at, here)
@@ -79,11 +107,58 @@ function mapReferences(text: string, rewrite: (reference: FoundReference) => str
       continue
     }
 
-    out.push(rewrite(reference))
+    out.push(rewrite(reference, null))
     at = reference.end
   }
 
   return out.join('')
+}
+
+/**
+ * What stands before the `!` of a reference.
+ *
+ * Read for one purpose: deciding whether a reference is talking about the
+ * sheet whose rows have just moved. Which sheet it names matters less than
+ * whether it names one at all — a span names several and a book prefix names
+ * another file, and neither can be answered with a single moved row.
+ */
+export interface SheetPrefix {
+  /** The sheet, as written and unquoted; null when it names more than one. */
+  name: string | null
+  /** `[1]Sheet1!` or `[Book.xlsx]Sheet1!` — another workbook entirely. */
+  external: boolean
+  /** `Sheet1:Sheet3!` — the same cell on each of a run of sheets. */
+  span: boolean
+  end: number
+}
+
+/** A sheet name as it may be written: bare, or quoted with `''` for a quote. */
+const SHEET_NAME = String.raw`(?:'(?:[^']|'')*'|[A-Za-z0-9_.\u00C0-\uFFFF]+)`
+const SHEET_PREFIX = new RegExp(
+  String.raw`^(\[[^\]]*\])?(${SHEET_NAME})(?::(${SHEET_NAME}))?!`,
+  'u',
+)
+
+const unquoted = (name: string): string =>
+  name.startsWith("'") ? name.slice(1, -1).replace(/''/gu, "'") : name
+
+/** The prefix starting exactly here, or null. */
+function sheetPrefixAt(text: string, from: number): SheetPrefix | null {
+  const before = from === 0 ? '' : (text[from - 1] ?? '')
+  // Mid-name: `A1.Sheet1!` is not a prefix, and neither is the tail of one.
+  if (before !== '' && IDENTIFIER.test(before)) return null
+
+  const match = SHEET_PREFIX.exec(text.slice(from))
+  if (match === null) return null
+
+  const span = match[3] !== undefined
+
+  return {
+    name: span ? null : unquoted(match[2] ?? ''),
+    external: match[1] !== undefined,
+    span,
+    end: from + match[0].length,
+  }
 }
 
 /** Rows or columns inserted at a place, or taken away from it. */
@@ -93,6 +168,46 @@ export interface BandChange {
   at: number
   /** How many were put in; negative for how many were taken out. */
   by: number
+}
+
+/**
+ * Which sheet a band changed on, and which sheet a formula is written on.
+ *
+ * Both are needed and neither can be guessed. A formula on another sheet can
+ * point at this one and has to be adjusted; a formula on this one can point
+ * at another and must not be. Left out, every reference is adjusted — which
+ * is right for a workbook of one sheet and for a caller that has already
+ * decided.
+ */
+export interface FormulaPlace {
+  /** The sheet whose rows or columns moved. */
+  changed: string
+  /** The sheet the formula sits on, which is what a bare `A1` means. */
+  own: string
+}
+
+/** Sheet names are matched the way Excel matches them, which is loosely. */
+const sameSheet = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
+
+/**
+ * Whether this reference is talking about the sheet that changed.
+ *
+ * A reference into another workbook never is: an external reference is
+ * carried through untouched, and a row put into this file says nothing about
+ * the rows of that one.
+ *
+ * A reference across a span of sheets — `Sheet1:Sheet3!A5` — is left alone
+ * too, and that is a decision rather than an omission. It means A5 on each of
+ * three sheets, and a row inserted on one of them would make it mean a
+ * different row on that sheet and the same row on the others. One reference
+ * cannot say that, so moving it would be right in one place and wrong in two.
+ */
+function concerns(on: SheetPrefix | null, place: FormulaPlace | undefined): boolean {
+  if (place === undefined) return true
+  if (on === null) return sameSheet(place.own, place.changed)
+  if (on.external || on.span || on.name === null) return false
+
+  return sameSheet(on.name, place.changed)
 }
 
 /**
@@ -107,10 +222,12 @@ export interface BandChange {
  * A reference to a row that was deleted is `#REF!`, which is what Excel puts
  * there and the only honest answer: the cell it named is gone.
  */
-export function adjustFormula(text: string, change: BandChange): string {
+export function adjustFormula(text: string, change: BandChange, place?: FormulaPlace): string {
   if (change.by === 0) return text
 
-  return mapReferences(text, (reference) => {
+  return mapReferences(text, (reference, on) => {
+    if (!concerns(on, place)) return written(reference)
+
     const index = change.axis === 'row' ? reference.row : reference.column
     if (index < change.at) return written(reference)
 

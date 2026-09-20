@@ -99,7 +99,7 @@ export {
   sharedMasters,
   shiftFormula,
 } from './formulas'
-export type { BandChange, SharedMaster } from './formulas'
+export type { BandChange, FormulaPlace, SharedMaster } from './formulas'
 export { movedIndex, movedPosition, movedRange, movedRanges } from './band'
 export {
   EMU_PER_POINT,

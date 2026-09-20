@@ -222,3 +222,71 @@ describe('a formula after rows or columns move under it', () => {
     expect(adjustFormula('SUM(A1:A9)', { axis: 'row', at: 4, by: 0 })).toBe('SUM(A1:A9)')
   })
 })
+
+describe('adjusting a formula that names its sheet', () => {
+  const rows = { axis: 'row', at: 0, by: 1 } as const
+  const on = (changed: string, own: string) => ({ changed, own })
+
+  it('moves a reference to the sheet that changed', () => {
+    expect(adjustFormula('Sheet2!A9', rows, on('Sheet2', 'Sheet1'))).toBe('Sheet2!A10')
+  })
+
+  it('leaves a reference to a sheet that did not change', () => {
+    // The bug this exists for: a row put into Sheet1 used to move every
+    // reference in every formula on it, including the ones pointing away.
+    expect(adjustFormula('Sheet2!A9', rows, on('Sheet1', 'Sheet1'))).toBe('Sheet2!A9')
+  })
+
+  it('moves a bare reference only when the formula is on the sheet that changed', () => {
+    expect(adjustFormula('A9', rows, on('Sheet1', 'Sheet1'))).toBe('A10')
+    expect(adjustFormula('A9', rows, on('Sheet1', 'Sheet2'))).toBe('A9')
+  })
+
+  it('reads a quoted name, doubled quotes and all', () => {
+    expect(adjustFormula("'My Sheet'!A9", rows, on('My Sheet', 'Sheet1'))).toBe("'My Sheet'!A10")
+    expect(adjustFormula("'Bob''s'!A9", rows, on("Bob's", 'Sheet1'))).toBe("'Bob''s'!A10")
+  })
+
+  it('matches a name however it was capitalised, as Excel does', () => {
+    expect(adjustFormula('SHEET2!A9', rows, on('Sheet2', 'Sheet1'))).toBe('SHEET2!A10')
+  })
+
+  it('never touches another workbook', () => {
+    // External references are carried through; a row here says nothing about
+    // the rows there.
+    expect(adjustFormula('[1]Sheet1!A9', rows, on('Sheet1', 'Sheet1'))).toBe('[1]Sheet1!A9')
+  })
+
+  it('leaves a reference across a span of sheets alone', () => {
+    // `Sheet1:Sheet3!A9` means A9 on three sheets. A row inserted on one of
+    // them would make it two different answers, and one reference cannot say
+    // both — so it says what it said.
+    expect(adjustFormula('SUM(Sheet1:Sheet3!A9)', rows, on('Sheet2', 'Sheet1'))).toBe(
+      'SUM(Sheet1:Sheet3!A9)',
+    )
+  })
+
+  it('adjusts both ends of a range on the sheet that changed', () => {
+    expect(adjustFormula('SUM(Sheet2!A9:Sheet2!B9)', rows, on('Sheet2', 'Sheet1'))).toBe(
+      'SUM(Sheet2!A10:Sheet2!B10)',
+    )
+  })
+
+  it('takes the far end of a range with the near one', () => {
+    // `Sheet2!A9:B9` prefixes only the first half; the second belongs to the
+    // same sheet and moves with it.
+    expect(adjustFormula('SUM(Sheet2!A9:B9)', rows, on('Sheet2', 'Sheet1'))).toBe(
+      'SUM(Sheet2!A10:B10)',
+    )
+  })
+
+  it('still moves everything when nobody said where', () => {
+    expect(adjustFormula('Sheet2!A9', rows)).toBe('Sheet2!A10')
+  })
+
+  it('leaves a string that looks like a sheet name', () => {
+    expect(adjustFormula('IF(A9>0,"Sheet2!A9","")', rows, on('Sheet1', 'Sheet1'))).toBe(
+      'IF(A10>0,"Sheet2!A9","")',
+    )
+  })
+})

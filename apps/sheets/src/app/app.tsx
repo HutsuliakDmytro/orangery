@@ -3,6 +3,7 @@ import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
 import { selectedCount } from '@orangery/grid'
+import { formatCodeOf, resolveStyle } from '@orangery/ooxml-spreadsheet'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog, recoverWorkbook } from '../document/file'
 import { recoverable } from '../document/autosave'
@@ -16,6 +17,7 @@ import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
 import { FindPanel } from '../render/find-panel'
+import { FormatDialog } from '../render/format-dialog'
 import { LinkDialog } from '../render/link-dialog'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
@@ -91,6 +93,39 @@ function Shell() {
     void recoverable().then(setLost, () => {
       // Nothing to offer, which is the ordinary case and not a failure.
     })
+  }, [])
+
+  /** The format dialog, with the code and the value the cursor is on. */
+  const [formatting, setFormatting] = useState<{
+    code: string
+    value: number | null
+  } | null>(null)
+
+  useEffect(() => {
+    const onAsk = () => {
+      const { open: workbook, current: at, selection: where } = useWorkbookStore.getState()
+      if (workbook === null || workbook.styles === null) return
+
+      const sheet = visibleSheetsOf(workbook)[at]
+      const cell = sheet?.cells.rows.get(where.active.row)?.get(where.active.column) ?? null
+      const number = cell === null || cell.value === null ? Number.NaN : Number(cell.value)
+
+      setFormatting({
+        // A cell with no format of its own shows everything as it comes,
+        // which is what `General` means and what the box should start at.
+        code:
+          formatCodeOf(
+            workbook.styles,
+            resolveStyle(workbook.styles, cell?.style ?? null).numberFormat,
+          ) ?? 'General',
+        value: Number.isFinite(number) ? number : null,
+      })
+    }
+
+    window.addEventListener('orangery:format-cells', onAsk)
+    return () => {
+      window.removeEventListener('orangery:format-cells', onAsk)
+    }
   }, [])
 
   /** The link dialog, and what the cell under the cursor already links to. */
@@ -333,6 +368,21 @@ function Shell() {
           }}
           onCancel={() => {
             setImporting(null)
+          }}
+        />
+      )}
+
+      {formatting !== null && open !== null && (
+        <FormatDialog
+          code={formatting.code}
+          value={formatting.value}
+          date1904={open.workbook.date1904}
+          onApply={(code) => {
+            setFormatting(null)
+            format({ numberFormat: code })
+          }}
+          onCancel={() => {
+            setFormatting(null)
           }}
         />
       )}

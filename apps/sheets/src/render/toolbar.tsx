@@ -234,8 +234,9 @@ export function Toolbar({ open, sheet, selection, onFormat, onMerge }: ToolbarPr
         onChange={(event) => {
           const code = FORMATS.find((one) => one.label === event.target.value)?.code
           if (code === null) {
-            // The custom dialog is the next thing to build; until it is, the
-            // choice does nothing rather than doing something unasked.
+            // The dialog belongs to the window, which is listening: a toolbar
+            // knows how to ask for a format, not how to open a dialog.
+            window.dispatchEvent(new Event('orangery:format-cells'))
             return
           }
           if (code !== undefined) onFormat({ numberFormat: code })

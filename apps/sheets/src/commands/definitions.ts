@@ -177,6 +177,17 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'format.cells',
+    label: 'Number Format…',
+    group: 'edit',
+    shortcut: 'Mod+1',
+    keywords: ['format', 'cells', 'custom', 'currency', 'date'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      window.dispatchEvent(new Event('orangery:format-cells'))
+    },
+  },
+  {
     id: 'edit.link',
     label: 'Link…',
     group: 'edit',

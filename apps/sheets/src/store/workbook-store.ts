@@ -34,7 +34,7 @@ import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
 import { refusalFor } from '../document/validation'
 import { refusalForLocked } from '../document/protection'
-import { insertChart } from '../document/charts'
+import { insertChart, insertPicture } from '../document/charts'
 import type { NewChartKind } from '@orangery/charts'
 import {
   applyReport,
@@ -1277,6 +1277,30 @@ export function chartFromSelection(kind: NewChartKind): boolean {
     useWorkbookStore.setState({
       notice: 'A chart needs a block of cells: names down one column and numbers beside them.',
     })
+    return false
+  }
+
+  useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
+  return true
+}
+
+/**
+ * A picture put on the sheet, at the cell the cursor is on.
+ *
+ * Outside the history for the same reason a chart is: a step able to take it
+ * back would have to hold the image, the drawing and the relationship
+ * between them.
+ */
+export function pictureAtCursor(file: { name: string; bytes: Uint8Array }): boolean {
+  const { open, current, selection } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return false
+
+  const added = insertPicture(open, sheet, selection.active, file)
+  if (added === null) {
+    useWorkbookStore.setState({ notice: 'That file is not a picture this program can read.' })
     return false
   }
 

@@ -42,6 +42,28 @@ export async function readWorkbookFile(path: string): Promise<Uint8Array> {
   return new Uint8Array(loaded.bytes)
 }
 
+/**
+ * A picture off the disk, for putting on a sheet.
+ *
+ * Read through the same command a workbook is, because the webview cannot
+ * open a file by path and the bytes have to come from the native side either
+ * way — and because a picture somebody chose is a document like any other as
+ * far as reading it goes.
+ */
+export async function pickPicture(): Promise<{ name: string; bytes: Uint8Array } | null> {
+  if (!isTauri()) return null
+
+  const selected = await openDialog({
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'Picture', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'] }],
+  })
+
+  if (typeof selected !== 'string') return null
+
+  return { name: baseName(selected), bytes: await readWorkbookFile(selected) }
+}
+
 /** The file name, for the window title. Re-exported so callers need one import. */
 export const nameOf = baseName
 

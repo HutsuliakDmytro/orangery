@@ -17,6 +17,8 @@ import {
   writeSheetDrawings,
 } from '@orangery/ooxml-spreadsheet'
 import type { SheetDrawing } from '@orangery/ooxml-spreadsheet'
+import { addMedia } from '@orangery/ooxml-core'
+import { imageSize } from '@orangery/ooxml-drawingml'
 import { newChartPart } from '@orangery/charts'
 import type { ChartData, NewChartKind, SheetSource } from '@orangery/charts'
 import type { GridRange } from '@orangery/grid'
@@ -244,4 +246,76 @@ function relativeTo(from: string, to: string): string {
 
   const up = here.slice(same).map(() => '..')
   return [...up, ...there.slice(same)].join('/')
+}
+
+const IMAGE_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
+
+/** What a picture's bytes are, worked out from the name it came under. */
+const CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+}
+
+/**
+ * A picture put on a sheet, at its own size.
+ *
+ * Its own size because that is what Excel does and what somebody expects: a
+ * photograph dropped on a sheet arrives as a photograph rather than as a
+ * square. The size is read out of the first few dozen bytes rather than by
+ * decoding the image, which is a great deal of work for two numbers.
+ *
+ * Null for bytes nothing here can read as a picture, which is a file
+ * somebody chose by mistake rather than a failure to be reported in a banner.
+ */
+export function insertPicture(
+  open: OpenWorkbook,
+  sheet: OpenSheet,
+  at: { row: number; column: number },
+  file: { name: string; bytes: Uint8Array },
+): AnchoredDrawing | null {
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const contentType = CONTENT_TYPES[extension]
+  if (contentType === undefined) return null
+
+  const drawingPath = drawingPartOf(open, sheet)
+  const drawings = readSheetDrawings(getPartText(open.pkg, drawingPath) ?? '')
+
+  const added = addMedia(open.pkg, {
+    directory: 'xl/media',
+    relsPart: relationshipsOf(drawingPath),
+    relationshipType: IMAGE_RELATIONSHIP,
+    fileName: file.name,
+    contentType,
+    bytes: file.bytes,
+  })
+
+  // Pixels at ninety-six to the inch, which is what every screen-made image
+  // means by its size and what Excel assumes of one.
+  const size = imageSize(file.bytes) ?? { width: 320, height: 240 }
+  const emu = (pixels: number) => Math.round((pixels / 96) * 72 * EMU_PER_POINT)
+
+  const drawing: SheetDrawing = {
+    anchor: {
+      kind: 'one',
+      from: { column: at.column, columnOffset: 0, row: at.row, rowOffset: 0 },
+      width: emu(size.width),
+      height: emu(size.height),
+    },
+    content: { kind: 'picture', relationshipId: added.relationshipId },
+    name: `Picture ${String(drawings.length + 1)}`,
+    editAs: 'oneCell',
+  }
+
+  setPartText(open.pkg, drawingPath, writeSheetDrawings([...drawings, drawing]))
+
+  const anchored: AnchoredDrawing = { drawing, path: added.path }
+  sheet.drawings.push(anchored)
+
+  return anchored
 }

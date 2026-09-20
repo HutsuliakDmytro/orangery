@@ -5,11 +5,17 @@ import {
   newWorkbookFile,
   openWorkbookFromDialog,
   saveWorkbook,
+  pickPicture,
   saveWorkbookAs,
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
 import { exportOds, exportSheet } from '../document/file'
-import { chartFromSelection, recalculateWorkbook, useWorkbookStore } from '../store/workbook-store'
+import {
+  chartFromSelection,
+  pictureAtCursor,
+  recalculateWorkbook,
+  useWorkbookStore,
+} from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
 /**
@@ -485,6 +491,22 @@ export const chartCommands: readonly Command[] = (
   },
 }))
 
+export const pictureCommands: readonly Command[] = [
+  {
+    id: 'insert.picture',
+    label: 'Picture…',
+    group: 'insert',
+    keywords: ['image', 'photo', 'logo'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      void (async () => {
+        const file = await pickPicture()
+        if (file !== null) pictureAtCursor(file)
+      })()
+    },
+  },
+]
+
 export const sheetCommands: readonly Command[] = [
   {
     id: 'sheet.next',
@@ -521,6 +543,7 @@ export const sheetCommands: readonly Command[] = [
 export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(chartCommands)
+  registerAll(pictureCommands)
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(dataCommands)

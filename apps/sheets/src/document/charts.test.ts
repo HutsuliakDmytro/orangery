@@ -6,7 +6,7 @@ import { readSheetDrawings } from '@orangery/ooxml-spreadsheet'
 import { readChart } from '@orangery/charts'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
-import { chartDataFrom, insertChart } from './charts'
+import { chartDataFrom, insertChart, insertPicture } from './charts'
 import { workbookBytes } from './save'
 
 /**
@@ -113,5 +113,36 @@ describe('putting one on the sheet', () => {
     expect(readSheetDrawings(getPartText(open.pkg, 'xl/drawings/drawing1.xml') ?? '')).toHaveLength(
       sheet.drawings.length,
     )
+  })
+})
+
+describe('putting a picture on the sheet', () => {
+  /** The smallest PNG there is: one pixel, and a header that says so. */
+  const png = () =>
+    Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x40, 0x08, 0x06, 0x00, 0x00, 0x00,
+    ])
+
+  it('shows it at once, at the size the image says it is', () => {
+    const added = insertPicture(open, sheet, { row: 2, column: 2 }, { name: 'a.png', bytes: png() })
+
+    expect(added?.drawing.content.kind).toBe('picture')
+    // Ninety-six pixels wide at ninety-six to the inch is one inch, which is
+    // seventy-two points.
+    expect(added?.drawing.anchor.kind === 'one' ? added.drawing.anchor.width : 0).toBe(72 * 12_700)
+  })
+
+  it('puts the bytes in the package with a relationship to them', () => {
+    const added = insertPicture(open, sheet, { row: 0, column: 0 }, { name: 'a.png', bytes: png() })
+
+    expect(open.pkg.parts.has(added?.path ?? '')).toBe(true)
+    expect(getPartText(open.pkg, '[Content_Types].xml')).toContain('image/png')
+  })
+
+  it('refuses bytes nothing here can read as a picture', () => {
+    expect(
+      insertPicture(open, sheet, { row: 0, column: 0 }, { name: 'notes.txt', bytes: png() }),
+    ).toBeNull()
   })
 })

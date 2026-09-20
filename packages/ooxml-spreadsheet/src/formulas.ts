@@ -47,71 +47,102 @@ export function shiftFormula(text: string, by: { rows: number; columns: number }
  * of a string, the column names inside a structured reference, a function that
  * happens to be three letters and a number.
  */
-function mapReferences(
-  text: string,
-  rewrite: (reference: FoundReference, on: SheetPrefix | null) => string,
-): string {
-  if (text === '') return text
+/**
+ * Every A1 reference in a formula, found where it stands.
+ *
+ * The walk both moving and rewriting share, and the only difficult part of
+ * either. Almost all of it is about what must *not* count: the words of a
+ * string, the column names inside a structured reference, a function that
+ * happens to be three letters and a number.
+ */
+function scanReferences(text: string, visit: (found: Found) => void): void {
+  if (text === '') return
 
-  const out: string[] = []
   let at = 0
 
   while (at < text.length) {
     const here = text[at] ?? ''
 
-    // `Sheet2!`, `'My Sheet'!`, `[1]Book!`, `Sheet1:Sheet3!` — pushed through
-    // untouched, and remembered, because what a reference after one means
-    // depends on it.
+    // `Sheet2!`, `'My Sheet'!`, `[1]Book!`, `Sheet1:Sheet3!` — remembered,
+    // because what a reference after one means depends on it.
     const prefix = sheetPrefixAt(text, at)
     if (prefix !== null) {
-      out.push(text.slice(at, prefix.end))
-      at = prefix.end
+      const reference = referenceAt(text, prefix.end)
+      if (reference === null) {
+        at = prefix.end
+        continue
+      }
 
-      const reference = referenceAt(text, at)
-      if (reference !== null) {
-        out.push(rewrite(reference, prefix))
-        at = reference.end
+      visit({ start: at, from: prefix.end, end: reference.end, prefix, reference, far: false })
+      at = reference.end
 
-        // `Sheet2!A1:B2` names the sheet once. The far end of the range is on
-        // the same sheet as the near one, and a walk that forgot the prefix at
-        // the colon would decide it was on this one.
-        const far = text[at] === ':' ? referenceAt(text, at + 1) : null
-        if (far !== null) {
-          out.push(':', rewrite(far, prefix))
-          at = far.end
-        }
+      // `Sheet2!A1:B2` names the sheet once. The far end of the range is on
+      // the same sheet as the near one, and a walk that forgot the prefix at
+      // the colon would decide it was on this one.
+      const far = text[at] === ':' ? referenceAt(text, at + 1) : null
+      if (far !== null) {
+        visit({ start: at + 1, from: at + 1, end: far.end, prefix, reference: far, far: true })
+        at = far.end
       }
       continue
     }
 
     if (here === '"' || here === "'") {
-      const end = closingQuote(text, at, here)
-      out.push(text.slice(at, end))
-      at = end
+      at = closingQuote(text, at, here)
       continue
     }
 
     // `Table1[[#Headers],[Total]]` names columns, not cells; nothing inside
     // the brackets is an A1 reference and nothing in them moves.
     if (here === '[') {
-      const end = closingBracket(text, at)
-      out.push(text.slice(at, end))
-      at = end
+      at = closingBracket(text, at)
       continue
     }
 
     const reference = referenceAt(text, at)
     if (reference === null) {
-      out.push(here)
       at += 1
       continue
     }
 
-    out.push(rewrite(reference, null))
+    const far = text[reference.end] === ':' ? referenceAt(text, reference.end + 1) : null
+    visit({ start: at, from: at, end: reference.end, prefix: null, reference, far: false })
     at = reference.end
-  }
 
-  return out.join('')
+    if (far !== null) {
+      visit({ start: at + 1, from: at + 1, end: far.end, prefix: null, reference: far, far: true })
+      at = far.end
+    }
+  }
+}
+
+/** One reference, and where in the text it was written. */
+interface Found {
+  /** Where it starts, sheet prefix and all. */
+  start: number
+  /** Where the letters and digits start, which is after any prefix. */
+  from: number
+  end: number
+  prefix: SheetPrefix | null
+  reference: FoundReference
+  /** Whether it is the far end of a range whose near end came just before. */
+  far: boolean
+}
+
+/** Every A1 reference in a formula, rewritten. */
+function mapReferences(
+  text: string,
+  rewrite: (reference: FoundReference, on: SheetPrefix | null) => string,
+): string {
+  const out: string[] = []
+  let at = 0
+
+  scanReferences(text, (found) => {
+    out.push(text.slice(at, found.from), rewrite(found.reference, found.prefix))
+    at = found.end
+  })
+
+  return out.length === 0 ? text : out.join('') + text.slice(at)
 }
 
 /**
@@ -457,4 +488,119 @@ export function collapsedFormula(cell: Cell, masters: Map<number, SharedMaster>)
   return formula.text === expected
     ? { ...formula, text: '' }
     : { text: formula.text, kind: 'normal', shared: null, ref: null }
+}
+
+/** A reference as it stands in a formula, with where it stands. */
+export interface WrittenReference {
+  /** Where it begins, sheet prefix and all, and where it ends. */
+  start: number
+  end: number
+  /** The sheet it names, or null when it names none of its own. */
+  sheet: string | null
+  /** Whether it reaches into another workbook. */
+  external: boolean
+  from: { row: number; column: number }
+  to: { row: number; column: number }
+}
+
+/**
+ * Every reference a formula makes, as ranges rather than as corners.
+ *
+ * `A1:B2` is one thing a person means and two things the text holds, and
+ * everything that wants this list — colouring the references in a formula bar,
+ * boxing the cells they name, cycling the dollars on the one under the caret —
+ * wants the thing rather than the corners.
+ *
+ * What is in the list is what the formula *says*, not what it means: an
+ * unknown name is not here, and neither is a table reference, because neither
+ * of them is a rectangle until somebody who knows the workbook says so.
+ */
+export function referencesIn(text: string): WrittenReference[] {
+  const found: WrittenReference[] = []
+
+  scanReferences(text, (one) => {
+    const corner = { row: one.reference.row, column: one.reference.column }
+    const last = found[found.length - 1]
+
+    if (one.far && last !== undefined) {
+      last.end = one.end
+      last.to = corner
+      return
+    }
+
+    found.push({
+      start: one.start,
+      end: one.end,
+      sheet: one.prefix?.name ?? null,
+      external: one.prefix?.external ?? false,
+      from: corner,
+      to: corner,
+    })
+  })
+
+  return found
+}
+
+/**
+ * The reference under the caret with its dollars moved on one step.
+ *
+ * `A1` → `$A$1` → `A$1` → `$A1` → `A1`, which is Excel's F4 and is in the
+ * fingers of everybody who has ever written a formula they meant to copy. The
+ * order is not arbitrary: the first press pins everything, which is what is
+ * wanted most often, and the two half-pinned forms come after.
+ *
+ * A range moves as one. `A1:B2` pins both ends together, because a range
+ * half-pinned at one end is something somebody would have asked for by
+ * typing it.
+ *
+ * Null when the caret is not in a reference, which is how the caller knows to
+ * leave the key alone.
+ */
+export function cycledReference(
+  text: string,
+  caret: number,
+): { text: string; caret: number } | null {
+  const parts: Found[] = []
+  scanReferences(text, (one) => parts.push(one))
+
+  // The two halves of `A1:B2` are one range as far as this is concerned.
+  const ranges: { first: number; start: number; end: number }[] = []
+  for (const [index, one] of parts.entries()) {
+    const last = ranges[ranges.length - 1]
+    if (one.far && last !== undefined) last.end = one.end
+    else ranges.push({ first: index, start: one.start, end: one.end })
+  }
+
+  // Touching either edge counts: somebody who has just typed `A1` has the
+  // caret after the `1`.
+  const range = ranges.find((one) => caret >= one.start && caret <= one.end)
+  const near = range === undefined ? undefined : parts[range.first]
+  if (range === undefined || near === undefined) return null
+
+  const after = parts[range.first + 1]
+  const far = after?.far === true ? after : undefined
+  const next =
+    NEXT[`${near.reference.columnFixed ? '1' : '0'}${near.reference.rowFixed ? '1' : '0'}`]
+  if (next === undefined) return null
+
+  const pinned = (one: Found): string =>
+    written({ ...one.reference, columnFixed: next.column, rowFixed: next.row })
+
+  const before = text.slice(0, near.from)
+  const middle = far === undefined ? '' : text.slice(near.end, far.from)
+  const rewritten = pinned(near) + middle + (far === undefined ? '' : pinned(far))
+  const ends = (far ?? near).end
+
+  return {
+    text: before + rewritten + text.slice(ends),
+    caret: before.length + rewritten.length,
+  }
+}
+
+/** Where each state of the dollars goes next, by column-then-row. */
+const NEXT: Record<string, { column: boolean; row: boolean }> = {
+  '00': { column: true, row: true },
+  '11': { column: false, row: true },
+  '01': { column: true, row: false },
+  '10': { column: false, row: false },
 }

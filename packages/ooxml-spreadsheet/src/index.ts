@@ -95,11 +95,13 @@ export type { SaveOptions, SheetToWrite } from './save'
 export {
   adjustFormula,
   collapsedFormula,
+  cycledReference,
   expandFormulas,
+  referencesIn,
   sharedMasters,
   shiftFormula,
 } from './formulas'
-export type { BandChange, FormulaPlace, SharedMaster } from './formulas'
+export type { BandChange, FormulaPlace, SharedMaster, WrittenReference } from './formulas'
 export { movedEnd, movedIndex, movedPosition, movedRange, movedRanges, movedStart } from './band'
 export {
   EMU_PER_POINT,

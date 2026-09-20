@@ -27,27 +27,50 @@ function held(value: number | string | boolean): { type: CellType; value: string
 }
 
 /**
- * Puts what somebody typed into a cell.
+ * What one cell was, and what it became.
+ *
+ * Both halves, because undo needs the first and redo needs the second, and a
+ * history that kept only one of them would be a history that could go in one
+ * direction.
+ */
+export interface CellChange {
+  /** The part, rather than the position: sheets can be reordered. */
+  sheet: string
+  row: number
+  column: number
+  before: Cell | null
+  after: Cell | null
+}
+
+/**
+ * Puts what somebody typed into a cell, and says what that changed.
  *
  * Written into the model in place: the workbook is a sparse map of a million
  * cells and the store hands the same one back, so a copy to change one string
  * would be a copy of all of it on every keystroke.
+ *
+ * Null when nothing changed — typing the same thing again, or emptying a cell
+ * that was already empty. A step that changed nothing is a step that undo
+ * would appear to skip.
  */
 export function applyEdit(
   open: OpenWorkbook,
   sheet: OpenSheet,
   address: CellAddress,
   text: string,
-): void {
+): CellChange | null {
   const existing = sheet.cells.rows.get(address.row)?.get(address.column) ?? null
   const parsed = parseInput(text, { date1904: open.workbook.date1904 })
+  const was = { sheet: sheet.path, row: address.row, column: address.column, before: existing }
 
   // An empty cell is absent rather than blank: a `<c>` with no `<v>` is an
   // empty string to some readers and nothing to others, and absent is the one
   // form everybody agrees about.
   if (parsed.kind === 'text' && parsed.value === '') {
+    if (existing === null) return null
+
     sheet.cells.rows.get(address.row)?.delete(address.column)
-    return
+    return { ...was, after: null }
   }
 
   const { type, value } =
@@ -74,4 +97,39 @@ export function applyEdit(
   }
 
   putCell(sheet.cells, cell)
+  return { ...was, after: cell }
+}
+
+/**
+ * Empties every cell of a range, as one change apiece.
+ *
+ * Handed back rather than applied step by step: clearing a selection is one
+ * thing somebody did and has to be one thing they can take back.
+ */
+export function clearCells(sheet: OpenSheet, cells: Iterable<CellAddress>): CellChange[] {
+  const changes: CellChange[] = []
+
+  for (const address of cells) {
+    const existing = sheet.cells.rows.get(address.row)?.get(address.column) ?? null
+    if (existing === null) continue
+
+    sheet.cells.rows.get(address.row)?.delete(address.column)
+    changes.push({
+      sheet: sheet.path,
+      row: address.row,
+      column: address.column,
+      before: existing,
+      after: null,
+    })
+  }
+
+  return changes
+}
+
+/** Puts a cell back the way a change found it, or takes it away again. */
+export function restore(sheet: OpenSheet, change: CellChange, to: 'before' | 'after'): void {
+  const cell = change[to]
+
+  if (cell === null) sheet.cells.rows.get(change.row)?.delete(change.column)
+  else putCell(sheet.cells, cell)
 }

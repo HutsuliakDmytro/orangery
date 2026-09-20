@@ -60,6 +60,8 @@ export interface SheetViewProps {
   onSelectionChange?: (selection: GridSelection) => void
   /** Called with what was typed; without it the sheet is read-only. */
   onEdit?: (address: CellAddress, text: string) => void
+  /** Called when Delete is pressed, with everything selected. */
+  onClear?: () => void
 }
 
 export function SheetView({
@@ -70,6 +72,7 @@ export function SheetView({
   selection,
   onSelectionChange,
   onEdit,
+  onClear,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -382,6 +385,7 @@ export function SheetView({
       {...(selection === undefined ? {} : { selection })}
       {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
       {...(onEdit === undefined ? {} : { onChange: onEdit })}
+      {...(onClear === undefined ? {} : { onDelete: onClear })}
       onHoverCell={notes.any ? setHovered : undefined}
       overlay={
         sheet.drawings.length === 0 && !notes.any

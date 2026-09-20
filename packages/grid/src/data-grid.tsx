@@ -104,6 +104,14 @@ export interface DataGridProps {
   selection?: GridSelection
   onSelectionChange?: (selection: GridSelection) => void
   /**
+   * Called with everything selected when Delete is pressed.
+   *
+   * Without it, Delete empties the one cell the cursor is on, which is all a
+   * chart's data editor has ever needed. With it, clearing a selection is one
+   * thing the caller can record as one thing.
+   */
+  onDelete?: (selection: GridSelection) => void
+  /**
    * How much larger everything is drawn; 1 is unzoomed.
    *
    * Folded into the measurements rather than applied to the canvas, so that
@@ -244,6 +252,7 @@ export function DataGrid({
   onHoverCell,
   selection: given,
   onSelectionChange,
+  onDelete,
 }: DataGridProps) {
   const metrics = useMemo<GridMetrics>(
     () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
@@ -765,14 +774,22 @@ export function DataGrid({
       return
     }
 
-    // Delete empties the cell, as it does in every spreadsheet. Handed over as
-    // empty text rather than as a value of its own: what emptying a cell means
-    // is the caller's to decide, and for a chart it is a gap rather than a
-    // nought.
-    if ((event.key === 'Delete' || event.key === 'Backspace') && canEdit(selected)) {
-      event.preventDefault()
-      if (valueAt(selected) !== null && valueAt(selected) !== '') onChange?.(selected, '')
-      return
+    // Delete empties what is selected, as it does in every spreadsheet. Handed
+    // over as empty text rather than as a value of its own: what emptying a
+    // cell means is the caller's to decide, and for a chart it is a gap rather
+    // than a nought.
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (onDelete !== undefined) {
+        event.preventDefault()
+        onDelete(selection)
+        return
+      }
+
+      if (canEdit(selected)) {
+        event.preventDefault()
+        if (valueAt(selected) !== null && valueAt(selected) !== '') onChange?.(selected, '')
+        return
+      }
     }
 
     // Typing into a selected cell replaces what is in it, as every spreadsheet

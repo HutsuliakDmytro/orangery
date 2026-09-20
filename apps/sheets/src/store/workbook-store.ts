@@ -1,7 +1,9 @@
 import { create } from 'zustand'
-import { singleCell } from '@orangery/grid'
+import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
-import { applyEdit } from '../document/edit'
+import { applyEdit, clearCells } from '../document/edit'
+import { emptyHistory, recorded, redo, undo } from '../document/history'
+import type { History } from '../document/history'
 import { openWorkbook, visibleSheets } from '../document/workbook'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -34,6 +36,8 @@ export interface WorkbookState {
    * changes" will ask when there is one to ask.
    */
   edited: boolean
+  /** What can be taken back, and what can be put back after that. */
+  history: History
   /** What went wrong the last time something was opened, for the banner. */
   problem: string | null
   busy: boolean
@@ -44,6 +48,10 @@ export interface WorkbookState {
   select: (index: number) => void
   choose: (selection: GridSelection) => void
   edit: (address: CellAddress, text: string) => void
+  /** Empties everything selected, as one thing that can be taken back. */
+  clear: () => void
+  undo: () => void
+  redo: () => void
   /** A workbook that has just been written, and now belongs to that path. */
   saved: (path: string) => void
 }
@@ -54,6 +62,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   current: 0,
   selection: singleCell({ row: 0, column: 0 }),
   edited: false,
+  history: emptyHistory(),
   problem: null,
   busy: false,
 
@@ -71,6 +80,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       current: active,
       selection: singleCell({ row: 0, column: 0 }),
       edited: false,
+      history: emptyHistory(),
       problem: null,
       busy: false,
     })
@@ -93,6 +103,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       current: 0,
       selection: singleCell({ row: 0, column: 0 }),
       edited: false,
+      history: emptyHistory(),
       problem: null,
       busy: false,
     })
@@ -113,28 +124,106 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   },
 
   edit: (address, text) => {
-    const { open, current } = useWorkbookStore.getState()
+    const { open, current, history, selection } = useWorkbookStore.getState()
     if (open === null) return
 
     const sheet = visibleSheets(open)[current]
     if (sheet === undefined) return
 
-    applyEdit(open, sheet, address, text)
+    const change = applyEdit(open, sheet, address, text)
+    if (change === null) return
 
-    /**
-     * The cells are changed in place and then handed over in a new wrapper.
-     *
-     * A sparse map of a million cells is not copied to change one string, but
-     * something has to tell the window that what it is holding is no longer
-     * what it drew. Shallow copies of the sheet and of the workbook around it
-     * cost three objects and say exactly that.
-     */
-    const changed: OpenSheet = { ...sheet, cells: { ...sheet.cells } }
     set({
-      open: { ...open, sheets: open.sheets.map((one) => (one === sheet ? changed : one)) },
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes: [change], selection }),
+    })
+  },
+
+  clear: () => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    // Every cell of every range, once: `Mod`-clicking a cell that is already
+    // selected would otherwise clear it twice, and the second change would
+    // record an empty cell as what the first one found.
+    const seen = new Set<number>()
+    const cells: CellAddress[] = []
+
+    for (const range of selection.ranges) {
+      const bounds = boundsOf(range)
+      for (let row = bounds.top; row <= bounds.bottom; row += 1) {
+        for (let column = bounds.left; column <= bounds.right; column += 1) {
+          const key = row * 16_384 + column
+          if (seen.has(key)) continue
+
+          seen.add(key)
+          cells.push({ row, column })
+        }
+      }
+    }
+
+    const changes = clearCells(sheet, cells)
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  undo: () => {
+    const { open, history } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const moved = undo(open, history)
+    if (moved.selection === null) return
+
+    set({
+      open: redrawn(open, moved.sheets),
+      history: moved.history,
+      selection: moved.selection,
+      edited: true,
+    })
+  },
+
+  redo: () => {
+    const { open, history } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const moved = redo(open, history)
+    if (moved.selection === null) return
+
+    set({
+      open: redrawn(open, moved.sheets),
+      history: moved.history,
+      selection: moved.selection,
       edited: true,
     })
   },
 }))
+
+/**
+ * The workbook, with the sheets that changed handed over in new wrappers.
+ *
+ * A sparse map of a million cells is not copied to change one string, but
+ * something has to tell the window that what it is holding is no longer what
+ * it drew. Shallow copies of the sheet and of the workbook around it cost
+ * three objects and say exactly that.
+ */
+function redrawn(open: OpenWorkbook, paths: Iterable<string>): OpenWorkbook {
+  const changed = new Set(paths)
+
+  return {
+    ...open,
+    sheets: open.sheets.map((one) =>
+      changed.has(one.path) ? { ...one, cells: { ...one.cells } } : one,
+    ),
+  }
+}
 
 export const visibleSheetsOf = (open: OpenWorkbook): OpenSheet[] => visibleSheets(open)

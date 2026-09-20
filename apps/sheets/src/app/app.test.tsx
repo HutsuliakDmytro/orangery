@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -30,6 +30,13 @@ beforeEach(() => {
   useWorkbookStore.getState().close()
   recorded.reset()
 })
+
+/** Somebody at the keyboard, with the grid under it. */
+const atTheGrid = async () => {
+  const typist = userEvent.setup()
+  await typist.click(await screen.findByRole('grid', { name: 'Budget' }))
+  return typist
+}
 
 describe('a window with nothing in it', () => {
   it('says so, and offers the one thing there is to do', () => {
@@ -255,5 +262,83 @@ describe('typing into a sheet', () => {
     await waitFor(() => {
       expect(recorded.texts.some((one) => one.text === 'Rent')).toBe(true)
     })
+  })
+})
+
+describe('taking back what was typed', () => {
+  const cellAt = (row: number, column: number) =>
+    useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+
+  it('is offered only once there is something to take back', async () => {
+    render(<App />)
+    await load()
+
+    expect(getCommand('edit.undo')?.isEnabled?.({})).toBe(false)
+
+    await (await atTheGrid()).keyboard('42{Enter}')
+    expect(getCommand('edit.undo')?.isEnabled?.({})).toBe(true)
+  })
+
+  it('puts the cell back as it was', async () => {
+    render(<App />)
+    await load()
+
+    await (await atTheGrid()).keyboard('Rent{Enter}')
+    expect(cellAt(0, 0)?.value).toBe('Rent')
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    // A1 held "Month" as an index into the shared string table.
+    expect(cellAt(0, 0)).toMatchObject({ type: 's', value: '0' })
+  })
+
+  it('puts it back again on redo', async () => {
+    render(<App />)
+    await load()
+
+    await (await atTheGrid()).keyboard('Rent{Enter}')
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+    act(() => {
+      runCommand('edit.redo', {})
+    })
+
+    expect(cellAt(0, 0)?.value).toBe('Rent')
+  })
+
+  it('clears everything selected, and takes it back in one press', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    // A1 to B2, four cells with something in each. Chosen through the name box
+    // rather than by dragging: a click in jsdom lands at the origin, which is
+    // the corner box, which selects the whole sheet.
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'A1:B2{Enter}')
+
+    // Delete goes straight to the grid, so no pointer disturbs the selection.
+    fireEvent.keyDown(screen.getByRole('grid', { name: 'Budget' }), { key: 'Delete' })
+
+    expect(cellAt(0, 0)).toBeNull()
+    expect(cellAt(1, 1)).toBeNull()
+    expect(cellAt(0, 1)).toBeNull()
+
+    // C2 was never selected and is still there, which is what says the clear
+    // stopped where the selection did.
+    expect(cellAt(1, 2)).not.toBeNull()
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(cellAt(0, 0)).not.toBeNull()
+    expect(cellAt(1, 1)?.value).toBe('1234.5')
+    // One press, for four cells.
+    expect(getCommand('edit.undo')?.isEnabled?.({})).toBe(false)
   })
 })

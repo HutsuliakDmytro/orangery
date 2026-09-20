@@ -2,6 +2,7 @@ import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import { openWorkbookFromDialog, saveWorkbook } from '../document/file'
+import { canRedo, canUndo } from '../document/history'
 import { useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
@@ -12,9 +13,8 @@ import { visibleSheets } from '../document/workbook'
  * exists once and works from all three — the rule the other two apps follow
  * (`apps/docs/docs/adr/0002-command-registry.md`).
  *
- * What a reader can do is all there is so far: open a workbook, save it back,
- * close it, and move between its sheets. Editing brings its own commands with
- * it.
+ * Open a workbook, save it back, close it, move between its sheets, and take
+ * back what was typed. The rest of editing brings its own commands with it.
  */
 
 const hasWorkbook = () => useWorkbookStore.getState().open !== null
@@ -62,6 +62,34 @@ export const fileCommands: readonly Command[] = [
   },
 ]
 
+/** The history of the workbook on screen, or an empty one when there is none. */
+const historyNow = () => useWorkbookStore.getState().history
+
+export const editCommands: readonly Command[] = [
+  {
+    id: 'edit.undo',
+    label: 'Undo',
+    group: 'edit',
+    shortcut: 'Mod+Z',
+    keywords: ['revert', 'back'],
+    isEnabled: () => hasWorkbook() && canUndo(historyNow()),
+    run: () => {
+      useWorkbookStore.getState().undo()
+    },
+  },
+  {
+    id: 'edit.redo',
+    label: 'Redo',
+    group: 'edit',
+    shortcut: 'Mod+Shift+Z',
+    keywords: ['again', 'forward'],
+    isEnabled: () => hasWorkbook() && canRedo(historyNow()),
+    run: () => {
+      useWorkbookStore.getState().redo()
+    },
+  },
+]
+
 export const sheetCommands: readonly Command[] = [
   {
     id: 'sheet.next',
@@ -98,5 +126,6 @@ export const sheetCommands: readonly Command[] = [
 export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(fileCommands)
+  registerAll(editCommands)
   registerAll(sheetCommands)
 }

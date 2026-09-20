@@ -463,3 +463,84 @@ fn aggregate_can_be_told_to_step_over_the_broken_cells() {
         Value::Error(Error::DivideByZero)
     );
 }
+
+#[test]
+fn an_answer_too_big_for_a_cell_fills_the_cells_beside_it() {
+    // Which is the whole of what a dynamic array is, and the reason a
+    // formula can now change cells nobody typed in.
+    let mut engine = engine();
+    set(&mut engine, "A1", 3.0);
+    set(&mut engine, "A2", 1.0);
+    set(&mut engine, "A3", 2.0);
+    formula(&mut engine, "C1", "SORT(A1:A3)");
+
+    assert_eq!(number(&engine, "C1"), 1.0);
+    assert_eq!(number(&engine, "C2"), 2.0);
+    assert_eq!(number(&engine, "C3"), 3.0);
+}
+
+#[test]
+fn a_spill_that_shrinks_gives_back_what_it_no_longer_covers() {
+    // Or the sheet keeps showing numbers from an answer that is no longer
+    // true, which is worse than showing none.
+    let mut engine = engine();
+    formula(&mut engine, "A1", "SEQUENCE(3)");
+    assert_eq!(number(&engine, "A3"), 3.0);
+
+    formula(&mut engine, "A1", "SEQUENCE(2)");
+    assert_eq!(engine.value("Sheet1", 2, 0), Value::Blank);
+    assert_eq!(number(&engine, "A2"), 2.0);
+}
+
+#[test]
+fn a_formula_taken_away_takes_its_spill_with_it() {
+    let mut engine = engine();
+    formula(&mut engine, "A1", "SEQUENCE(3)");
+    assert_eq!(number(&engine, "A3"), 3.0);
+
+    engine.clear("Sheet1", 0, 0);
+    assert_eq!(engine.value("Sheet1", 1, 0), Value::Blank);
+    assert_eq!(engine.value("Sheet1", 2, 0), Value::Blank);
+}
+
+#[test]
+fn something_in_the_way_stops_a_spill_rather_than_being_written_over() {
+    // A formula that quietly replaced a column of typed figures would be the
+    // worst thing a spreadsheet could do.
+    let mut engine = engine();
+    set(&mut engine, "A3", 99.0);
+    formula(&mut engine, "A1", "SEQUENCE(3)");
+
+    assert_eq!(engine.value("Sheet1", 0, 0), Value::Error(Error::Spill));
+    assert_eq!(number(&engine, "A3"), 99.0);
+    // And the cell in between is not half a spill.
+    assert_eq!(engine.value("Sheet1", 1, 0), Value::Blank);
+}
+
+#[test]
+fn typing_into_a_spill_breaks_it_and_says_so() {
+    let mut engine = engine();
+    formula(&mut engine, "A1", "SEQUENCE(3)");
+    assert_eq!(number(&engine, "A3"), 3.0);
+
+    set(&mut engine, "A2", 5.0);
+
+    assert_eq!(engine.value("Sheet1", 0, 0), Value::Error(Error::Spill));
+    assert_eq!(number(&engine, "A2"), 5.0);
+    assert_eq!(engine.value("Sheet1", 2, 0), Value::Blank);
+}
+
+#[test]
+fn what_depends_on_a_spilled_cell_follows_it() {
+    // The graph has no edge to the third cell of a spill: nobody wrote a
+    // formula there. It is reached by walking again from what the spill
+    // moved, which is the second pass Excel does too.
+    let mut engine = engine();
+    formula(&mut engine, "A1", "SEQUENCE(3)");
+    formula(&mut engine, "C1", "A3*10");
+    assert_eq!(number(&engine, "C1"), 30.0);
+
+    formula(&mut engine, "A1", "SEQUENCE(3,1,10)");
+    assert_eq!(number(&engine, "A3"), 12.0);
+    assert_eq!(number(&engine, "C1"), 120.0);
+}

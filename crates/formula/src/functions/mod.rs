@@ -11,6 +11,7 @@
 //! spreadsheet that is wrong about the one thing the formula was guarding.
 
 pub mod aggregate;
+pub mod arrays;
 pub mod criteria;
 pub mod datetime;
 pub mod financial;
@@ -106,6 +107,14 @@ static FUNCTIONS: &[&Function] = &[
     &math::LOG10,
     &math::SIGN,
     &math::PI,
+    &arrays::SEQUENCE,
+    &arrays::TRANSPOSE,
+    &arrays::SORT,
+    &arrays::SORTBY,
+    &arrays::FILTER,
+    &arrays::UNIQUE,
+    &arrays::TEXTSPLIT,
+    &arrays::RANDARRAY,
     &aggregate::SUBTOTAL,
     &aggregate::AGGREGATE,
     &math::CEILING,

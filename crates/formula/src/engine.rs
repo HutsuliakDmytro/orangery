@@ -17,7 +17,7 @@ use crate::date::DateSystem;
 use crate::eval::{evaluate, Cells, Context, Standing};
 use crate::graph::{precedents_of, CellId, Graph};
 use crate::parser::{parse, ParseError};
-use crate::value::Value;
+use crate::value::{Error, Value};
 
 /// What is in a cell: something typed, or something worked out.
 #[derive(Debug, Clone)]
@@ -38,6 +38,10 @@ pub struct Engine {
     moment: f64,
     /// Which morning the workbook counts days from.
     system: DateSystem,
+    /// For each formula that spilled, the cells it filled besides its own.
+    spills: HashMap<CellId, Vec<CellId>>,
+    /// And the other way round, so a cell can say whose answer it is showing.
+    spilled_from: HashMap<CellId, CellId>,
     /// The rows nobody can see, and why.
     ///
     /// Not a fact about any cell's value, and not one the engine could work
@@ -361,6 +365,25 @@ impl Engine {
             }
         }
 
+        // A cell that no longer holds a formula has to give back whatever
+        // that formula used to fill: an answer nobody is computing any more
+        // must not leave its numbers lying on the sheet.
+        for cell in changed {
+            if !matches!(self.contents.get(cell), Some(Content::Formula { .. })) {
+                for (place, value) in self.clear_spill(cell) {
+                    result.cells.push((place, value));
+                }
+            }
+        }
+
+        // And typing into a cell somebody's answer was spilling into breaks
+        // that answer, so the formula it came from is worked out again — and
+        // will find its way blocked and say so.
+        let blocked: Vec<CellId> = changed
+            .iter()
+            .filter_map(|cell| self.spilled_from.get(cell).cloned())
+            .collect();
+
         // Every volatile formula goes into the plan whatever was typed:
         // `NOW()` is a different time and `OFFSET(A1,B1,0)` may be a
         // different cell, and neither fact is reachable through an edge. They
@@ -374,46 +397,176 @@ impl Engine {
                 .filter(|cell| !already.contains(*cell))
                 .cloned(),
         );
+        seeds.extend(blocked);
 
-        let plan = self.graph.order_from(&seeds);
+        // A formula that spills fills cells the graph has no edges for: what
+        // depends on the third cell of a spill depends on a cell nobody has
+        // written a formula in. So the walk is repeated from whatever a spill
+        // moved, until a round moves nothing. Excel does the same thing and
+        // calls it a second pass; the bound is here because a spill that
+        // feeds itself would otherwise go round for ever, and a workbook that
+        // cannot settle is one to stop rather than to hang over.
+        let mut pending = seeds;
 
-        for cell in plan.order {
-            // A formula the graph knows about but the sheet does not is one
-            // that was just taken out; skipping it is not an error.
-            let Some(Content::Formula { tree, .. }) = self.contents.get(&cell).cloned() else {
-                continue;
-            };
+        for _round in 0..8 {
+            let plan = self.graph.order_from(&pending);
+            let mut spilled: Vec<CellId> = Vec::new();
 
-            let value = {
-                let view = View {
-                    engine: self,
-                    sheet: cell.0.clone(),
+            for cell in plan.order {
+                // A formula the graph knows about but the sheet does not is
+                // one that was just taken out; skipping it is not an error.
+                let Some(Content::Formula { tree, .. }) = self.contents.get(&cell).cloned() else {
+                    continue;
                 };
-                evaluate(
-                    &tree,
-                    &Context {
-                        cells: &view,
-                        at: (cell.1, cell.2),
-                    },
-                )
-            };
 
-            let before = self.values.get(&cell);
-            if before != Some(&value) {
-                self.values.insert(cell.clone(), value.clone());
-                result.cells.push((cell, value));
+                let value = {
+                    let view = View {
+                        engine: self,
+                        sheet: cell.0.clone(),
+                    };
+                    evaluate(
+                        &tree,
+                        &Context {
+                            cells: &view,
+                            at: (cell.1, cell.2),
+                        },
+                    )
+                };
+
+                let (shown, moved) = self.spill(&cell, value);
+
+                for (place, value) in moved {
+                    spilled.push(place.clone());
+                    result.cells.push((place, value));
+                }
+
+                let before = self.values.get(&cell);
+                if before != Some(&shown) {
+                    self.values.insert(cell.clone(), shown.clone());
+                    result.cells.push((cell, shown));
+                }
+            }
+
+            // A cell in a cycle shows nought, as Excel leaves it, and is
+            // named so the caller can say why.
+            for cell in &plan.circular {
+                self.values.insert(cell.clone(), Value::Number(0.0));
+                result.cells.push((cell.clone(), Value::Number(0.0)));
+            }
+            if !plan.circular.is_empty() {
+                result.circular = plan.circular;
+            }
+
+            if spilled.is_empty() {
+                break;
+            }
+            pending = spilled;
+        }
+
+        result
+    }
+
+    /// A formula's answer put where it belongs, and what that moved.
+    ///
+    /// One value stays in the cell. An array does not fit in a cell, so it is
+    /// written across the ones below and to the right of it — which is the
+    /// whole of what a dynamic array is, and the reason a formula can now
+    /// change cells nobody typed in.
+    ///
+    /// Anything already in the way stops it: `#SPILL!` rather than writing
+    /// over somebody's work, because a formula that quietly replaced a column
+    /// of typed figures would be the worst bug a spreadsheet could have.
+    fn spill(&mut self, anchor: &CellId, value: Value) -> (Value, Vec<(CellId, Value)>) {
+        let mut moved = self.clear_spill(anchor);
+
+        let Value::Array(array) = &value else {
+            return (value, moved);
+        };
+        // An array of one is a value, and putting it in one cell is what
+        // every formula has always done.
+        if array.rows <= 1 && array.columns <= 1 {
+            let only = array.values.first().cloned().unwrap_or(Value::Blank);
+            return (only, moved);
+        }
+
+        let mut places = Vec::new();
+        for row in 0..array.rows as i64 {
+            for column in 0..array.columns as i64 {
+                if row == 0 && column == 0 {
+                    continue;
+                }
+
+                let place = (anchor.0.clone(), anchor.1 + row, anchor.2 + column);
+                // Something typed, or somebody else's spill.
+                if self.contents.contains_key(&place) || self.spilled_from.contains_key(&place) {
+                    return (Value::Error(Error::Spill), moved);
+                }
+
+                places.push((place, array.at(row as usize, column as usize).clone()));
             }
         }
 
-        // A cell in a cycle shows nought, as Excel leaves it, and is named so
-        // the caller can say why.
-        for cell in &plan.circular {
-            self.values.insert(cell.clone(), Value::Number(0.0));
-            result.cells.push((cell.clone(), Value::Number(0.0)));
+        let mut filled = Vec::new();
+        for (place, value) in places {
+            self.values.insert(place.clone(), value.clone());
+            self.spilled_from.insert(place.clone(), anchor.clone());
+            filled.push(place.clone());
+            moved.push((place, value));
+            self.grow(
+                &anchor.0,
+                anchor.1 + array.rows as i64 - 1,
+                anchor.2 + array.columns as i64 - 1,
+            );
         }
-        result.circular = plan.circular;
 
-        result
+        self.spills.insert(anchor.clone(), filled);
+
+        (array.values.first().cloned().unwrap_or(Value::Blank), moved)
+    }
+
+    /// The cells a formula used to fill, emptied again.
+    ///
+    /// A spill that shrinks has to give back what it no longer covers, or the
+    /// sheet keeps showing numbers from an answer that is no longer true.
+    fn clear_spill(&mut self, anchor: &CellId) -> Vec<(CellId, Value)> {
+        let Some(filled) = self.spills.remove(anchor) else {
+            return Vec::new();
+        };
+
+        let mut emptied = Vec::new();
+        for place in filled {
+            self.spilled_from.remove(&place);
+
+            // Unless somebody has typed there since. Breaking a spill by
+            // typing into it is how it usually ends, and taking the typed
+            // value away again would be the program arguing with the person
+            // about a cell they just filled in.
+            if self.contents.contains_key(&place) {
+                continue;
+            }
+
+            self.values.remove(&place);
+            emptied.push((place, Value::Blank));
+        }
+
+        emptied
+    }
+
+    /// Where a cell's value came from, when it came from somebody else's
+    /// formula.
+    pub fn spilled_from(&self, sheet: &str, row: i64, column: i64) -> Option<&CellId> {
+        self.spilled_from.get(&(sheet.to_string(), row, column))
+    }
+
+    /// The rectangle a formula's answer covers, its own cell included.
+    pub fn spill_of(&self, sheet: &str, row: i64, column: i64) -> Option<(i64, i64)> {
+        let anchor = (sheet.to_string(), row, column);
+        let filled = self.spills.get(&anchor)?;
+
+        let bottom = filled.iter().map(|(_, row, _)| *row).max()?;
+        let right = filled.iter().map(|(_, _, column)| *column).max()?;
+
+        Some((bottom.max(row), right.max(column)))
     }
 
     fn grow(&mut self, sheet: &str, row: i64, column: i64) {

@@ -6,6 +6,9 @@ import { selectedCount } from '@orangery/grid'
 import { registerBuiltinCommands } from '../commands/definitions'
 import { openWorkbookFromDialog, recoverWorkbook } from '../document/file'
 import { recoverable } from '../document/autosave'
+import { guessOptions, pickCsv, workbookFromCsv } from '../document/csv-file'
+import type { ImportOptions } from '../document/csv-file'
+import { CsvWizard } from '../render/csv-wizard'
 import type { Recoverable } from '../document/autosave'
 import { valuesIn } from '../document/filter'
 import { FilterMenu } from '../render/filter-menu'
@@ -70,6 +73,32 @@ function Shell() {
     void recoverable().then(setLost, () => {
       // Nothing to offer, which is the ordinary case and not a failure.
     })
+  }, [])
+
+  /** The text file somebody chose, while they answer what it is. */
+  const [importing, setImporting] = useState<{
+    bytes: Uint8Array
+    name: string
+    options: ImportOptions
+  } | null>(null)
+
+  useEffect(() => {
+    const onAsk = () => {
+      void pickCsv().then((chosen) => {
+        if (chosen !== null) {
+          setImporting({
+            bytes: chosen.bytes,
+            name: baseName(chosen.path),
+            options: guessOptions(chosen.bytes),
+          })
+        }
+      }, ignore)
+    }
+
+    window.addEventListener('orangery:import-csv', onAsk)
+    return () => {
+      window.removeEventListener('orangery:import-csv', onAsk)
+    }
   }, [])
 
   const recover = useCallback((one: Recoverable) => {
@@ -199,6 +228,29 @@ function Shell() {
         )}
       </main>
 
+      {importing !== null && (
+        <CsvWizard
+          bytes={importing.bytes}
+          name={importing.name}
+          options={importing.options}
+          onChange={(options) => {
+            setImporting({ ...importing, options })
+          }}
+          onImport={() => {
+            const chosen = importing
+            setImporting(null)
+            void workbookFromCsv(chosen.bytes, chosen.options).then((made) => {
+              // Imported rather than opened: it came from a text file, and
+              // saving it has to ask where the workbook should go.
+              useWorkbookStore.setState({ open: made, path: null, edited: true })
+            }, ignore)
+          }}
+          onCancel={() => {
+            setImporting(null)
+          }}
+        />
+      )}
+
       {openFilter !== null && (
         <FilterMenu
           filter={openFilter.filter}
@@ -273,6 +325,9 @@ export function App() {
     </CommandSourceProvider>
   )
 }
+
+/** A rejection nobody needs telling about, which is most of them here. */
+const ignore = () => undefined
 
 /**
  * The window's size, which the grid needs in numbers.

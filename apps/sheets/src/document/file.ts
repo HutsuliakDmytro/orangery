@@ -2,7 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { baseName, isTauri } from '@orangery/platform'
 import { useWorkbookStore } from '../store/workbook-store'
+import { visibleSheets } from './workbook'
 import { clearSnapshot, readSnapshot } from './autosave'
+import { exportCsv } from './csv-file'
 import { blankWorkbook } from './new'
 import { saveWorkbookTo } from './save'
 
@@ -152,6 +154,29 @@ export async function recoverWorkbook(key: string, path: string | null): Promise
     useWorkbookStore
       .getState()
       .fail(error instanceof Error ? error.message : 'Could not recover that workbook.')
+    return false
+  }
+}
+
+/**
+ * Writes the sheet on screen out as a text file.
+ *
+ * One sheet, because a `.csv` holds one table and a workbook of five sheets
+ * written into one file would be five tables nobody can tell apart.
+ */
+export async function exportSheet(): Promise<boolean> {
+  const { open, current } = useWorkbookStore.getState()
+  if (open === null) return false
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return false
+
+  try {
+    return (await exportCsv(open, sheet, ',')) !== null
+  } catch (error) {
+    useWorkbookStore
+      .getState()
+      .fail(error instanceof Error ? error.message : 'Could not write that file.')
     return false
   }
 }

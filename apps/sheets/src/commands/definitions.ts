@@ -8,6 +8,7 @@ import {
   saveWorkbookAs,
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
+import { exportSheet } from '../document/file'
 import { useWorkbookStore } from '../store/workbook-store'
 import { visibleSheets } from '../document/workbook'
 
@@ -74,6 +75,28 @@ export const fileCommands: readonly Command[] = [
     isEnabled: () => isTauri() && hasWorkbook(),
     run: () => {
       void saveWorkbookAs()
+    },
+  },
+  {
+    id: 'file.importCsv',
+    label: 'Import Text File…',
+    group: 'file',
+    keywords: ['csv', 'tsv', 'open'],
+    isEnabled: () => isTauri(),
+    run: () => {
+      // The window owns the wizard, because the wizard is the window; the
+      // command is only the door.
+      window.dispatchEvent(new Event('orangery:import-csv'))
+    },
+  },
+  {
+    id: 'file.exportCsv',
+    label: 'Export Sheet as CSV…',
+    group: 'file',
+    keywords: ['csv', 'save', 'text'],
+    isEnabled: () => isTauri() && hasWorkbook(),
+    run: () => {
+      void exportSheet()
     },
   },
   {

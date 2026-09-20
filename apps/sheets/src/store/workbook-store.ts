@@ -33,6 +33,7 @@ import type { SortKey } from '../document/sort'
 import { filterColumn, toggleFilter } from '../document/filter'
 import { shownText } from '../document/shown'
 import { refusalFor } from '../document/validation'
+import { refusalForLocked } from '../document/protection'
 import {
   applyReport,
   closeEngine,
@@ -425,6 +426,15 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const sheet = visibleSheets(open)[current]
     if (sheet === undefined) return
 
+    // A protected sheet is honoured rather than enforced: the password is a
+    // hash anybody can strip, and what it is really for is stopping somebody
+    // typing over a formula by accident.
+    const locked = refusalForLocked(open, sheet, [address])
+    if (locked !== null) {
+      set({ notice: locked })
+      return
+    }
+
     /**
      * What the cell is allowed to hold.
      *
@@ -456,6 +466,12 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
 
     const sheet = visibleSheets(open)[current]
     if (sheet === undefined) return
+
+    const locked = refusalForLocked(open, sheet, selectedCells(selection))
+    if (locked !== null) {
+      set({ notice: locked })
+      return
+    }
 
     const changes = clearCells(sheet, selectedCells(selection))
     if (changes.length === 0) return

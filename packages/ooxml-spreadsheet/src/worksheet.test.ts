@@ -137,3 +137,45 @@ describe('a part that is not a worksheet', () => {
     expect(readWorksheet('')).toBeNull()
   })
 })
+
+describe('a protected sheet', () => {
+  const protectedSheet = (attributes: string) =>
+    readWorksheet(
+      `<?xml version="1.0"?><worksheet><sheetData/><sheetProtection ${attributes}/></worksheet>`,
+    )
+
+  it('says the cells are protected when the sheet says so', () => {
+    expect(protectedSheet('sheet="1"')?.protection).toMatchObject({ cells: true })
+  })
+
+  it('lets somebody click about unless told otherwise', () => {
+    // A bare `<sheetProtection sheet="1"/>` locks the cells and allows
+    // selecting, which is what people mean by protecting a sheet.
+    expect(protectedSheet('sheet="1"')?.protection).toMatchObject({
+      selectLocked: true,
+      selectUnlocked: true,
+    })
+    expect(protectedSheet('sheet="1" selectLockedCells="1"')?.protection).toMatchObject({
+      selectLocked: false,
+    })
+  })
+
+  it('allows nothing else unless the sheet allows it', () => {
+    expect(protectedSheet('sheet="1"')?.protection).toMatchObject({
+      formatCells: false,
+      insertRows: false,
+      sort: false,
+      autoFilter: false,
+    })
+    expect(protectedSheet('sheet="1" sort="1" autoFilter="1"')?.protection).toMatchObject({
+      sort: true,
+      autoFilter: true,
+    })
+  })
+
+  it('is nothing at all on a sheet nobody protected', () => {
+    expect(
+      readWorksheet('<?xml version="1.0"?><worksheet><sheetData/></worksheet>')?.protection,
+    ).toBeNull()
+  })
+})

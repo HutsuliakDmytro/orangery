@@ -95,6 +95,58 @@ export interface Worksheet {
    * (`highlight.ts`).
    */
   conditional: ConditionalFormat[]
+  /**
+   * Whether the sheet is protected, and what that protection allows.
+   *
+   * Protection is not security. The password is a hash anybody can strip and
+   * Microsoft has never claimed otherwise: it is there to stop somebody
+   * typing over a formula by accident, which is a real thing to want and a
+   * different thing from keeping a secret. What it is read for is to honour
+   * it — and the hash is carried through a save untouched, because rewriting
+   * it would be claiming to have checked it.
+   */
+  protection: SheetProtection | null
+}
+
+/** What a protected sheet allows anyway. */
+export interface SheetProtection {
+  /** Whether the cells are protected at all; `sheet="1"`. */
+  cells: boolean
+  /** Whether somebody may still select a cell that is locked. */
+  selectLocked: boolean
+  selectUnlocked: boolean
+  formatCells: boolean
+  insertRows: boolean
+  insertColumns: boolean
+  deleteRows: boolean
+  deleteColumns: boolean
+  sort: boolean
+  autoFilter: boolean
+}
+
+/**
+ * What `<sheetProtection>` says, with Excel's own defaults.
+ *
+ * Every `allow*` attribute is off unless stated, and the two about selecting
+ * are on unless stated — so a bare `<sheetProtection sheet="1"/>` locks the
+ * cells and lets somebody click about, which is what people mean by it.
+ */
+function readProtection(root: XmlNode): SheetProtection | null {
+  const node = findChild(root, 'sheetProtection')
+  if (node === undefined) return null
+
+  return {
+    cells: flag(node, 'sheet', false),
+    selectLocked: !flag(node, 'selectLockedCells', false),
+    selectUnlocked: !flag(node, 'selectUnlockedCells', false),
+    formatCells: flag(node, 'formatCells', false),
+    insertRows: flag(node, 'insertRows', false),
+    insertColumns: flag(node, 'insertColumns', false),
+    deleteRows: flag(node, 'deleteRows', false),
+    deleteColumns: flag(node, 'deleteColumns', false),
+    sort: flag(node, 'sort', false),
+    autoFilter: flag(node, 'autoFilter', false),
+  }
 }
 
 const DEFAULT_VIEW: SheetView = {
@@ -218,6 +270,7 @@ export function readWorksheet(xml: string): Worksheet | null {
     tabColor: attribute(tab ?? {}, 'rgb') ?? null,
     autoFilter: readAutoFilter(filter),
     conditional: readConditionalFormats(root),
+    protection: readProtection(root),
   }
 }
 

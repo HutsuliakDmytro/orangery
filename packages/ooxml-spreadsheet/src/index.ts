@@ -111,7 +111,14 @@ export { mergeCovering, replaceMerges, withMerge, withoutMerges, writeMerges } f
 export { replaceColumns, widthOfColumnIn, withColumns, writeColumns } from './columns'
 export type { ColumnLook } from './columns'
 export { isColumnHidden, mergeAt, readWorksheet, widthOfColumn } from './worksheet'
-export type { ColumnRange, FrozenPanes, SheetFormat, SheetView, Worksheet } from './worksheet'
+export type {
+  ColumnRange,
+  FrozenPanes,
+  SheetFormat,
+  SheetProtection,
+  SheetView,
+  Worksheet,
+} from './worksheet'
 export { newWorkbook } from './new-workbook'
 export type { NewSheet } from './new-workbook'
 export {

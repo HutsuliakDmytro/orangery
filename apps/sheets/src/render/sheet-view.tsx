@@ -37,6 +37,7 @@ import type { Suggested } from './suggestion-list'
 import { chosen, functionsKnownSoFar, knownFunctions, shape, suggest } from '../document/suggest'
 import type { KnownFunction } from '../document/suggest'
 import { choicesOf, ruleAt } from '../document/validation'
+import { isLocked } from '../document/protection'
 import { editableText } from '../document/shown'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -585,6 +586,7 @@ export function SheetView({
         editableAt={editableAt}
         styleAt={styleAt}
         mergeAt={merged}
+        editable={(cell) => !isLocked(open, sheet, cell)}
         onEditing={setEditing}
         onEditingKey={(event) => {
           if (items.length === 0) return false

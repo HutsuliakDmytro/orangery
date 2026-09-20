@@ -297,6 +297,7 @@ const EMPTY_SHEET: Worksheet = {
   tabColor: null,
   autoFilter: null,
   conditional: [],
+  protection: null,
 }
 
 /** The sheets a person sees, which is not all of them. */

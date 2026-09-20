@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/*/src-tauri", "packages/tauri-shared"]
+members = ["apps/*/src-tauri", "crates/*", "packages/tauri-shared"]
 resolver = "2"
 
 # Shared by every crate in the workspace: an app that disagrees with one of

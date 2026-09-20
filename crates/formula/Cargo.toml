@@ -1,0 +1,17 @@
+[package]
+name = "formula"
+description = "Excel-compatible formula parsing and evaluation."
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+# A library and nothing else: the crate is given cells and asked for values,
+# and anything that needed a window or a file would not compile to WASM.
+name = "formula"
+path = "src/lib.rs"
+
+[dependencies]

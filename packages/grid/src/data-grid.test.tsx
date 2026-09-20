@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataGrid, columnName } from './data-grid'
+import type { Editing } from './data-grid'
 import type { CellStyle } from './cell-style'
 import { recorded } from './test-setup'
 
@@ -1170,5 +1171,66 @@ describe('the lines a font cannot carry', () => {
 
     // Five letters at seven points each, in a cell eighty-four wide.
     expect(under('Total')[0]?.to[0]).toBeLessThan(44 + 84)
+  })
+})
+
+describe('helping with what is being edited', () => {
+  it('says what is in the editor, where it is, and where the caret is', async () => {
+    // A spreadsheet offers function names while a formula is being typed.
+    // That is not the grid's business — but the grid owns the editor, so it
+    // is the only one that knows what is in it.
+    const user = userEvent.setup()
+    const told = vi.fn()
+    grid({ onChange: vi.fn(), onEditing: told })
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SU')
+
+    const last = told.mock.lastCall?.[0] as Editing | null
+    expect(last).toMatchObject({ text: '=SU', caret: 3, cell: { row: 0, column: 0 } })
+    expect(last?.rect.width ?? 0).toBeGreaterThan(0)
+  })
+
+  it('says so when the editing stops', async () => {
+    const user = userEvent.setup()
+    const told = vi.fn()
+    grid({ onChange: vi.fn(), onEditing: told })
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('x{Escape}')
+
+    expect(told.mock.lastCall?.[0]).toBeNull()
+  })
+
+  it('offers a key to the helper before doing anything with it', async () => {
+    // While a list of suggestions is open, Enter belongs to it rather than
+    // to the cell, and only the caller knows whether it is open.
+    const user = userEvent.setup()
+    const changed = vi.fn()
+    grid({ onChange: changed, onEditingKey: (event) => event.key === 'Enter' })
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('42{Enter}')
+
+    expect(changed).not.toHaveBeenCalled()
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('42')
+  })
+
+  it('lets the helper put something in, caret and all', async () => {
+    const user = userEvent.setup()
+    grid({
+      onChange: vi.fn(),
+      onEditingKey: (event, state) => {
+        if (event.key !== 'Tab') return false
+        event.preventDefault()
+        state.replace('=SUM(', 5)
+        return true
+      },
+    })
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SU{Tab}')
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=SUM(')
   })
 })

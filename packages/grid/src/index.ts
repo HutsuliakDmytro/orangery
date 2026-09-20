@@ -14,7 +14,7 @@ export type { TextOptions } from './text'
 export { heightNeeded, widthNeeded } from './fit'
 export type { FitCell } from './fit'
 export { columnName, DataGrid, zoomedMetrics } from './data-grid'
-export type { DataGridProps } from './data-grid'
+export type { DataGridProps, Editing } from './data-grid'
 export {
   cellAtPoint,
   columnAtOffset,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DataGrid } from '@orangery/grid'
-import type { CellAddress, CellStyle, GridRange, GridSelection } from '@orangery/grid'
+import type { CellAddress, CellStyle, Editing, GridRange, GridSelection } from '@orangery/grid'
 import {
   cellAt,
   extentOf,
@@ -32,6 +32,9 @@ import { iconOf } from './icon-sets'
 import { SheetDrawings } from './sheet-drawings'
 import { NoteBox } from './note-box'
 import { notesOf } from './sheet-notes'
+import { FunctionList } from './function-list'
+import { chosen, functionsKnownSoFar, knownFunctions, suggest } from '../document/suggest'
+import type { KnownFunction } from '../document/suggest'
 import { editableText } from '../document/shown'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
 
@@ -76,6 +79,8 @@ export interface SheetViewProps {
   onCellClick?: (cell: CellAddress) => void
   /** Called when the fill handle is dragged, with what and how far. */
   onFillSeries?: (from: GridRange, to: GridRange) => void
+  /** The functions to offer, for a caller with its own list — a test. */
+  functions?: readonly KnownFunction[]
 }
 
 export function SheetView({
@@ -91,6 +96,7 @@ export function SheetView({
   onResize,
   onFilterClick,
   onFillSeries,
+  functions,
   onCellClick,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
@@ -450,6 +456,40 @@ export function SheetView({
     return stated > 0 ? stated / 100 : 1
   }, [sheet.sheet.view.zoom])
 
+  /**
+   * The functions to offer while a formula is being typed into a cell.
+   *
+   * The grid owns the editor and says what is in it (`onEditing`); what to
+   * make of that is a spreadsheet's business and so is here. The formula bar
+   * asks the same question from another keyboard, and both go through the
+   * same `suggest`.
+   */
+  const [editing, setEditing] = useState<Editing | null>(null)
+  const [highlighted, setHighlighted] = useState(0)
+
+  useEffect(() => {
+    void knownFunctions()
+  }, [])
+
+  const offered = useMemo(() => {
+    if (editing === null) return null
+    return suggest(editing.text, editing.caret, functions ?? functionsKnownSoFar())
+  }, [editing, functions])
+
+  const matches = offered?.matches ?? []
+  const picked = Math.min(highlighted, Math.max(matches.length - 1, 0))
+
+  const takeSuggestion = useCallback(
+    (name: string) => {
+      if (editing === null || offered === null) return
+
+      const made = chosen(editing.text, offered, name)
+      editing.replace(made.text, made.caret)
+      setHighlighted(0)
+    },
+    [editing, offered],
+  )
+
   const frozen = useMemo(() => {
     const panes = sheet.sheet.view.panes
     // A split moves both panes and is not a freeze; nothing here holds rows
@@ -458,56 +498,101 @@ export function SheetView({
   }, [sheet.sheet.view.panes])
 
   return (
-    <DataGrid
-      label={sheet.name}
-      rows={extent.rows}
-      columns={extent.columns}
-      width={width}
-      height={height}
-      metrics={metrics}
-      frozen={frozen}
-      gridLines={sheet.sheet.view.showGridLines}
-      zoom={zoom}
-      {...(selection === undefined ? {} : { selection })}
-      {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
-      {...(onEdit === undefined ? {} : { onChange: onEdit })}
-      {...(onClear === undefined ? {} : { onDelete: onClear })}
-      {...(filled === undefined ? {} : { onFill: filled })}
-      {...(onResize === undefined ? {} : { onResize })}
-      {...(onFilterClick === undefined ? {} : { onFilterClick })}
-      {...(onFillSeries === undefined ? {} : { onFillSeries })}
-      {...(onCellClick === undefined ? {} : { onCellClick })}
-      onHoverCell={notes.any ? setHovered : undefined}
-      overlay={
-        sheet.drawings.length === 0 && !notes.any
-          ? undefined
-          : (view) => (
-              <>
-                <SheetDrawings
-                  open={open}
-                  sheet={sheet}
-                  metrics={view.metrics}
-                  scrollX={view.scrollX}
-                  scrollY={view.scrollY}
-                  zoom={zoom}
-                />
-                <NoteBox
-                  note={hovered === null ? null : notes.at(hovered)}
-                  cell={hovered}
-                  metrics={view.metrics}
-                  scrollX={view.scrollX}
-                  scrollY={view.scrollY}
-                />
-              </>
-            )
-      }
-      columnHeader={(column) => indexToColumn(column)}
-      rowHeader={(row) => String(row + 1)}
-      valueAt={valueAt}
-      editableAt={editableAt}
-      styleAt={styleAt}
-      mergeAt={merged}
-    />
+    <div style={{ position: 'relative' }}>
+      <DataGrid
+        label={sheet.name}
+        rows={extent.rows}
+        columns={extent.columns}
+        width={width}
+        height={height}
+        metrics={metrics}
+        frozen={frozen}
+        gridLines={sheet.sheet.view.showGridLines}
+        zoom={zoom}
+        {...(selection === undefined ? {} : { selection })}
+        {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
+        {...(onEdit === undefined ? {} : { onChange: onEdit })}
+        {...(onClear === undefined ? {} : { onDelete: onClear })}
+        {...(filled === undefined ? {} : { onFill: filled })}
+        {...(onResize === undefined ? {} : { onResize })}
+        {...(onFilterClick === undefined ? {} : { onFilterClick })}
+        {...(onFillSeries === undefined ? {} : { onFillSeries })}
+        {...(onCellClick === undefined ? {} : { onCellClick })}
+        onHoverCell={notes.any ? setHovered : undefined}
+        overlay={
+          sheet.drawings.length === 0 && !notes.any
+            ? undefined
+            : (view) => (
+                <>
+                  <SheetDrawings
+                    open={open}
+                    sheet={sheet}
+                    metrics={view.metrics}
+                    scrollX={view.scrollX}
+                    scrollY={view.scrollY}
+                    zoom={zoom}
+                  />
+                  <NoteBox
+                    note={hovered === null ? null : notes.at(hovered)}
+                    cell={hovered}
+                    metrics={view.metrics}
+                    scrollX={view.scrollX}
+                    scrollY={view.scrollY}
+                  />
+                </>
+              )
+        }
+        columnHeader={(column) => indexToColumn(column)}
+        rowHeader={(row) => String(row + 1)}
+        valueAt={valueAt}
+        editableAt={editableAt}
+        styleAt={styleAt}
+        mergeAt={merged}
+        onEditing={setEditing}
+        onEditingKey={(event, state) => {
+          if (matches.length === 0) return false
+
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const step = event.key === 'ArrowDown' ? 1 : matches.length - 1
+            setHighlighted((was) => (was + step) % matches.length)
+            return true
+          }
+
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            const name = matches[picked]?.name
+            if (name === undefined || offered === null) return false
+
+            const made = chosen(state.text, offered, name)
+            state.replace(made.text, made.caret)
+            setHighlighted(0)
+            return true
+          }
+
+          // Escape closes the list and leaves the cell being edited, which is
+          // one Escape more than a cell without a list needs.
+          if (event.key === 'Escape') {
+            setEditing(null)
+            return true
+          }
+
+          return false
+        }}
+      />
+
+      {editing !== null && matches.length > 0 && (
+        <FunctionList
+          matches={matches}
+          highlighted={picked}
+          onChoose={takeSuggestion}
+          onHighlight={setHighlighted}
+          style={{
+            position: 'absolute',
+            left: editing.rect.x,
+            top: editing.rect.y + editing.rect.height,
+          }}
+        />
+      )}
+    </div>
   )
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import {
   cellAtPoint,
   frozenSize,
@@ -52,6 +53,18 @@ import type { FitCell } from './fit'
  * text behaviour are the platform's, not ours.
  */
 
+/** A cell being edited, as told to whoever wants to help. */
+export interface Editing {
+  cell: CellAddress
+  text: string
+  /** Where the caret is in that text. */
+  caret: number
+  /** Where the editor is, in the grid's own box. */
+  rect: { x: number; y: number; width: number; height: number }
+  /** Replaces what is being edited, caret and all. */
+  replace: (text: string, caret: number) => void
+}
+
 export interface DataGridProps {
   rows: number
   columns: number
@@ -72,6 +85,27 @@ export interface DataGridProps {
   editableAt?: (cell: CellAddress) => string | null
   /** Called when a cell is committed. Without it the grid is read-only. */
   onChange?: (cell: CellAddress, text: string) => void
+  /**
+   * What is being edited, and where, for a caller that wants to put
+   * something beside it.
+   *
+   * A spreadsheet offers function names while a formula is being typed; a
+   * grid of tasks might offer people's names. Neither is the grid's business
+   * — what is the grid's business is that it owns the editor, so it is the
+   * only one that knows what is in it and where on screen it sits.
+   *
+   * Null when nothing is being edited.
+   */
+  onEditing?: (state: Editing | null) => void
+  /**
+   * First refusal on a key while a cell is being edited.
+   *
+   * True means the caller has dealt with it, and the key goes no further —
+   * not to the cell and not into the text. That is what a list of
+   * suggestions needs: while it is open, Enter belongs to it rather than to
+   * the cell, and only the caller knows whether it is open.
+   */
+  onEditingKey?: (event: KeyboardEvent<HTMLTextAreaElement>, state: Editing) => boolean
   /** Cells this says no to are selectable and not editable. */
   editable?: (cell: CellAddress) => boolean
   /**
@@ -380,6 +414,8 @@ export function DataGrid({
   columns,
   valueAt,
   editableAt,
+  onEditing,
+  onEditingKey,
   columnHeader = columnName,
   rowHeader = (row) => String(row + 1),
   onChange,
@@ -430,6 +466,9 @@ export function DataGrid({
 
   const selectedCells = useMemo(() => selectedCount(selection), [selection])
   const [editing, setEditing] = useState<{ cell: CellAddress; text: string } | null>(null)
+  /** Where the caret is in the editor, for whoever is helping with it. */
+  const [caret, setCaret] = useState(0)
+  const editorBox = useRef<HTMLTextAreaElement>(null)
 
   /**
    * What the pointer would do here, said the one way a pointer can say it.
@@ -1107,6 +1146,49 @@ export function DataGrid({
 
   const editor = editing === null ? null : rectangleOfCell(metrics, viewport, editing.cell, frozen)
 
+  /**
+   * What is being edited, as whoever is helping with it needs to see it.
+   *
+   * Built on every render rather than kept, because every part of it — the
+   * text, the caret, where the cell is on screen — changes as somebody types
+   * or scrolls, and a copy kept aside would be the one thing on screen that
+   * was out of date.
+   */
+  const editingState: Editing | null =
+    editing === null || editor === null
+      ? null
+      : {
+          cell: editing.cell,
+          text: editing.text,
+          caret,
+          rect: { x: editor.x, y: editor.y, width: editor.width, height: editor.height },
+          replace: (text, to) => {
+            setEditing({ cell: editing.cell, text })
+            setCaret(to)
+            // After the render that puts the new text in: setting it now
+            // would put the caret on the old text and the browser would move
+            // it back to the end.
+            requestAnimationFrame(() => {
+              editorBox.current?.setSelectionRange(to, to)
+            })
+          },
+        }
+
+  // Told rather than handed back, because a caller that wanted to draw
+  // something beside the editor would otherwise have to guess when it opened.
+  //
+  // Watched by its parts rather than by the object: `replace` is made afresh
+  // on every render, so the object is never the same twice and an effect
+  // watching it would fire on every frame.
+  const told = useRef('')
+  const summary = JSON.stringify([editing?.cell, editing?.text, caret, editor?.x, editor?.y])
+
+  useEffect(() => {
+    if (told.current === summary) return
+    told.current = summary
+    onEditing?.(editingState)
+  })
+
   return (
     <div
       ref={surface}
@@ -1385,6 +1467,7 @@ export function DataGrid({
         // scrollbars, no wrapping it did not ask for.
         <textarea
           autoFocus
+          ref={editorBox}
           rows={1}
           wrap="off"
           aria-label={`${columnHeader(editing.cell.column)}${String(editing.cell.row + 1)}`}
@@ -1398,6 +1481,10 @@ export function DataGrid({
           }}
           onChange={(event) => {
             setEditing({ cell: editing.cell, text: event.target.value })
+            setCaret(event.target.selectionStart)
+          }}
+          onSelect={(event) => {
+            setCaret(event.currentTarget.selectionStart)
           }}
           onBlur={() => {
             if (closing.current) {
@@ -1407,6 +1494,17 @@ export function DataGrid({
             commit(editing.text, editing.cell)
           }}
           onKeyDown={(event) => {
+            // Whoever is helping gets the key first. While a list of
+            // suggestions is open, Enter belongs to it rather than to the
+            // cell, and only the caller knows whether it is open.
+            if (editingState !== null && onEditingKey?.(event, editingState) === true) {
+              // A key that was dealt with goes no further: without this, an
+              // Enter the helper took would still put a line break in the
+              // cell behind the list.
+              event.preventDefault()
+              return
+            }
+
             if (event.key === 'Escape') {
               event.preventDefault()
               stopEditing()

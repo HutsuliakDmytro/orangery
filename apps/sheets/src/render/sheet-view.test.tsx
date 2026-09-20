@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { recorded } from '../test-setup'
 import { applyLook } from '../document/edit'
 import { openWorkbook } from '../document/workbook'
@@ -28,6 +28,14 @@ beforeAll(async () => {
 beforeEach(() => {
   recorded.reset()
 })
+
+/** The sheet the tests render, for the ones that add props of their own. */
+const showing = () => {
+  const sheet = workbook.sheets[0]
+  if (sheet === undefined) throw new Error('the fixture has no sheets')
+
+  return { open: workbook, sheet, width: 800, height: 400 }
+}
 
 const drawn = () => {
   const sheet = workbook.sheets[0]
@@ -319,5 +327,45 @@ describe('the lines a font cannot carry', () => {
     )
 
     expect(below).toHaveLength(0)
+  })
+})
+
+describe('the functions offered while a formula is typed into a cell', () => {
+  const functions = [
+    { name: 'SUM', least: 1, most: null, volatile: false },
+    { name: 'SUMIF', least: 2, most: 3, volatile: false },
+  ]
+
+  it('offers them under the cell being edited', async () => {
+    const user = userEvent.setup()
+    render(<SheetView {...showing()} functions={functions} onEdit={vi.fn()} />)
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SUM')
+
+    expect(screen.getByRole('list', { name: 'Functions' })).toBeTruthy()
+  })
+
+  it('puts the chosen one in rather than committing half a formula', async () => {
+    const user = userEvent.setup()
+    const edited = vi.fn()
+    render(<SheetView {...showing()} functions={functions} onEdit={edited} />)
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SUM{ArrowDown}{Enter}')
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=SUMIF(')
+    expect(edited).not.toHaveBeenCalled()
+  })
+
+  it('leaves Enter to the cell once the list has gone', async () => {
+    const user = userEvent.setup()
+    const edited = vi.fn()
+    render(<SheetView {...showing()} functions={functions} onEdit={edited} />)
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SUM(A1){Enter}')
+
+    expect(edited).toHaveBeenCalled()
   })
 })

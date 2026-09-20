@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { chosen, functionsKnownSoFar, knownFunctions, shape, suggest } from '../document/suggest'
+import { chosen, functionsKnownSoFar, knownFunctions, suggest } from '../document/suggest'
 import type { KnownFunction } from '../document/suggest'
+import { FunctionList } from './function-list'
 
 /**
  * The strip that shows what is in the cell rather than what it looks like.
@@ -154,36 +155,13 @@ export function FormulaBar({ text, editable = true, functions, onCommit }: Formu
       />
 
       {picked !== undefined && (
-        <ul
-          aria-label="Functions"
-          className="absolute left-6 top-7 z-20 max-h-64 w-72 overflow-auto rounded border border-border bg-surface py-1 shadow-lg"
-        >
-          {showing.map((one, at) => (
-            <li key={one.name}>
-              <button
-                type="button"
-                className={`flex w-full items-baseline justify-between gap-3 px-2 py-1 text-left text-xs ${
-                  one.name === picked.name ? 'bg-accent/15' : ''
-                }`}
-                // The mouse must not take the focus away from the box, or
-                // the blur would commit the half-written formula before the
-                // click had a chance to finish it.
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
-                onClick={() => {
-                  take(one.name)
-                }}
-                onMouseEnter={() => {
-                  setHighlighted(at)
-                }}
-              >
-                <span className="font-mono">{one.name}</span>
-                <span className="text-muted">{shape(one)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <FunctionList
+          matches={showing}
+          highlighted={showing.indexOf(picked)}
+          onChoose={take}
+          onHighlight={setHighlighted}
+          style={{ position: 'absolute', left: 24, top: 28 }}
+        />
       )}
     </div>
   )

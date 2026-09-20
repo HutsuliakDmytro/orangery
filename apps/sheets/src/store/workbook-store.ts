@@ -62,6 +62,14 @@ export interface WorkbookState {
    * rather than that this program is not Excel.
    */
   notice: string | null
+  /**
+   * The editing session, which the autosave is keyed by.
+   *
+   * Not the path: a workbook that was never saved has none, and one saved
+   * under a new name would leave its old snapshot behind to be offered as
+   * recoverable at every launch.
+   */
+  session: string
   busy: boolean
   load: (bytes: Uint8Array, path: string | null) => Promise<void>
   fail: (problem: string) => void
@@ -108,6 +116,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   history: emptyHistory(),
   problem: null,
   notice: null,
+  session: newSession(),
   busy: false,
 
   load: async (bytes, path) => {
@@ -127,6 +136,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       history: emptyHistory(),
       problem: null,
       notice: noticeFor(open),
+      session: newSession(),
       busy: false,
     })
   },
@@ -151,6 +161,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       history: emptyHistory(),
       problem: null,
       notice: null,
+      session: newSession(),
       busy: false,
     })
   },
@@ -534,6 +545,16 @@ function redrawn(open: OpenWorkbook, paths: Iterable<string>): OpenWorkbook {
 }
 
 export const visibleSheetsOf = (open: OpenWorkbook): OpenSheet[] => visibleSheets(open)
+
+/**
+ * A name for one editing session, which nothing else will collide with.
+ *
+ * A declaration rather than a const, because the store is built at module load
+ * and reaches for this while doing it.
+ */
+function newSession(): string {
+  return `${String(Date.now())}-${Math.random().toString(36).slice(2)}`
+}
 
 /**
  * What is worth saying about a workbook that has just been opened.

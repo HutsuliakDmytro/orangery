@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { baseName, isTauri } from '@orangery/platform'
 import { useWorkbookStore } from '../store/workbook-store'
+import { clearSnapshot, readSnapshot } from './autosave'
 import { blankWorkbook } from './new'
 import { saveWorkbookTo } from './save'
 
@@ -129,4 +130,28 @@ export async function saveWorkbookAs(): Promise<boolean> {
 
   const to = await pickSavePath()
   return to === null ? false : writeTo(open, to)
+}
+
+/**
+ * Opens what a workbook looked like when the program stopped.
+ *
+ * It opens as the file it came from, so saving goes where it was going; a
+ * workbook that had never been saved comes back with no path, exactly as it
+ * was. The snapshot is cleared once it is in front of somebody — the point of
+ * keeping it was to get it here.
+ */
+export async function recoverWorkbook(key: string, path: string | null): Promise<boolean> {
+  try {
+    const bytes = await readSnapshot(key)
+    if (bytes === null) return false
+
+    await useWorkbookStore.getState().load(bytes, path)
+    await clearSnapshot(key)
+    return true
+  } catch (error) {
+    useWorkbookStore
+      .getState()
+      .fail(error instanceof Error ? error.message : 'Could not recover that workbook.')
+    return false
+  }
 }

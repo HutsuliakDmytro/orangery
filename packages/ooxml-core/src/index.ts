@@ -30,6 +30,7 @@ export {
 } from './relationships'
 export type { Relationship } from './relationships'
 
+export { decodeBytes, encodeBytes } from './base64'
 export * from './xml'
 export * from './units'
 export { compareXml, describeDifferences } from './compare'

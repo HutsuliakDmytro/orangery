@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { CellAddress } from '@orangery/grid'
 import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
 import { selectedCount } from '@orangery/grid'
 import { registerBuiltinCommands } from '../commands/definitions'
-import { openWorkbookFromDialog } from '../document/file'
+import { openWorkbookFromDialog, recoverWorkbook } from '../document/file'
+import { recoverable } from '../document/autosave'
+import type { Recoverable } from '../document/autosave'
 import { valuesIn } from '../document/filter'
 import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
@@ -13,6 +15,7 @@ import { SheetView } from '../render/sheet-view'
 import { useWorkbookStore, visibleSheetsOf } from '../store/workbook-store'
 import { useCommandSource } from './command-source'
 import { useExternalOpen } from './use-external-open'
+import { useAutosave } from './use-autosave'
 import { useShortcuts } from './use-shortcuts'
 
 // Registration happens once at module load: the registry is process-wide state,
@@ -31,6 +34,7 @@ function Shell() {
   useNativeMenu()
   useShortcuts()
   useExternalOpen()
+  useAutosave()
 
   const open = useWorkbookStore((state) => state.open)
   const path = useWorkbookStore((state) => state.path)
@@ -52,6 +56,26 @@ function Shell() {
   /** The header cell whose filter list is open, if one is. */
   const [filtering, setFiltering] = useState<CellAddress | null>(null)
   const size = useWindowSize()
+
+  /**
+   * Workbooks that were not closed cleanly, asked for once at startup.
+   *
+   * Offered rather than opened: somebody who has just had a crash is owed the
+   * choice, and a program that reopened what it liked would be one you could
+   * not get out of a bad state.
+   */
+  const [lost, setLost] = useState<Recoverable[]>([])
+
+  useEffect(() => {
+    void recoverable().then(setLost, () => {
+      // Nothing to offer, which is the ordinary case and not a failure.
+    })
+  }, [])
+
+  const recover = useCallback((one: Recoverable) => {
+    setLost((rest) => rest.filter((other) => other.key !== one.key))
+    void recoverWorkbook(one.key, one.path)
+  }, [])
 
   useEffect(() => {
     document.title = path === null ? 'Orangery Sheets' : baseName(path)
@@ -84,6 +108,38 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
+      {lost.map((one) => (
+        <div
+          key={one.key}
+          role="status"
+          className="flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2 text-xs"
+        >
+          <span className="text-muted">
+            {`${one.path === null ? 'An unsaved workbook' : baseName(one.path)} was not closed properly.`}
+          </span>
+          <span className="flex gap-3">
+            <button
+              type="button"
+              className="text-accent"
+              onClick={() => {
+                recover(one)
+              }}
+            >
+              Recover
+            </button>
+            <button
+              type="button"
+              className="text-muted hover:text-text"
+              onClick={() => {
+                setLost((rest) => rest.filter((other) => other.key !== one.key))
+              }}
+            >
+              Ignore
+            </button>
+          </span>
+        </div>
+      ))}
+
       {(problem ?? notice) !== null && (
         <div
           // A failure is announced; a notice is not. Both are worth reading,

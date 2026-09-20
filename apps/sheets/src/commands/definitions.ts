@@ -2,6 +2,7 @@ import { registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import {
+  newFromTemplate,
   newWorkbookFile,
   openWorkbookFromDialog,
   saveWorkbook,
@@ -10,6 +11,7 @@ import {
 } from '../document/file'
 import { canRedo, canUndo } from '../document/history'
 import { printSheet } from '../document/print'
+import { TEMPLATES } from '../document/templates'
 import { exportOds, exportSheet } from '../document/file'
 import {
   chartFromSelection,
@@ -537,6 +539,23 @@ export const chartCommands: readonly Command[] = (
  * shortcuts: the bracket keys group and ungroup, which is the one pair of
  * shortcuts nobody remembers and everybody who uses outlines knows.
  */
+/**
+ * A workbook that starts with something in it.
+ *
+ * One command each rather than one that asks which: the palette is where
+ * people look, and "New from template…" that opens another list is two
+ * searches for one thing.
+ */
+export const templateCommands: readonly Command[] = TEMPLATES.map((template) => ({
+  id: `file.new.${template.name}`,
+  label: `New: ${template.label}`,
+  group: 'file' as const,
+  keywords: ['template', 'start', 'example'],
+  run: () => {
+    void newFromTemplate(template.name)
+  },
+}))
+
 export const outlineCommands: readonly Command[] = (
   [
     ['group', 'Group Rows', 'Mod+Shift+K'],
@@ -634,6 +653,7 @@ export function registerBuiltinCommands(): void {
   registerAll(pictureCommands)
   registerAll(tableCommands)
   registerAll(outlineCommands)
+  registerAll(templateCommands)
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(dataCommands)

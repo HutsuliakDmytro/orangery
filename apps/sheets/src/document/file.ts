@@ -7,6 +7,9 @@ import { clearSnapshot, readSnapshot } from './autosave'
 import { exportCsv } from './csv-file'
 import { isOds, odsBytes, workbookFromOds } from './converters/ods-file'
 import { blankWorkbook } from './new'
+import { openWorkbook, visibleSheets as sheetsOf } from './workbook'
+import { fillTemplate } from './templates'
+import type { TemplateName } from './templates'
 import { saveWorkbookTo } from './save'
 
 /**
@@ -160,6 +163,27 @@ async function pickSavePath(): Promise<string | null> {
  */
 export async function newWorkbookFile(): Promise<void> {
   await useWorkbookStore.getState().load(await blankWorkbook(), null)
+}
+
+/**
+ * A workbook that starts with something in it.
+ *
+ * Made by filling a blank one rather than by shipping five `.xlsx` files:
+ * files would have to be kept in step with every change to the writer, and a
+ * template Excel opened and this program could not would be a strange thing
+ * to ship.
+ *
+ * It belongs to no file, like a converted one, so the first save asks where —
+ * which is what somebody wants, because a template saved over itself is a
+ * template used once.
+ */
+export async function newFromTemplate(name: TemplateName): Promise<void> {
+  const open = await openWorkbook(await blankWorkbook())
+  const sheet = sheetsOf(open)[0]
+  if (sheet === undefined) return
+
+  fillTemplate(open, sheet, name)
+  useWorkbookStore.getState().converted(open, null)
 }
 
 /** Writes the workbook somewhere else, and belongs to that file afterwards. */

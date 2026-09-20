@@ -1,5 +1,5 @@
 import { parseReference } from './reference'
-import type { CellPosition } from './reference'
+import type { CellPosition, CellRange } from './reference'
 import type { RichText } from './rich-text'
 
 /**
@@ -125,3 +125,62 @@ export function extentOf(sheet: SheetCells): { rows: number; columns: number } {
 
 /** The position a cell states, for a reader that has the reference and not the parts. */
 export const positionOf = (reference: string): CellPosition | null => parseReference(reference)
+
+/**
+ * The block of filled cells a cell belongs to.
+ *
+ * What a spreadsheet means by "this table" when you have clicked one cell of
+ * it and asked to sort: grow outwards while the next row or column still has
+ * something in it, and stop at the first empty one. A blank row is what
+ * everybody uses to mean "and here is a different table", so it is what this
+ * stops at.
+ *
+ * A cell with nothing around it is a region of itself.
+ */
+export function regionAround(sheet: SheetCells, from: CellPosition): CellRange {
+  const filled = (row: number, column: number): boolean => {
+    const cell = cellAt(sheet, { row, column })
+    return cell !== null && cell.value !== null && cell.value !== ''
+  }
+
+  let top = from.row
+  let bottom = from.row
+  let left = from.column
+  let right = from.column
+
+  const anyInRow = (row: number) => {
+    for (let column = left; column <= right; column += 1) if (filled(row, column)) return true
+    return false
+  }
+  const anyInColumn = (column: number) => {
+    for (let row = top; row <= bottom; row += 1) if (filled(row, column)) return true
+    return false
+  }
+
+  // Alternated rather than done once each: a table found one row at a time is
+  // wider by the end, and a column that only touches the rows found later
+  // would be missed by a single pass.
+  let growing = true
+  while (growing) {
+    growing = false
+
+    if (top > 0 && anyInRow(top - 1)) {
+      top -= 1
+      growing = true
+    }
+    if (anyInRow(bottom + 1)) {
+      bottom += 1
+      growing = true
+    }
+    if (left > 0 && anyInColumn(left - 1)) {
+      left -= 1
+      growing = true
+    }
+    if (anyInColumn(right + 1)) {
+      right += 1
+      growing = true
+    }
+  }
+
+  return { sheet: null, from: { row: top, column: left }, to: { row: bottom, column: right } }
+}

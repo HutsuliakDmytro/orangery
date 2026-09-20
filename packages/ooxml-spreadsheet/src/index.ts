@@ -106,6 +106,7 @@ export {
   extentOf,
   positionOf,
   putCell,
+  regionAround,
   rowsWithCells,
 } from './cells'
 export type { Cell, CellType, Formula, FormulaKind, RowProperties, SheetCells } from './cells'

@@ -120,6 +120,29 @@ export const editCommands: readonly Command[] = [
   },
 ]
 
+export const dataCommands: readonly Command[] = [
+  {
+    id: 'data.sortAscending',
+    label: 'Sort A to Z',
+    group: 'edit',
+    keywords: ['order', 'ascending'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().sort(true)
+    },
+  },
+  {
+    id: 'data.sortDescending',
+    label: 'Sort Z to A',
+    group: 'edit',
+    keywords: ['order', 'descending'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      useWorkbookStore.getState().sort(false)
+    },
+  },
+]
+
 export const structureCommands: readonly Command[] = [
   {
     id: 'sheet.insertRows',
@@ -240,6 +263,7 @@ export function registerBuiltinCommands(): void {
   resetRegistry()
   registerAll(fileCommands)
   registerAll(editCommands)
+  registerAll(dataCommands)
   registerAll(structureCommands)
   registerAll(sheetCommands)
 }

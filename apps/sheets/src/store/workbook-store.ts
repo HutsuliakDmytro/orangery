@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { regionAround } from '@orangery/ooxml-spreadsheet'
 import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
 import type { BandChange, LookChange } from '@orangery/ooxml-spreadsheet'
@@ -12,6 +13,7 @@ import {
 } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
+import { looksLikeHeader, sortRows } from '../document/sort'
 import { shownText } from '../document/shown'
 import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
@@ -73,6 +75,8 @@ export interface WorkbookState {
   hide: (axis: BandChange['axis'], hidden: boolean) => void
   /** Draws what is selected as one cell, or gives the cells back. */
   merge: (join: boolean) => void
+  /** Puts the rows of the table under the cursor in order of one column. */
+  sort: (ascending: boolean) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   paste: () => Promise<void>
@@ -301,6 +305,43 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     }
 
     const changes = join ? merge(sheet, range) : unmerge(sheet, range)
+    if (changes.length === 0) return
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
+  },
+
+  sort: (ascending) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const last = selection.ranges[selection.ranges.length - 1]
+    const bounds = boundsOf(last ?? { anchor: selection.active, focus: selection.active })
+
+    // One cell means the table it is in; Excel does the same, and the
+    // alternative is sorting a column out of step with the rows beside it.
+    const range =
+      bounds.top === bounds.bottom && bounds.left === bounds.right
+        ? regionAround(sheet.cells, selection.active)
+        : {
+            sheet: null,
+            from: { row: bounds.top, column: bounds.left },
+            to: { row: bounds.bottom, column: bounds.right },
+          }
+
+    const changes = sortRows(
+      open,
+      sheet,
+      range,
+      [{ column: selection.active.column, ascending }],
+      looksLikeHeader(open, sheet, range),
+    )
     if (changes.length === 0) return
 
     set({

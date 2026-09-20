@@ -936,3 +936,64 @@ describe('cells drawn as one', () => {
     expect(again.sheets[0]?.sheet.merges).toHaveLength(2)
   })
 })
+
+describe('putting a table in order', () => {
+  const cellAt = (row: number, column: number) =>
+    useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+
+  it('sorts the table the cursor is in, by the column it is in', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'B2{Enter}')
+
+    // B2 is 1234.50 and B3 is -99; A to Z puts the negative first, and the
+    // months beside them have to come with them.
+    act(() => {
+      runCommand('data.sortAscending', {})
+    })
+
+    expect(cellAt(1, 1)?.value).toBe('-99')
+    expect(cellAt(1, 0)?.value).toBe('3')
+  })
+
+  it('leaves the header where it is', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'A2{Enter}')
+
+    act(() => {
+      runCommand('data.sortDescending', {})
+    })
+
+    // Row 1 is the header and stays; A2 was January and is now the later month.
+    expect(cellAt(0, 0)?.value).toBe('0')
+  })
+
+  it('takes the whole sort back in one press', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    const before = [cellAt(1, 0)?.value, cellAt(2, 0)?.value]
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'B2{Enter}')
+
+    act(() => {
+      runCommand('data.sortAscending', {})
+    })
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect([cellAt(1, 0)?.value, cellAt(2, 0)?.value]).toEqual(before)
+  })
+})

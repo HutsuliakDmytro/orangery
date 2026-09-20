@@ -177,6 +177,19 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.find',
+    label: 'Find and Replace…',
+    group: 'edit',
+    shortcut: 'Mod+F',
+    keywords: ['search', 'replace'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      // The strip belongs to the window, which is listening; a command knows
+      // nothing about what is on screen.
+      window.dispatchEvent(new Event('orangery:find'))
+    },
+  },
+  {
     id: 'edit.undo',
     label: 'Undo',
     group: 'edit',

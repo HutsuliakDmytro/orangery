@@ -14,6 +14,8 @@ import {
 import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { fillCells } from '../document/fill'
+import { findAll, nextAfter, replaceAll, replaceIn } from '../document/find'
+import type { SearchOptions } from '../document/find'
 import {
   addSheet,
   colorTab,
@@ -146,6 +148,22 @@ export interface WorkbookState {
   toggleFilter: () => void
   /** What one filtered column keeps; null lets everything through again. */
   filterBy: (column: number, criteria: FilterCriteria | null) => void
+  /**
+   * Moves the cursor to the next thing that matches, and says where it is.
+   *
+   * The count comes back with it because what somebody wants to know while
+   * searching is how many there are and which one they are on — and the
+   * search has just worked both out.
+   */
+  findNext: (
+    term: string,
+    options: SearchOptions,
+    backwards?: boolean,
+  ) => { at: number; of: number }
+  /** Replaces what the cursor is on, if it matches, and moves to the next. */
+  replaceOne: (term: string, replacement: string, options: SearchOptions) => void
+  /** Replaces every match as one step, and says how many that was. */
+  replaceEverywhere: (term: string, replacement: string, options: SearchOptions) => number
   copy: () => Promise<void>
   cut: () => Promise<void>
   /**
@@ -605,6 +623,86 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       edited: true,
       history: recorded(history, { changes, selection }),
     })
+  },
+
+  findNext: (term, options, backwards = false) => {
+    const { open, current, selection } = useWorkbookStore.getState()
+    if (open === null) return { at: 0, of: 0 }
+
+    const shown = visibleSheets(open)
+    const sheet = shown[current]
+    if (sheet === undefined) return { at: 0, of: 0 }
+
+    const looking = options.everywhere ? shown : [sheet]
+    const found = findAll(open, looking, term, options)
+    if (found.length === 0) return { at: 0, of: 0 }
+
+    const next = nextAfter(
+      found,
+      { sheet: sheet.path, row: selection.active.row, column: selection.active.column },
+      backwards,
+    )
+    if (next === null) return { at: 0, of: found.length }
+
+    const landed = shown.findIndex((one) => one.path === next.sheet)
+    const cell = { row: next.row, column: next.column }
+
+    set({
+      ...(landed >= 0 && landed !== current ? { current: landed } : {}),
+      selection: singleCell(cell),
+    })
+
+    return {
+      at: found.findIndex((one) => one === next) + 1,
+      of: found.length,
+    }
+  },
+
+  replaceOne: (term, replacement, options) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const change = replaceIn(open, sheet, selection.active, term, replacement, options)
+    if (change !== null) {
+      set({
+        open: redrawn(open, [sheet.path]),
+        edited: true,
+        history: recorded(history, { changes: cellChanges([change]), selection }),
+      })
+    }
+
+    // On to the next either way: a cell that did not match is one the cursor
+    // was parked on, and stopping there would be a button that does nothing.
+    useWorkbookStore.getState().findNext(term, options)
+  },
+
+  replaceEverywhere: (term, replacement, options) => {
+    const { open, current, history, selection } = useWorkbookStore.getState()
+    if (open === null) return 0
+
+    const shown = visibleSheets(open)
+    const sheet = shown[current]
+    if (sheet === undefined) return 0
+
+    const changes = replaceAll(
+      open,
+      options.everywhere ? shown : [sheet],
+      term,
+      replacement,
+      options,
+    )
+    if (changes.length === 0) return 0
+
+    set({
+      open: redrawn(open, new Set(changes.map((one) => one.sheet))),
+      edited: true,
+      history: recorded(history, { changes: cellChanges(changes), selection }),
+    })
+
+    return changes.length
   },
 
   copy: async () => {

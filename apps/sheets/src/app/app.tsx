@@ -14,6 +14,7 @@ import { valuesIn } from '../document/filter'
 import { FilterMenu } from '../render/filter-menu'
 import { ReferenceBox } from '../render/reference-box'
 import { Toolbar } from '../render/toolbar'
+import { FindPanel } from '../render/find-panel'
 import { SheetTabs } from '../render/sheet-tabs'
 import { SheetView } from '../render/sheet-view'
 import { SortDialog } from '../render/sort-dialog'
@@ -64,6 +65,9 @@ function Shell() {
   const moveSheet = useWorkbookStore((state) => state.moveSheet)
   const hideSheet = useWorkbookStore((state) => state.hideSheet)
   const colorTab = useWorkbookStore((state) => state.colorTab)
+  const findNext = useWorkbookStore((state) => state.findNext)
+  const replaceOne = useWorkbookStore((state) => state.replaceOne)
+  const replaceEverywhere = useWorkbookStore((state) => state.replaceEverywhere)
 
   /** The header cell whose filter list is open, if one is. */
   const [filtering, setFiltering] = useState<CellAddress | null>(null)
@@ -82,6 +86,20 @@ function Shell() {
     void recoverable().then(setLost, () => {
       // Nothing to offer, which is the ordinary case and not a failure.
     })
+  }, [])
+
+  /** Whether the find strip is showing, which `Mod+F` turns on. */
+  const [finding, setFinding] = useState(false)
+
+  useEffect(() => {
+    const onAsk = () => {
+      setFinding(true)
+    }
+
+    window.addEventListener('orangery:find', onAsk)
+    return () => {
+      window.removeEventListener('orangery:find', onAsk)
+    }
   }, [])
 
   /** The table a sort dialog is open over, with its columns named. */
@@ -140,7 +158,7 @@ function Shell() {
   const sheets = open === null ? [] : visibleSheetsOf(open)
   const sheet = sheets[current] ?? null
   const tabsHeight = sheets.length > 0 ? 32 : 0
-  const barHeight = sheet === null ? 0 : 33 + 37
+  const barHeight = (sheet === null ? 0 : 33 + 37) + (finding ? 30 : 0)
   const selected = selectedCount(selection)
 
   /**
@@ -212,6 +230,17 @@ function Shell() {
 
       {sheet !== null && open !== null && (
         <Toolbar open={open} sheet={sheet} selection={selection} onFormat={format} onMerge={join} />
+      )}
+
+      {finding && sheet !== null && (
+        <FindPanel
+          onFind={findNext}
+          onReplace={replaceOne}
+          onReplaceAll={replaceEverywhere}
+          onClose={() => {
+            setFinding(false)
+          }}
+        />
       )}
 
       {sheet !== null && (

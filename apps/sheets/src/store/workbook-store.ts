@@ -13,7 +13,7 @@ import {
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { reshape, resizeColumns, resizeRows } from '../document/structure'
 import { shownText } from '../document/shown'
-import { emptyHistory, recorded, redo, undo } from '../document/history'
+import { cellChanges, emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
 import { openWorkbook, visibleSheets } from '../document/workbook'
 import type { OpenSheet, OpenWorkbook } from '../document/workbook'
@@ -160,7 +160,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     set({
       open: redrawn(open, [sheet.path]),
       edited: true,
-      history: recorded(history, { changes: [change], selection }),
+      history: recorded(history, { changes: cellChanges([change]), selection }),
     })
   },
 
@@ -177,7 +177,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     set({
       open: redrawn(open, [sheet.path]),
       edited: true,
-      history: recorded(history, { changes, selection }),
+      history: recorded(history, { changes: cellChanges(changes), selection }),
     })
   },
 
@@ -196,7 +196,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     set({
       open: redrawn(open, [sheet.path]),
       edited: true,
-      history: recorded(history, { changes, selection }),
+      history: recorded(history, { changes: cellChanges(changes), selection }),
     })
   },
 
@@ -213,7 +213,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     set({
       open: redrawn(open, [sheet.path]),
       edited: true,
-      history: recorded(history, { changes, selection }),
+      history: recorded(history, { changes: cellChanges(changes), selection }),
     })
   },
 
@@ -242,16 +242,22 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   },
 
   resize: (axis, from, to, size) => {
-    const { open, current } = useWorkbookStore.getState()
+    const { open, current, history, selection } = useWorkbookStore.getState()
     if (open === null) return
 
     const sheet = visibleSheets(open)[current]
     if (sheet === undefined) return
 
-    if (axis === 'column') resizeColumns(sheet, from, to, { width: size, custom: size !== null })
-    else resizeRows(sheet, from, to, { height: size, customHeight: size !== null })
+    const changes =
+      axis === 'column'
+        ? resizeColumns(sheet, from, to, { width: size, custom: size !== null })
+        : resizeRows(sheet, from, to, { height: size, customHeight: size !== null })
 
-    set({ open: redrawn(open, [sheet.path]), edited: true })
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+    })
   },
 
   hide: (axis, hidden) => {
@@ -265,10 +271,16 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const from = Math.min(...bounds.map((one) => (axis === 'row' ? one.top : one.left)))
     const to = Math.max(...bounds.map((one) => (axis === 'row' ? one.bottom : one.right)))
 
-    if (axis === 'column') resizeColumns(sheet, from, to, { hidden })
-    else resizeRows(sheet, from, to, { hidden })
+    const changes =
+      axis === 'column'
+        ? resizeColumns(sheet, from, to, { hidden })
+        : resizeRows(sheet, from, to, { hidden })
 
-    set({ open: redrawn(open, [sheet.path]), edited: true })
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(useWorkbookStore.getState().history, { changes, selection }),
+    })
   },
 
   copy: async () => {
@@ -310,7 +322,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     set({
       open: redrawn(open, [sheet.path]),
       edited: true,
-      history: recorded(history, { changes, selection }),
+      history: recorded(history, { changes: cellChanges(changes), selection }),
       // What was pasted is what is selected afterwards, as every spreadsheet
       // does: it is the thing somebody is about to format or move.
       selection: {

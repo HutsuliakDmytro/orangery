@@ -6,7 +6,8 @@ import { singleCell } from '@orangery/grid'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 import { applyEdit, clearCells } from './edit'
-import { canRedo, canUndo, emptyHistory, recorded, redo, undo } from './history'
+import { reshape, resizeColumns, resizeRows } from './structure'
+import { canRedo, canUndo, cellChanges, emptyHistory, recorded, redo, undo } from './history'
 import type { History } from './history'
 
 /**
@@ -40,7 +41,10 @@ const at = (row: number, column: number) => cellAt(sheet.cells, { row, column })
 const type = (row: number, column: number, text: string) => {
   const change = applyEdit(open, sheet, { row, column }, text)
   if (change !== null) {
-    history = recorded(history, { changes: [change], selection: singleCell({ row, column }) })
+    history = recorded(history, {
+      changes: cellChanges([change]),
+      selection: singleCell({ row, column }),
+    })
   }
 }
 
@@ -69,7 +73,10 @@ describe('one step, one press', () => {
     ).flat()
 
     const changes = clearCells(sheet, cells)
-    history = recorded(history, { changes, selection: singleCell({ row: 0, column: 0 }) })
+    history = recorded(history, {
+      changes: cellChanges(changes),
+      selection: singleCell({ row: 0, column: 0 }),
+    })
 
     expect(at(1, 1)).toBeNull()
     expect(changes.length).toBeGreaterThan(1)
@@ -134,7 +141,10 @@ describe('where it leaves the cursor', () => {
     const change = applyEdit(open, sheet, { row: 8, column: 5 }, '42')
     if (change === null) throw new Error('nothing was typed')
 
-    history = recorded(history, { changes: [change], selection: singleCell({ row: 8, column: 5 }) })
+    history = recorded(history, {
+      changes: cellChanges([change]),
+      selection: singleCell({ row: 8, column: 5 }),
+    })
     const moved = undo(open, history)
 
     expect(moved.selection?.active).toEqual({ row: 8, column: 5 })
@@ -176,5 +186,73 @@ describe('how much is kept', () => {
     for (let index = 0; index < 100; index += 1) moved = undo(open, moved.history)
 
     expect(at(8, 5)?.value).toBe('19')
+  })
+})
+
+describe('things that are not cells', () => {
+  it('takes back a column’s width', () => {
+    // A width belongs to a column, not to any cell in it. A history that only
+    // knew cells would take back the last thing typed instead.
+    const before = sheet.sheet.columns
+
+    const history = recorded(emptyHistory(), {
+      changes: resizeColumns(sheet, 1, 1, { width: 44, custom: true }),
+      selection: singleCell({ row: 0, column: 1 }),
+    })
+    expect(sheet.sheet.columns).not.toEqual(before)
+
+    undo(open, history)
+    expect(sheet.sheet.columns).toEqual(before)
+  })
+
+  it('takes back hiding a row, and hides it again on redo', () => {
+    const history = recorded(emptyHistory(), {
+      changes: resizeRows(sheet, 2, 2, { hidden: true }),
+      selection: singleCell({ row: 2, column: 0 }),
+    })
+    expect(sheet.cells.properties.get(2)?.hidden).toBe(true)
+
+    const back = undo(open, history)
+    expect(sheet.cells.properties.get(2)?.hidden ?? false).toBe(false)
+
+    redo(open, back.history)
+    expect(sheet.cells.properties.get(2)?.hidden).toBe(true)
+  })
+
+  it('takes a row’s properties away again where there were none', () => {
+    // Row 9 of the fixture has no entry at all; hiding it makes one, and
+    // undoing has to leave none rather than an entry saying "not hidden".
+    expect(sheet.cells.properties.has(8)).toBe(false)
+
+    const history = recorded(emptyHistory(), {
+      changes: resizeRows(sheet, 8, 8, { hidden: true }),
+      selection: singleCell({ row: 8, column: 0 }),
+    })
+    undo(open, history)
+
+    expect(sheet.cells.properties.has(8)).toBe(false)
+  })
+
+  it('puts the heights back when a row insertion is taken back', () => {
+    // Row 2 is thirty points tall; inserting above it moves that down, and
+    // undoing has to bring it back up.
+    const history = recorded(emptyHistory(), {
+      changes: reshape(sheet, { axis: 'row', at: 0, by: 1 }),
+      selection: singleCell({ row: 0, column: 0 }),
+    })
+    expect(sheet.cells.properties.get(2)?.height).toBe(30)
+
+    undo(open, history)
+    expect(sheet.cells.properties.get(1)?.height).toBe(30)
+    expect(sheet.cells.properties.get(2)?.height ?? null).toBeNull()
+  })
+
+  it('says which sheet a column change was on, so only it is redrawn', () => {
+    const history = recorded(emptyHistory(), {
+      changes: resizeColumns(sheet, 0, 0, { width: 12 }),
+      selection: singleCell({ row: 0, column: 0 }),
+    })
+
+    expect(undo(open, history).sheets).toEqual(new Set([sheet.path]))
   })
 })

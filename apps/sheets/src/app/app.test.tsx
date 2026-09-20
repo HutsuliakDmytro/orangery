@@ -737,3 +737,48 @@ describe('hiding and resizing', () => {
     expect(again.sheets[0]?.sheet.columns).toEqual(before.sheets[0]?.sheet.columns)
   })
 })
+
+describe('taking back what was not a cell', () => {
+  const sheetNow = () => useWorkbookStore.getState().open?.sheets[0]
+
+  it('undoes a drag on a column edge', async () => {
+    render(<App />)
+    await load()
+
+    const before = sheetNow()?.sheet.columns
+    act(() => {
+      useWorkbookStore.getState().resize('column', 1, 1, 30)
+    })
+    expect(sheetNow()?.sheet.columns).not.toEqual(before)
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(sheetNow()?.sheet.columns).toEqual(before)
+  })
+
+  it('undoes hiding, rather than the last thing typed', async () => {
+    const typist = userEvent.setup()
+    render(<App />)
+    await load()
+
+    await typist.click(await screen.findByRole('grid', { name: 'Budget' }))
+    await typist.keyboard('Rent{Enter}')
+
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, 'B1{Enter}')
+    act(() => {
+      runCommand('sheet.hideColumns', {})
+    })
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    // The hiding went; what was typed before it stayed.
+    expect(sheetNow()?.sheet.columns.filter((one) => one.hidden)).toHaveLength(0)
+    expect(sheetNow()?.cells.rows.get(0)?.get(0)?.value).toBe('Rent')
+  })
+})

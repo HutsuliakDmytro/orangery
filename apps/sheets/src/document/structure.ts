@@ -1,5 +1,7 @@
 import { adjustFormula, putCell, withColumns } from '@orangery/ooxml-spreadsheet'
 import type { BandChange, Cell, ColumnLook, RowProperties } from '@orangery/ooxml-spreadsheet'
+import { cellChanges } from './history'
+import type { Change } from './history'
 import type { CellChange } from './edit'
 import type { OpenSheet } from './workbook'
 
@@ -38,7 +40,7 @@ function movedTo(cell: Cell, change: BandChange): { row: number; column: number 
  * walked the existing map in place would overwrite cells it had not visited
  * yet — and which ones depend on which direction the band moved.
  */
-export function reshape(sheet: OpenSheet, change: BandChange): CellChange[] {
+export function reshape(sheet: OpenSheet, change: BandChange): Change[] {
   if (change.by === 0) return []
 
   const changes: CellChange[] = []
@@ -81,8 +83,7 @@ export function reshape(sheet: OpenSheet, change: BandChange): CellChange[] {
   sheet.cells.rows.clear()
   for (const cell of now.values()) putCell(sheet.cells, cell)
 
-  reshapeRows(sheet, change)
-  return changes
+  return [...cellChanges(changes), ...reshapeRows(sheet, change)]
 }
 
 /** Whether two cells would be written identically, one of them possibly absent. */
@@ -98,68 +99,68 @@ function same(a: Cell | null, b: Cell | null): boolean {
   )
 }
 
-/**
- * The heights and the hiding, moved with the rows they belong to.
- *
- * Not part of the history: a row's height is a property of the row and not of
- * any cell, and the history records cells. Taking a row out and putting it
- * back leaves the rows below it the height they had rather than the height
- * they were given — which is a smaller wrong than an undo that does not put
- * the values back, and is written down here so it is a decision rather than
- * an oversight.
- */
-function reshapeRows(sheet: OpenSheet, change: BandChange): void {
-  if (change.axis !== 'row') return
+/** The heights and the hiding, moved with the rows they belong to. */
+function reshapeRows(sheet: OpenSheet, change: BandChange): Change[] {
+  if (change.axis !== 'row') return []
 
-  const moved = new Map<number, ReturnType<typeof rowsOf>[number]>()
+  const was = new Map(sheet.cells.properties)
+  const now = new Map<number, RowProperties>()
 
-  for (const row of rowsOf(sheet)) {
+  for (const row of was.values()) {
     if (row.index < change.at) {
-      moved.set(row.index, row)
+      now.set(row.index, row)
       continue
     }
     if (change.by < 0 && row.index < change.at - change.by) continue
 
     const to = row.index + change.by
-    moved.set(to, { ...row, index: to })
+    now.set(to, { ...row, index: to })
   }
 
   sheet.cells.properties.clear()
-  for (const [index, row] of moved) sheet.cells.properties.set(index, row)
+  for (const [index, row] of now) sheet.cells.properties.set(index, row)
+
+  return [...new Set([...was.keys(), ...now.keys()])].flatMap((index): Change[] => {
+    const before = was.get(index) ?? null
+    const after = now.get(index) ?? null
+    if (before === after) return []
+
+    return [{ kind: 'row', sheet: sheet.path, index, before, after }]
+  })
 }
 
-const rowsOf = (sheet: OpenSheet) => [...sheet.cells.properties.values()]
-
 /**
- * What a column or a row looks like, changed over a span.
+ * What a run of columns looks like, changed.
  *
- * Not in the history, and this is where that decision bites hardest: a width
- * belongs to a column and a height to a row, and the history records cells.
- * Dragging a column edge and pressing undo takes back the last thing typed
- * rather than the drag — which is wrong, and is the price of a history that
- * is honest about only knowing cells. The right fix is a step that can hold
- * something other than cell changes, and it is the next thing this file
- * wants (`PLAN.md`, phase 2).
+ * The whole list of runs, before and after: a sheet has a handful of them, and
+ * keeping both versions of the handful is cheaper to write and to read than
+ * describing which run was split.
  */
 export function resizeColumns(
   sheet: OpenSheet,
   from: number,
   to: number,
   look: Partial<ColumnLook>,
-): void {
-  sheet.sheet.columns = withColumns(sheet.sheet.columns, from, to, look)
+): Change[] {
+  const before = sheet.sheet.columns
+  const after = withColumns(before, from, to, look)
+  sheet.sheet.columns = after
+
+  return [{ kind: 'columns', sheet: sheet.path, before, after }]
 }
 
+/** The same for rows, which keep what they look like one row at a time. */
 export function resizeRows(
   sheet: OpenSheet,
   from: number,
   to: number,
   look: Partial<Pick<RowProperties, 'height' | 'customHeight' | 'hidden'>>,
-): void {
-  for (let index = Math.min(from, to); index <= Math.max(from, to); index += 1) {
-    const existing = sheet.cells.properties.get(index)
+): Change[] {
+  const changes: Change[] = []
 
-    sheet.cells.properties.set(index, {
+  for (let index = Math.min(from, to); index <= Math.max(from, to); index += 1) {
+    const before = sheet.cells.properties.get(index) ?? null
+    const after: RowProperties = {
       index,
       height: null,
       customHeight: false,
@@ -168,8 +169,13 @@ export function resizeRows(
       style: null,
       collapsed: false,
       carried: null,
-      ...existing,
+      ...before,
       ...look,
-    })
+    }
+
+    sheet.cells.properties.set(index, after)
+    changes.push({ kind: 'row', sheet: sheet.path, index, before, after })
   }
+
+  return changes
 }

@@ -176,11 +176,3 @@ export function applyLook(
 
   return changes
 }
-
-/** Puts a cell back the way a change found it, or takes it away again. */
-export function restore(sheet: OpenSheet, change: CellChange, to: 'before' | 'after'): void {
-  const cell = change[to]
-
-  if (cell === null) sheet.cells.rows.get(change.row)?.delete(change.column)
-  else putCell(sheet.cells, cell)
-}

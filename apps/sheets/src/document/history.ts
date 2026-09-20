@@ -1,7 +1,8 @@
+import { putCell } from '@orangery/ooxml-spreadsheet'
+import type { ColumnRange, RowProperties } from '@orangery/ooxml-spreadsheet'
 import type { GridSelection } from '@orangery/grid'
-import { restore } from './edit'
 import type { CellChange } from './edit'
-import type { OpenWorkbook } from './workbook'
+import type { OpenSheet, OpenWorkbook } from './workbook'
 
 /**
  * What can be taken back.
@@ -12,11 +13,19 @@ import type { OpenWorkbook } from './workbook'
  * get out of. That is the whole of what "transactional" means here, and it is
  * why the unit is a list of changes rather than a change.
  *
- * Each change carries what the cell was and what it became, so the two
+ * Each change carries what something was and what it became, so the two
  * directions are the same walk with a different field read. Nothing is
- * recomputed on the way back: undo restores cells rather than re-running the
- * edit backwards, which would mean the edit had to be invertible, which is a
- * promise a formula engine will not keep.
+ * recomputed on the way back: undo restores what was there rather than
+ * re-running the edit backwards, which would mean the edit had to be
+ * invertible, which is a promise a formula engine will not keep.
+ *
+ * Not everything a person does to a sheet is a change to a cell. A column's
+ * width, a row's height, whether either is hidden — none of them live in a
+ * cell, and a history that only knew cells would take back the last thing
+ * typed when somebody meant to take back a drag. So a change is one of three
+ * things, and the ones that are not cells are whole-list snapshots: a sheet
+ * has a handful of column runs, and keeping both versions of the handful is
+ * cheaper than describing the difference.
  *
  * What is not undone is the style entries an edit added to the workbook.
  * Typing `15%` can append an `<xf>`, and undoing leaves it there, unused. That
@@ -25,8 +34,24 @@ import type { OpenWorkbook } from './workbook'
  * restyle cells that had nothing to do with the edit.
  */
 
+/** One thing that changed, in whichever part of the workbook keeps it. */
+export type Change =
+  | { kind: 'cell'; cell: CellChange }
+  | { kind: 'columns'; sheet: string; before: ColumnRange[]; after: ColumnRange[] }
+  | {
+      kind: 'row'
+      sheet: string
+      index: number
+      before: RowProperties | null
+      after: RowProperties | null
+    }
+
+/** Cell changes as changes, which is what everything that makes them hands over. */
+export const cellChanges = (changes: readonly CellChange[]): Change[] =>
+  changes.map((cell) => ({ kind: 'cell', cell }))
+
 export interface Step {
-  changes: CellChange[]
+  changes: Change[]
   /**
    * Where the cursor was when the step began.
    *
@@ -93,7 +118,7 @@ export function undo(open: OpenWorkbook, history: History): Moved {
   return {
     history: { past: history.past.slice(0, -1), future: [...history.future, step] },
     selection: step.selection,
-    sheets: new Set(step.changes.map((change) => change.sheet)),
+    sheets: sheetsOf(step),
   }
 }
 
@@ -106,13 +131,39 @@ export function redo(open: OpenWorkbook, history: History): Moved {
   return {
     history: { past: [...history.past, step], future: history.future.slice(0, -1) },
     selection: step.selection,
-    sheets: new Set(step.changes.map((change) => change.sheet)),
+    sheets: sheetsOf(step),
   }
 }
 
-function put(open: OpenWorkbook, change: CellChange, to: 'before' | 'after'): void {
-  const sheet = open.sheets.find((one) => one.path === change.sheet)
+/** The parts a step touched, so only those are redrawn. */
+const sheetsOf = (step: Step): Set<string> =>
+  new Set(step.changes.map((change) => (change.kind === 'cell' ? change.cell.sheet : change.sheet)))
+
+function put(open: OpenWorkbook, change: Change, to: 'before' | 'after'): void {
+  const path = change.kind === 'cell' ? change.cell.sheet : change.sheet
+  const sheet = open.sheets.find((one) => one.path === path)
   // A step naming a sheet the workbook no longer has is one belonging to a
   // file that has since been closed; there is nothing to put it back into.
-  if (sheet !== undefined) restore(sheet, change, to)
+  if (sheet === undefined) return
+
+  restore(sheet, change, to)
+}
+
+/** Puts one change back the way it found things, or forward again. */
+function restore(sheet: OpenSheet, change: Change, to: 'before' | 'after'): void {
+  if (change.kind === 'columns') {
+    sheet.sheet.columns = change[to]
+    return
+  }
+
+  if (change.kind === 'row') {
+    const row = change[to]
+    if (row === null) sheet.cells.properties.delete(change.index)
+    else sheet.cells.properties.set(change.index, row)
+    return
+  }
+
+  const cell = change.cell[to]
+  if (cell === null) sheet.cells.rows.get(change.cell.row)?.delete(change.cell.column)
+  else putCell(sheet.cells, cell)
 }

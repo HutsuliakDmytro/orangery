@@ -8,9 +8,11 @@ import {
   copiedFrom,
   copiedRange,
   pasteBlock,
+  pastedArea,
   readClipboard,
   writeClipboard,
 } from '../document/clipboard'
+import type { PasteOptions } from '../document/clipboard'
 import { applyEdit, applyLook, clearCells } from '../document/edit'
 import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
 import { looksLikeHeader, sortRows } from '../document/sort'
@@ -100,7 +102,14 @@ export interface WorkbookState {
   filterBy: (column: number, criteria: { values: string[]; blanks: boolean } | null) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
-  paste: () => Promise<void>
+  /**
+   * Puts the clipboard down. Without options it is the ordinary paste.
+   *
+   * Values, formats and a transpose are the same operation with a different
+   * answer to what arrives, which is why they are options rather than three
+   * actions that would each have to record their own step.
+   */
+  paste: (options?: PasteOptions) => Promise<void>
   undo: () => void
   redo: () => void
   /** A workbook that has just been written, and now belongs to that path. */
@@ -429,7 +438,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     useWorkbookStore.getState().clear()
   },
 
-  paste: async () => {
+  paste: async (options) => {
     const { open, current, selection } = useWorkbookStore.getState()
     if (open === null) return
 
@@ -440,8 +449,18 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
     const block = blockFrom(await readClipboard(), { row: at.row, column: at.column })
     if (block === null) return
 
-    const changes = pasteBlock(sheet, block, { row: at.row, column: at.column })
+    // The rectangle somebody selected, so a block that goes into it a whole
+    // number of times is laid down that many times.
+    const over = {
+      rows: at.to.row - at.row + 1,
+      columns: at.to.column - at.column + 1,
+    }
+    const how: PasteOptions = { what: 'all', transpose: false, ...options, over }
+
+    const changes = pasteBlock(sheet, block, { row: at.row, column: at.column }, how)
     if (changes.length === 0) return
+
+    const area = pastedArea(block, how)
 
     // Read again rather than above: reading the clipboard is a wait, and a
     // step recorded against the history as it was before the wait would lose
@@ -458,7 +477,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
         ranges: [
           {
             anchor: { row: at.row, column: at.column },
-            focus: { row: at.row + block.rows - 1, column: at.column + block.columns - 1 },
+            focus: { row: at.row + area.rows - 1, column: at.column + area.columns - 1 },
           },
         ],
         active: { row: at.row, column: at.column },

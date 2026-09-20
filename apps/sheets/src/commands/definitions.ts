@@ -146,6 +146,37 @@ export const editCommands: readonly Command[] = [
     },
   },
   {
+    id: 'edit.pasteValues',
+    label: 'Paste Values Only',
+    group: 'edit',
+    shortcut: 'Mod+Shift+V',
+    keywords: ['special', 'numbers', 'freeze'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      void useWorkbookStore.getState().paste({ what: 'values', transpose: false })
+    },
+  },
+  {
+    id: 'edit.pasteFormats',
+    label: 'Paste Formatting Only',
+    group: 'edit',
+    keywords: ['special', 'style', 'look'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      void useWorkbookStore.getState().paste({ what: 'formats', transpose: false })
+    },
+  },
+  {
+    id: 'edit.pasteTransposed',
+    label: 'Paste Transposed',
+    group: 'edit',
+    keywords: ['special', 'turn', 'rotate', 'rows', 'columns'],
+    isEnabled: hasWorkbook,
+    run: () => {
+      void useWorkbookStore.getState().paste({ what: 'all', transpose: true })
+    },
+  },
+  {
     id: 'edit.undo',
     label: 'Undo',
     group: 'edit',

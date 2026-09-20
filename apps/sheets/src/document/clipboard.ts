@@ -76,11 +76,53 @@ export function blockFrom(
 }
 
 /**
- * Puts a block into a sheet, and says what that changed.
+ * What of a copied cell actually arrives, and in what shape.
  *
- * Pasted once at the corner rather than tiled across a larger selection; what
- * Excel does with a selection that is a whole multiple of the block is a
- * convenience that can wait for somebody to want it.
+ * The three questions every spreadsheet's Paste Special asks, and they are
+ * separate because people want them separately: numbers without the formulas
+ * that made them, a look without the values wearing it, a column turned into
+ * a row.
+ */
+export interface PasteOptions {
+  /** `values` drops the formulas, `formats` brings nothing but the look. */
+  what: 'all' | 'values' | 'formats'
+  /** Rows become columns, which is a different block rather than a flag. */
+  transpose: boolean
+  /**
+   * The rectangle somebody selected, where it is bigger than the block.
+   *
+   * A block laid into a selection that is a whole multiple of it is laid down
+   * as many times as it goes — one row copied across a week, a fortnight of
+   * columns filled from a fortnight's worth. Anything that is not a whole
+   * multiple is pasted once at the corner, because half a block is not
+   * something anybody meant.
+   */
+  over?: { rows: number; columns: number }
+}
+
+const ORDINARY: PasteOptions = { what: 'all', transpose: false }
+
+/** How much room a block will take, which is not its shape if it is turned. */
+export const pastedArea = (
+  block: CellBlock,
+  options: PasteOptions = ORDINARY,
+): { rows: number; columns: number } => {
+  const one = options.transpose
+    ? { rows: block.columns, columns: block.rows }
+    : { rows: block.rows, columns: block.columns }
+
+  const over = options.over
+  if (over === undefined) return one
+
+  return {
+    rows: over.rows >= one.rows && over.rows % one.rows === 0 ? over.rows : one.rows,
+    columns:
+      over.columns >= one.columns && over.columns % one.columns === 0 ? over.columns : one.columns,
+  }
+}
+
+/**
+ * Puts a block into a sheet, and says what that changed.
  *
  * A block from another window arrives without its styles. A style is an index
  * into the workbook it came from, and the same index here is a different
@@ -91,47 +133,105 @@ export function pasteBlock(
   sheet: OpenSheet,
   block: CellBlock,
   at: CellBlock['origin'],
+  options: PasteOptions = ORDINARY,
 ): CellChange[] {
   const own = sameSession(block)
-  const by = { rows: at.row - block.origin.row, columns: at.column - block.origin.column }
+  const area = pastedArea(block, options)
+  const one = pastedArea(block, { ...options, over: undefined })
+
   const changes: CellChange[] = []
 
-  for (const [row, cells] of block.cells.entries()) {
-    for (const [column, cell] of cells.entries()) {
-      const address = { row: at.row + row, column: at.column + column }
-      if (address.row < 0 || address.column < 0) continue
-
-      const existing = sheet.cells.rows.get(address.row)?.get(address.column) ?? null
-      const was = { sheet: sheet.path, row: address.row, column: address.column, before: existing }
-
-      // An empty cell in the block empties the cell it lands on: a copied
-      // block is a rectangle, and pasting it leaving holes would leave the old
-      // values showing through.
-      if (cell === null) {
-        if (existing === null) continue
-
-        sheet.cells.rows.get(address.row)?.delete(address.column)
-        changes.push({ ...was, after: null })
-        continue
+  for (let tileRow = 0; tileRow < area.rows / one.rows; tileRow += 1) {
+    for (let tileColumn = 0; tileColumn < area.columns / one.columns; tileColumn += 1) {
+      const corner = {
+        row: at.row + tileRow * one.rows,
+        column: at.column + tileColumn * one.columns,
       }
 
-      const pasted: Cell = {
-        ...cell,
-        row: address.row,
-        column: address.column,
-        style: own ? cell.style : (existing?.style ?? null),
-        formula:
-          cell.formula === null
-            ? null
-            : { ...cell.formula, text: shiftFormula(cell.formula.text, by) },
-      }
+      for (const [row, cells] of block.cells.entries()) {
+        for (const [column, cell] of cells.entries()) {
+          const address = options.transpose
+            ? { row: corner.row + column, column: corner.column + row }
+            : { row: corner.row + row, column: corner.column + column }
+          if (address.row < 0 || address.column < 0) continue
 
-      putCell(sheet.cells, pasted)
-      changes.push({ ...was, after: pasted })
+          const change = placed(sheet, cell, address, { own, what: options.what })
+          if (change !== null) changes.push(change)
+        }
+      }
     }
   }
 
   return changes
+}
+
+/** One cell of a block, put where it lands. */
+function placed(
+  sheet: OpenSheet,
+  cell: Cell | null,
+  address: { row: number; column: number },
+  how: { own: boolean; what: PasteOptions['what'] },
+): CellChange | null {
+  const existing = sheet.cells.rows.get(address.row)?.get(address.column) ?? null
+  const was = { sheet: sheet.path, row: address.row, column: address.column, before: existing }
+
+  // A look pasted over a value leaves the value alone: that is the whole of
+  // what "formats" means, and a cell of the target that has nothing in it is
+  // still a cell somebody can have made yellow.
+  if (how.what === 'formats') {
+    const style = how.own ? (cell?.style ?? null) : (existing?.style ?? null)
+    if (existing === null && style === null) return null
+
+    const after: Cell =
+      existing === null
+        ? {
+            row: address.row,
+            column: address.column,
+            type: 'n',
+            value: null,
+            style,
+            formula: null,
+            rich: null,
+            carried: null,
+          }
+        : { ...existing, style }
+
+    putCell(sheet.cells, after)
+    return { ...was, after }
+  }
+
+  // An empty cell in the block empties the cell it lands on: a copied block is
+  // a rectangle, and pasting it leaving holes would leave the old values
+  // showing through.
+  if (cell === null) {
+    if (existing === null) return null
+
+    sheet.cells.rows.get(address.row)?.delete(address.column)
+    return { ...was, after: null }
+  }
+
+  // Worked out for each cell rather than once for the block, because a
+  // transposed paste moves every cell by a different distance. A reference in
+  // a turned formula is moved rather than turned with it: a shift is what a
+  // paste has always meant, and rotating references would be a second rule
+  // nobody could predict from the first.
+  const by = { rows: address.row - cell.row, columns: address.column - cell.column }
+
+  const pasted: Cell = {
+    ...cell,
+    row: address.row,
+    column: address.column,
+    style: how.what === 'all' && how.own ? cell.style : (existing?.style ?? null),
+    // Values means the number that is there, not the sum that produced it —
+    // which is what everybody uses it for: freezing a result.
+    formula:
+      how.what === 'values' || cell.formula === null
+        ? null
+        : { ...cell.formula, text: shiftFormula(cell.formula.text, by) },
+  }
+
+  putCell(sheet.cells, pasted)
+  return { ...was, after: pasted }
 }
 
 /**

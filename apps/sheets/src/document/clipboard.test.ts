@@ -6,7 +6,7 @@ import type { CellBlock } from '@orangery/ooxml-spreadsheet'
 import { singleCell } from '@orangery/grid'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
-import { blockFrom, copiedFrom, pasteBlock } from './clipboard'
+import { blockFrom, copiedFrom, pasteBlock, pastedArea } from './clipboard'
 import { shownText } from './shown'
 
 /**
@@ -172,5 +172,114 @@ describe('a copy that goes round the whole way', () => {
     const block = blockFrom({ html, text: null }, { row: 0, column: 0 })
 
     expect(block).toMatchObject({ rows: 1, columns: 1 })
+  })
+})
+
+describe('a paste that is not the whole cell', () => {
+  it('takes the number and leaves the sum that made it', () => {
+    // Which is what everybody uses "values" for: freezing a result so it
+    // stops moving when the rows under it change.
+    const block = copied({ row: 3, column: 2 }, { row: 3, column: 2 })
+    pasteBlock(sheet, block, { row: 8, column: 5 }, { what: 'values', transpose: false })
+
+    expect(at(8, 5)?.formula).toBeNull()
+    expect(at(8, 5)?.value).toBe(at(3, 2)?.value)
+  })
+
+  it('leaves the look of what it lands on alone', () => {
+    const block = copied({ row: 1, column: 1 }, { row: 1, column: 1 })
+    const was = at(2, 2)?.style
+
+    pasteBlock(sheet, block, { row: 2, column: 2 }, { what: 'values', transpose: false })
+    expect(at(2, 2)?.style).toBe(was)
+  })
+
+  it('takes the look and leaves the value, the other way about', () => {
+    const block = copied({ row: 1, column: 1 }, { row: 1, column: 1 })
+    const value = at(2, 2)?.value
+
+    pasteBlock(sheet, block, { row: 2, column: 2 }, { what: 'formats', transpose: false })
+
+    expect(at(2, 2)?.style).toBe(at(1, 1)?.style)
+    expect(at(2, 2)?.value).toBe(value)
+  })
+
+  it('can put a look on a cell that has nothing in it', () => {
+    const block = copied({ row: 1, column: 1 }, { row: 1, column: 1 })
+    pasteBlock(sheet, block, { row: 8, column: 5 }, { what: 'formats', transpose: false })
+
+    expect(at(8, 5)?.style).toBe(at(1, 1)?.style)
+    expect(at(8, 5)?.value).toBeNull()
+  })
+})
+
+describe('a block turned on its side', () => {
+  it('puts the first row down the first column', () => {
+    const block = copied({ row: 0, column: 0 }, { row: 0, column: 2 })
+    pasteBlock(sheet, block, { row: 10, column: 5 }, { what: 'all', transpose: true })
+
+    expect(at(10, 5)?.value).toBe(at(0, 0)?.value)
+    expect(at(12, 5)?.value).toBe(at(0, 2)?.value)
+  })
+
+  it('says how much room it takes, which is the other way round', () => {
+    const block = copied({ row: 0, column: 0 }, { row: 2, column: 0 })
+
+    expect(pastedArea(block, { what: 'all', transpose: true })).toEqual({ rows: 1, columns: 3 })
+  })
+})
+
+describe('a block laid into a bigger selection', () => {
+  it('goes down as many times as it fits', () => {
+    // One row copied across a week is the gesture; Excel asks for a whole
+    // multiple and so does this.
+    const block = copied({ row: 0, column: 0 }, { row: 0, column: 0 })
+    const changes = pasteBlock(
+      sheet,
+      block,
+      { row: 10, column: 5 },
+      {
+        what: 'all',
+        transpose: false,
+        over: { rows: 3, columns: 2 },
+      },
+    )
+
+    expect(changes).toHaveLength(6)
+    expect(at(12, 6)?.value).toBe(at(0, 0)?.value)
+  })
+
+  it('moves each copy’s formulas by as far as that copy went', () => {
+    const block = copied({ row: 3, column: 2 }, { row: 3, column: 2 })
+    pasteBlock(
+      sheet,
+      block,
+      { row: 10, column: 2 },
+      {
+        what: 'all',
+        transpose: false,
+        over: { rows: 2, columns: 1 },
+      },
+    )
+
+    expect(at(10, 2)?.formula?.text).toBe('B9+B10')
+    expect(at(11, 2)?.formula?.text).toBe('B10+B11')
+  })
+
+  it('is pasted once where the selection is not a whole multiple', () => {
+    // Half a block is not something anybody meant.
+    const block = copied({ row: 0, column: 0 }, { row: 1, column: 0 })
+    const changes = pasteBlock(
+      sheet,
+      block,
+      { row: 10, column: 5 },
+      {
+        what: 'all',
+        transpose: false,
+        over: { rows: 3, columns: 1 },
+      },
+    )
+
+    expect(changes).toHaveLength(2)
   })
 })

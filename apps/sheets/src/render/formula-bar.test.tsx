@@ -137,3 +137,47 @@ describe('the functions it offers while a name is being typed', () => {
     expect(committed).toHaveBeenCalledWith('=SUM(A1)')
   })
 })
+
+describe('the references in a formula', () => {
+  it('moves the dollars on with F4, on the one under the caret', async () => {
+    const user = userEvent.setup()
+    render(<FormulaBar text="=A1+B2" onCommit={vi.fn()} functions={[]} />)
+
+    const box = screen.getByRole<HTMLInputElement>('textbox', { name: 'Formula bar' })
+    await user.click(box)
+    box.setSelectionRange(3, 3)
+
+    await user.keyboard('{F4}')
+    expect(box.value).toBe('=$A$1+B2')
+
+    await user.keyboard('{F4}')
+    expect(box.value).toBe('=A$1+B2')
+  })
+
+  it('leaves F4 alone when the caret is not in a reference', async () => {
+    const user = userEvent.setup()
+    render(<FormulaBar text="=SUM(1,2)" onCommit={vi.fn()} functions={[]} />)
+
+    const box = screen.getByRole<HTMLInputElement>('textbox', { name: 'Formula bar' })
+    await user.click(box)
+    box.setSelectionRange(6, 6)
+
+    await user.keyboard('{F4}')
+    expect(box.value).toBe('=SUM(1,2)')
+  })
+
+  it('says what is being typed, so the sheet can box the cells it names', async () => {
+    const user = userEvent.setup()
+    const typing = vi.fn()
+    render(<FormulaBar text="" onCommit={vi.fn()} onTyping={typing} functions={[]} />)
+
+    const box = screen.getByRole('textbox', { name: 'Formula bar' })
+    await user.click(box)
+    await user.type(box, '=A1')
+
+    expect(typing).toHaveBeenLastCalledWith('=A1')
+
+    await user.tab()
+    expect(typing).toHaveBeenLastCalledWith(null)
+  })
+})

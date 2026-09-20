@@ -10,6 +10,7 @@ import type {
 } from '@orangery/grid'
 import {
   cellAt,
+  cycledReference,
   extentOf,
   formatCodeOf,
   highlightsOf,
@@ -40,6 +41,7 @@ import { formatValue } from '@orangery/numfmt'
 import { iconOf } from './icon-sets'
 import { SheetDrawings } from './sheet-drawings'
 import { NoteBox } from './note-box'
+import { ReferenceBoxes } from './reference-boxes'
 import { TraceArrows } from './trace-arrows'
 import { notesOf } from './sheet-notes'
 import { SuggestionList } from './suggestion-list'
@@ -96,6 +98,14 @@ export interface SheetViewProps {
   /** The functions to offer, for a caller with its own list — a test. */
   functions?: readonly KnownFunction[]
   /**
+   * A formula being written somewhere that is not a cell of this sheet.
+   *
+   * The formula bar, in practice. The boxes round what a formula names have
+   * to appear whichever of the two somebody is typing in, and only the window
+   * knows about both.
+   */
+  writing?: string | null
+  /**
    * The arrows that say where a number came from, when somebody asked.
    *
    * Handed in already settled — which cell, on which sheet, and whether the
@@ -121,6 +131,7 @@ export function SheetView({
   functions,
   onCellClick,
   traced = null,
+  writing = null,
 }: SheetViewProps) {
   const { styles, strings, palette } = open
 
@@ -542,6 +553,15 @@ export function SheetView({
    * same `suggest`.
    */
   const [editing, setEditing] = useState<Editing | null>(null)
+
+  /**
+   * The formula being written, wherever it is being written.
+   *
+   * The cell editor's text when a cell is open, and the formula bar's when it
+   * is not. One answer, because the boxes it draws are about the formula
+   * rather than about which box the letters are going into.
+   */
+  const written = editing?.text ?? writing
   const [highlighted, setHighlighted] = useState(0)
 
   useEffect(() => {
@@ -632,7 +652,7 @@ export function SheetView({
         {...(onCellClick === undefined ? {} : { onCellClick })}
         onHoverCell={notes.any ? setHovered : undefined}
         overlay={
-          sheet.drawings.length === 0 && !notes.any && traced === null
+          sheet.drawings.length === 0 && !notes.any && traced === null && written === null
             ? undefined
             : (view) => (
                 <>
@@ -651,6 +671,15 @@ export function SheetView({
                     scrollX={view.scrollX}
                     scrollY={view.scrollY}
                   />
+                  {written !== null && (
+                    <ReferenceBoxes
+                      text={written}
+                      sheet={sheet.name}
+                      metrics={view.metrics}
+                      scrollX={view.scrollX}
+                      scrollY={view.scrollY}
+                    />
+                  )}
                   {traced !== null && (
                     <TraceArrows
                       traced={traced}
@@ -672,7 +701,18 @@ export function SheetView({
         mergeAt={merged}
         editable={(cell) => !isLocked(open, sheet, cell)}
         onEditing={setEditing}
-        onEditingKey={(event) => {
+        onEditingKey={(event, state) => {
+          // `A1` → `$A$1` → `A$1` → `$A1`, on the reference under the caret.
+          // First, because it works whether or not a list is open — a formula
+          // being written is exactly when somebody reaches for it.
+          if (event.key === 'F4') {
+            const moved = cycledReference(state.text, state.caret)
+            if (moved === null) return false
+
+            state.replace(moved.text, moved.caret)
+            return true
+          }
+
           if (items.length === 0) return false
 
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {

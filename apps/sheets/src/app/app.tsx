@@ -104,6 +104,15 @@ function Shell() {
 
   /** The header cell whose filter list is open, if one is. */
   const [filtering, setFiltering] = useState<CellAddress | null>(null)
+
+  /**
+   * What is in the formula bar while somebody is in it.
+   *
+   * Held here rather than in the bar because the sheet needs it: the boxes
+   * round the cells a formula names have to appear whether the formula is
+   * being typed into a cell or into the bar, and only this knows about both.
+   */
+  const [writing, setWriting] = useState<string | null>(null)
   const size = useWindowSize()
 
   /**
@@ -441,6 +450,7 @@ function Shell() {
             onCommit={(text) => {
               edit(selection.active, text)
             }}
+            onTyping={setWriting}
           />
         </div>
       )}
@@ -485,6 +495,7 @@ function Shell() {
             onFillSeries={fillSeries}
             onCellClick={followLink}
             traced={traced !== null && traced.arrows && traced.sheet === sheet.path ? traced : null}
+            writing={writing}
             onResize={(axis, index, size) => {
               // Points on the screen, characters in the file: a column's width
               // is counted in the widest digit of the default font, which is

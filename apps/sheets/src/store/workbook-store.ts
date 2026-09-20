@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
-import type { BandChange, LookChange } from '@orangery/ooxml-spreadsheet'
+import type { BandChange, FilterCriteria, LookChange } from '@orangery/ooxml-spreadsheet'
 import {
   blockFrom,
   copiedFrom,
@@ -107,7 +107,7 @@ export interface WorkbookState {
   /** Turns the filter arrows on over the table under the cursor, or off. */
   toggleFilter: () => void
   /** What one filtered column keeps; null lets everything through again. */
-  filterBy: (column: number, criteria: { values: string[]; blanks: boolean } | null) => void
+  filterBy: (column: number, criteria: FilterCriteria | null) => void
   copy: () => Promise<void>
   cut: () => Promise<void>
   /**

@@ -99,7 +99,7 @@ export {
   withFilter,
   writeAutoFilter,
 } from './autofilter'
-export type { AutoFilter, FilterColumn } from './autofilter'
+export type { AutoFilter, FilterColumn, FilterCondition, FilterCriteria } from './autofilter'
 export { mergeCovering, replaceMerges, withMerge, withoutMerges, writeMerges } from './merges'
 export { replaceColumns, widthOfColumnIn, withColumns, writeColumns } from './columns'
 export type { ColumnLook } from './columns'

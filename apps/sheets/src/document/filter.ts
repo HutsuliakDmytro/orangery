@@ -1,5 +1,5 @@
 import { passes, regionAround, withFilter } from '@orangery/ooxml-spreadsheet'
-import type { AutoFilter } from '@orangery/ooxml-spreadsheet'
+import type { AutoFilter, FilterCondition, FilterCriteria } from '@orangery/ooxml-spreadsheet'
 import type { Change } from './history'
 import { resizeRows } from './structure'
 import { shownText } from './shown'
@@ -106,10 +106,70 @@ export function filterColumn(
   open: OpenWorkbook,
   sheet: OpenSheet,
   column: number,
-  criteria: { values: string[]; blanks: boolean } | null,
+  criteria: FilterCriteria | null,
 ): Change[] {
   const filter = sheet.sheet.autoFilter
   if (filter === null) return []
 
   return applyFilter(open, sheet, withFilter(filter, column, criteria))
+}
+
+/**
+ * A test as somebody says it, and as the file spells it.
+ *
+ * A spreadsheet's file format has six operators and wildcards; a person has
+ * "contains". The two are the same thing written differently — `contains` is
+ * `equal` against `*text*` — and translating here rather than storing a
+ * vocabulary of our own is what keeps a filter written in Excel readable as
+ * the filter somebody meant.
+ */
+export type ConditionKind =
+  | 'equals'
+  | 'notEquals'
+  | 'contains'
+  | 'notContains'
+  | 'beginsWith'
+  | 'endsWith'
+  | 'greaterThan'
+  | 'greaterThanOrEqual'
+  | 'lessThan'
+  | 'lessThanOrEqual'
+
+const escapedForMatching = (text: string): string => text.replace(/([*?])/gu, '~$1')
+
+/** The condition a kind and a word come to. */
+export function conditionFor(kind: ConditionKind, text: string): FilterCondition {
+  const quoted = escapedForMatching(text)
+
+  if (kind === 'contains') return { operator: 'equal', value: `*${quoted}*` }
+  if (kind === 'notContains') return { operator: 'notEqual', value: `*${quoted}*` }
+  if (kind === 'beginsWith') return { operator: 'equal', value: `${quoted}*` }
+  if (kind === 'endsWith') return { operator: 'equal', value: `*${quoted}` }
+  if (kind === 'equals') return { operator: 'equal', value: text }
+  if (kind === 'notEquals') return { operator: 'notEqual', value: text }
+
+  return { operator: kind, value: text }
+}
+
+/** The same thing backwards, for a filter that arrived in a file. */
+export function conditionShown(condition: FilterCondition): {
+  kind: ConditionKind
+  text: string
+} {
+  const { operator, value } = condition
+  const plain = operator === 'equal' || operator === 'notEqual'
+  const no = operator === 'notEqual'
+
+  if (plain && value.startsWith('*') && value.endsWith('*') && value.length > 1) {
+    return { kind: no ? 'notContains' : 'contains', text: value.slice(1, -1) }
+  }
+  if (plain && value.endsWith('*')) {
+    return { kind: no ? 'notEquals' : 'beginsWith', text: value.slice(0, -1) }
+  }
+  if (plain && value.startsWith('*')) {
+    return { kind: no ? 'notEquals' : 'endsWith', text: value.slice(1) }
+  }
+  if (plain) return { kind: no ? 'notEquals' : 'equals', text: value }
+
+  return { kind: operator, text: value }
 }

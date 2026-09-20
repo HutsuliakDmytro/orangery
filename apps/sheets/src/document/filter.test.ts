@@ -5,7 +5,14 @@ import { singleCell } from '@orangery/grid'
 import { openWorkbook } from './workbook'
 import type { OpenSheet, OpenWorkbook } from './workbook'
 import { applyEdit } from './edit'
-import { applyFilter, filterColumn, toggleFilter, valuesIn } from './filter'
+import {
+  applyFilter,
+  conditionFor,
+  conditionShown,
+  filterColumn,
+  toggleFilter,
+  valuesIn,
+} from './filter'
 import { emptyHistory, recorded, undo } from './history'
 
 /**
@@ -90,7 +97,7 @@ describe('what a column offers', () => {
 describe('filtering', () => {
   const filtered = (values: string[]) => {
     toggleFilter(open, sheet, { row: 1, column: 0 })
-    return filterColumn(open, sheet, 0, { values, blanks: false })
+    return filterColumn(open, sheet, 0, { kind: 'values', values, blanks: false })
   }
 
   it('hides the rows that do not match, and leaves the ones that do', () => {
@@ -117,7 +124,7 @@ describe('filtering', () => {
   it('keeps the reason as well as the result', () => {
     filtered(['January'])
 
-    expect(sheet.sheet.autoFilter?.columns[0]?.values).toEqual(['January'])
+    expect(sheet.sheet.autoFilter?.columns[0]?.criteria).toMatchObject({ values: ['January'] })
     expect(hidden(2)).toBe(true)
   })
 })
@@ -127,7 +134,11 @@ describe('taking a filter back', () => {
     toggleFilter(open, sheet, { row: 1, column: 0 })
 
     const history = recorded(emptyHistory(), {
-      changes: filterColumn(open, sheet, 0, { values: ['January'], blanks: false }),
+      changes: filterColumn(open, sheet, 0, {
+        kind: 'values',
+        values: ['January'],
+        blanks: false,
+      }),
       selection: singleCell({ row: 0, column: 0 }),
     })
     expect(hidden(2)).toBe(true)
@@ -155,10 +166,66 @@ describe('a filter that was already in the file', () => {
     // would disagree with Excel about any row somebody hid by hand.
     applyFilter(open, sheet, {
       range: { sheet: null, from: { row: 0, column: 0 }, to: { row: 3, column: 2 } },
-      columns: [{ column: 0, values: ['February'], blanks: false }],
+      columns: [{ column: 0, criteria: { kind: 'values', values: ['February'], blanks: false } }],
     })
 
     expect(hidden(1)).toBe(true)
     expect(hidden(2)).toBe(false)
+  })
+})
+
+describe('filtering by a condition rather than by a list', () => {
+  it('hides the rows the condition turns away', () => {
+    toggleFilter(open, sheet, { row: 1, column: 0 })
+    filterColumn(open, sheet, 0, {
+      kind: 'conditions',
+      all: false,
+      conditions: [conditionFor('beginsWith', 'Feb')],
+    })
+
+    // January goes, February stays.
+    expect(hidden(1)).toBe(true)
+    expect(hidden(2)).toBe(false)
+  })
+
+  it('says "contains" the way the file says it', () => {
+    expect(conditionFor('contains', 'ary')).toEqual({ operator: 'equal', value: '*ary*' })
+  })
+
+  it('reads the file’s spelling back as the words somebody used', () => {
+    expect(conditionShown({ operator: 'equal', value: '*ary*' })).toEqual({
+      kind: 'contains',
+      text: 'ary',
+    })
+    expect(conditionShown({ operator: 'notEqual', value: '*x*' })).toEqual({
+      kind: 'notContains',
+      text: 'x',
+    })
+    expect(conditionShown({ operator: 'greaterThan', value: '5' })).toEqual({
+      kind: 'greaterThan',
+      text: '5',
+    })
+  })
+
+  it('keeps a star somebody typed as a star', () => {
+    // A part number with an asterisk in it is a thing people filter for.
+    const condition = conditionFor('contains', 'A*B')
+    expect(condition.value).toBe('*A~*B*')
+    expect(conditionShown(condition)).toEqual({ kind: 'contains', text: 'A~*B' })
+  })
+
+  it('replaces a list with a condition rather than keeping both', () => {
+    // The file holds one or the other; keeping both would be a state no
+    // spreadsheet can save.
+    toggleFilter(open, sheet, { row: 1, column: 0 })
+    filterColumn(open, sheet, 0, { kind: 'values', values: ['January'], blanks: false })
+    filterColumn(open, sheet, 0, {
+      kind: 'conditions',
+      all: false,
+      conditions: [conditionFor('contains', 'Feb')],
+    })
+
+    expect(sheet.sheet.autoFilter?.columns[0]?.criteria.kind).toBe('conditions')
+    expect(sheet.sheet.autoFilter?.columns).toHaveLength(1)
   })
 })

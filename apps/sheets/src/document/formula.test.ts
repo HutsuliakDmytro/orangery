@@ -151,7 +151,14 @@ describe('putting a report back into the workbook', () => {
 
     const touched = applyReport(open, {
       cells: [
-        { sheet: sheet.name, row: at.row, column: at.column, value: { kind: 'number', number: 2 } },
+        {
+          sheet: sheet.name,
+          row: at.row,
+          column: at.column,
+          value: { kind: 'number', number: 2 },
+          spilledFrom: null,
+          emptied: false,
+        },
       ],
       circular: [],
       refused: null,
@@ -167,7 +174,16 @@ describe('putting a report back into the workbook', () => {
 
   it('leaves alone a cell that is not there', () => {
     const touched = applyReport(open, {
-      cells: [{ sheet: sheet.name, row: 300, column: 9, value: { kind: 'number', number: 2 } }],
+      cells: [
+        {
+          sheet: sheet.name,
+          row: 300,
+          column: 9,
+          value: { kind: 'number', number: 2 },
+          spilledFrom: null,
+          emptied: false,
+        },
+      ],
       circular: [],
       refused: null,
     })
@@ -180,7 +196,16 @@ describe('putting a report back into the workbook', () => {
     putCell(sheet.cells, { ...blank(), row: 8, column: 6, type: 'n', value: '2' })
 
     const touched = applyReport(open, {
-      cells: [{ sheet: sheet.name, row: 8, column: 6, value: { kind: 'number', number: 2 } }],
+      cells: [
+        {
+          sheet: sheet.name,
+          row: 8,
+          column: 6,
+          value: { kind: 'number', number: 2 },
+          spilledFrom: null,
+          emptied: false,
+        },
+      ],
       circular: [],
       refused: null,
     })
@@ -225,6 +250,111 @@ describe('which cells a step of history moved', () => {
       'after',
     )
     expect(widths).toEqual([])
+  })
+})
+
+describe('an answer that did not fit in its own cell', () => {
+  const at = { row: 8, column: 5 }
+
+  /** A report of a formula that spilled two cells below its own. */
+  const spill = () => ({
+    cells: [
+      {
+        sheet: sheet.name,
+        row: at.row,
+        column: at.column,
+        value: { kind: 'number' as const, number: 1 },
+        spilledFrom: null,
+        emptied: false,
+      },
+      {
+        sheet: sheet.name,
+        row: at.row + 1,
+        column: at.column,
+        value: { kind: 'number' as const, number: 2 },
+        spilledFrom: { sheet: sheet.name, row: at.row, column: at.column },
+        emptied: false,
+      },
+      {
+        sheet: sheet.name,
+        row: at.row + 2,
+        column: at.column,
+        value: { kind: 'number' as const, number: 3 },
+        spilledFrom: { sheet: sheet.name, row: at.row, column: at.column },
+        emptied: false,
+      },
+    ],
+    circular: [],
+    refused: null,
+  })
+
+  it('makes the cells it landed in, which nobody typed in', () => {
+    applyEdit(open, sheet, at, '=SEQUENCE(3)')
+    applyReport(open, spill())
+
+    expect(cellAt(sheet.cells, { row: at.row + 2, column: at.column })).toMatchObject({
+      type: 'n',
+      value: '3',
+    })
+  })
+
+  it('writes it the way the file has said it since 1993', () => {
+    // One formula over a rectangle: the corner carries the `ref` and every
+    // other cell carries only its cached value. A workbook full of dynamic
+    // arrays opens in a spreadsheet that has never heard of one.
+    applyEdit(open, sheet, at, '=SEQUENCE(3)')
+    applyReport(open, spill())
+
+    expect(cellAt(sheet.cells, at)?.formula).toMatchObject({
+      text: 'SEQUENCE(3)',
+      kind: 'array',
+      ref: 'F9:F11',
+    })
+    expect(cellAt(sheet.cells, { row: at.row + 1, column: at.column })?.formula).toMatchObject({
+      text: 'SEQUENCE(3)',
+      kind: 'array',
+      ref: null,
+    })
+  })
+
+  it('does not ask the engine to work the same answer out twenty times', () => {
+    // The cells under an array formula all carry its text, because the
+    // reader gives it to them. Only the corner computes it: twenty cells all
+    // working out the same answer would all try to spill it over each other.
+    applyEdit(open, sheet, at, '=SEQUENCE(3)')
+    applyReport(open, spill())
+
+    const sent = cellsOf(open).find((one) => one.sheet === sheet.name)
+    const below = sent?.cells.find((one) => one.row === at.row + 1 && one.column === at.column)
+    const corner = sent?.cells.find((one) => one.row === at.row && one.column === at.column)
+
+    expect(corner?.formula).toBe('SEQUENCE(3)')
+    expect(below?.formula).toBeUndefined()
+    expect(below?.value).toEqual({ kind: 'number', number: 2 })
+  })
+
+  it('takes the cells away again when the spill lets them go', () => {
+    // An empty cell left behind would leave the file with a `<c>` nobody put
+    // there.
+    applyEdit(open, sheet, at, '=SEQUENCE(3)')
+    applyReport(open, spill())
+
+    applyReport(open, {
+      cells: [
+        {
+          sheet: sheet.name,
+          row: at.row + 2,
+          column: at.column,
+          value: { kind: 'blank' as const },
+          spilledFrom: null,
+          emptied: true,
+        },
+      ],
+      circular: [],
+      refused: null,
+    })
+
+    expect(cellAt(sheet.cells, { row: at.row + 2, column: at.column })).toBeNull()
   })
 })
 

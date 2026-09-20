@@ -57,6 +57,12 @@ pub struct Engine {
     chance: AtomicU64,
 }
 
+/// What a spill moved: the cells it filled, and the ones it let go of.
+struct Moved {
+    filled: Vec<(CellId, Value)>,
+    emptied: Vec<CellId>,
+}
+
 /// What one cell is being made into.
 #[derive(Debug, Clone)]
 pub enum Edit {
@@ -80,6 +86,13 @@ pub struct Changed {
     pub cells: Vec<(CellId, Value)>,
     /// Cells that depend on themselves; Excel warns and leaves them at nought.
     pub circular: Vec<CellId>,
+    /// Cells filled by somebody else's formula, and whose formula it was.
+    ///
+    /// The window has to be told: a cell nobody typed in has appeared, and
+    /// it belongs to a formula somewhere else rather than to itself.
+    pub spilled: Vec<(CellId, CellId)>,
+    /// Cells a spill no longer covers, which go back to being empty.
+    pub emptied: Vec<CellId>,
 }
 
 impl Engine {
@@ -370,8 +383,9 @@ impl Engine {
         // must not leave its numbers lying on the sheet.
         for cell in changed {
             if !matches!(self.contents.get(cell), Some(Content::Formula { .. })) {
-                for (place, value) in self.clear_spill(cell) {
-                    result.cells.push((place, value));
+                for place in self.clear_spill(cell) {
+                    result.cells.push((place.clone(), Value::Blank));
+                    result.emptied.push(place);
                 }
             }
         }
@@ -435,9 +449,15 @@ impl Engine {
 
                 let (shown, moved) = self.spill(&cell, value);
 
-                for (place, value) in moved {
+                for place in moved.emptied {
                     spilled.push(place.clone());
-                    result.cells.push((place, value));
+                    result.cells.push((place.clone(), Value::Blank));
+                    result.emptied.push(place);
+                }
+                for (place, value) in moved.filled {
+                    spilled.push(place.clone());
+                    result.cells.push((place.clone(), value));
+                    result.spilled.push((place, cell.clone()));
                 }
 
                 let before = self.values.get(&cell);
@@ -476,8 +496,11 @@ impl Engine {
     /// Anything already in the way stops it: `#SPILL!` rather than writing
     /// over somebody's work, because a formula that quietly replaced a column
     /// of typed figures would be the worst bug a spreadsheet could have.
-    fn spill(&mut self, anchor: &CellId, value: Value) -> (Value, Vec<(CellId, Value)>) {
-        let mut moved = self.clear_spill(anchor);
+    fn spill(&mut self, anchor: &CellId, value: Value) -> (Value, Moved) {
+        let mut moved = Moved {
+            emptied: self.clear_spill(anchor),
+            filled: Vec::new(),
+        };
 
         let Value::Array(array) = &value else {
             return (value, moved);
@@ -511,13 +534,14 @@ impl Engine {
             self.values.insert(place.clone(), value.clone());
             self.spilled_from.insert(place.clone(), anchor.clone());
             filled.push(place.clone());
-            moved.push((place, value));
-            self.grow(
-                &anchor.0,
-                anchor.1 + array.rows as i64 - 1,
-                anchor.2 + array.columns as i64 - 1,
-            );
+            moved.filled.push((place, value));
         }
+
+        self.grow(
+            &anchor.0,
+            anchor.1 + array.rows as i64 - 1,
+            anchor.2 + array.columns as i64 - 1,
+        );
 
         self.spills.insert(anchor.clone(), filled);
 
@@ -528,7 +552,7 @@ impl Engine {
     ///
     /// A spill that shrinks has to give back what it no longer covers, or the
     /// sheet keeps showing numbers from an answer that is no longer true.
-    fn clear_spill(&mut self, anchor: &CellId) -> Vec<(CellId, Value)> {
+    fn clear_spill(&mut self, anchor: &CellId) -> Vec<CellId> {
         let Some(filled) = self.spills.remove(anchor) else {
             return Vec::new();
         };
@@ -546,7 +570,7 @@ impl Engine {
             }
 
             self.values.remove(&place);
-            emptied.push((place, Value::Blank));
+            emptied.push(place);
         }
 
         emptied

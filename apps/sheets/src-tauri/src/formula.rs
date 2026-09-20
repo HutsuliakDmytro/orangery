@@ -122,6 +122,14 @@ pub struct Outcome {
     pub row: i64,
     pub column: i64,
     pub value: Held,
+    /// The formula this came from, when it was not this cell's own.
+    ///
+    /// A cell nobody typed in has appeared, because a formula somewhere else
+    /// gave an answer too big to fit in its own cell. The window has to make
+    /// the cell, and has to know it belongs to the other one.
+    pub spilled_from: Option<Place>,
+    /// Whether a spill has let this cell go, and it is empty again.
+    pub emptied: bool,
 }
 
 /// What a change came to.
@@ -139,15 +147,27 @@ pub struct Report {
 
 impl Report {
     fn of(changed: formula::engine::Changed) -> Self {
+        let spilled: HashMap<_, _> = changed.spilled.iter().cloned().collect();
+        let emptied: std::collections::HashSet<_> = changed.emptied.iter().cloned().collect();
+
         Self {
             cells: changed
                 .cells
                 .iter()
-                .map(|((sheet, row, column), value)| Outcome {
-                    sheet: sheet.clone(),
-                    row: *row,
-                    column: *column,
-                    value: Held::from(value),
+                .map(|(at, value)| {
+                    let (sheet, row, column) = at;
+                    Outcome {
+                        sheet: sheet.clone(),
+                        row: *row,
+                        column: *column,
+                        value: Held::from(value),
+                        spilled_from: spilled.get(at).map(|(sheet, row, column)| Place {
+                            sheet: sheet.clone(),
+                            row: *row,
+                            column: *column,
+                        }),
+                        emptied: emptied.contains(at),
+                    }
                 })
                 .collect(),
             circular: changed

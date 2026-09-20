@@ -12,6 +12,7 @@
 
 pub mod criteria;
 pub mod datetime;
+pub mod financial;
 pub mod info;
 pub mod logical;
 pub mod lookup;
@@ -220,6 +221,19 @@ static FUNCTIONS: &[&Function] = &[
     &datetime::WORKDAY_INTL,
     &datetime::DATEVALUE,
     &datetime::TIMEVALUE,
+    &financial::PMT,
+    &financial::FV,
+    &financial::PV,
+    &financial::NPER,
+    &financial::RATE,
+    &financial::IPMT,
+    &financial::PPMT,
+    &financial::NPV,
+    &financial::IRR,
+    &financial::XNPV,
+    &financial::XIRR,
+    &financial::SLN,
+    &financial::DB,
     &info::ISBLANK,
     &info::ISNUMBER,
     &info::ISTEXT,

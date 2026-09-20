@@ -13,6 +13,7 @@ import { printSheet } from '../document/print'
 import { exportOds, exportSheet } from '../document/file'
 import {
   chartFromSelection,
+  outlineRows,
   pictureAtCursor,
   tableFromSelection,
   totalsRowHere,
@@ -529,6 +530,32 @@ export const chartCommands: readonly Command[] = (
   },
 }))
 
+/**
+ * Grouping, and folding a group away.
+ *
+ * Four commands because they are four things somebody means, and Excel's own
+ * shortcuts: the bracket keys group and ungroup, which is the one pair of
+ * shortcuts nobody remembers and everybody who uses outlines knows.
+ */
+export const outlineCommands: readonly Command[] = (
+  [
+    ['group', 'Group Rows', 'Mod+Shift+K'],
+    ['ungroup', 'Ungroup Rows', 'Mod+Shift+J'],
+    ['collapse', 'Collapse Group', undefined],
+    ['expand', 'Expand Group', undefined],
+  ] as const
+).map(([what, label, shortcut]) => ({
+  id: `structure.${what}`,
+  label,
+  group: 'format' as const,
+  keywords: ['outline', 'group', 'fold', 'subtotal'],
+  ...(shortcut === undefined ? {} : { shortcut }),
+  isEnabled: hasWorkbook,
+  run: () => {
+    outlineRows(what)
+  },
+}))
+
 export const tableCommands: readonly Command[] = [
   {
     id: 'insert.table',
@@ -606,6 +633,7 @@ export function registerBuiltinCommands(): void {
   registerAll(chartCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)
+  registerAll(outlineCommands)
   registerAll(fileCommands)
   registerAll(editCommands)
   registerAll(dataCommands)

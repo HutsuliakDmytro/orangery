@@ -166,7 +166,9 @@ export function resizeRows(
   sheet: OpenSheet,
   from: number,
   to: number,
-  look: Partial<Pick<RowProperties, 'height' | 'customHeight' | 'hidden'>>,
+  look: Partial<
+    Pick<RowProperties, 'height' | 'customHeight' | 'hidden' | 'outlineLevel' | 'collapsed'>
+  >,
 ): Change[] {
   const changes: Change[] = []
 
@@ -236,4 +238,86 @@ export function unmerge(sheet: OpenSheet, range: CellRange): Change[] {
 
   sheet.sheet.merges = after
   return [{ kind: 'merges', sheet: sheet.path, before, after }]
+}
+
+/**
+ * Rows grouped, or a group taken apart.
+ *
+ * An outline level is a number on a row, not a bracket around a range: rows
+ * one to nine at level 1 *are* the group, and the sheet holds nothing else
+ * about it. Which is why grouping is adding one to a number and ungrouping is
+ * taking it away, and why two groups next to each other are the same group as
+ * far as the file is concerned — Excel behaves that way too, and it surprises
+ * people the first time.
+ *
+ * Seven levels is Excel's limit, and it is a limit rather than a convention:
+ * the file has nowhere to put an eighth.
+ */
+export function groupRows(sheet: OpenSheet, from: number, to: number, by: 1 | -1): Change[] {
+  const changes: Change[] = []
+
+  for (let index = Math.min(from, to); index <= Math.max(from, to); index += 1) {
+    const level = sheet.cells.properties.get(index)?.outlineLevel ?? 0
+    const wanted = Math.max(0, Math.min(7, level + by))
+    if (wanted === level) continue
+
+    changes.push(
+      ...resizeRows(sheet, index, index, {
+        outlineLevel: wanted === 0 ? null : wanted,
+        // A row at no level cannot be collapsed, because there is nothing
+        // left to collapse it into.
+        ...(wanted === 0 ? { collapsed: false, hidden: false } : {}),
+      }),
+    )
+  }
+
+  return changes
+}
+
+/**
+ * A group folded away, or opened again.
+ *
+ * What folding does is hide the rows; what it records is `collapsed` on the
+ * row below the group, which is where Excel keeps the state and where the
+ * little box with the plus in it is drawn. Both are needed: a reader that
+ * hid the rows without saying so would open a file whose groups were all
+ * shut with no way to see it.
+ */
+export function collapseRows(
+  sheet: OpenSheet,
+  from: number,
+  to: number,
+  folded: boolean,
+): Change[] {
+  const top = Math.min(from, to)
+  const bottom = Math.max(from, to)
+
+  const changes = resizeRows(sheet, top, bottom, { hidden: folded })
+  const after = sheet.cells.properties.get(bottom + 1) ?? null
+
+  // The row under the group carries the state, unless the group runs to the
+  // bottom of what the sheet has — then there is nowhere to put it, and the
+  // hidden rows are the whole of the record.
+  if (after !== null || folded) {
+    changes.push(...resizeRows(sheet, bottom + 1, bottom + 1, { collapsed: folded }))
+  }
+
+  return changes
+}
+
+/** The rows either side of a cell that share its outline level, as a group. */
+export function groupAround(
+  sheet: OpenSheet,
+  row: number,
+): { top: number; bottom: number; level: number } | null {
+  const level = sheet.cells.properties.get(row)?.outlineLevel ?? 0
+  if (level === 0) return null
+
+  let top = row
+  let bottom = row
+
+  while ((sheet.cells.properties.get(top - 1)?.outlineLevel ?? 0) >= level && top > 0) top -= 1
+  while ((sheet.cells.properties.get(bottom + 1)?.outlineLevel ?? 0) >= level) bottom += 1
+
+  return { top, bottom, level }
 }

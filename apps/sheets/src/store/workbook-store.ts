@@ -27,7 +27,16 @@ import {
   removeSheet,
   renameSheet,
 } from '../document/sheets'
-import { merge, reshape, resizeColumns, resizeRows, unmerge } from '../document/structure'
+import {
+  collapseRows,
+  groupAround,
+  groupRows,
+  merge,
+  reshape,
+  resizeColumns,
+  resizeRows,
+  unmerge,
+} from '../document/structure'
 import { columnNamesIn, looksLikeHeader, sortRows, tableToSort } from '../document/sort'
 import type { SortKey } from '../document/sort'
 import { filterColumn, toggleFilter } from '../document/filter'
@@ -1304,6 +1313,61 @@ export function chartFromSelection(kind: NewChartKind): boolean {
 
   useWorkbookStore.setState({ open: redrawn(open, [sheet.path]), edited: true })
   return true
+}
+
+/**
+ * The selected rows grouped, ungrouped, or folded away.
+ *
+ * All four are the same shape of change — properties on a run of rows — so
+ * they are one function with a word for which, and one step of history
+ * apiece: somebody who groups four rows and then changes their mind means to
+ * take back one thing.
+ */
+export function outlineRows(what: 'group' | 'ungroup' | 'collapse' | 'expand'): void {
+  const { open, current, history, selection } = useWorkbookStore.getState()
+  if (open === null) return
+
+  const sheet = visibleSheets(open)[current]
+  if (sheet === undefined) return
+
+  const rows = selection.ranges.reduce(
+    (found, range) => ({
+      top: Math.min(found.top, range.anchor.row, range.focus.row),
+      bottom: Math.max(found.bottom, range.anchor.row, range.focus.row),
+    }),
+    { top: selection.active.row, bottom: selection.active.row },
+  )
+
+  const changes =
+    what === 'group' || what === 'ungroup'
+      ? groupRows(sheet, rows.top, rows.bottom, what === 'group' ? 1 : -1)
+      : foldAround(sheet, rows, what === 'collapse')
+
+  if (changes.length === 0) {
+    useWorkbookStore.setState({
+      notice: what === 'group' ? 'Nothing to group.' : 'The cursor is not in a group.',
+    })
+    return
+  }
+
+  useWorkbookStore.setState({
+    open: redrawn(open, [sheet.path]),
+    edited: true,
+    history: recorded(history, { changes, selection }),
+  })
+}
+
+/** The group a selection is in, folded or opened. */
+function foldAround(sheet: OpenSheet, rows: { top: number; bottom: number }, folded: boolean) {
+  // A selection inside one group means that group; a selection spanning
+  // several means the rows themselves, which is what somebody dragging over
+  // them is pointing at.
+  const around = groupAround(sheet, rows.top)
+  const within = around !== null && around.bottom >= rows.bottom
+
+  return within
+    ? collapseRows(sheet, around.top, around.bottom, folded)
+    : collapseRows(sheet, rows.top, rows.bottom, folded)
 }
 
 /** The rules on the cell the cursor is in, for the dialog that lists them. */

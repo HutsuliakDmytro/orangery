@@ -67,6 +67,36 @@ const historyNow = () => useWorkbookStore.getState().history
 
 export const editCommands: readonly Command[] = [
   {
+    id: 'edit.cut',
+    label: 'Cut',
+    group: 'edit',
+    shortcut: 'Mod+X',
+    isEnabled: hasWorkbook,
+    run: () => {
+      void useWorkbookStore.getState().cut()
+    },
+  },
+  {
+    id: 'edit.copy',
+    label: 'Copy',
+    group: 'edit',
+    shortcut: 'Mod+C',
+    isEnabled: hasWorkbook,
+    run: () => {
+      void useWorkbookStore.getState().copy()
+    },
+  },
+  {
+    id: 'edit.paste',
+    label: 'Paste',
+    group: 'edit',
+    shortcut: 'Mod+V',
+    isEnabled: hasWorkbook,
+    run: () => {
+      void useWorkbookStore.getState().paste()
+    },
+  },
+  {
     id: 'edit.undo',
     label: 'Undo',
     group: 'edit',

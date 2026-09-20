@@ -395,3 +395,114 @@ describe('filling a block with one value', () => {
     expect(cellAt(1, 1)?.value).toBe('1234.5')
   })
 })
+
+describe('copying cells and putting them back', () => {
+  const cellAt = (row: number, column: number) =>
+    useWorkbookStore.getState().open?.sheets[0]?.cells.rows.get(row)?.get(column) ?? null
+
+  /**
+   * What is on the clipboard now.
+   *
+   * Asked of whatever stub is installed rather than of one the test keeps:
+   * `userEvent.setup()` puts its own clipboard on the navigator, so a fake
+   * held here would be the one thing nothing ever writes to.
+   */
+  const onClipboard = () => navigator.clipboard.readText()
+
+  const goTo = async (range: string) => {
+    const typist = userEvent.setup()
+    const box = await screen.findByLabelText('Name box')
+    await typist.clear(box)
+    await typist.type(box, `${range}{Enter}`)
+  }
+
+  it('carries the values somebody was looking at', async () => {
+    render(<App />)
+    await load()
+    await goTo('A1:B2')
+
+    await act(async () => {
+      await useWorkbookStore.getState().copy()
+    })
+
+    // The header, and the figure as its format shows it rather than as the
+    // file keeps it.
+    const text = await onClipboard()
+    expect(text).toContain('Month')
+    expect(text).toContain('1,234.50')
+  })
+
+  it('pastes them where the cursor is, as one thing to take back', async () => {
+    render(<App />)
+    await load()
+
+    await goTo('A1:A2')
+    await act(async () => {
+      await useWorkbookStore.getState().copy()
+    })
+
+    await goTo('E8')
+    await act(async () => {
+      await useWorkbookStore.getState().paste()
+    })
+
+    expect(cellAt(7, 4)?.value).toBe('Month')
+    expect(cellAt(8, 4)?.value).toBe('January')
+
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(cellAt(7, 4)).toBeNull()
+    expect(cellAt(8, 4)).toBeNull()
+  })
+
+  it('selects what it pasted, which is what somebody acts on next', async () => {
+    render(<App />)
+    await load()
+
+    await goTo('A1:A2')
+    await act(async () => {
+      await useWorkbookStore.getState().copy()
+    })
+
+    await goTo('E8')
+    await act(async () => {
+      await useWorkbookStore.getState().paste()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('2 cells')).toBeInTheDocument()
+    })
+  })
+
+  it('empties the cells a cut took, and only after they are safely copied', async () => {
+    render(<App />)
+    await load()
+    await goTo('A1:A2')
+
+    await act(async () => {
+      await useWorkbookStore.getState().cut()
+    })
+
+    expect(await onClipboard()).toContain('Month')
+    expect(cellAt(0, 0)).toBeNull()
+    expect(cellAt(1, 0)).toBeNull()
+  })
+
+  it('takes a cut back in one press', async () => {
+    render(<App />)
+    await load()
+    await goTo('A1:A2')
+
+    await act(async () => {
+      await useWorkbookStore.getState().cut()
+    })
+    act(() => {
+      runCommand('edit.undo', {})
+    })
+
+    expect(cellAt(0, 0)).not.toBeNull()
+    expect(cellAt(1, 0)).not.toBeNull()
+  })
+})

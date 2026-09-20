@@ -1,7 +1,16 @@
 import { create } from 'zustand'
 import { boundsOf, singleCell } from '@orangery/grid'
 import type { CellAddress, GridSelection } from '@orangery/grid'
+import {
+  blockFrom,
+  copiedFrom,
+  copiedRange,
+  pasteBlock,
+  readClipboard,
+  writeClipboard,
+} from '../document/clipboard'
 import { applyEdit, clearCells } from '../document/edit'
+import { shownText } from '../document/shown'
 import { emptyHistory, recorded, redo, undo } from '../document/history'
 import type { History } from '../document/history'
 import { openWorkbook, visibleSheets } from '../document/workbook'
@@ -52,6 +61,9 @@ export interface WorkbookState {
   clear: () => void
   /** Puts one value into everything selected, likewise. */
   fill: (text: string) => void
+  copy: () => Promise<void>
+  cut: () => Promise<void>
+  paste: () => Promise<void>
   undo: () => void
   redo: () => void
   /** A workbook that has just been written, and now belongs to that path. */
@@ -175,6 +187,60 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       open: redrawn(open, [sheet.path]),
       edited: true,
       history: recorded(history, { changes, selection }),
+    })
+  },
+
+  copy: async () => {
+    const { open, current, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    await writeClipboard(copiedFrom(sheet, selection, (cell) => shownText(open, cell)))
+  },
+
+  cut: async () => {
+    // Copy first: a cut that emptied the cells and then failed to reach the
+    // clipboard would be a delete nobody asked for.
+    await useWorkbookStore.getState().copy()
+    useWorkbookStore.getState().clear()
+  },
+
+  paste: async () => {
+    const { open, current, selection } = useWorkbookStore.getState()
+    if (open === null) return
+
+    const sheet = visibleSheets(open)[current]
+    if (sheet === undefined) return
+
+    const at = copiedRange(selection)
+    const block = blockFrom(await readClipboard(), { row: at.row, column: at.column })
+    if (block === null) return
+
+    const changes = pasteBlock(sheet, block, { row: at.row, column: at.column })
+    if (changes.length === 0) return
+
+    // Read again rather than above: reading the clipboard is a wait, and a
+    // step recorded against the history as it was before the wait would lose
+    // whatever happened during it.
+    const history = useWorkbookStore.getState().history
+
+    set({
+      open: redrawn(open, [sheet.path]),
+      edited: true,
+      history: recorded(history, { changes, selection }),
+      // What was pasted is what is selected afterwards, as every spreadsheet
+      // does: it is the thing somebody is about to format or move.
+      selection: {
+        ranges: [
+          {
+            anchor: { row: at.row, column: at.column },
+            focus: { row: at.row + block.rows - 1, column: at.column + block.columns - 1 },
+          },
+        ],
+        active: { row: at.row, column: at.column },
+      },
     })
   },
 

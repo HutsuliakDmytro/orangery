@@ -5,6 +5,10 @@
     // DOM is here for the callbacks Playwright hands to the browser — they are
     // written in the spec file but run inside the page.
     "lib": ["ES2023", "DOM"],
+    // A script may reach a package whose entry point re-exports a component —
+    // the chart reader and the chart view live behind one door. Nothing here
+    // renders anything; this only lets the types through.
+    "jsx": "react-jsx",
     "types": ["node"],
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },

@@ -40,12 +40,26 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": null,
-      "entitlements": null
+      "entitlements": null,
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 220
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 220
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        }
+      }
     },
     "category": "Productivity",
     "shortDescription": "Desktop spreadsheet with .xlsx as its native format",
     "longDescription": "Orangery Sheets opens, shows and saves .xlsx workbooks without converting them to a format of its own.",
-    "copyright": "\u00a9 Dmytro Hutsuliak",
+    "copyright": "© Dmytro Hutsuliak",
     "publisher": "Dmytro Hutsuliak",
     "fileAssociations": [
       {
@@ -63,5 +77,15 @@
         "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
       }
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": false,
+      "dialog": true,
+      "endpoints": [
+        "https://releases.orangery.example/sheets/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": ""
+    }
   }
 }

@@ -39,6 +39,12 @@ here, finds the chart parts inside, and asks of each one:
 With the directory empty the test says so and skips, which is why it can live
 in the repository before the files do.
 
+`apps/slides/src/test/corpus.test.tsx` takes every `.pptx` here and **draws**
+it — every slide, through the same component the window uses. That is a
+different question from whether it parses, and it is the one that was not being
+asked: opening somebody else's presentation once took the whole window down,
+because a render threw where no file we had written could make it throw.
+
 `pnpm --filter charts corpus` prints what a corpus holds — kinds, features,
 the parts nobody models yet — which is how to decide what to implement next
 rather than guessing.

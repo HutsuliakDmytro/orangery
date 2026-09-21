@@ -50,6 +50,7 @@ export {
 export { ColorPicker } from './components/color-picker'
 export { CommandPalette } from './components/command-palette'
 export { ConfirmDialog } from './components/confirm-dialog'
+export { ErrorBoundary } from './components/error-boundary'
 export type { ConfirmChoice } from './components/confirm-dialog'
 export { PickerPopover } from './components/picker-popover'
 export { RecentFilesMenu } from './components/recent-files-menu'

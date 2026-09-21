@@ -40,7 +40,21 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": null,
-      "entitlements": null
+      "entitlements": null,
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 220
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 220
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        }
+      }
     },
     "category": "Productivity",
     "shortDescription": "Presentation editor that writes real PPTX",

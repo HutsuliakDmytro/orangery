@@ -371,6 +371,51 @@ describe('the functions offered while a formula is typed into a cell', () => {
   })
 })
 
+describe('moving the dollars while typing in the cell', () => {
+  it('pins the reference under the caret, and goes round', async () => {
+    // Excel's F4, and it has to work here as well as in the formula bar:
+    // typing straight into the cell is how most formulas get written.
+    const user = userEvent.setup()
+    render(<SheetView {...showing()} onEdit={vi.fn()} />)
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=A1')
+
+    await user.keyboard('{F4}')
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=$A$1')
+
+    await user.keyboard('{F4}')
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=A$1')
+
+    await user.keyboard('{F4}{F4}')
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=A1')
+  })
+
+  it('moves a range as one thing, because that is what it is', async () => {
+    const user = userEvent.setup()
+    render(<SheetView {...showing()} onEdit={vi.fn()} />)
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SUM(A1:B2')
+    await user.keyboard('{F4}')
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=SUM($A$1:$B$2')
+  })
+
+  it('leaves the key alone when the caret is not in a reference', async () => {
+    // F4 elsewhere in the system means something else, and a key that did
+    // nothing visible here would be a key somebody pressed twice.
+    const user = userEvent.setup()
+    render(<SheetView {...showing()} onEdit={vi.fn()} />)
+
+    await user.click(screen.getByRole('grid'))
+    await user.keyboard('=SUM(')
+    await user.keyboard('{F4}')
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('=SUM(')
+  })
+})
+
 describe('the values a cell is allowed to hold', () => {
   /** The sheet with a list rule on A1, and A1 empty for somebody to fill. */
   const withChoices = () => {

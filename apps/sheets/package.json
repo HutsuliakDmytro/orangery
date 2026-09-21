@@ -21,6 +21,8 @@
     "lint": "eslint .",
     "test:unit": "vitest run",
     "test:speed": "MEASURE_SPEED=1 vitest run src/test/performance.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "icon": "tauri icon src-tauri/icons/icon.svg"
   },
   "dependencies": {
@@ -45,6 +47,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/cli": "^2.9.0",
+    "@playwright/test": "^1.63.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

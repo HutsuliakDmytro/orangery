@@ -38,7 +38,7 @@ jobs:
         # The webview differs per platform (WKWebView, WebView2, WebKitGTK), and
         # so does the modifier key, so the suite runs on all three.
         os: [ubuntu-latest, macos-latest, windows-latest]
-        app: [docs, slides]
+        app: [docs, slides, sheets]
     steps:
       - uses: actions/checkout@v4
 
@@ -52,8 +52,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # WebKit as well as Chromium: the two engines disagree about the one
-      # thing a slide is made of. Blink clamps `font-size`, WebKit does not,
-      # and the app runs in one of them on macOS and the other on Windows.
+      # thing a slide is made of, and about the one a sheet is measured by.
+      # Blink clamps `font-size` where WebKit does not, and the two measure
+      # text differently — and the app runs in one of them on macOS and the
+      # other on Windows.
       - run: pnpm --filter ${{ matrix.app }} exec playwright install chromium webkit --with-deps
 
       # These run against the Vite dev server. `tauri-driver` supports Linux and

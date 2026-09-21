@@ -1,10 +1,11 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getPartText } from '@orangery/ooxml-core'
+import { XML_DECLARATION, getPartText } from '@orangery/ooxml-core'
 import { readDeck } from './deck'
-import { readPptxPackage } from './parts'
+import { PRESENTATION_PART, readPptxPackage } from './parts'
 import { rewriteEveryPart, saveDeck } from './save'
+import { setSlideSize } from './slide-size'
 
 /**
  * Open, save, and get the same file back.
@@ -49,5 +50,29 @@ describe.each(decks)('%s', (name) => {
     for (const [path, text] of before) {
       expect(getPartText(pkg, path), path).toBe(text)
     }
+  })
+})
+
+/**
+ * An edited part is still one XML document.
+ *
+ * The writers here parse a part, patch the tree and build it back — and the
+ * `<?xml?>` node comes out of the tree with everything else, so prepending a
+ * declaration to the result wrote two of them. Nothing in this package minds
+ * (the readers look for an element by name), which is exactly why it went
+ * unnoticed: the file stops being well-formed XML and PowerPoint is the one
+ * that says so.
+ */
+describe.each(decks)('%s, once edited', (name) => {
+  it('has one declaration in the part that was written', async () => {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, `${name}.pptx`)))
+    const deck = readDeck(pkg)
+    const bigger = { width: deck.slideSize.width + 914400, height: deck.slideSize.height }
+
+    expect(setSlideSize(pkg, deck, bigger, 'maximize')).toBe(true)
+
+    const text = getPartText(pkg, PRESENTATION_PART) ?? ''
+    expect([...text.matchAll(/<\?xml/gu)]).toHaveLength(1)
+    expect(text.startsWith(XML_DECLARATION)).toBe(true)
   })
 })

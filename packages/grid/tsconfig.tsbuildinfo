@@ -1,0 +1,1 @@
+{"root":["./src/cell-style.ts","./src/data-grid.test.tsx","./src/data-grid.tsx","./src/fit.test.ts","./src/fit.ts","./src/icon.ts","./src/index.ts","./src/layout.test.ts","./src/layout.ts","./src/selection.test.ts","./src/selection.ts","./src/test-setup.ts","./src/text.ts","./vitest.config.ts"],"version":"5.9.3"}

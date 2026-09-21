@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveColor } from './color'
 import type { ColorContext } from './color'
 import { hasEffects, readFill, readShapeProperties, readShapeStyle } from './shape-properties'
+import { shadowOffset } from './effects'
 
 function node(xml: string): XmlNode {
   const parsed = parseXml(xml)[0]
@@ -168,5 +169,39 @@ describe('effects', () => {
     )
     expect(hasEffects(node('<a:spPr><a:effectLst/></a:spPr>'))).toBe(false)
     expect(hasEffects(node('<a:spPr/>'))).toBe(false)
+  })
+})
+
+describe('the drop shadow', () => {
+  it('is read from the effect list', () => {
+    const properties = node(
+      '<p:spPr><a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="2700000"><a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst></p:spPr>',
+    )
+
+    const shadow = readShapeProperties(properties).shadow
+    expect(shadow).toMatchObject({ blur: 50800, distance: 38100, direction: 2700000 })
+    expect(shadow?.color?.source).toEqual({ kind: 'srgb', hex: '#000000' })
+  })
+
+  it('is null for a shape that has none', () => {
+    expect(readShapeProperties(node('<p:spPr/>')).shadow).toBeNull()
+  })
+
+  it('is null when the effect list holds something else', () => {
+    const properties = node('<p:spPr><a:effectLst><a:glow rad="50800"/></a:effectLst></p:spPr>')
+    expect(readShapeProperties(properties).shadow).toBeNull()
+  })
+
+  it('turns a distance and an angle into an offset', () => {
+    // 45° down and to the right: both components positive and equal.
+    const offset = shadowOffset({ distance: 1000, direction: 45 * 60000, blur: 0, color: null })
+    expect(offset.x).toBe(707)
+    expect(offset.y).toBe(707)
+  })
+
+  it('points straight down at ninety degrees', () => {
+    const offset = shadowOffset({ distance: 1000, direction: 90 * 60000, blur: 0, color: null })
+    expect(offset.x).toBe(0)
+    expect(offset.y).toBe(1000)
   })
 })

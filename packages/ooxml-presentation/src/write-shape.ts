@@ -2,7 +2,9 @@ import {
   children,
   ensureChild,
   element,
+  findChild,
   removeAttribute,
+  removeChild,
   setAttribute,
   tagName,
   upsertChild,
@@ -141,5 +143,86 @@ export function ensureTextBody(shape: Shape): boolean {
     ]),
     shape.kind === 'sp' ? SHAPE : CONNECTOR,
   )
+  return true
+}
+
+/**
+ * How much of a picture is hidden on each side, as fractions from 0 to 1.
+ *
+ * `a:srcRect` counts in thousandths of a percent, which is a hundred thousand
+ * to the whole image; every side is optional and absent means nothing cropped.
+ * A side cropped to nothing is removed rather than written as zero, so a
+ * picture cropped and then uncropped is the picture it was.
+ */
+export function writeCrop(
+  shape: Shape,
+  crop: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  const fill = findChild(shape.node, 'p:blipFill') ?? findChild(shape.node, 'a:blipFill')
+  if (fill === undefined) return false
+
+  const sides = [
+    ['l', crop.left],
+    ['t', crop.top],
+    ['r', crop.right],
+    ['b', crop.bottom],
+  ] as const
+
+  // Nothing cropped at all: the element goes, rather than sitting there saying
+  // zero four times.
+  if (sides.every(([, value]) => Math.round(value * 100000) === 0)) {
+    removeChild(fill, 'a:srcRect')
+    return true
+  }
+
+  // Before the stretch or the tile, which is where the schema puts it.
+  const source = ensureChild(fill, 'a:srcRect', ['a:srcRect', 'a:stretch', 'a:tile'])
+  for (const [name, value] of sides) {
+    const thousandths = Math.round(Math.min(Math.max(value, 0), 1) * 100000)
+    if (thousandths === 0) removeAttribute(source, name)
+    else setAttribute(source, name, String(thousandths))
+  }
+
+  return true
+}
+
+/**
+ * How see-through a picture is, from 0 to 1.
+ *
+ * `a:alphaModFix` states what is left rather than what was taken away, and a
+ * blip that says nothing is opaque — so setting it back to 1 removes the
+ * element rather than writing "100%", and a picture made transparent and put
+ * back is the picture it was.
+ */
+export function writePictureOpacity(shape: Shape, opacity: number): boolean {
+  const fill = findChild(shape.node, 'p:blipFill') ?? findChild(shape.node, 'a:blipFill')
+  const blip = fill === undefined ? undefined : findChild(fill, 'a:blip')
+  if (blip === undefined) return false
+
+  const clamped = Math.min(Math.max(opacity, 0), 1)
+  if (clamped >= 1) {
+    removeChild(blip, 'a:alphaModFix')
+    return true
+  }
+
+  const element = ensureChild(blip, 'a:alphaModFix', ['a:alphaModFix'])
+  setAttribute(element, 'amt', String(Math.round(clamped * 100000)))
+  return true
+}
+
+/**
+ * Points a picture at different bytes, keeping everything else about it.
+ *
+ * The frame, the crop, the transparency and whatever else the shape carries
+ * stay exactly as they were — replacing a picture is not drawing a new one, and
+ * somebody who has spent a minute placing and cropping one does not want that
+ * minute back.
+ */
+export function replacePicture(shape: Shape, relationshipId: string): boolean {
+  const fill = findChild(shape.node, 'p:blipFill') ?? findChild(shape.node, 'a:blipFill')
+  const blip = fill === undefined ? undefined : findChild(fill, 'a:blip')
+  if (blip === undefined) return false
+
+  setAttribute(blip, 'r:embed', relationshipId)
   return true
 }

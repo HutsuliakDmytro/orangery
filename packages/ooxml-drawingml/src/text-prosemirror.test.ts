@@ -323,3 +323,151 @@ describe('line spacing', () => {
     expect(serializeNode(element)).toBe(before)
   })
 })
+
+describe('paragraph indents', () => {
+  it('reads how far a paragraph is pushed in', () => {
+    const body = readTextBody(
+      node(
+        '<a:txBody><a:bodyPr/><a:p><a:pPr marL="457200" indent="-228600"/><a:r><a:t>In</a:t></a:r></a:p></a:txBody>',
+      ),
+    )
+
+    const paragraph = textBodyToDoc(body).content?.[0]
+    expect(paragraph?.attrs?.['marginLeft']).toBe(457200)
+    expect(paragraph?.attrs?.['firstLine']).toBe(-228600)
+  })
+
+  it('says nothing about a paragraph that says nothing', () => {
+    const body = readTextBody(
+      node('<a:txBody><a:bodyPr/><a:p><a:r><a:t>Plain</a:t></a:r></a:p></a:txBody>'),
+    )
+    const paragraph = textBodyToDoc(body).content?.[0]
+
+    // Null and zero are different answers: one inherits, the other decides.
+    expect(paragraph?.attrs?.['marginLeft']).toBeNull()
+  })
+
+  it('writes an indent back', () => {
+    const target = node('<a:txBody><a:bodyPr/><a:p><a:r><a:t>Move me</a:t></a:r></a:p></a:txBody>')
+    const doc = textBodyToDoc(readTextBody(target))
+    const first = doc.content?.[0]
+    if (first === undefined) throw new Error('no paragraph')
+
+    writeTextBody(target, {
+      ...doc,
+      content: [{ ...first, attrs: { ...first.attrs, marginLeft: 228600 } }],
+    })
+
+    expect(serializeNode(target)).toContain('marL="228600"')
+  })
+
+  it('takes it away again rather than writing a zero', () => {
+    const target = node(
+      '<a:txBody><a:bodyPr/><a:p><a:pPr marL="228600"/><a:r><a:t>Back</a:t></a:r></a:p></a:txBody>',
+    )
+    const doc = textBodyToDoc(readTextBody(target))
+    const first = doc.content?.[0]
+    if (first === undefined) throw new Error('no paragraph')
+
+    writeTextBody(target, {
+      ...doc,
+      content: [{ ...first, attrs: { ...first.attrs, marginLeft: null } }],
+    })
+
+    // A paragraph indented and then un-indented is the paragraph it was.
+    expect(serializeNode(target)).not.toContain('marL')
+  })
+
+  it('leaves the rest of the properties alone', () => {
+    const target = node(
+      '<a:txBody><a:bodyPr/><a:p><a:pPr lvl="2"><a:buChar char="—"/></a:pPr><a:r><a:t>Deep</a:t></a:r></a:p></a:txBody>',
+    )
+    const doc = textBodyToDoc(readTextBody(target))
+    const first = doc.content?.[0]
+    if (first === undefined) throw new Error('no paragraph')
+
+    writeTextBody(target, {
+      ...doc,
+      content: [{ ...first, attrs: { ...first.attrs, marginLeft: 457200 } }],
+    })
+
+    const written = serializeNode(target)
+    expect(written).toContain('marL="457200"')
+    expect(written).toContain('lvl="2"')
+    expect(written).toContain('buChar')
+  })
+})
+
+describe('a field in the text', () => {
+  const FIELD =
+    '<a:p><a:r><a:t>Page </a:t></a:r>' +
+    '<a:fld id="{7C1F}" type="slidenum"><a:rPr lang="en-US"/><a:t>3</a:t></a:fld></a:p>'
+
+  it('is one thing rather than the characters it shows', () => {
+    const doc = docOf(FIELD)
+    const field = doc.content?.[0]?.content?.[1]
+
+    // Read as text, a keystroke beside it would merge into it and the slide
+    // number would quietly become the digit it happened to say.
+    expect(field?.type).toBe('ooxmlField')
+    expect(field?.attrs?.['fieldType']).toBe('slidenum')
+  })
+
+  it('shows what it stands for now, when somebody can say', () => {
+    const doc = textBodyToDoc(readTextBody(body(FIELD)), {
+      field: (type, cached) => (type === 'slidenum' ? '12' : cached),
+    })
+
+    expect(doc.content?.[0]?.content?.[1]?.attrs?.['text']).toBe('12')
+  })
+
+  it('falls back to what the file cached when nobody can', () => {
+    expect(docOf(FIELD).content?.[0]?.content?.[1]?.attrs?.['text']).toBe('3')
+  })
+
+  it('goes back into the file exactly as it came', () => {
+    const original = body(FIELD)
+    const read = readTextBody(original)
+    writeTextBody(read.node, textBodyToDoc(read, { field: () => '12' }))
+
+    const written = serializeNode(original)
+    expect(written).toContain('<a:fld id="{7C1F}" type="slidenum">')
+    // The live value is never written down: it is worked out afresh every time
+    // it is drawn, and writing it would turn the field into the answer.
+    expect(written).not.toContain('12')
+  })
+
+  it('survives the text around it being edited', () => {
+    const original = body(FIELD)
+    const read = readTextBody(original)
+    const doc = textBodyToDoc(read)
+
+    const paragraph = doc.content?.[0]
+    const field = paragraph?.content?.[1]
+    if (paragraph === undefined || field === undefined) throw new Error('bad doc')
+
+    writeTextBody(read.node, {
+      ...doc,
+      content: [{ ...paragraph, content: [{ type: 'text', text: 'Slide ' }, field] }],
+    })
+
+    const written = serializeNode(original)
+    expect(written).toContain('Slide ')
+    expect(written).toContain('type="slidenum"')
+  })
+
+  it('is gone from the file when it is deleted in the editor', () => {
+    const original = body(FIELD)
+    const read = readTextBody(original)
+    const doc = textBodyToDoc(read)
+    const paragraph = doc.content?.[0]
+    if (paragraph === undefined) throw new Error('bad doc')
+
+    writeTextBody(read.node, {
+      ...doc,
+      content: [{ ...paragraph, content: [{ type: 'text', text: 'Page ' }] }],
+    })
+
+    expect(serializeNode(original)).not.toContain('a:fld')
+  })
+})

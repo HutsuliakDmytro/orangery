@@ -31,7 +31,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: () => Promise.resolve(null),
+  // Nothing here is about crash recovery, but the window looks for snapshots as
+  // it mounts and a listing that is not a list is not what Rust ever answers.
+  invoke: (command: string) => Promise.resolve(command === 'list_autosaves' ? [] : null),
 }))
 
 vi.mock('@orangery/platform', async (importActual) => ({

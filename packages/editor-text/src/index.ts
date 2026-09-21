@@ -54,3 +54,6 @@ export {
 export type { QuoteLanguage, SmartTypingOptions } from './smart-typing'
 
 export { OoxmlParagraph } from './ooxml-paragraph'
+
+export { OoxmlField } from './ooxml-field'
+export type { FieldAttributes } from './ooxml-field'

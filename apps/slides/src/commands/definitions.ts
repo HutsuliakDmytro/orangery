@@ -1,16 +1,12 @@
-import { registerAll, resetRegistry } from '@orangery/ui-kit'
+import { register, registerAll, resetRegistry } from '@orangery/ui-kit'
 import type { Command } from '@orangery/ui-kit'
 import { isTauri } from '@orangery/platform'
 import {
   nameOf,
-  pickDeckPath,
   pickPicturePath,
   pickDirectory,
   pickExportPath,
-  pickSavePath,
-  readDeckFile,
   readFileBytes,
-  writeDeckFile,
   writeFileBytes,
 } from '../document/file'
 import {
@@ -23,8 +19,14 @@ import {
   duplicateSlides,
   insertConnector,
   insertIcon,
-  insertPicture,
-  insertTable,
+  flatten,
+  geometryPoints,
+  insertColumn,
+  insertRow,
+  mergeCells,
+  removeColumn,
+  removeRow,
+  splitCell,
   saveDeck,
   moveSlide,
   readSections,
@@ -32,18 +34,44 @@ import {
   removeSlides,
   distributeShapes,
   duplicateShape,
+  flipShapes,
   groupShapes,
   moveShape,
   reorderShapes,
   sectionOfSlide,
   ungroupShape,
+  withAncestors,
+  convertDiagramToShapes,
+  diagramDrawingPart,
   writeBackgroundPicture,
   writePart,
+  writeSlidePart,
 } from '@orangery/ooxml-presentation'
 import type { Alignment, Shape, Slide } from '@orangery/ooxml-presentation'
+import { findDescendant } from '@orangery/ooxml-core'
+import type { XmlNode } from '@orangery/ooxml-core'
 import { pictureName, rasterise, slideSvg } from '../document/export-image'
 import type { RasterType } from '../document/export-image'
 import { ICON_SIZE, ICONS } from '../document/icons'
+import {
+  closeDeck,
+  exportOdp,
+  exportTheme,
+  exportVideoFile,
+  importOutline,
+  newDeck,
+  openDeck,
+  openInNewWindow,
+  saveDeckFile,
+} from '../document/file-operations'
+import { stepsPerSlide } from '../render/animation'
+import { groupAfterEscape } from '../render/selection'
+import { insertChartOnSlide } from '../document/insert-chart'
+import { insertPictureOnSlide } from '../document/insert-picture'
+import { copySelection, pasteShapesHere } from '../document/shape-clipboard'
+import { startReview } from '../document/review'
+import { copyFormatting, heldFormat, pasteFormatting } from '../document/format-painter'
+import { whenSafe } from '../document/unsaved'
 import { currentSlide, useDeckStore } from '../store/deck-store'
 import { closeShowWindows, openShowWindows } from '../document/show-windows'
 import { useShowStore } from '../store/show-store'
@@ -57,23 +85,11 @@ import { useViewStore } from '../store/view-store'
  * native menu and the command palette without either being told separately
  * (`apps/docs/docs/adr/0002-command-registry.md`).
  *
- * A command that is not implemented yet is registered disabled rather than left
- * out. The menu is the shape of the application: a File menu with nothing in it
- * says the app cannot open a deck at all, while a greyed-out Save says it
- * cannot do so yet.
+ * A command the build cannot run is registered disabled rather than left out.
+ * The menu is the shape of the application: a File menu with nothing in it says
+ * the app cannot open a deck at all, while a greyed-out Open says only that
+ * there is no file dialog outside the shell.
  */
-
-const notYet = (id: string, label: string, shortcut?: string): Command => ({
-  id,
-  label,
-  group: 'file',
-  ...(shortcut === undefined ? {} : { shortcut }),
-  isEnabled: () => false,
-  run: () => {
-    // Deliberately nothing: `isEnabled` keeps this unreachable from every
-    // surface, and a stub that half-worked would be worse than one that does not.
-  },
-})
 
 export const fileCommands: readonly Command[] = [
   {
@@ -85,7 +101,7 @@ export const fileCommands: readonly Command[] = [
     // shows the command greyed out rather than failing when it is used.
     isEnabled: () => isTauri(),
     run: () => {
-      void openDeck()
+      whenSafe(openDeck)
     },
   },
   {
@@ -95,7 +111,7 @@ export const fileCommands: readonly Command[] = [
     shortcut: 'Mod+w',
     isEnabled: () => useDeckStore.getState().open !== null,
     run: () => {
-      useDeckStore.getState().close()
+      whenSafe(closeDeck)
     },
   },
   {
@@ -118,39 +134,43 @@ export const fileCommands: readonly Command[] = [
       void saveDeckFile(true)
     },
   },
-  notYet('file.new', 'New Presentation', 'Mod+n'),
+  {
+    id: 'file.new',
+    label: 'New Presentation',
+    group: 'file',
+    shortcut: 'Mod+n',
+    // No shell needed: a new deck is built in memory and is a real package from
+    // the first keystroke, so the browser build can make one it cannot save.
+    isEnabled: () => true,
+    run: () => {
+      whenSafe(newDeck)
+    },
+  },
+  {
+    id: 'file.new-from-template',
+    label: 'New from Template…',
+    group: 'file',
+    isEnabled: () => true,
+    run: () => {
+      // The question about unsaved work waits until a template is chosen: it
+      // would be a poor trade to ask it and then have the person change their
+      // mind about starting a deck at all.
+      useViewStore.getState().setChoosingTemplate(true)
+    },
+  },
+  {
+    id: 'file.new-window',
+    label: 'New Window',
+    group: 'file',
+    shortcut: 'Mod+Shift+n',
+    // A window is the shell's to make, so there is nothing to offer in a
+    // browser — and nothing is displaced either, so no question is asked.
+    isEnabled: () => isTauri(),
+    run: () => {
+      void openInNewWindow()
+    },
+  },
 ]
-
-/**
- * Writes the deck out, asking where when it has to.
- *
- * A deck that has never been saved has nowhere to go, so Save asks the same
- * question Save As does rather than failing quietly. Everything else about the
- * write — the temporary file, the rename, the backup — is Rust's, because a
- * webview cannot rename a file and a half-written deck is a deck nobody gets
- * back.
- */
-async function saveDeckFile(askWhere: boolean): Promise<void> {
-  const { open, markSaved } = useDeckStore.getState()
-  if (open === null) return
-
-  const suggested = open.path ?? 'Presentation.pptx'
-  const path = askWhere || open.path === null ? await pickSavePath(nameOf(suggested)) : open.path
-  if (path === null) return
-
-  // The package is what goes to disk, not the model: everything we never
-  // understood is still in it (`docs/adr/0002-pptx-roundtrip.md`).
-  await writeDeckFile(path, await saveDeck(open.package))
-  markSaved(path)
-}
-
-async function openDeck(): Promise<void> {
-  const path = await pickDeckPath()
-  if (path === null) return
-
-  await useDeckStore.getState().load(await readDeckFile(path), path)
-  document.title = `${nameOf(path)} — Orangery Slides`
-}
 
 export const slideCommands: readonly Command[] = [
   {
@@ -194,6 +214,30 @@ function nudge(dx: number, dy: number): void {
   )
 }
 
+/** Whether the pointer is working inside a group on the current slide. */
+function insideGroup(): boolean {
+  return useDeckStore.getState().openGroup !== null
+}
+
+/**
+ * Steps out of the open group by one.
+ *
+ * Which chain to step out along comes from what is selected, because that is
+ * what is inside the group. Leaving selects the group just left, which is where
+ * a person expects to find themselves: back holding the thing they went into.
+ */
+function leaveGroup(): void {
+  const { openGroup, selection, setOpenGroup, selectShapes } = useDeckStore.getState()
+  const slide = currentSlide(useDeckStore.getState())
+  if (openGroup === null || slide === null) return
+
+  const held = withAncestors(slide.shapes).find(({ shape }) => selection.includes(shape.id))
+  const next = groupAfterEscape(openGroup, held?.ancestors ?? [])
+
+  setOpenGroup(next)
+  selectShapes([openGroup])
+}
+
 export const editCommands: readonly Command[] = [
   {
     id: 'edit.undo',
@@ -225,6 +269,63 @@ export const editCommands: readonly Command[] = [
     run: () => {
       const { finding, setFinding } = useViewStore.getState()
       setFinding(!finding)
+    },
+  },
+  {
+    id: 'format.edit-points',
+    label: 'Edit Points',
+    group: 'format',
+    // Only a shape that states its own outline has points to move. A preset's
+    // shape is a name rather than a list of corners, and offering handles that
+    // did nothing would be worse than offering none.
+    isEnabled: () => {
+      const slide = currentSlide(useDeckStore.getState())
+      const selection = useDeckStore.getState().selection
+      if (slide === null || selection.length !== 1) return false
+
+      const shape = flatten(slide.shapes).find((one) => selection.includes(one.id))
+      return shape !== undefined && geometryPoints(shape).length > 0
+    },
+    run: () => {
+      const { editingPoints, selection, setEditingPoints } = useDeckStore.getState()
+      const first = selection[0] ?? null
+      // A toggle, because the way out of it is the same gesture as the way in
+      // as well as `Escape`.
+      setEditingPoints(editingPoints === first ? null : first)
+    },
+  },
+  {
+    id: 'edit.leave-points',
+    label: 'Finish Editing Points',
+    group: 'edit',
+    shortcut: 'Escape',
+    isEnabled: () => useDeckStore.getState().editingPoints !== null,
+    run: () => {
+      useDeckStore.getState().setEditingPoints(null)
+    },
+  },
+  {
+    id: 'edit.leave-crop',
+    label: 'Finish Cropping',
+    group: 'edit',
+    shortcut: 'Escape',
+    isEnabled: () => useDeckStore.getState().cropping !== null,
+    run: () => {
+      useDeckStore.getState().setCropping(null)
+    },
+  },
+  {
+    id: 'edit.leave-group',
+    label: 'Leave Group',
+    group: 'edit',
+    shortcut: 'Escape',
+    // A second Escape, after the one that leaves a text box: they are separate
+    // commands because they are separate places to be, and one keystroke that
+    // did both would take two steps out of a group whose member was being typed
+    // in.
+    isEnabled: () => useDeckStore.getState().editing === null && onSlides() && insideGroup(),
+    run: () => {
+      leaveGroup()
     },
   },
   {
@@ -260,6 +361,73 @@ export const editCommands: readonly Command[] = [
       const { edit, selectShapes } = useDeckStore.getState()
       edit((slide) => deleteShapes(slide, selected(slide)))
       selectShapes([])
+    },
+  },
+  {
+    id: 'edit.copy',
+    label: 'Copy',
+    group: 'edit',
+    shortcut: 'Mod+c',
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      void copySelection()
+    },
+  },
+  {
+    id: 'edit.cut',
+    label: 'Cut',
+    group: 'edit',
+    shortcut: 'Mod+x',
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    run: () => {
+      void (async () => {
+        // Deleted only once the copy has landed: a cut that failed to copy and
+        // deleted anyway is the one way this command can lose work.
+        if (!(await copySelection())) return
+        useDeckStore.getState().edit((slide) => deleteShapes(slide, selected(slide)))
+        useDeckStore.getState().selectShapes([])
+      })()
+    },
+  },
+  {
+    id: 'edit.paste',
+    label: 'Paste',
+    group: 'edit',
+    shortcut: 'Mod+v',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      void pasteShapesHere()
+    },
+  },
+  {
+    id: 'edit.paste-keep-source',
+    label: 'Paste Keeping Source Formatting',
+    group: 'edit',
+    keywords: ['paste', 'special', 'formatting'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      void pasteShapesHere({ formatting: 'source' })
+    },
+  },
+  {
+    id: 'edit.paste-text-only',
+    label: 'Paste Text Only',
+    group: 'edit',
+    keywords: ['paste', 'special', 'text', 'unformatted'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      void pasteShapesHere({ textOnly: true })
+    },
+  },
+  {
+    id: 'edit.paste-special',
+    label: 'Paste Special…',
+    group: 'edit',
+    shortcut: 'Mod+Shift+v',
+    keywords: ['clipboard', 'history', 'formatting'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setPasting(true)
     },
   },
   {
@@ -322,6 +490,121 @@ function selected(slide: Slide): Shape[] {
   return slide.shapes.filter((shape) => selection.includes(shape.id))
 }
 
+/**
+ * The table the picked cells are in, and the `a:tbl` under it.
+ *
+ * Both, because every command here changes the XML and then has to write the
+ * part the XML came from; one without the other is a change nothing saves.
+ */
+function pickedTable(): {
+  table: XmlNode
+  cells: NonNullable<ReturnType<typeof cellsPicked>>
+} | null {
+  const cells = cellsPicked()
+  const slide = currentSlide(useDeckStore.getState())
+  if (cells === null || slide === null) return null
+
+  const frame = flatten(slide.shapes).find((shape) => shape.id === cells.table)
+  const table = frame === undefined ? undefined : findDescendant(frame.node, 'a:tbl')
+  return table === undefined ? null : { table, cells }
+}
+
+const cellsPicked = () => useDeckStore.getState().cells
+
+/** Runs a change against the picked table, as one undo step. */
+function editTable(change: (table: XmlNode) => boolean): void {
+  useDeckStore.getState().edit(() => {
+    const found = pickedTable()
+    return found === null ? false : change(found.table)
+  })
+}
+
+export const tableEditCommands: readonly Command[] = [
+  {
+    id: 'table.row-above',
+    label: 'Insert Row Above',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertRow(table, cellsPicked()?.row ?? 0, false))
+    },
+  },
+  {
+    id: 'table.row-below',
+    label: 'Insert Row Below',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertRow(table, cellsPicked()?.toRow ?? 0, true))
+    },
+  },
+  {
+    id: 'table.column-left',
+    label: 'Insert Column Left',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertColumn(table, cellsPicked()?.column ?? 0, false))
+    },
+  },
+  {
+    id: 'table.column-right',
+    label: 'Insert Column Right',
+    group: 'insert',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => insertColumn(table, cellsPicked()?.toColumn ?? 0, true))
+    },
+  },
+  {
+    id: 'table.delete-row',
+    label: 'Delete Row',
+    group: 'edit',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => removeRow(table, cellsPicked()?.row ?? 0))
+    },
+  },
+  {
+    id: 'table.delete-column',
+    label: 'Delete Column',
+    group: 'edit',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => removeColumn(table, cellsPicked()?.column ?? 0))
+    },
+  },
+  {
+    id: 'table.merge',
+    label: 'Merge Cells',
+    group: 'format',
+    // One cell is not a merge, and greying it out says which gesture is missing
+    // rather than doing nothing when it is used.
+    isEnabled: () => {
+      const cells = cellsPicked()
+      return cells !== null && (cells.row !== cells.toRow || cells.column !== cells.toColumn)
+    },
+    run: () => {
+      editTable((table) => {
+        const cells = cellsPicked()
+        return cells === null ? false : mergeCells(table, cells)
+      })
+    },
+  },
+  {
+    id: 'table.split',
+    label: 'Split Cell',
+    group: 'format',
+    isEnabled: () => cellsPicked() !== null,
+    run: () => {
+      editTable((table) => {
+        const cells = cellsPicked()
+        return cells === null ? false : splitCell(table, cells.row, cells.column)
+      })
+    },
+  },
+]
+
 export const alignCommands: readonly Command[] = (
   [
     ['left', 'Align Left'],
@@ -344,6 +627,21 @@ export const alignCommands: readonly Command[] = (
       const shapes = selected(slide)
       return alignShapes(shapes, alignment, alignmentBounds(shapes, size))
     })
+  },
+}))
+
+export const flipCommands: readonly Command[] = (
+  [
+    ['horizontal', 'Flip Horizontal'],
+    ['vertical', 'Flip Vertical'],
+  ] as const
+).map(([axis, label]) => ({
+  id: `format.flip-${axis}`,
+  label,
+  group: 'format' as const,
+  isEnabled: () => useDeckStore.getState().selection.length > 0,
+  run: () => {
+    useDeckStore.getState().edit((slide) => flipShapes(selected(slide), axis))
   },
 }))
 
@@ -467,6 +765,38 @@ function setParagraph(attributes: Record<string, unknown>): void {
 function paragraphAttribute(name: string): unknown {
   return useEditorStore.getState().editor?.getAttributes('paragraph')[name]
 }
+
+/** A quarter inch, which is the step Word and PowerPoint both indent by. */
+const INDENT_STEP = 228600
+
+/**
+ * Moving a paragraph in or out.
+ *
+ * Distinct from `Tab`, which changes the outline level: a level is a rung on
+ * the master's list style and brings a bullet and a size with it, while an
+ * indent is a distance and brings nothing. Offering only the first, as this did,
+ * means a paragraph can be moved but not moved *a little*.
+ */
+export const indentCommands: readonly Command[] = (
+  [
+    ['in', 'Increase Indent', 1],
+    ['out', 'Decrease Indent', -1],
+  ] as const
+).map(([id, label, direction]) => ({
+  id: `format.indent-${id}`,
+  label,
+  group: 'format' as const,
+  isEnabled: () => useEditorStore.getState().editor !== null,
+  run: () => {
+    const current = paragraphAttribute('marginLeft')
+    const from = typeof current === 'number' ? current : 0
+    const next = Math.max(from + direction * INDENT_STEP, 0)
+
+    // Back to nothing is back to inheriting, not a stated zero: a paragraph
+    // indented and then un-indented should be the paragraph it was.
+    setParagraph({ marginLeft: next === 0 ? null : next })
+  },
+}))
 
 export const paragraphCommands: readonly Command[] = [
   ...(
@@ -722,6 +1052,26 @@ export const showCommands: readonly Command[] = [
     },
   },
   {
+    id: 'show.rehearse',
+    label: 'Rehearse Timings',
+    group: 'view',
+    keywords: ['practise', 'timing', 'timer'],
+    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      void present(0, true)
+    },
+  },
+  {
+    id: 'show.record',
+    label: 'Record Slide Show',
+    group: 'view',
+    keywords: ['narration', 'voice', 'microphone', 'timing'],
+    isEnabled: () => (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0,
+    run: () => {
+      void present(0, true, true)
+    },
+  },
+  {
     id: 'show.end',
     label: 'End Slide Show',
     group: 'view',
@@ -773,6 +1123,48 @@ export const printCommands: readonly Command[] = (
  * blank picture.
  */
 export const exportCommands: readonly Command[] = [
+  {
+    id: 'export.odp',
+    label: 'Export as OpenDocument\u2026',
+    group: 'file',
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void exportOdp()
+    },
+  },
+  {
+    id: 'file.import-outline',
+    label: 'New from Document Outline\u2026',
+    group: 'file',
+    keywords: ['docx', 'word', 'outline', 'import'],
+    isEnabled: () => isTauri(),
+    run: () => {
+      whenSafe(importOutline)
+    },
+  },
+  {
+    id: 'export.thmx',
+    label: 'Save Theme\u2026',
+    group: 'file',
+    keywords: ['theme', 'thmx', 'palette', 'master'],
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void exportTheme()
+    },
+  },
+  {
+    id: 'export.video',
+    label: 'Export as Video\u2026',
+    group: 'file',
+    keywords: ['film', 'movie', 'mp4', 'record'],
+    isEnabled: () =>
+      isTauri() &&
+      (useDeckStore.getState().open?.deck.slides.length ?? 0) > 0 &&
+      useViewStore.getState().recordingVideo === null,
+    run: () => {
+      void exportVideoFile()
+    },
+  },
   {
     id: 'export.svg',
     label: 'Export Slide as SVG…',
@@ -915,6 +1307,42 @@ export const zoomCommands: readonly Command[] = [
     },
   },
   {
+    id: 'view.grid',
+    label: 'Gridlines',
+    group: 'view',
+    isActive: () => useViewStore.getState().grid,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setGrid(!view.grid)
+    },
+  },
+  {
+    id: 'view.snap-to-grid',
+    label: 'Snap to Grid',
+    group: 'view',
+    // Apart from showing it, as in PowerPoint: wanting things lined up and
+    // wanting to look at the lines are two different wishes.
+    isActive: () => useViewStore.getState().snapToGrid,
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setSnapToGrid(!view.snapToGrid)
+    },
+  },
+  {
+    id: 'view.grid-and-guides',
+    label: 'Grid and Guides…',
+    group: 'view',
+    // Where PowerPoint keeps the same four answers, which is the reason to put
+    // them here rather than to invent a place of our own.
+    keywords: ['grid', 'guides', 'snap', 'spacing'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setEditingGrid(true)
+    },
+  },
+  {
     id: 'view.outline',
     label: 'Outline View',
     group: 'view',
@@ -1012,6 +1440,33 @@ export const connectorCommands: readonly Command[] = [
   },
 ]
 
+/**
+ * A chart of each kind, as five commands rather than one and a dialog.
+ *
+ * PowerPoint opens a gallery; here the kinds are in the menu and the palette,
+ * where typing "pie" reaches a pie chart in one gesture. Changing the kind
+ * afterwards is a control in the panel, so the choice made here is not one
+ * anybody is stuck with.
+ */
+export const chartCommands: readonly Command[] = (
+  [
+    ['bar', 'Column Chart'],
+    ['line', 'Line Chart'],
+    ['pie', 'Pie Chart'],
+    ['area', 'Area Chart'],
+    ['scatter', 'Scatter Chart'],
+  ] as const
+).map(([kind, label]) => ({
+  id: `insert.chart.${kind}`,
+  label,
+  group: 'insert',
+  keywords: ['chart', 'graph', 'data'],
+  isEnabled: () => useDeckStore.getState().open !== null,
+  run: () => {
+    void insertChartOnSlide(kind)
+  },
+}))
+
 export const tableCommands: readonly Command[] = [
   {
     id: 'insert.table',
@@ -1019,34 +1474,140 @@ export const tableCommands: readonly Command[] = [
     group: 'insert',
     isEnabled: () => useDeckStore.getState().open !== null,
     run: () => {
-      const { open, edit, selectShapes } = useDeckStore.getState()
-      const size = open?.deck.slideSize ?? { width: 0, height: 0 }
-      if (open === null) return
-
-      // Three by three across most of the slide, which is what PowerPoint's
-      // own dialogue starts at; choosing the size comes with the grid picker.
-      const width = size.width * 0.8
-      const height = size.height * 0.4
-      const made: { id: number | null } = { id: null }
-
-      edit((slide) => {
-        made.id = insertTable(open.package, slide, {
-          rows: 3,
-          columns: 3,
-          transform: {
-            x: (size.width - width) / 2,
-            y: (size.height - height) / 2,
-            width,
-            height,
-          },
-        })
-        return made.id !== null
-      })
-
-      if (made.id !== null) selectShapes([made.id])
+      useViewStore.getState().setChoosingTable(true)
     },
   },
 ]
+
+/**
+ * The format painter, as two halves of one gesture.
+ *
+ * PowerPoint arms a button and waits for a click on a shape. Two commands do
+ * the same work from the keyboard, the menu and the palette, and this app
+ * already has an armed pointer for drawing — a second mode to get stuck in is
+ * one more than it needs.
+ */
+export const painterCommands: readonly Command[] = [
+  {
+    id: 'format.copy-formatting',
+    label: 'Copy Formatting',
+    group: 'format',
+    shortcut: 'Mod+Alt+C',
+    keywords: ['painter', 'brush', 'style'],
+    isEnabled: () => useDeckStore.getState().selection.length > 0,
+    isActive: () => heldFormat() !== null,
+    run: () => {
+      copyFormatting()
+    },
+  },
+  {
+    id: 'format.paste-formatting',
+    label: 'Paste Formatting',
+    group: 'format',
+    shortcut: 'Mod+Alt+V',
+    keywords: ['painter', 'brush', 'apply'],
+    isEnabled: () => heldFormat() !== null && useDeckStore.getState().selection.length > 0,
+    run: () => {
+      pasteFormatting()
+    },
+  },
+]
+
+export const reviewCommands: readonly Command[] = [
+  {
+    id: 'review.compare',
+    label: 'Compare with Another Deck\u2026',
+    group: 'view',
+    keywords: ['review', 'changes', 'accept', 'merge'],
+    isEnabled: () => isTauri() && useDeckStore.getState().open !== null,
+    run: () => {
+      void startReview()
+    },
+  },
+]
+
+export const commentCommands: readonly Command[] = [
+  {
+    id: 'review.comments',
+    label: 'Comments',
+    group: 'view',
+    shortcut: 'Mod+Alt+m',
+    keywords: ['review', 'remark', 'note'],
+    isEnabled: () => useDeckStore.getState().open !== null,
+    isActive: () => useViewStore.getState().commenting,
+    run: () => {
+      const view = useViewStore.getState()
+      view.setCommenting(!view.commenting)
+    },
+  },
+]
+
+/** The one thing to do to a diagram: stop it being one. */
+export const diagramCommands: readonly Command[] = [
+  {
+    id: 'format.convert-diagram',
+    label: 'Convert SmartArt to Shapes',
+    group: 'format',
+    keywords: ['smartart', 'diagram', 'ungroup'],
+    isEnabled: () => selectedDiagram() !== null,
+    run: () => {
+      const { open } = useDeckStore.getState()
+      const slide = currentSlide(useDeckStore.getState())
+      if (open === null || slide === null) return
+
+      const made: { id: number | null } = { id: null }
+      useDeckStore.getState().editPackage((deck) => {
+        const part = deck.deck.slides[useDeckStore.getState().current]
+        const frame = part?.shapes.find((one) => one.id === selectedDiagram())
+        if (part === undefined || frame === undefined) return false
+
+        made.id = convertDiagramToShapes(deck.package, part, frame)
+        if (made.id !== null) writeSlidePart(deck.package, part)
+        return made.id !== null
+      })
+
+      if (made.id !== null) useDeckStore.getState().selectShapes([made.id])
+    },
+  },
+]
+
+/** The selected shape's id, when it is a diagram we could draw. */
+function selectedDiagram(): number | null {
+  const state = useDeckStore.getState()
+  const slide = currentSlide(state)
+  if (state.open === null || slide === null || state.selection.length !== 1) return null
+
+  const shape = slide.shapes.find((one) => state.selection.includes(one.id))
+  if (shape?.graphic?.kind !== 'diagram') return null
+
+  // A diagram nobody has opened in PowerPoint has no picture to convert into,
+  // and offering the command would be offering to make an empty group.
+  return diagramDrawingPart(state.open.package, slide.path, shape.graphic.relationshipId) === null
+    ? null
+    : shape.id
+}
+
+export const footerCommands: readonly Command[] = [
+  {
+    id: 'insert.header-footer',
+    label: 'Header and Footer…',
+    group: 'insert',
+    isEnabled: () => useDeckStore.getState().open !== null,
+    run: () => {
+      useViewStore.getState().setEditingFooters(true)
+    },
+  },
+]
+
+export const shapeGalleryCommand: Command = {
+  id: 'insert.shape',
+  label: 'Shape…',
+  group: 'insert',
+  isEnabled: () => useDeckStore.getState().open !== null,
+  run: () => {
+    useViewStore.getState().setChoosingShape(true)
+  },
+}
 
 export const insertCommands: readonly Command[] = PRESETS.map(([preset, label]) => ({
   id: `insert.${preset}`,
@@ -1121,41 +1682,12 @@ export const iconCommands: readonly Command[] = ICONS.map((icon) => ({
   },
 }))
 
-/**
- * Putting a picture on the slide.
- *
- * Sized to a quarter of the slide's width and the shape of the file, which
- * needs the picture measured; until that is wired up it goes in square and can
- * be resized, which is better than guessing an aspect ratio and being wrong.
- */
+/** Putting a picture on the slide, through the one place that does that. */
 async function insertPictureFromDisk(): Promise<void> {
   const path = await pickPicturePath()
   if (path === null) return
 
-  const bytes = await readFileBytes(path)
-  const { open, current, edit, selectShapes } = useDeckStore.getState()
-  const size = open?.deck.slideSize ?? { width: 0, height: 0 }
-  const slide = open?.deck.slides[current]
-  if (open === null || slide === undefined) return
-
-  const side = size.width / 4
-  const made: { id: number | null } = { id: null }
-
-  edit((edited) => {
-    made.id = insertPicture(open.package, edited, {
-      fileName: nameOf(path),
-      bytes,
-      transform: {
-        x: (size.width - side) / 2,
-        y: (size.height - side) / 2,
-        width: side,
-        height: side,
-      },
-    })
-    return true
-  })
-
-  if (made.id !== null) selectShapes([made.id])
+  insertPictureOnSlide(nameOf(path), await readFileBytes(path))
 }
 
 export const groupCommands: readonly Command[] = [
@@ -1285,12 +1817,20 @@ export function registerBuiltinCommands(): void {
   registerAll(editCommands)
   registerAll(arrangeCommands)
   registerAll(insertCommands)
+  register(shapeGalleryCommand)
   registerAll(iconCommands)
   registerAll(pictureCommands)
   registerAll(tableCommands)
+  registerAll(chartCommands)
+  registerAll(footerCommands)
+  registerAll(diagramCommands)
+  registerAll(commentCommands)
+  registerAll(reviewCommands)
+  registerAll(painterCommands)
   registerAll(connectorCommands)
   registerAll(textCommands)
   registerAll(paragraphCommands)
+  registerAll(indentCommands)
   registerAll(spacingCommands)
   registerAll(slideEditCommands)
   registerAll(exportCommands)
@@ -1299,6 +1839,8 @@ export function registerBuiltinCommands(): void {
   registerAll(zoomCommands)
   registerAll(groupCommands)
   registerAll(alignCommands)
+  registerAll(tableEditCommands)
+  registerAll(flipCommands)
   registerAll(distributeCommands)
   registerAll(slideCommands)
   registerAll(viewCommands)
@@ -1332,11 +1874,16 @@ async function backgroundPictureFromDisk(): Promise<void> {
  * one of those falls back to showing it here, because a presentation that does
  * not start is worse than one on the wrong screen.
  */
-async function present(at: number): Promise<void> {
+async function present(at: number, rehearsing = false, recording = false): Promise<void> {
   const { open } = useDeckStore.getState()
   if (open === null) return
 
-  if (isTauri()) {
+  // A rehearsal stays in this window: the point is the numbers at the end, and
+  // a second window would take them somewhere this one cannot read them.
+  // A rehearsal or a recording stays in this window: the point is what comes
+  // back at the end, and a second window would take it somewhere this one
+  // cannot read it.
+  if (isTauri() && !rehearsing && !recording) {
     try {
       // Whether a presenter view came with it or not, the show is on its own
       // screen and this window has nothing to add.
@@ -1349,7 +1896,9 @@ async function present(at: number): Promise<void> {
 
   // In a browser there is one window, and writing the deck out to hand it to
   // nobody would be a copy made for nothing.
-  useShowStore.getState().start(at, open.deck.slides.length)
+  useShowStore
+    .getState()
+    .start(at, open.deck.slides.length, stepsPerSlide(open.deck), rehearsing, recording)
   await enterFullScreen()
 }
 

@@ -9,7 +9,7 @@ import {
   UnsupportedFormatError,
 } from '../../document/file-operations'
 import { fileNameOf, formatFromPath } from '../../document/formats'
-import { rememberRecent } from '../../document/recent-files'
+import { rememberRecent } from '@orangery/platform'
 import { templateById } from '../../document/templates'
 import type { TemplateId } from '../../document/templates'
 import { getSession, setSession } from '../../document/session'

@@ -10,16 +10,21 @@
 export {
   EMU_PER_CENTIMETRE,
   EMU_PER_INCH,
+  EMU_PER_PIXEL,
   EMU_PER_POINT,
   emuToPoints,
   fitWithin,
   pointsToEmu,
 } from './units'
-export { contentTypeFor } from './media'
+export { contentTypeFor, dataUrlFrom, mediaContentTypeFor } from './media'
 export { blipRelationshipId, NO_CROP, pictureGraphic, readBlipFill } from './picture'
 export type { BlipFill, Crop, Picture } from './picture'
 export { readColor, readColorChild, resolveColor } from './color'
 export type { Color, ColorContext, ColorSource, ColorTransform, ResolvedColor } from './color'
+export { hasAnyEffect, readShadow, shadowOffset } from './effects'
+export type { Shadow } from './effects'
+export { imageSize } from './image-size'
+export type { ImageSize } from './image-size'
 export { fontStackFor, parseTheme, resolveThemeFont } from './theme'
 export type { Theme, ThemeFonts } from './theme'
 export {
@@ -70,11 +75,14 @@ export {
 export type { FormatScheme } from './format-scheme'
 export { readCellProperties, readTable, visibleCells } from './table'
 export type { CellProperties, Table, TableCell, TableProperties, TableRow } from './table'
-export { readChart } from './chart'
-export type { Chart, ChartKind, ChartSeries } from './chart'
 export { docToParagraphs, textBodyToDoc, writeTextBody } from './text-prosemirror'
 export type { PmMark, PmNode } from './text-prosemirror'
-export { autofitKindOf, bodyPropertiesOf, writeBodyProperties } from './write-text-body'
+export {
+  autofitKindOf,
+  bodyPropertiesOf,
+  writeAutofitScale,
+  writeBodyProperties,
+} from './write-text-body'
 export type { Anchor, AutofitKind, BodyChange, Wrap } from './write-text-body'
 export {
   customGeometry,

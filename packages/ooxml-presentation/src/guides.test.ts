@@ -2,7 +2,16 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getPartText, setPartText } from '@orangery/ooxml-core'
-import { addGuide, moveGuide, readGuides, removeGuide, writeGuides } from './guides'
+import {
+  addGuide,
+  DEFAULT_GRID,
+  moveGuide,
+  readGridSpacing,
+  readGuides,
+  removeGuide,
+  writeGridSpacing,
+  writeGuides,
+} from './guides'
 import { readPptxPackage } from './parts'
 import { saveDeck } from './save'
 
@@ -147,5 +156,49 @@ describe('changing one guide', () => {
     const [guide] = readGuides(pkg)
     expect(guide?.at).not.toBe(1_234_567)
     expect(Math.abs((guide?.at ?? 0) - 1_234_567)).toBeLessThan(UNIT)
+  })
+})
+
+describe('the grid', () => {
+  it('is a twelfth of an inch on a deck that says nothing', async () => {
+    // PowerPoint's own default. A deck with no `p:gridSpacing` is not a deck
+    // with no grid — it is one that never had reason to state one.
+    expect(readGridSpacing(await load('empty'))).toBe(DEFAULT_GRID)
+  })
+
+  it('survives being written and reopened', async () => {
+    const pkg = await load('empty')
+    expect(writeGridSpacing(pkg, 228600)).toBe(true)
+
+    expect(readGridSpacing(await reopen(pkg))).toBe(228600)
+  })
+
+  it('says nothing changed when it is set to what it already is', async () => {
+    const pkg = await load('empty')
+    writeGridSpacing(pkg, 228600)
+
+    expect(writeGridSpacing(pkg, 228600)).toBe(false)
+  })
+
+  it('refuses a spacing nothing could be placed on', async () => {
+    const pkg = await load('empty')
+    writeGridSpacing(pkg, -5)
+
+    // Clamped rather than written: a grid of zero is a division by zero in
+    // every drag on the slide.
+    expect(readGridSpacing(await reopen(pkg))).toBeGreaterThan(0)
+  })
+
+  it('is kept apart from the guides it lives beside', async () => {
+    const pkg = await load('empty')
+    const before = readGuides(pkg).length
+    addGuide(pkg, { orientation: 'vert', at: 2000000 })
+    writeGridSpacing(pkg, 457200)
+
+    // Both live in `viewProps.xml`, and writing one over the other is the kind
+    // of thing a single part invites.
+    const reopened = await reopen(pkg)
+    expect(readGuides(reopened)).toHaveLength(before + 1)
+    expect(readGridSpacing(reopened)).toBe(457200)
   })
 })

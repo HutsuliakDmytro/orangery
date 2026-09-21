@@ -15,7 +15,7 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import type { Deck, SlidePart } from './deck'
-import { PRESENTATION_PART } from './parts'
+import { PRESENTATION_ORDER, PRESENTATION_PART } from './parts'
 import type { SlideSize } from './presentation'
 import { writePart } from './save'
 import { writeTransform } from './write-shape'
@@ -39,24 +39,6 @@ import { writeTransform } from './write-shape'
 export type ContentFit = 'maximize' | 'fit'
 
 /** `p:presentation` in schema order, enough of it to place `p:sldSz`. */
-const PRESENTATION_ORDER = [
-  'p:sldMasterIdLst',
-  'p:notesMasterIdLst',
-  'p:handoutMasterIdLst',
-  'p:sldIdLst',
-  'p:sldSz',
-  'p:notesSz',
-  'p:smartTags',
-  'p:embeddedFontLst',
-  'p:custShowLst',
-  'p:photoAlbum',
-  'p:custDataLst',
-  'p:kinsoku',
-  'p:defaultTextStyle',
-  'p:modifyVerifier',
-  'p:extLst',
-]
-
 /** The presets PowerPoint names, so the label on the size is not left stale. */
 const PRESETS: { type: string; width: number; height: number }[] = [
   { type: 'screen4x3', width: 9144000, height: 6858000 },

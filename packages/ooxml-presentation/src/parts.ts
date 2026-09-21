@@ -28,3 +28,65 @@ export const NOTES_SLIDE_RELATIONSHIP = `${RELATIONSHIP}notesSlide`
 export const NOTES_MASTER_RELATIONSHIP = `${RELATIONSHIP}notesMaster`
 export const HANDOUT_MASTER_RELATIONSHIP = `${RELATIONSHIP}handoutMaster`
 export const THEME_RELATIONSHIP = `${RELATIONSHIP}theme`
+export const COMMENT_AUTHORS_RELATIONSHIP = `${RELATIONSHIP}commentAuthors`
+export const COMMENTS_RELATIONSHIP = `${RELATIONSHIP}comments`
+
+/**
+ * Comments as PowerPoint has written them since 2018.
+ *
+ * A second, extension-namespaced relationship beside the old one, and the one
+ * a deck from a current PowerPoint actually uses. A map that knew only the
+ * standard name would report every modern deck as having no comments, which is
+ * worse than not looking.
+ */
+export const MODERN_COMMENTS_RELATIONSHIP =
+  'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/comments'
+
+/**
+ * Both spellings of it.
+ *
+ * The extension namespace is not a published standard, and the name appears
+ * singular in decks and plural in what documentation there is. With no
+ * PowerPoint-authored deck in the corpus to pin it with, guessing one would be
+ * guessing which half of the decks to read. Reading both costs a comparison and
+ * cannot be wrong: a deck carries whichever it carries.
+ */
+export const MODERN_COMMENTS_RELATIONSHIPS = [
+  MODERN_COMMENTS_RELATIONSHIP,
+  'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/comment',
+]
+export const MODERN_COMMENT_AUTHORS_RELATIONSHIP =
+  'http://schemas.microsoft.com/office/powerpoint/2018/8/relationships/authors'
+
+/** What a relationship to a picture, a film or a sound is called. */
+export const MEDIA_RELATIONSHIPS = [
+  `${RELATIONSHIP}image`,
+  `${RELATIONSHIP}audio`,
+  `${RELATIONSHIP}video`,
+  `${RELATIONSHIP}media`,
+]
+
+/**
+ * The order `p:presentation` states its children in.
+ *
+ * A sequence, not a set: an element put in the wrong place makes PowerPoint
+ * offer to repair the deck. Shared, because three different edits add a child
+ * to this one element.
+ */
+export const PRESENTATION_ORDER = [
+  'p:sldMasterIdLst',
+  'p:notesMasterIdLst',
+  'p:handoutMasterIdLst',
+  'p:sldIdLst',
+  'p:sldSz',
+  'p:notesSz',
+  'p:smartTags',
+  'p:embeddedFontLst',
+  'p:custShowLst',
+  'p:photoAlbum',
+  'p:custDataLst',
+  'p:kinsoku',
+  'p:defaultTextStyle',
+  'p:modifyVerifier',
+  'p:extLst',
+]

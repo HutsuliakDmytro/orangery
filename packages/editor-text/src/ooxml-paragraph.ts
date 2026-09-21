@@ -61,6 +61,37 @@ export const OoxmlParagraph = Extension.create({
                 ? { 'data-line-spacing': String(attributes['lineSpacing']) }
                 : {},
           },
+          /**
+           * How far the paragraph is pushed in, in EMU, or null to inherit.
+           *
+           * Null and zero are different answers: null takes the indent of the
+           * outline level, and zero says there is none. A schema that defaulted
+           * to zero would turn every paragraph nobody touched into one that had
+           * decided to sit flush left.
+           */
+          marginLeft: {
+            default: null,
+            parseHTML: (element) => {
+              const value = Number(element.dataset['marginLeft'])
+              return Number.isFinite(value) ? value : null
+            },
+            renderHTML: (attributes) =>
+              typeof attributes['marginLeft'] === 'number'
+                ? { 'data-margin-left': String(attributes['marginLeft']) }
+                : {},
+          },
+          /** How much further the first line goes, in EMU; negative hangs it. */
+          firstLine: {
+            default: null,
+            parseHTML: (element) => {
+              const value = Number(element.dataset['firstLine'])
+              return Number.isFinite(value) ? value : null
+            },
+            renderHTML: (attributes) =>
+              typeof attributes['firstLine'] === 'number'
+                ? { 'data-first-line': String(attributes['firstLine']) }
+                : {},
+          },
           /** The original properties element, serialised. Never rendered. */
           pPrOriginal: { default: null, renderHTML: () => ({}) },
           /** What an empty paragraph would type in. Never rendered. */

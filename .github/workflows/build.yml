@@ -4,9 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
-    # Each app releases on its own tag, so a fix in Docs never ships a version
-    # bump for Slides. A tag builds the same way and then publishes what it built.
-    tags: ['docs-v*', 'slides-v*']
+    # Each app releases on its own tag, so a fix in one never ships a version
+    # bump for the others. A tag builds the same way and then publishes what it
+    # built.
+    tags: ['docs-v*', 'slides-v*', 'sheets-v*']
 
 concurrency:
   group: build-${{ github.ref }}
@@ -21,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         # Adding an app to the suite is adding it to this list.
-        app: [docs, slides]
+        app: [docs, slides, sheets]
         platform:
           - os: macos-latest
             label: macOS universal (unsigned)

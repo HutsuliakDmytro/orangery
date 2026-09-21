@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
-import { isTauri } from '@orangery/platform'
+import { baseName, isTauri } from '@orangery/platform'
 
 /**
  * Getting a deck off the disk.
@@ -22,7 +22,22 @@ export async function pickDeckPath(): Promise<string | null> {
   const selected = await openDialog({
     multiple: false,
     directory: false,
-    filters: [{ name: 'Presentation', extensions: ['pptx'] }],
+    // OpenDocument as well: it is not the native format, but a person with one
+    // in front of them is trying to open a presentation.
+    filters: [{ name: 'Presentation', extensions: ['pptx', 'odp'] }],
+  })
+
+  return typeof selected === 'string' ? selected : null
+}
+
+/** A document to take an outline from, which is a different question. */
+export async function pickDocumentPath(): Promise<string | null> {
+  if (!isTauri()) return null
+
+  const selected = await openDialog({
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'Document', extensions: ['docx'] }],
   })
 
   return typeof selected === 'string' ? selected : null
@@ -33,10 +48,8 @@ export async function readDeckFile(path: string): Promise<Uint8Array> {
   return new Uint8Array(loaded.bytes)
 }
 
-/** The file name, for the window title, without walking a path library. */
-export function nameOf(path: string): string {
-  return path.split(/[\\/]/u).pop() ?? path
-}
+/** The file name, for the window title. Re-exported so callers need one import. */
+export const nameOf = baseName
 
 /** Picks a picture to put on a slide. */
 export async function pickPicturePath(): Promise<string | null> {

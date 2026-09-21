@@ -80,8 +80,24 @@ export function buildXml(nodes: XmlNode[]): string {
 /** The XML declaration Word writes. Kept byte-identical, including CRLF. */
 export const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
 
+/**
+ * Puts a declaration in front of built XML, unless there is one already.
+ *
+ * `parseXml` hands the `<?xml?>` node back as a root like any other, so the
+ * usual `withDeclaration(buildXml(parseXml(text)))` round trip has one in the
+ * built string before this is called. Prepending regardless produced parts with
+ * two prologs — not well-formed XML, which the readers here happen to tolerate
+ * and PowerPoint does not. The one the file already carries is kept rather than
+ * replaced: a part written with `standalone="no"` said so on purpose.
+ *
+ * The line break is put back because the parser drops it: every part in an
+ * OOXML package has one, and a part that came back without it would be the one
+ * file in the zip shaped differently for no reason.
+ */
 export function withDeclaration(xml: string): string {
-  return `${XML_DECLARATION}${xml}`
+  if (!xml.startsWith('<?xml')) return `${XML_DECLARATION}${xml}`
+
+  return xml.replace(/^(<\?xml[^?]*\?>)(?!\r?\n)/u, '$1\r\n')
 }
 
 /** Strips a leading declaration so a part can be re-parsed after editing. */

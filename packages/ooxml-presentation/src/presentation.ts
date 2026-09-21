@@ -11,6 +11,12 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, Relationship, XmlNode } from '@orangery/ooxml-core'
 import {
+  COMMENT_AUTHORS_RELATIONSHIP,
+  COMMENTS_RELATIONSHIP,
+  HANDOUT_MASTER_RELATIONSHIP,
+  MEDIA_RELATIONSHIPS,
+  MODERN_COMMENT_AUTHORS_RELATIONSHIP,
+  MODERN_COMMENTS_RELATIONSHIPS,
   NOTES_MASTER_RELATIONSHIP,
   NOTES_SLIDE_RELATIONSHIP,
   PRESENTATION_PART,
@@ -37,10 +43,25 @@ export interface SlideSize {
 export interface SlideParts {
   /** Path in the package, e.g. `ppt/slides/slide1.xml`. */
   path: string
+  /**
+   * `p:sldId/@id` — what the deck calls this slide.
+   *
+   * Stable across every edit, which the position is not: inserting one slide
+   * renumbers every slide after it. Anything that has to recognise the same
+   * slide in a copy of the deck matches on this.
+   */
+  id: string
   /** The layout this slide is built on; null only in a malformed deck. */
   layout: string | null
   /** The notes page, when the slide has one. */
   notes: string | null
+  /**
+   * The comment parts on this slide, old and modern.
+   *
+   * Both, because a deck edited by two versions of PowerPoint has both, and a
+   * reader that knew only one would report half a conversation.
+   */
+  comments: string[]
 }
 
 export interface MasterParts {
@@ -55,8 +76,31 @@ export interface PresentationMap {
   slides: SlideParts[]
   masters: MasterParts[]
   notesMaster: string | null
+  /**
+   * The handout master, which decides what several slides on one page look
+   * like. Rare, and a deck that has one is a deck somebody meant to print.
+   */
+  handoutMaster: string | null
+  /** `commentAuthors.xml` — the people, which the whole deck shares. */
+  commentAuthors: string[]
+  /**
+   * Every picture, film and sound any part of the deck points at.
+   *
+   * Gathered by walking the parts rather than by listing the `ppt/media`
+   * directory: what is in that directory and what the deck uses are two
+   * different questions, and only the second one means anything.
+   */
+  media: string[]
   slideSize: SlideSize
   notesSize: SlideSize
+  /**
+   * `p:presentation/@firstSlideNum` — what the first slide is numbered.
+   *
+   * One almost always, and not always: a deck that continues another one starts
+   * where that one stopped, and every slide number on it is then off by the
+   * difference if this is ignored.
+   */
+  firstSlideNum: number
 }
 
 /** A part's relationships, resolved to package paths. */
@@ -105,6 +149,12 @@ function sizeOf(root: XmlNode | undefined, tag: string, fallback: SlideSize): Sl
   }
 }
 
+/** An attribute read as a number, or the fallback when it is absent or junk. */
+function numberOf(value: string | undefined, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 /** PowerPoint's own default, used when a deck does not say. */
 const DEFAULT_SLIDE_SIZE: SlideSize = { width: 12192000, height: 6858000 }
 const DEFAULT_NOTES_SIZE: SlideSize = { width: 6858000, height: 9144000 }
@@ -122,14 +172,25 @@ function orderedTargets(
   itemTag: string,
   relationships: Relationship[],
 ): string[] {
+  return orderedEntries(presentation, listTag, itemTag, relationships).map((entry) => entry.target)
+}
+
+/** The same, keeping the id the list gives each entry. */
+function orderedEntries(
+  presentation: XmlNode | undefined,
+  listTag: string,
+  itemTag: string,
+  relationships: Relationship[],
+): { id: string; target: string }[] {
   const list = presentation === undefined ? undefined : findChild(presentation, listTag)
   if (list === undefined) return []
 
   const byId = new Map(relationships.map((relationship) => [relationship.id, relationship.target]))
 
-  return findChildren(list, itemTag)
-    .map((item) => byId.get(attribute(item, 'r:id') ?? ''))
-    .filter((target): target is string => target !== undefined)
+  return findChildren(list, itemTag).flatMap((item) => {
+    const target = byId.get(attribute(item, 'r:id') ?? '')
+    return target === undefined ? [] : [{ id: attribute(item, 'id') ?? '', target }]
+  })
 }
 
 export function readPresentation(pkg: OoxmlPackage): PresentationMap {
@@ -138,12 +199,18 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
   )
   const relationships = relationshipsOf(pkg, PRESENTATION_PART)
 
-  const slides = orderedTargets(root, 'p:sldIdLst', 'p:sldId', relationships).map((path) => {
+  const slides = orderedEntries(root, 'p:sldIdLst', 'p:sldId', relationships).map((entry) => {
+    const path = entry.target
     const own = relationshipsOf(pkg, path)
     return {
       path,
+      id: entry.id,
       layout: firstTargetOf(own, SLIDE_LAYOUT_RELATIONSHIP),
       notes: firstTargetOf(own, NOTES_SLIDE_RELATIONSHIP),
+      comments: [
+        ...targetsOf(own, COMMENTS_RELATIONSHIP),
+        ...MODERN_COMMENTS_RELATIONSHIPS.flatMap((type) => targetsOf(own, type)),
+      ],
     }
   })
 
@@ -158,12 +225,40 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
     },
   )
 
+  const notesMaster = firstTargetOf(relationships, NOTES_MASTER_RELATIONSHIP)
+  const handoutMaster = firstTargetOf(relationships, HANDOUT_MASTER_RELATIONSHIP)
+
+  // Every part that can point at a picture: the slides and what they inherit
+  // from, the notes and the two masters that are not slide masters.
+  const carriers = [
+    PRESENTATION_PART,
+    ...slides.flatMap((slide) => [slide.path, ...(slide.notes === null ? [] : [slide.notes])]),
+    ...masters.flatMap((master) => [master.path, ...master.layouts]),
+    ...(notesMaster === null ? [] : [notesMaster]),
+    ...(handoutMaster === null ? [] : [handoutMaster]),
+  ]
+
+  const media = new Set<string>()
+  for (const part of carriers) {
+    for (const relationship of relationshipsOf(pkg, part)) {
+      if (relationship.external) continue
+      if (MEDIA_RELATIONSHIPS.includes(relationship.type)) media.add(relationship.target)
+    }
+  }
+
   return {
     slides,
     masters,
-    notesMaster: firstTargetOf(relationships, NOTES_MASTER_RELATIONSHIP),
+    notesMaster,
+    handoutMaster,
+    commentAuthors: [
+      ...targetsOf(relationships, COMMENT_AUTHORS_RELATIONSHIP),
+      ...targetsOf(relationships, MODERN_COMMENT_AUTHORS_RELATIONSHIP),
+    ],
+    media: [...media].sort(),
     slideSize: sizeOf(root, 'p:sldSz', DEFAULT_SLIDE_SIZE),
     notesSize: sizeOf(root, 'p:notesSz', DEFAULT_NOTES_SIZE),
+    firstSlideNum: numberOf(root === undefined ? undefined : attribute(root, 'firstSlideNum'), 1),
   }
 }
 
@@ -175,6 +270,7 @@ export function referencedParts(map: PresentationMap): string[] {
     parts.add(slide.path)
     if (slide.layout !== null) parts.add(slide.layout)
     if (slide.notes !== null) parts.add(slide.notes)
+    for (const comments of slide.comments) parts.add(comments)
   }
 
   for (const master of map.masters) {
@@ -184,6 +280,9 @@ export function referencedParts(map: PresentationMap): string[] {
   }
 
   if (map.notesMaster !== null) parts.add(map.notesMaster)
+  if (map.handoutMaster !== null) parts.add(map.handoutMaster)
+  for (const authors of map.commentAuthors) parts.add(authors)
+  for (const one of map.media) parts.add(one)
 
   return [...parts].sort()
 }

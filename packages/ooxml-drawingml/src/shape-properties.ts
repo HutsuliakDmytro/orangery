@@ -1,5 +1,7 @@
 import { attribute, children, findChild, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
+import { readShadow } from './effects'
+import type { Shadow } from './effects'
 import { readCustomGeometry } from './svg-path'
 import type { CustomPath } from './svg-path'
 import { readColorChild } from './color'
@@ -96,6 +98,13 @@ export interface ShapeProperties {
   geometry: Geometry | null
   fill: Fill | null
   line: Line | null
+  /**
+   * The drop shadow, when there is one.
+   *
+   * The one effect that is read. Everything else in `a:effectLst` is preserved
+   * and not modelled — see `effects.ts` for why this one is not.
+   */
+  shadow: Shadow | null
 }
 
 const numberOr = (value: string | undefined, fallback: number | null): number | null => {
@@ -237,6 +246,7 @@ export function readShapeProperties(properties: XmlNode): ShapeProperties {
     geometry: readGeometry(properties),
     fill: fillIn(properties),
     line: line === undefined ? null : readLine(line),
+    shadow: readShadow(properties),
   }
 }
 

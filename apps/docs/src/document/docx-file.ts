@@ -16,7 +16,9 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { DOCUMENT_PART, NUMBERING_PART, readDocxPackage } from '../ooxml/parts'
-import { parseTheme } from '@orangery/ooxml-drawingml'
+import { parseTheme, resolveColor } from '@orangery/ooxml-drawingml'
+import { allSeries, patchedWorkbook, readChart } from '@orangery/charts'
+import type { ChartCategories, ChartValues } from '@orangery/charts'
 import { parseNumbering } from '../ooxml/numbering'
 import {
   allocateNumbering,
@@ -80,11 +82,36 @@ export interface OpenDocx {
   documentAttributes: Record<string, string>
 }
 
+/**
+ * The document theme's colour slots as hexes — `accent1` to `#4472C4`.
+ *
+ * A chart states its colours symbolically and is drawn in whatever the
+ * document's theme means by `accent1`, so resolving them once here keeps that
+ * lookup out of every repaint. Used when a document is opened and again when a
+ * chart is inserted into one.
+ */
+export function themeColorsOf(pkg: OoxmlPackage): (readonly [string, string])[] {
+  const theme = parseTheme(getPartText(pkg, THEME_PART) ?? '')
+
+  return [...theme.colors].flatMap(([slot, color]) => {
+    const resolved = resolveColor(color, { scheme: theme.colors, map: new Map() })
+    return resolved === null ? [] : [[slot, resolved.hex] as const]
+  })
+}
+
 export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
   const pkg = await readDocxPackage(bytes)
 
   const theme = parseTheme(getPartText(pkg, THEME_PART) ?? '').fonts
   const relationships = parseRelationships(getPartText(pkg, 'word/_rels/document.xml.rels') ?? '')
+  const themeColors = themeColorsOf(pkg)
+
+  /** A chart's part, as text, for the renderer that draws it. */
+  const resolveChart = (relationshipId: string): string | null => {
+    const relationship = relationships.get(relationshipId)
+    if (!relationship || relationship.external) return null
+    return getPartText(pkg, resolveTarget(relationship.target, 'word')) ?? null
+  }
 
   // Images are stored as relationship ids; the webview needs something it can
   // put in a `src`, so each one is resolved to a data URL from the media part.
@@ -108,6 +135,8 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
   const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '', {
     theme,
     resolveImage,
+    resolveChart,
+    themeColors,
     footnoteText,
     numbering,
   })
@@ -173,12 +202,80 @@ export async function saveDocx(
   }
 
   setPartText(open.pkg, DOCUMENT_PART, xml)
+  // A chart is a part of its own, held in the node that draws it so the undo
+  // history owns it; here is where the node's copy becomes the file's.
+  await writeCharts(open.pkg, doc)
   // Footnotes live in their own part, so they are written alongside the body.
   writeFootnotes(open.pkg, open.footnotes, doc)
   writeComments(open.pkg, options.comments ?? open.comments, doc)
   if (options.trackChanges !== undefined) writeTrackChanges(open.pkg, options.trackChanges)
 
   return writePackage(open.pkg)
+}
+
+/** Every node of a document, in the order they appear. */
+function* everyNode(node: ProseMirrorNodeJson): Generator<ProseMirrorNodeJson> {
+  yield node
+  for (const child of node.content ?? []) yield* everyNode(child)
+}
+
+/**
+ * Writes each chart's part from the node that holds it.
+ *
+ * Only where the two differ. A chart nobody edited is left exactly as the file
+ * had it — including the parts of `c:chartSpace` we do not model — which is
+ * what makes a save of an untouched document produce an untouched file.
+ */
+async function writeCharts(pkg: OoxmlPackage, doc: ProseMirrorNodeJson): Promise<void> {
+  const relationships = parseRelationships(getPartText(pkg, 'word/_rels/document.xml.rels') ?? '')
+
+  for (const node of everyNode(doc)) {
+    if (node.type !== 'documentChart') continue
+
+    const id = node.attrs?.['relationshipId']
+    const xml = node.attrs?.['chart']
+    if (typeof id !== 'string' || typeof xml !== 'string') continue
+
+    const relationship = relationships.get(id)
+    if (relationship === undefined || relationship.external) continue
+
+    const path = resolveTarget(relationship.target, 'word')
+    if (getPartText(pkg, path) === xml) continue
+
+    setPartText(pkg, path, xml)
+    await syncWorkbook(pkg, path, xml)
+  }
+}
+
+/**
+ * Brings the workbook a chart embeds back into step with the chart.
+ *
+ * A chart says its numbers twice: the cache it is drawn from and the workbook
+ * "Edit Data" opens. Word rebuilds the cache from the workbook the moment
+ * anybody opens the data, so a chart edited in only one of them loses the edit
+ * the first time somebody looks.
+ *
+ * Done here rather than as the edit happens, because the edit happens in the
+ * node — which the undo history owns — and the workbook is a package part,
+ * which it does not. Writing both at edit time would make an undone edit come
+ * back through the workbook.
+ */
+async function syncWorkbook(pkg: OoxmlPackage, path: string, xml: string): Promise<void> {
+  const chart = readChart(xml)
+  if (chart === null) return
+
+  const write = async (change: ChartValues | ChartCategories) => {
+    const patched = await patchedWorkbook(pkg, path, change)
+    if (patched === null) return
+
+    pkg.parts.set(patched.path, { path: patched.path, bytes: patched.bytes, date: new Date() })
+  }
+
+  if (chart.categories.length > 0) await write({ categories: chart.categories })
+
+  for (const [index, series] of allSeries(chart).entries()) {
+    await write({ series: index, values: series.values.map((value) => value ?? 0) })
+  }
 }
 
 /**

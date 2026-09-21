@@ -11,6 +11,23 @@ export const EMU_PER_INCH = 914400
 export const EMU_PER_POINT = EMU_PER_INCH / 72
 export const EMU_PER_CENTIMETRE = 360000
 
+/**
+ * How many EMU a CSS pixel is worth.
+ *
+ * A format that measures in EMU has no pixels in it, and this is not about the
+ * file: it is the number a renderer needs when it hands a piece of a drawing to
+ * the browser's text layout, which measures in CSS pixels and nothing else. A
+ * CSS pixel is a ninety-sixth of an inch by definition, so the conversion is
+ * exact rather than a matter of the screen.
+ *
+ * Why it matters: a slide's text cannot be laid out in EMU. A 44-point title is
+ * 558800 EMU, and Blink clamps `font-size` at ten thousand pixels — so text in
+ * EMU comes out of Chromium at a fiftieth of its size, which is to say invisible,
+ * and out of a rasteriser as nothing at all. Text is laid out in pixels and the
+ * drawing is scaled back up around it.
+ */
+export const EMU_PER_PIXEL = EMU_PER_INCH / 96
+
 export function emuToPoints(emu: number): number {
   return Math.round((emu / EMU_PER_POINT) * 100) / 100
 }

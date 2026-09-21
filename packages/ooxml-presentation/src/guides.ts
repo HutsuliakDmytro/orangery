@@ -7,11 +7,13 @@ import {
   getPartText,
   parseXml,
   removeChild,
+  setAttribute,
   setPartText,
   tagName,
   withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { VIEW_PROPS_PART } from './parts'
 
 /**
  * The guides a person drags out of the rulers.
@@ -24,8 +26,6 @@ import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
  * format that is neither EMU nor a percentage. Everything here speaks EMU and
  * converts at the edge.
  */
-
-const VIEW_PROPERTIES_PART = 'ppt/viewProps.xml'
 
 /** An eighth of a point, in EMU. */
 const UNIT = 12700 / 8
@@ -50,7 +50,7 @@ export interface SlideGuide {
 }
 
 function viewRoot(pkg: OoxmlPackage): { roots: XmlNode[]; root: XmlNode } | null {
-  const text = getPartText(pkg, VIEW_PROPERTIES_PART)
+  const text = getPartText(pkg, VIEW_PROPS_PART)
   if (text === undefined) return null
 
   const roots = parseXml(text)
@@ -133,7 +133,7 @@ export function writeGuides(pkg: OoxmlPackage, guides: readonly SlideGuide[]): b
     if (common === undefined) return false
 
     removeChild(common, 'p:guideLst')
-    setPartText(pkg, VIEW_PROPERTIES_PART, withDeclaration(buildXml(found.roots)))
+    setPartText(pkg, VIEW_PROPS_PART, withDeclaration(buildXml(found.roots)))
     return true
   }
 
@@ -148,7 +148,7 @@ export function writeGuides(pkg: OoxmlPackage, guides: readonly SlideGuide[]): b
   )
 
   children(list).splice(0, children(list).length, ...written)
-  setPartText(pkg, VIEW_PROPERTIES_PART, withDeclaration(buildXml(found.roots)))
+  setPartText(pkg, VIEW_PROPS_PART, withDeclaration(buildXml(found.roots)))
   return true
 }
 
@@ -180,4 +180,46 @@ export function removeGuide(pkg: OoxmlPackage, index: number): boolean {
     pkg,
     guides.filter((_, at) => at !== index),
   )
+}
+
+/**
+ * How far apart the grid's lines are, in EMU.
+ *
+ * PowerPoint's own default, and what a deck that states nothing is drawn with:
+ * a twelfth of an inch. Stated in `p:gridSpacing`, which sits beside the guides
+ * because it is the same kind of thing — something about this window, not
+ * about the slides.
+ */
+export const DEFAULT_GRID = 76200
+
+/** The narrowest and widest PowerPoint lets the grid be. */
+export const MIN_GRID = 9525
+export const MAX_GRID = 914400 * 2
+
+export function readGridSpacing(pkg: OoxmlPackage): number {
+  const found = viewRoot(pkg)
+  const spacing =
+    found === null
+      ? undefined
+      : children(found.root).find((child) => tagName(child) === 'p:gridSpacing')
+  if (spacing === undefined) return DEFAULT_GRID
+
+  // `cx` and `cy` can differ, and nothing in this app draws a grid of
+  // rectangles; the horizontal one is what a single number means here.
+  const value = Number(attribute(spacing, 'cx'))
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_GRID
+}
+
+export function writeGridSpacing(pkg: OoxmlPackage, spacing: number): boolean {
+  const found = viewRoot(pkg)
+  if (found === null) return false
+
+  const clamped = String(Math.round(Math.min(Math.max(spacing, MIN_GRID), MAX_GRID)))
+  const node = ensureChild(found.root, 'p:gridSpacing', VIEW_PROPERTIES)
+  if (attribute(node, 'cx') === clamped && attribute(node, 'cy') === clamped) return false
+
+  setAttribute(node, 'cx', clamped)
+  setAttribute(node, 'cy', clamped)
+  setPartText(pkg, VIEW_PROPS_PART, withDeclaration(buildXml(found.roots)))
+  return true
 }

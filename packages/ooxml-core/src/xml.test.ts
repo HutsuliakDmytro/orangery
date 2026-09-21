@@ -140,6 +140,22 @@ describe('declaration', () => {
     )
   })
 
+  it('does not add a second one to XML that has its own', () => {
+    // What every writer here produces: the part is parsed, patched and built,
+    // and the declaration comes back out of the tree with everything else.
+    const part = withDeclaration('<a:b xmlns:a="u" id="1"/>')
+    const built = buildXml(parseXml(part))
+
+    expect(withDeclaration(built)).toBe(part)
+    expect([...withDeclaration(built).matchAll(/<\?xml/gu)]).toHaveLength(1)
+  })
+
+  it('keeps a declaration the file states differently', () => {
+    const own = "<?xml version='1.0' encoding='UTF-8' standalone='no'?>\r\n<a/>"
+
+    expect(withDeclaration(own)).toBe(own)
+  })
+
   it('strips a declaration back off', () => {
     expect(stripDeclaration(withDeclaration('<a/>'))).toBe('<a/>')
   })

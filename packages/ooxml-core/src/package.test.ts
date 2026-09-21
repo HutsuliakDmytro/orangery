@@ -9,6 +9,7 @@ import {
   setPartText,
   writePackage,
 } from './package'
+import type { OoxmlPackage } from './package'
 
 /**
  * Built here rather than read from a corpus: this package knows nothing about
@@ -119,5 +120,51 @@ describe('writePackage', () => {
 
     setPartText(pkg, 'word/document.xml', '<w:document/>')
     expect(pkg.parts.get('word/document.xml')?.date).toStrictEqual(date)
+  })
+})
+
+describe('storing a part uncompressed', () => {
+  it('keeps its bytes readable where a deflated one would not be', async () => {
+    const pkg: OoxmlPackage = { parts: new Map() }
+    const text = 'application/vnd.oasis.opendocument.presentation'
+    pkg.parts.set('mimetype', {
+      path: 'mimetype',
+      bytes: new TextEncoder().encode(text),
+      date: new Date(),
+    })
+
+    const zipped = await writePackage(pkg, { stored: ['mimetype'] })
+
+    // The whole point of storing it: the contents appear in the archive as
+    // themselves, which is what lets a reader identify the file without
+    // unzipping it.
+    expect(new TextDecoder().decode(zipped)).toContain(text)
+  })
+
+  it('deflates it when not asked, which is what OOXML wants', async () => {
+    const pkg: OoxmlPackage = { parts: new Map() }
+    const text = 'application/vnd.oasis.opendocument.presentation'
+    pkg.parts.set('mimetype', {
+      path: 'mimetype',
+      bytes: new TextEncoder().encode(text),
+      date: new Date(),
+    })
+
+    const zipped = await writePackage(pkg)
+    expect(new TextDecoder().decode(zipped)).not.toContain(text)
+  })
+
+  it('reads back the same either way', async () => {
+    const pkg: OoxmlPackage = { parts: new Map() }
+    pkg.parts.set('mimetype', {
+      path: 'mimetype',
+      bytes: new TextEncoder().encode('x'),
+      date: new Date(),
+    })
+
+    const stored = await readPackage(await writePackage(pkg, { stored: ['mimetype'] }))
+    const deflated = await readPackage(await writePackage(pkg))
+
+    expect(stored.parts.get('mimetype')?.bytes).toEqual(deflated.parts.get('mimetype')?.bytes)
   })
 })

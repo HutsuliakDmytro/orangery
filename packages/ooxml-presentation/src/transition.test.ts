@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getPartText } from '@orangery/ooxml-core'
+import { getPartText, parseXml } from '@orangery/ooxml-core'
 import { readDeck, readSlidePart } from './deck'
+import type { SlidePart } from './deck'
 import { readPptxPackage } from './parts'
 import { saveDeck } from './save'
-import { readTransition } from './transition'
+import { readTransition, setAdvanceTime } from './transition'
 
 /** How one slide gives way to the next. */
 
@@ -104,5 +105,81 @@ describe('what the file keeps', () => {
     if (part === null) throw new Error('lost the slide')
 
     expect(readTransition(part)?.kind).toBe('push')
+  })
+})
+
+describe('a transition that carries only a timing', () => {
+  const slideWith = (xml: string): SlidePart => {
+    const root = parseXml(`<p:sld xmlns:p="p"><p:cSld><p:spTree/></p:cSld>${xml}</p:sld>`)[0]
+    if (root === undefined) throw new Error('bad fixture')
+    return { path: 'ppt/slides/slide1.xml', root, tree: root, shapes: [] }
+  }
+
+  it('states no effect rather than a fade', () => {
+    // What rehearsing leaves behind. Fading it would invent a transition the
+    // file never asked for.
+    const slide = slideWith('<p:transition advTm="4000"/>')
+
+    expect(readTransition(slide)?.kind).toBe('none')
+    expect(readTransition(slide)?.advanceAfter).toBe(4000)
+  })
+
+  it('reads the timing beside a real transition too', () => {
+    const slide = slideWith('<p:transition advTm="2500"><p:fade/></p:transition>')
+
+    expect(readTransition(slide)?.kind).toBe('fade')
+    expect(readTransition(slide)?.advanceAfter).toBe(2500)
+  })
+
+  it('says nothing about advancing where the slide waits for a press', () => {
+    expect(readTransition(slideWith('<p:transition><p:fade/></p:transition>'))?.advanceAfter).toBe(
+      null,
+    )
+  })
+})
+
+describe('writing down how long a slide was up', () => {
+  const bare = (): SlidePart => {
+    const root = parseXml('<p:sld xmlns:p="p"><p:cSld><p:spTree/></p:cSld></p:sld>')[0]
+    if (root === undefined) throw new Error('bad fixture')
+    return { path: 'ppt/slides/slide1.xml', root, tree: root, shapes: [] }
+  }
+
+  it('gives a slide that had no transition a timing and nothing else', () => {
+    const slide = bare()
+    expect(setAdvanceTime(slide, 3000)).toBe(true)
+
+    // A deck that started dissolving because it was practised would be a deck
+    // changed by being practised.
+    expect(readTransition(slide)).toMatchObject({ kind: 'none', advanceAfter: 3000 })
+  })
+
+  it('leaves a transition that was already there alone', () => {
+    const root = parseXml(
+      '<p:sld xmlns:p="p"><p:cSld><p:spTree/></p:cSld><p:transition><p:push dir="l"/></p:transition></p:sld>',
+    )[0]
+    if (root === undefined) throw new Error('bad fixture')
+    const slide: SlidePart = { path: 'ppt/slides/slide1.xml', root, tree: root, shapes: [] }
+
+    setAdvanceTime(slide, 1500)
+    expect(readTransition(slide)).toMatchObject({
+      kind: 'push',
+      direction: 'l',
+      advanceAfter: 1500,
+    })
+  })
+
+  it('takes the timing off, and the element with it when that was all', () => {
+    const slide = bare()
+    setAdvanceTime(slide, 3000)
+    expect(setAdvanceTime(slide, null)).toBe(true)
+
+    expect(readTransition(slide)).toBeNull()
+  })
+
+  it('says nothing changed when it is already that', () => {
+    const slide = bare()
+    setAdvanceTime(slide, 3000)
+    expect(setAdvanceTime(slide, 3000)).toBe(false)
   })
 })

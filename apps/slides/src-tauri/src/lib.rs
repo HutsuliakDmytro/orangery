@@ -33,10 +33,22 @@ pub fn run() {
         ])
         .manage(show::ShowState::default())
         .setup(|app| {
+            document::emit_launch_paths(app.handle());
+
             // A placeholder menu so the window never appears bare; the frontend
             // replaces it with the registry-driven one as soon as it mounts.
             app.set_menu(menu::build_bootstrap(app.handle())?)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // The frontend owns "is there anything unsaved?", so a close request
+            // is handed to it rather than answered here. It calls back through
+            // `confirm_close` once the user has chosen.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if document::close_requested(window) {
+                    api.prevent_close();
+                }
+            }
         })
         .on_menu_event(|app, event| {
             // Menu items are registry command ids — the frontend looks them up

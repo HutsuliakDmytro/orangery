@@ -5,10 +5,10 @@ import { parseXml } from '@orangery/ooxml-core'
 import { textOfBody } from '@orangery/ooxml-drawingml'
 import { readDeck } from './deck'
 import { parseShapeTree } from './shape-tree'
-import { findInDeck, replaceInDeck, replaceInSlide } from './find-replace'
+import { findInDeck, replaceInDeck, replaceInSlide, replaceMatch } from './find-replace'
 import { readPptxPackage } from './parts'
 import { saveDeck, writeSlidePart } from './save'
-import type { Slide } from './deck'
+import type { Deck, Slide } from './deck'
 
 const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synthetic')
 
@@ -46,6 +46,7 @@ function slideWithRuns(...runs: string[]): Slide {
 
   return {
     path: 'ppt/slides/slide1.xml',
+    id: '256',
     root: { 'p:sld': [{ 'p:cSld': [tree] }] },
     tree,
     shapes: parseShapeTree(tree),
@@ -181,5 +182,60 @@ describe('a match that spans runs', () => {
 
     expect(replaceInSlide(slide, 'a', 'aaa')).toBe(3)
     expect(textOf(slide)).toBe('aaa aaa aaa')
+  })
+})
+
+/** The slide a one-slide deck holds, with the check the types cannot make. */
+function firstSlide(deck: Deck): Slide {
+  const slide = deck.slides[0]
+  if (slide === undefined) throw new Error('no slides')
+  return slide
+}
+
+describe('replacing one match', () => {
+  /**
+   * A deck of one slide whose one shape holds the given paragraph runs.
+   *
+   * Only the slide list is filled: that is all this walks, and a whole package
+   * built to satisfy the type would be scenery.
+   */
+  const deckOf = (...runs: string[]) => ({ slides: [slideWithRuns(...runs)] }) as Deck
+
+  it('changes the one named and leaves the others', () => {
+    const deck = deckOf('one two one two one')
+    expect(replaceMatch(deck, 'one', 'ONE', 1)).toBe(true)
+
+    // The second, counting as the list counts.
+    expect(textOf(firstSlide(deck))).toBe('one two ONE two one')
+  })
+
+  it('counts through paragraphs in the order the search lists them', async () => {
+    const pkg = await load('many-slides')
+    const deck = readDeck(pkg)
+
+    const matches = findInDeck(deck, 'Slide')
+    expect(matches.length).toBeGreaterThan(2)
+
+    const third = matches[2]
+    if (third === undefined) throw new Error('fixture is too short')
+    expect(replaceMatch(deck, 'Slide', 'Sheet', 2)).toBe(true)
+
+    // The one that changed is the one on the slide the list said it was on.
+    const after = findInDeck(deck, 'Sheet')
+    expect(after).toHaveLength(1)
+    expect(after[0]?.slide).toBe(third.slide)
+  })
+
+  it('leaves a match that spans runs on one of them, as replace-all does', () => {
+    const deck = deckOf('Pre', 'sen', 'tation and Presentation')
+    replaceMatch(deck, 'Presentation', 'Deck', 0)
+
+    expect(textOf(firstSlide(deck))).toBe('Deck and Presentation')
+  })
+
+  it('says no when there is no match at that place', () => {
+    expect(replaceMatch(deckOf('one'), 'one', 'two', 4)).toBe(false)
+    expect(replaceMatch(deckOf('one'), 'one', 'two', -1)).toBe(false)
+    expect(replaceMatch(deckOf('one'), '', 'two', 0)).toBe(false)
   })
 })

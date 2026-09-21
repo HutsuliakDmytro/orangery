@@ -26,6 +26,7 @@ export type PickerKind =
   | 'table-grid'
   | 'cell-background'
   | 'table-borders'
+  | 'chart-data'
 
 let openPicker: PickerKind | null = null
 const listeners = new Set<() => void>()

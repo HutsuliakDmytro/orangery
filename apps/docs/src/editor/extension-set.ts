@@ -26,6 +26,7 @@ import { CharacterStyle } from './extensions/character-style'
 import { CommentMark } from './extensions/comment'
 import { Deletion, FormatChange, Insertion, Revisions } from './extensions/revisions'
 import { TrackChanges } from './extensions/track-changes'
+import { DocumentChart } from './extensions/document-chart'
 import { DocumentImage } from './extensions/document-image'
 import {
   FontSize,
@@ -203,6 +204,7 @@ export function buildExtensions(): Extensions {
       },
     }),
     DocumentImage,
+    DocumentChart,
     ImageDrop.configure({
       onFiles: (files) => {
         // Imported lazily: the actions module reaches into the document session,

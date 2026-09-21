@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    Orangery Sheets.
+
+    The same family as Docs and Slides: a black tile, an orange sun behind, a
+    pale sheet in front. What differs is the only thing that should. Docs has
+    lines of text, Slides has a landscape sheet with a title on it, and this
+    has a grid, because a grid is what a spreadsheet is and nothing else in the
+    suite has one.
+
+    Four cells rather than forty: at 32 pixels a real grid turns to grey, and
+    what has to survive is the idea of a grid rather than a count of rows. The
+    one filled cell is where every spreadsheet starts.
+
+    The header row is grey and not orange, though a header row is the thing a
+    spreadsheet is read from and the temptation is to colour it. It sits
+    exactly where the sun passes behind the sheet, and two oranges touching
+    across an edge are one orange: the circle lost its lower half and the icon
+    became a blob with a bite out of it. Orange is an accent here as it is
+    everywhere else in the suite, so it is the sun and the one cell, and the
+    sheet is what covers the sun rather than what joins it.
+
+    Source of truth for every other file in this directory; `pnpm icon` in this
+    app regenerates the lot from it, straight from this SVG.
+
+    Note for anyone editing: a double hyphen is not allowed inside an XML
+    comment. A browser will forgive it and the icon generator will not, which
+    is exactly the order you do not want to find out in.
+  -->
+  <rect width="1024" height="1024" rx="230" fill="#0B0B0B"/>
+  <circle cx="706" cy="318" r="178" fill="#FF7A00"/>
+
+  <g>
+    <rect x="156" y="372" width="612" height="496" rx="36" fill="#F5F5F5"/>
+
+    <!-- The header row, which every sheet is read from. -->
+    <rect x="156" y="372" width="612" height="96" rx="36" fill="#DCDCDC"/>
+    <rect x="156" y="434" width="612" height="34" fill="#DCDCDC"/>
+
+    <!-- Two lines each way: a grid, at the size a grid stops being one. -->
+    <g fill="#0B0B0B" opacity="0.18">
+      <rect x="156" y="600" width="612" height="14"/>
+      <rect x="156" y="734" width="612" height="14"/>
+      <rect x="354" y="468" width="14" height="400"/>
+      <rect x="556" y="468" width="14" height="400"/>
+    </g>
+
+    <!-- The first cell, filled: where a spreadsheet starts. -->
+    <rect x="192" y="508" width="130" height="62" rx="12" fill="#FF7A00"/>
+  </g>
+</svg>

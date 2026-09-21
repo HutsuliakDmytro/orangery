@@ -1,0 +1,37 @@
+{
+  "name": "@orangery/charts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Charts: the c:* part, its model, its renderer and the numbers behind it.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "corpus": "vite-node scripts/corpus-report.ts"
+  },
+  "dependencies": {
+    "@orangery/ooxml-core": "workspace:*",
+    "@orangery/ooxml-drawingml": "workspace:*",
+    "@orangery/ooxml-spreadsheet": "workspace:*",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^10.10.0",
+    "jsdom": "^30.0.1",
+    "jszip": "^3.10.2",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vite-node": "^6.0.0",
+    "vitest": "^5.0.1"
+  }
+}

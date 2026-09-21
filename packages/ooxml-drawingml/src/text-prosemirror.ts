@@ -164,6 +164,17 @@ function textOf(node: XmlNode): string {
     .join('')
 }
 
+export interface DocOptions {
+  /**
+   * What a field says right now, given its type and the text the file cached.
+   *
+   * Asked for rather than worked out here: a slide number is the slide's place
+   * in a deck, and a text body has no idea which deck it is in. Without it the
+   * cached answer stands, which is what a notes page or a test wants.
+   */
+  field?: (type: string | null, cached: string) => string
+}
+
 /**
  * Reads a text body into a ProseMirror document.
  *
@@ -171,7 +182,7 @@ function textOf(node: XmlNode): string {
  * beside it in the tree, and finding them any other way — by matching the text,
  * say — would hand two runs that read the same the same formatting.
  */
-export function textBodyToDoc(body: TextBody): PmNode {
+export function textBodyToDoc(body: TextBody, options: DocOptions = {}): PmNode {
   const paragraphs = children(body.node)
     .filter((child) => tagName(child) === 'a:p')
     .map((paragraph): PmNode => {
@@ -186,6 +197,23 @@ export function textBodyToDoc(body: TextBody): PmNode {
 
         const value = children(child).find((one) => tagName(one) === 'a:t')
         const text = value === undefined ? '' : textOf(value)
+
+        // A field is one thing, not the characters it happens to show: typing
+        // over those characters is how a slide number stops being one.
+        if (tag === 'a:fld') {
+          const type = attribute(child, 'type') ?? null
+          return [
+            {
+              type: 'ooxmlField',
+              attrs: {
+                xml: serializeNode(child),
+                fieldType: type,
+                text: options.field === undefined ? text : options.field(type, text),
+              },
+            },
+          ]
+        }
+
         if (text === '') return []
 
         return [
@@ -198,12 +226,21 @@ export function textBodyToDoc(body: TextBody): PmNode {
       })
 
       const level = Number(properties === undefined ? undefined : attribute(properties, 'lvl'))
+      const emu = (name: string) => {
+        const value = Number(properties === undefined ? undefined : attribute(properties, name))
+        return Number.isFinite(value) ? value : null
+      }
 
       return {
         type: 'paragraph',
         attrs: {
           level: Number.isFinite(level) ? level : 0,
           align: (properties === undefined ? undefined : attribute(properties, 'algn')) ?? null,
+          // `marL` is how far the whole paragraph is pushed in; `indent` is how
+          // much further, or less far, the first line goes. Both in EMU, and
+          // both absent far more often than present.
+          marginLeft: emu('marL'),
+          firstLine: emu('indent'),
           bullet: properties === undefined ? null : bulletKindOf(properties),
           lineSpacing: properties === undefined ? null : lineSpacingOf(properties),
           pPrOriginal: properties === undefined ? null : serializeNode(properties),
@@ -436,11 +473,15 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
     const level = Number(paragraph.attrs?.['level'] ?? 0)
     const align = paragraph.attrs?.['align']
     const bullet = paragraph.attrs?.['bullet']
+    const marginLeft = paragraph.attrs?.['marginLeft']
+    const firstLine = paragraph.attrs?.['firstLine']
     const patched =
       properties ??
       (level > 0 ||
       typeof align === 'string' ||
       typeof bullet === 'string' ||
+      typeof marginLeft === 'number' ||
+      typeof firstLine === 'number' ||
       typeof paragraph.attrs?.['lineSpacing'] === 'number'
         ? element('a:pPr')
         : null)
@@ -452,12 +493,33 @@ export function docToParagraphs(doc: PmNode): XmlNode[] {
       if (typeof align === 'string') setAttribute(patched, 'algn', align)
       else removeAttribute(patched, 'algn')
 
+      // Cleared rather than written as zero: zero is a stated answer, and a
+      // paragraph that never said anything about its margin should go back to
+      // inheriting one from its level.
+      if (typeof marginLeft === 'number')
+        setAttribute(patched, 'marL', String(Math.round(marginLeft)))
+      else removeAttribute(patched, 'marL')
+
+      if (typeof firstLine === 'number')
+        setAttribute(patched, 'indent', String(Math.round(firstLine)))
+      else removeAttribute(patched, 'indent')
+
       setBullet(patched, paragraph.attrs?.['bullet'])
       setLineSpacing(patched, paragraph.attrs?.['lineSpacing'])
     }
 
     const runs = (paragraph.content ?? []).flatMap((node): XmlNode[] => {
       if (node.type === 'hardBreak') return [element('a:br')]
+
+      // Back exactly as it came, cached answer and all. What it shows is worked
+      // out afresh every time it is drawn, so the cache is only what another
+      // program reads before it does its own working out.
+      if (node.type === 'ooxmlField') {
+        const xml = node.attrs?.['xml']
+        const original = typeof xml === 'string' && xml !== '' ? deserializeNode(xml) : null
+        return original === null ? [] : [original]
+      }
+
       if (node.type !== 'text' || node.text === undefined) return []
 
       const rPr = propertiesFor(node.marks ?? [])

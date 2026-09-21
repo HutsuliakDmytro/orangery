@@ -1,0 +1,32 @@
+{
+  "name": "@orangery/grid",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A grid of cells, drawn on a canvas: the sheet surface every app shares.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/test-setup.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^10.10.0",
+    "jsdom": "^30.0.1",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

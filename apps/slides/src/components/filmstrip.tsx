@@ -5,18 +5,26 @@ import {
   renameSection,
   slidesOfSection,
 } from '@orangery/ooxml-presentation'
-import type { Section } from '@orangery/ooxml-presentation'
+import type { Section, Slide } from '@orangery/ooxml-presentation'
 import { SlideView } from '../render/slide-view'
+import { useOnScreen } from '../render/use-on-screen'
 import { useDeckStore } from '../store/deck-store'
+import type { OpenDeck } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
+import { hasMod } from '@orangery/platform'
 
 /**
  * The slides down the left, under the sections they fall in.
  *
  * Each thumbnail is the same renderer at a smaller size rather than a separate
  * drawing path — one way to draw a slide means a thumbnail cannot disagree with
- * the canvas. Rendering them to bitmaps and caching is the phase-4 performance
- * task; at ten slides this is not yet worth the machinery.
+ * the canvas.
+ *
+ * Only the ones near the window are drawn. Three hundred slides is three
+ * hundred of that renderer, and the measurement said so plainly: six and a half
+ * thousand elements before anybody has scrolled. Caching them as bitmaps was
+ * the plan, and it would have made the second drawing cheap; not drawing the
+ * two hundred and eighty nobody is looking at makes the first one cheap too.
  *
  * Slides are reordered by dragging. The dragged index is held here rather than
  * in the drag's data transfer: what is being dragged is a slide of the open
@@ -24,6 +32,35 @@ import { useViewStore } from '../store/view-store'
  * transfer back on `dragover` is not allowed anyway — which is exactly where
  * the line showing the drop has to be decided.
  */
+/**
+ * One slide, drawn when it comes near the window.
+ *
+ * The placeholder keeps the slide's own proportions, so the strip is the right
+ * length from the start and scrolling does not jump as thumbnails arrive.
+ */
+function Thumbnail({ open, slide }: { open: OpenDeck; slide: Slide }) {
+  const { ref, shown } = useOnScreen()
+  const size = open.deck.slideSize
+
+  return (
+    <div
+      ref={ref}
+      className="min-w-0 flex-1 border border-border"
+      style={{ aspectRatio: `${String(size.width)} / ${String(size.height)}` }}
+    >
+      {shown && (
+        <SlideView
+          deck={open.deck}
+          slide={slide}
+          themes={open.themes}
+          package={open.package}
+          style={{ width: '100%' }}
+        />
+      )}
+    </div>
+  )
+}
+
 export function Filmstrip() {
   const open = useDeckStore((state) => state.open)
   const current = useDeckStore((state) => state.current)
@@ -65,7 +102,10 @@ export function Filmstrip() {
       return
     }
 
-    if (event.metaKey || event.ctrlKey) {
+    // The platform's own modifier, not either of them: on macOS a Ctrl-click is
+    // the secondary click, so accepting it here made one gesture open a context
+    // menu and change the selection at the same time.
+    if (hasMod(event)) {
       const without = picked.filter((one) => one !== index)
       selectSlides(without.length === picked.length ? [...picked, index] : without)
       return
@@ -162,13 +202,7 @@ export function Filmstrip() {
           } ${dragging !== null && carried(dragging).includes(index) ? 'opacity-50' : ''}`}
         >
           <span className="w-4 shrink-0 pt-1 text-[10px] text-muted">{index + 1}</span>
-          <SlideView
-            deck={open.deck}
-            slide={slide}
-            themes={open.themes}
-            package={open.package}
-            className="min-w-0 flex-1 border border-border"
-          />
+          <Thumbnail open={open} slide={slide} />
         </button>
         {line(index) === 'after' && <div data-testid="drop-line" className="h-0.5 bg-accent" />}
       </li>

@@ -1,5 +1,10 @@
 import { useRef } from 'react'
-import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
+import {
+  CommandPalette,
+  CommandSourceProvider,
+  ConfirmDialog,
+  useNativeMenu,
+} from '@orangery/ui-kit'
 import { Canvas } from '../components/canvas'
 import { Filmstrip } from '../components/filmstrip'
 import { Outline } from '../components/outline'
@@ -7,12 +12,34 @@ import { MasterList } from '../components/master-list'
 import { FindPanel } from '../components/find-panel'
 import { Notes } from '../components/notes'
 import { PropertiesPanel } from '../components/properties-panel'
+import { CommentsPanel } from '../components/comments-panel'
+import { ReviewPanel } from '../components/review-panel'
 import { ResizeHandle } from '../components/resize-handle'
 import { PrintView } from '../components/print-view'
+import { RecentDecks } from '../components/recent-decks'
+import { PicturesDialog } from '../components/pictures-dialog'
+import { ShapeGallery } from '../components/shape-gallery'
+import { TablePicker } from '../components/table-picker'
+import { ChartDataDialog } from '../components/chart-data-dialog'
+import { HeaderFooterDialog } from '../components/header-footer-dialog'
+import { GridDialog } from '../components/grid-dialog'
+import { PasteDialog } from '../components/paste-dialog'
+import { RehearsalSummary } from '../components/rehearsal-summary'
+import { InkPrompt } from '../components/ink-prompt'
+import { VideoProgress } from '../components/video-progress'
+import { TemplatePicker } from '../components/template-picker'
+import { RecoveryBanner } from '../components/recovery-banner'
 import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
+import { useAutosave } from '../document/use-autosave'
+import { useCrashRecovery } from '../document/use-crash-recovery'
+import { resolveUnsaved, unsavedDeckName, useGuardStore } from '../document/unsaved'
+import { useCloseGuard } from './use-close-guard'
+import { useExternalOpen } from './use-external-open'
+import { baseName } from '@orangery/platform'
 import { useDeckStore } from '../store/deck-store'
+import type { OpenDeck } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { useCommandSource } from './command-source'
 import { useShortcuts } from './use-shortcuts'
@@ -35,6 +62,11 @@ function Shell() {
   useTheme()
   useNativeMenu()
   useShortcuts()
+  useAutosave()
+  useCloseGuard()
+  useExternalOpen()
+  const recovery = useCrashRecovery()
+  const prompting = useGuardStore((state) => state.pending) !== null
 
   const open = useDeckStore((state) => state.open)
   const current = useDeckStore((state) => state.current)
@@ -54,11 +86,13 @@ function Shell() {
     <div className="orangery-print-root flex h-full flex-col bg-bg text-text">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2 text-sm">
         <span className="font-medium">
-          {title(open?.path ?? null)}
+          {title(open, open?.path ?? null)}
           {/* The dot every editor uses, rather than the word: it says the same
               thing in the space a title bar has. */}
           {open !== null && !saved && <span aria-label="Unsaved changes"> •</span>}
         </span>
+        <RecentDecks />
+
         {open !== null && (
           <span className="text-xs text-muted">
             {master === null ? (
@@ -80,9 +114,37 @@ function Shell() {
         />
       )}
 
+      <RecoveryBanner
+        candidates={recovery.candidates}
+        onRecover={recovery.recover}
+        onDiscard={recovery.discard}
+        onDiscardAll={recovery.discardAll}
+      />
+
+      <TemplatePicker />
+
+      <ShapeGallery />
+
+      <TablePicker />
+
+      <HeaderFooterDialog />
+      <ChartDataDialog />
+
+      <GridDialog />
+
+      <PasteDialog />
+
+      <RehearsalSummary />
+
+      <InkPrompt />
+
+      <PicturesDialog />
+
       <PrintView />
 
       <Show />
+
+      <VideoProgress />
 
       <WarningsBanner />
 
@@ -156,16 +218,61 @@ function Shell() {
             </aside>
           </>
         )}
+
+        {/* Beside the format panel rather than inside it: a comment is about
+            the slide, not about the shape that happens to be picked out. */}
+        <CommentsPanel />
+
+        <ReviewPanel />
       </div>
+
+      {prompting && (
+        <ConfirmDialog
+          title="Unsaved changes"
+          message={`Do you want to save the changes you made to ${unsavedDeckName()}? Your changes will be lost if you don't save them.`}
+          onCancel={() => {
+            void resolveUnsaved('cancel')
+          }}
+          choices={[
+            {
+              label: "Don't Save",
+              danger: true,
+              onChoose: () => {
+                void resolveUnsaved('discard')
+              },
+            },
+            {
+              label: 'Cancel',
+              onChoose: () => {
+                void resolveUnsaved('cancel')
+              },
+            },
+            {
+              label: 'Save',
+              primary: true,
+              onChoose: () => {
+                void resolveUnsaved('save')
+              },
+            },
+          ]}
+        />
+      )}
 
       <CommandPalette />
     </div>
   )
 }
 
-/** What the window is called: the file, or the app when there is none. */
-function title(path: string | null): string {
-  return path === null ? 'Orangery Slides' : (path.split(/[\\/]/u).pop() ?? path)
+/**
+ * What the window is called: the file, or what there is instead of one.
+ *
+ * A deck with no path is not the same as no deck. Saying "Orangery Slides" for
+ * both would leave a new presentation looking like an empty window, and the dot
+ * beside it claiming unsaved changes to nothing.
+ */
+function title(open: OpenDeck | null, path: string | null): string {
+  if (path !== null) return baseName(path)
+  return open === null ? 'Orangery Slides' : 'Untitled Presentation'
 }
 
 export function App() {

@@ -40,12 +40,42 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": null,
-      "entitlements": null
+      "entitlements": null,
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 220
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 220
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        }
+      }
     },
     "category": "Productivity",
     "shortDescription": "Presentation editor that writes real PPTX",
     "longDescription": "Orangery Slides is a desktop presentation editor that uses PPTX as its native format.",
     "copyright": "© Dmytro Hutsuliak",
-    "publisher": "Dmytro Hutsuliak"
+    "publisher": "Dmytro Hutsuliak",
+    "fileAssociations": [
+      {
+        "ext": ["pptx"],
+        "name": "PowerPoint Presentation",
+        "description": "Microsoft PowerPoint Presentation",
+        "role": "Editor",
+        "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      },
+      {
+        "ext": ["odp"],
+        "name": "OpenDocument Presentation",
+        "description": "OpenDocument Presentation",
+        "role": "Editor",
+        "mimeType": "application/vnd.oasis.opendocument.presentation"
+      }
+    ]
   }
 }

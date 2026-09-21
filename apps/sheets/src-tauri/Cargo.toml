@@ -1,0 +1,26 @@
+[package]
+name = "orangery-sheets"
+description = "Orangery Sheets — desktop spreadsheet"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "orangery_sheets_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+orangery-tauri-shared = { path = "../../../packages/tauri-shared" }
+formula = { path = "../../../crates/formula" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-dialog = "2.7.3"
+tauri-plugin-fs = "2.5.2"
+tokio = { version = "1.53.1", features = ["time"] }

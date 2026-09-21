@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { allCommands, isCommandEnabled, runCommand } from '@orangery/ui-kit'
-import { isMac } from '@orangery/platform'
+import { hasMod } from '@orangery/platform'
 
 /**
  * Keyboard shortcuts, read from the registry.
@@ -41,7 +41,7 @@ export function useShortcuts(): void {
       if (event.key !== 'Escape' && isTyping(event.target)) return
 
       const pressed = event.key.toLowerCase()
-      const mod = isMac ? event.metaKey : event.ctrlKey
+      const mod = hasMod(event)
 
       for (const command of allCommands()) {
         if (command.shortcut === undefined) continue
@@ -52,9 +52,12 @@ export function useShortcuts(): void {
         if (wanted.shift !== event.shiftKey) continue
         if (wanted.alt !== event.altKey) continue
 
-        // A disabled command swallows nothing: the key keeps whatever meaning
-        // the browser gives it.
-        if (!isCommandEnabled(command, {})) return
+        // A disabled command swallows nothing — but it does not speak for the
+        // others either. Two commands can share a key and mean different things
+        // in different places: Escape leaves a text box when one is open and
+        // steps out of a group when one is not, and whichever is disabled must
+        // stand aside rather than answer for both.
+        if (!isCommandEnabled(command, {})) continue
 
         event.preventDefault()
         runCommand(command.id, {})

@@ -1,0 +1,1599 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
+import {
+  cellAtPoint,
+  frozenSize,
+  headerAtPoint,
+  heightOfRow,
+  rectangleOfCell,
+  resizeHandleAt,
+  scrollToCell,
+  totalHeight,
+  totalWidth,
+  visibleColumns,
+  visibleRows,
+  widthOfColumn,
+} from './layout'
+import type { CellAddress, FrozenPanes, GridMetrics, Viewport } from './layout'
+import {
+  boundsOf,
+  coversColumn,
+  coversRow,
+  edgeFrom,
+  everything,
+  extendedTo,
+  lastRange,
+  nextInSelection,
+  selectedCount,
+  singleCell,
+  stepFrom,
+  wholeColumns,
+  wholeRows,
+  withRange,
+} from './selection'
+import type { Direction, GridRange, GridSelection, Order } from './selection'
+import type { CellBorders, CellStyle } from './cell-style'
+import { ICON_GUTTER, drawIcon } from './icon'
+import { drawSpark } from './spark'
+import { drawCellText } from './text'
+import { heightNeeded, widthNeeded } from './fit'
+import type { FitCell } from './fit'
+
+/**
+ * A grid of cells, drawn rather than built.
+ *
+ * Cells are painted on a canvas and only the visible ones are painted at all.
+ * A table of DOM elements is the obvious way to do this and the wrong one: a
+ * sheet is a million rows by sixteen thousand columns, and a browser asked for
+ * that many elements stops being a browser. Here the same surface serves four
+ * columns in a chart's data editor and a whole worksheet later, because the
+ * cost is the size of the window rather than the size of the data.
+ *
+ * Exactly one cell is a DOM element: the one being edited. It is a real input
+ * over the canvas, so typing, selection, composition and the platform's own
+ * text behaviour are the platform's, not ours.
+ */
+
+/** A cell being edited, as told to whoever wants to help. */
+export interface Editing {
+  cell: CellAddress
+  text: string
+  /** Where the caret is in that text. */
+  caret: number
+  /** Where the editor is, in the grid's own box. */
+  rect: { x: number; y: number; width: number; height: number }
+  /** Replaces what is being edited, caret and all. */
+  replace: (text: string, caret: number) => void
+}
+
+export interface DataGridProps {
+  rows: number
+  columns: number
+  /** What to draw in a cell. Null is a blank, which is not the same as a nought. */
+  valueAt: (cell: CellAddress) => string | null
+  /** The letters along the top; A, B, C unless the caller says otherwise. */
+  columnHeader?: (column: number) => string
+  /** The numbers down the left. */
+  rowHeader?: (row: number) => string
+  /**
+   * What somebody edits when they open a cell, where that is not what the
+   * cell shows.
+   *
+   * A cell showing 42 may hold `=6*7`, and a cell showing 15 % may hold
+   * 0.15. What is drawn is the answer; what is edited is the question. Left
+   * out, the two are the same, which is true of most cells in most grids.
+   */
+  editableAt?: (cell: CellAddress) => string | null
+  /** Called when a cell is committed. Without it the grid is read-only. */
+  onChange?: (cell: CellAddress, text: string) => void
+  /**
+   * What is being edited, and where, for a caller that wants to put
+   * something beside it.
+   *
+   * A spreadsheet offers function names while a formula is being typed; a
+   * grid of tasks might offer people's names. Neither is the grid's business
+   * — what is the grid's business is that it owns the editor, so it is the
+   * only one that knows what is in it and where on screen it sits.
+   *
+   * Null when nothing is being edited.
+   */
+  onEditing?: (state: Editing | null) => void
+  /**
+   * First refusal on a key while a cell is being edited.
+   *
+   * True means the caller has dealt with it, and the key goes no further —
+   * not to the cell and not into the text. That is what a list of
+   * suggestions needs: while it is open, Enter belongs to it rather than to
+   * the cell, and only the caller knows whether it is open.
+   */
+  onEditingKey?: (event: KeyboardEvent<HTMLTextAreaElement>, state: Editing) => boolean
+  /** Cells this says no to are selectable and not editable. */
+  editable?: (cell: CellAddress) => boolean
+  /**
+   * What a cell looks like. Resolved by the caller, because what a style means
+   * is a question about the file rather than about the grid.
+   */
+  styleAt?: (cell: CellAddress) => CellStyle | null
+  /**
+   * The cell a merged range starts at, for any cell inside it.
+   *
+   * Merged cells are drawn once, from their top-left corner, across the whole
+   * range: a heading merged across four columns is one box with one string in
+   * it, and drawing each cell separately would clip it four times.
+   */
+  mergeAt?: (cell: CellAddress) => { cell: CellAddress; rows: number; columns: number } | null
+  /** Rows and columns held still at the top and left. */
+  frozen?: FrozenPanes | null
+  /**
+   * What is drawn over the cells rather than in them.
+   *
+   * A chart or a picture on a sheet is anchored to cells and belongs to none
+   * of them, and it is a real element rather than paint — an SVG chart and an
+   * `<img>` are things the platform already knows how to draw well. The grid
+   * owns the scroll, so it is the grid that has to say where the layer sits;
+   * what goes in it is the caller's.
+   */
+  overlay?: (view: { scrollX: number; scrollY: number; metrics: GridMetrics }) => React.ReactNode
+  /**
+   * The cell the pointer is over, or null once it leaves.
+   *
+   * Hovering is the grid's to know — it owns the scroll and the geometry — and
+   * what to do about it is the caller's. A note shown on hover is the reason
+   * this exists.
+   */
+  onHoverCell?: (cell: CellAddress | null) => void
+  /**
+   * What is selected, when the caller wants to say.
+   *
+   * Left out, the grid keeps its own and reports every change. Given, the
+   * caller decides — which is what a name box needs, since typing `B12` into
+   * one has to move a selection the grid did not move itself.
+   */
+  selection?: GridSelection
+  onSelectionChange?: (selection: GridSelection) => void
+  /**
+   * Called with everything selected when Delete is pressed.
+   *
+   * Without it, Delete empties the one cell the cursor is on, which is all a
+   * chart's data editor has ever needed. With it, clearing a selection is one
+   * thing the caller can record as one thing.
+   */
+  onDelete?: (selection: GridSelection) => void
+  /**
+   * Called on `Mod+Enter` with everything selected and what was typed.
+   *
+   * Filling a block with one value is one thing somebody did; handing over the
+   * selection rather than a cell at a time is what lets the caller record it
+   * as one.
+   */
+  onFill?: (selection: GridSelection, text: string) => void
+  /**
+   * Called while a header edge is dragged, with the size it is now.
+   *
+   * Continuously rather than at the end, so the sheet follows the pointer: a
+   * drag with no feedback is a drag people do twice because they could not
+   * tell whether the first one worked.
+   *
+   * The size is unzoomed. A width ends up written into a file, and a file has
+   * no idea what anybody was zoomed to when they dragged the edge.
+   *
+   * A double click on the same edge calls this once, with the size the values
+   * in that row or column actually need.
+   */
+  onResize?: (axis: 'row' | 'column', index: number, size: number) => void
+  /** Called when a filter arrow is clicked, with the cell it is on. */
+  onFilterClick?: (cell: CellAddress) => void
+  /**
+   * Called when a cell is clicked, after it has been selected.
+   *
+   * A click is not the same event as a selection change: the keyboard moves a
+   * selection too, and following a link on an arrow key would be a spreadsheet
+   * nobody could get out of. So the pointer says so itself.
+   */
+  onCellClick?: (cell: CellAddress) => void
+  /**
+   * Called when the fill handle is dragged, with what was dragged and how far.
+   *
+   * The little square at the corner of a selection. The grid owns the gesture
+   * — it is geometry — and the caller owns the answer to what 1, 2 goes on
+   * with, which is a question about values rather than about a grid.
+   *
+   * Without it there is no handle, which is what the chart data editor wants.
+   */
+  onFillSeries?: (from: GridRange, to: GridRange) => void
+  /**
+   * How much larger everything is drawn; 1 is unzoomed.
+   *
+   * Folded into the measurements rather than applied to the canvas, so that
+   * the arithmetic the grid does about where a click landed and how far there
+   * is to scroll is done in the same units it paints in. A canvas transform
+   * would have made the painting right and every other answer wrong.
+   */
+  zoom?: number
+  /**
+   * Whether the lines between the cells are drawn.
+   *
+   * A sheet can be told to show none, which is what a form or a printed
+   * layout is made on: the only lines then are the borders somebody drew.
+   */
+  gridLines?: boolean
+  width: number
+  height: number
+  label: string
+  metrics?: Partial<GridMetrics>
+}
+
+/** The font the grid writes in where a cell does not say otherwise. */
+const BASE_FONT = '12px -apple-system, system-ui, sans-serif'
+
+/** The side of the little square at the corner of a selection. */
+const HANDLE = 6
+
+/**
+ * A fill's reach, kept to the axis it has gone furthest along.
+ *
+ * A drag that went down and across at once would have no order to fill in —
+ * which of the two directions the series runs in would be anybody's guess —
+ * so the larger of the two wins and the other is left where it was.
+ */
+function straightened(
+  bounds: { top: number; bottom: number; left: number; right: number },
+  to: CellAddress,
+): CellAddress {
+  const down = to.row > bounds.bottom ? to.row - bounds.bottom : bounds.top - to.row
+  const across = to.column > bounds.right ? to.column - bounds.right : bounds.left - to.column
+
+  return down >= across
+    ? { row: to.row, column: Math.min(Math.max(to.column, bounds.left), bounds.right) }
+    : { row: Math.min(Math.max(to.row, bounds.top), bounds.bottom), column: to.column }
+}
+
+/** The corner of the selection a fill starts from, or ends at. */
+function boundsCorner(selection: GridSelection, which: 'first' | 'last'): CellAddress {
+  const bounds = boundsOf(lastRange(selection))
+  return which === 'first'
+    ? { row: bounds.top, column: bounds.left }
+    : { row: bounds.bottom, column: bounds.right }
+}
+
+/**
+ * Where the fill handle sits, which is also where it is taken hold of.
+ *
+ * Half on and half off the corner of the selection, as every spreadsheet
+ * draws it: a square wholly inside the last cell reads as part of the cell,
+ * and one wholly outside reads as belonging to the cell beyond.
+ */
+function handleBox(
+  metrics: GridMetrics,
+  view: Viewport,
+  selection: GridSelection,
+  counts: { rows: number; columns: number },
+  frozen: FrozenPanes | null,
+  zoom: number,
+): { x: number; y: number; size: number } {
+  const corner = boundsCorner(selection, 'last')
+  const last = rectangleOfCell(
+    metrics,
+    view,
+    {
+      row: Math.min(corner.row, counts.rows - 1),
+      column: Math.min(corner.column, counts.columns - 1),
+    },
+    frozen,
+  )
+
+  const size = HANDLE * zoom
+  return { x: last.x + last.width - size / 2, y: last.y + last.height - size / 2, size }
+}
+
+/**
+ * How many filled cells an auto-fit looks at.
+ *
+ * A column with five thousand values in it has already said how wide it needs
+ * to be; measuring the other million would only make the gesture slow enough
+ * to look broken.
+ */
+const FIT_SAMPLE = 5000
+
+const DEFAULTS: GridMetrics = {
+  rowHeight: 22,
+  columnWidth: 84,
+  headerWidth: 44,
+  headerHeight: 22,
+}
+
+const COLORS = {
+  grid: '#DADADA',
+  header: '#F5F5F5',
+  headerText: '#666666',
+  text: '#111111',
+  selection: '#FF7A00',
+  /** Over the cells, so what is under a selection stays readable. */
+  selectionFill: 'rgba(255, 122, 0, 0.12)',
+  /** A header whose row or column is selected, and one merely touched by it. */
+  headerSelected: '#FFE2C6',
+  headerTouched: '#E4E4E4',
+  background: '#FFFFFF',
+}
+
+/**
+ * The lines a cell states around itself.
+ *
+ * Drawn per cell rather than per edge, which means a shared edge is drawn
+ * twice — once by each neighbour. That is what the format describes and what
+ * Excel does: the cell below can state a different line from the cell above,
+ * and the last one drawn is the one that shows.
+ */
+function drawBorders(
+  context: CanvasRenderingContext2D,
+  rect: { x: number; y: number; width: number; height: number },
+  borders: CellBorders,
+): void {
+  const edges: [string | null, number, number, number, number][] = [
+    [borders.top, rect.x, rect.y, rect.x + rect.width, rect.y],
+    [borders.bottom, rect.x, rect.y + rect.height, rect.x + rect.width, rect.y + rect.height],
+    [borders.left, rect.x, rect.y, rect.x, rect.y + rect.height],
+    [borders.right, rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + rect.height],
+  ]
+
+  for (const [color, x1, y1, x2, y2] of edges) {
+    if (color === null) continue
+
+    context.strokeStyle = color
+    context.lineWidth = 1
+    context.beginPath()
+    context.moveTo(x1, y1)
+    context.lineTo(x2, y2)
+    context.stroke()
+  }
+}
+
+export { zoomed as zoomedMetrics }
+
+/**
+ * Every measurement larger or smaller by the same factor.
+ *
+ * Including the headers: a zoomed sheet whose row numbers stayed the old size
+ * would have them creeping under the cells beside them.
+ */
+function zoomed(metrics: GridMetrics, zoom: number): GridMetrics {
+  if (zoom === 1) return metrics
+
+  return {
+    rowHeight: metrics.rowHeight * zoom,
+    columnWidth: metrics.columnWidth * zoom,
+    columnWidths: metrics.columnWidths?.map((width) => width * zoom),
+    rowHeights: metrics.rowHeights?.map((height) => height * zoom),
+    headerWidth: metrics.headerWidth * zoom,
+    headerHeight: metrics.headerHeight * zoom,
+  }
+}
+
+/** A CSS font shorthand with its size scaled, which is all a zoom does to it. */
+const resized = (font: string, zoom: number): string =>
+  zoom === 1
+    ? font
+    : font.replace(/(\d*\.?\d+)px/u, (_, size: string) => `${String(Number(size) * zoom)}px`)
+
+/**
+ * Keeps the pointer's events coming to this element while a drag is on.
+ *
+ * Guarded, because not every environment has it — jsdom does not, and a
+ * webview without it still drags; the range simply stops growing once the
+ * pointer leaves the grid, which is the behaviour capture exists to improve
+ * rather than to enable.
+ */
+function holdPointer(element: Element, pointerId: number, hold: boolean): void {
+  const target = element as Partial<Element>
+  if (typeof target.setPointerCapture !== 'function') return
+
+  if (hold) target.setPointerCapture(pointerId)
+  else if (target.hasPointerCapture?.(pointerId) === true) target.releasePointerCapture?.(pointerId)
+}
+
+/** Where a filter arrow sits in a cell, which is also where it is clicked. */
+function arrowBox(
+  rect: { x: number; y: number; width: number; height: number },
+  zoom: number,
+): { x: number; y: number; size: number } {
+  const size = Math.min(14 * zoom, rect.height - 2, rect.width - 2)
+  return { x: rect.x + rect.width - size - 1, y: rect.y + (rect.height - size) / 2, size }
+}
+
+/** A, B, … Z, AA — the names a spreadsheet gives its columns. */
+export function columnName(index: number): string {
+  const letters: string[] = []
+  for (let left = index + 1; left > 0; left = Math.floor((left - 1) / 26)) {
+    letters.unshift(String.fromCharCode(64 + ((left - 1) % 26) + 1))
+  }
+
+  return letters.join('')
+}
+
+export function DataGrid({
+  rows,
+  columns,
+  valueAt,
+  editableAt,
+  onEditing,
+  onEditingKey,
+  columnHeader = columnName,
+  rowHeader = (row) => String(row + 1),
+  onChange,
+  editable,
+  width,
+  height,
+  label,
+  metrics: overrides,
+  styleAt,
+  mergeAt,
+  frozen = null,
+  zoom = 1,
+  overlay,
+  onHoverCell,
+  selection: given,
+  onSelectionChange,
+  onDelete,
+  onFill,
+  onResize,
+  onFilterClick,
+  onFillSeries,
+  onCellClick,
+  gridLines = true,
+}: DataGridProps) {
+  const metrics = useMemo<GridMetrics>(
+    () => zoomed({ ...DEFAULTS, ...overrides }, zoom),
+    [overrides, zoom],
+  )
+
+  const canvas = useRef<HTMLCanvasElement | null>(null)
+  const surface = useRef<HTMLDivElement | null>(null)
+  const [scroll, setScroll] = useState({ x: 0, y: 0 })
+  const [own, setOwn] = useState<GridSelection>(() => singleCell({ row: 0, column: 0 }))
+  const selection = given ?? own
+  const selected = selection.active
+
+  /** Whether the pointer is dragging a range out. */
+  const dragging = useRef(false)
+
+  /** The edge being dragged, and where the pointer took hold of it. */
+  const resizing = useRef<{ axis: 'row' | 'column'; index: number; from: number } | null>(null)
+
+  /** The range the fill handle is being dragged out of, while it is. */
+  const filling = useRef<GridRange | null>(null)
+
+  /** How far the fill has been dragged, which is drawn while it lasts. */
+  const [fillTo, setFillTo] = useState<CellAddress | null>(null)
+
+  const selectedCells = useMemo(() => selectedCount(selection), [selection])
+  const [editing, setEditing] = useState<{ cell: CellAddress; text: string } | null>(null)
+  /** Where the caret is in the editor, for whoever is helping with it. */
+  const [caret, setCaret] = useState(0)
+  const editorBox = useRef<HTMLTextAreaElement>(null)
+
+  /**
+   * What the pointer would do here, said the one way a pointer can say it.
+   *
+   * Without it the only way to find an edge is to try dragging it, which is
+   * how people conclude that a grid cannot be resized.
+   */
+  const [cursor, setCursor] = useState<'default' | 'col-resize' | 'row-resize'>('default')
+
+  const viewport: Viewport = { scrollX: scroll.x, scrollY: scroll.y, width, height }
+
+  const draw = useCallback(() => {
+    const context = canvas.current?.getContext('2d')
+    if (!context) return
+
+    const ratio = window.devicePixelRatio || 1
+    context.setTransform(ratio, 0, 0, ratio, 0, 0)
+    context.clearRect(0, 0, width, height)
+    context.fillStyle = COLORS.background
+    context.fillRect(0, 0, width, height)
+
+    const view: Viewport = { scrollX: scroll.x, scrollY: scroll.y, width, height }
+    const scrolling = {
+      rows: visibleRows(metrics, view, rows, frozen),
+      columns: visibleColumns(metrics, view, columns, frozen),
+    }
+
+    const held = frozen ?? { rows: 0, columns: 0 }
+    const DEFAULT_FONT = resized(BASE_FONT, zoom)
+
+    context.font = DEFAULT_FONT
+    context.textBaseline = 'middle'
+
+    /**
+     * Every row and column on screen, the held ones included.
+     *
+     * The frozen strip is drawn with the same code as the rest — it is the
+     * same cells at a fixed offset — so a column keeps its width, its style
+     * and its borders on both sides of the line.
+     */
+    const rowsOnScreen = [
+      ...Array.from({ length: held.rows }, (_, index) => index),
+      ...Array.from(
+        { length: Math.max(scrolling.rows.last - scrolling.rows.first + 1, 0) },
+        (_, index) => scrolling.rows.first + index,
+      ),
+    ]
+    const columnsOnScreen = [
+      ...Array.from({ length: held.columns }, (_, index) => index),
+      ...Array.from(
+        { length: Math.max(scrolling.columns.last - scrolling.columns.first + 1, 0) },
+        (_, index) => scrolling.columns.first + index,
+      ),
+    ]
+
+    /** A cell's box, grown to the whole merge when it starts one. */
+    const boxOf = (cell: CellAddress) => {
+      const rect = rectangleOfCell(metrics, view, cell, frozen)
+      const merge = mergeAt?.(cell)
+      if (merge === undefined || merge === null) return { rect, skip: false }
+
+      // Only the corner draws; the cells swallowed by a merge draw nothing,
+      // or the corner's text is clipped by the boxes it was merged with.
+      if (merge.cell.row !== cell.row || merge.cell.column !== cell.column) {
+        return { rect, skip: true }
+      }
+
+      const last = rectangleOfCell(
+        metrics,
+        view,
+        { row: cell.row + merge.rows - 1, column: cell.column + merge.columns - 1 },
+        frozen,
+      )
+      return {
+        rect: {
+          x: rect.x,
+          y: rect.y,
+          width: last.x + last.width - rect.x,
+          height: last.y + last.height - rect.y,
+        },
+        skip: false,
+      }
+    }
+
+    // What is behind the cells, then what is in them, then the lines, then the
+    // headers over all of it: a header is a fixed strip and has to cover
+    // whatever scrolled under it.
+    for (const row of rowsOnScreen) {
+      for (const column of columnsOnScreen) {
+        const cell = { row, column }
+        const style = styleAt?.(cell) ?? null
+        const { rect, skip } = boxOf(cell)
+        if (skip) continue
+
+        if (style?.background !== undefined) {
+          context.fillStyle = style.background
+          context.fillRect(rect.x, rect.y, rect.width, rect.height)
+        }
+
+        // A bar goes over the fill and under the value: it is a picture of the
+        // number, so the number has to stay readable on top of it.
+        if (style?.bar !== undefined && style.bar.proportion > 0) {
+          context.fillStyle = style.bar.color
+          context.fillRect(
+            rect.x + 1,
+            rect.y + 2,
+            Math.max(0, (rect.width - 2) * Math.min(1, style.bar.proportion)),
+            Math.max(0, rect.height - 4),
+          )
+        }
+
+        // A chart the size of the cell, under whatever is written in it: a
+        // sparkline usually sits in a cell of its own, and the file allows
+        // one that does not.
+        if (style?.spark !== undefined) {
+          drawSpark(context, style.spark, rect)
+        }
+
+        if (style?.icon !== undefined) {
+          drawIcon(context, style.icon, rect.x + 3 * zoom, rect.y + rect.height / 2, zoom)
+        }
+
+        const text = valueAt(cell)
+
+        if (text !== null && text !== '') {
+          // An icon sits in the cell rather than beside it, so the text starts
+          // after it. A right-aligned number is untouched: the icon is at the
+          // other end, and moving the digits would break the column.
+          drawCellText(
+            context,
+            text,
+            rect,
+            style === null ? null : { ...style, font: resized(style.font ?? BASE_FONT, zoom) },
+            {
+              font: DEFAULT_FONT,
+              color: COLORS.text,
+              gutter: style?.icon === undefined ? 0 : ICON_GUTTER * zoom,
+            },
+          )
+        }
+
+        // Outside the text, because a bordered cell with nothing in it is
+        // still a bordered cell — a ruled form is mostly those.
+        if (style?.borders !== undefined) drawBorders(context, rect, style.borders)
+
+        // A filter arrow sits at the right of the cell, over the value: it is
+        // a control, and a control a long value hid would be one nobody could
+        // find.
+        if (style?.filter !== undefined) {
+          const box = arrowBox(rect, zoom)
+          context.fillStyle = COLORS.header
+          context.fillRect(box.x, box.y, box.size, box.size)
+          context.strokeStyle = COLORS.grid
+          context.strokeRect(box.x, box.y, box.size, box.size)
+
+          context.fillStyle = style.filter.on ? COLORS.selection : COLORS.headerText
+          context.beginPath()
+          context.moveTo(box.x + box.size * 0.25, box.y + box.size * 0.4)
+          context.lineTo(box.x + box.size * 0.75, box.y + box.size * 0.4)
+          context.lineTo(box.x + box.size * 0.5, box.y + box.size * 0.68)
+          context.closePath()
+          context.fill()
+        }
+
+        // Last of all, so nothing in the cell is drawn over it: a corner mark
+        // that a wide value painted over would be a mark nobody sees.
+        if (style?.corner !== undefined) {
+          const side = 5 * zoom
+          context.fillStyle = style.corner
+          context.beginPath()
+          context.moveTo(rect.x + rect.width - side, rect.y)
+          context.lineTo(rect.x + rect.width, rect.y)
+          context.lineTo(rect.x + rect.width, rect.y + side)
+          context.closePath()
+          context.fill()
+        }
+      }
+    }
+
+    context.font = DEFAULT_FONT
+
+    // A sheet can say it wants no grid, and then the cells are drawn on
+    // nothing: it is what a form or a printed layout is made on, and the
+    // borders somebody drew have to be the only lines there are.
+    context.strokeStyle = gridLines ? COLORS.grid : COLORS.background
+    context.lineWidth = 1
+    context.beginPath()
+
+    for (const row of rowsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row, column: 0 }, frozen)
+      context.moveTo(metrics.headerWidth, rect.y)
+      context.lineTo(width, rect.y)
+      context.moveTo(metrics.headerWidth, rect.y + rect.height)
+      context.lineTo(width, rect.y + rect.height)
+    }
+
+    for (const column of columnsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row: 0, column }, frozen)
+      context.moveTo(rect.x, metrics.headerHeight)
+      context.lineTo(rect.x, height)
+      context.moveTo(rect.x + rect.width, metrics.headerHeight)
+      context.lineTo(rect.x + rect.width, height)
+    }
+
+    context.stroke()
+
+    /**
+     * What is selected, over the cells and under the headers.
+     *
+     * A wash rather than a solid: a selected cell has to stay readable, since
+     * the reason anybody selects a column of figures is to look at it.
+     */
+    for (const range of selection.ranges) {
+      const bounds = boundsOf(range)
+      const first = rectangleOfCell(
+        metrics,
+        view,
+        { row: Math.max(bounds.top, 0), column: Math.max(bounds.left, 0) },
+        frozen,
+      )
+      const last = rectangleOfCell(
+        metrics,
+        view,
+        { row: Math.min(bounds.bottom, rows - 1), column: Math.min(bounds.right, columns - 1) },
+        frozen,
+      )
+
+      context.fillStyle = COLORS.selectionFill
+      context.fillRect(
+        first.x,
+        first.y,
+        last.x + last.width - first.x,
+        last.y + last.height - first.y,
+      )
+
+      // One cell, and it is the cursor: the outline below is already drawing
+      // it, and a second one over the top would be a heavier line than any
+      // other selection gets.
+      const alone =
+        bounds.top === bounds.bottom &&
+        bounds.left === bounds.right &&
+        bounds.top === selected.row &&
+        bounds.left === selected.column
+      if (alone) continue
+
+      context.strokeStyle = COLORS.selection
+      context.lineWidth = 1
+      context.strokeRect(
+        first.x,
+        first.y,
+        last.x + last.width - first.x,
+        last.y + last.height - first.y,
+      )
+    }
+
+    // The active cell is left unwashed: it is where a typed value would land,
+    // and a person has to be able to tell it from the rest of the range.
+    const activeRect = rectangleOfCell(metrics, view, selected, frozen)
+    if (selectedCells > 1) {
+      context.fillStyle = COLORS.background
+      context.fillRect(
+        activeRect.x + 1,
+        activeRect.y + 1,
+        activeRect.width - 1,
+        activeRect.height - 1,
+      )
+
+      const style = styleAt?.(selected) ?? null
+      if (style?.background !== undefined) {
+        context.fillStyle = style.background
+        context.fillRect(
+          activeRect.x + 1,
+          activeRect.y + 1,
+          activeRect.width - 1,
+          activeRect.height - 1,
+        )
+      }
+
+      const text = valueAt(selected)
+      if (text !== null && text !== '') {
+        drawCellText(
+          context,
+          text,
+          activeRect,
+          style === null ? null : { ...style, font: resized(style.font ?? BASE_FONT, zoom) },
+          { font: DEFAULT_FONT, color: COLORS.text, gutter: 0 },
+        )
+      }
+    }
+
+    // Headers.
+    context.fillStyle = COLORS.header
+    context.fillRect(0, 0, width, metrics.headerHeight)
+    context.fillRect(0, 0, metrics.headerWidth, height)
+
+    for (const column of columnsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row: 0, column }, frozen)
+      const whole = coversColumn(selection, column, rows)
+      const touched =
+        whole ||
+        selection.ranges.some((range) => {
+          const bounds = boundsOf(range)
+          return column >= bounds.left && column <= bounds.right
+        })
+
+      if (touched) {
+        context.fillStyle = whole ? COLORS.headerSelected : COLORS.headerTouched
+        context.fillRect(rect.x, 0, rect.width, metrics.headerHeight)
+      }
+
+      context.fillStyle = COLORS.headerText
+      context.fillText(columnHeader(column), rect.x + 4, metrics.headerHeight / 2)
+    }
+
+    for (const row of rowsOnScreen) {
+      const rect = rectangleOfCell(metrics, view, { row, column: 0 }, frozen)
+      const whole = coversRow(selection, row, columns)
+      const touched =
+        whole ||
+        selection.ranges.some((range) => {
+          const bounds = boundsOf(range)
+          return row >= bounds.top && row <= bounds.bottom
+        })
+
+      if (touched) {
+        context.fillStyle = whole ? COLORS.headerSelected : COLORS.headerTouched
+        context.fillRect(0, rect.y, metrics.headerWidth, rect.height)
+      }
+
+      context.fillStyle = COLORS.headerText
+      context.fillText(rowHeader(row), 4, rect.y + rect.height / 2)
+    }
+
+    // The line where the frozen strip ends, which is what tells somebody the
+    // rows above it are not simply the rows they scrolled to.
+    if (frozen !== null) {
+      const size = frozenSize(metrics, frozen)
+      context.strokeStyle = COLORS.headerText
+      context.lineWidth = 1
+      context.beginPath()
+
+      if (frozen.rows > 0) {
+        context.moveTo(0, metrics.headerHeight + size.height)
+        context.lineTo(width, metrics.headerHeight + size.height)
+      }
+      if (frozen.columns > 0) {
+        context.moveTo(metrics.headerWidth + size.width, 0)
+        context.lineTo(metrics.headerWidth + size.width, height)
+      }
+
+      context.stroke()
+    }
+
+    // The active cell's outline last, so nothing draws over it.
+    context.strokeStyle = COLORS.selection
+    context.lineWidth = 2
+    context.strokeRect(activeRect.x, activeRect.y, activeRect.width, activeRect.height)
+
+    if (onFillSeries !== undefined) {
+      // How far the drag has reached, shown while it is happening: a fill
+      // with no outline is a fill people do twice.
+      if (fillTo !== null) {
+        const reach = rectangleOfCell(metrics, view, fillTo, frozen)
+        const start = rectangleOfCell(metrics, view, boundsCorner(selection, 'first'), frozen)
+
+        context.strokeStyle = COLORS.selection
+        context.lineWidth = 1
+        context.setLineDash([3, 2])
+        context.strokeRect(
+          Math.min(start.x, reach.x),
+          Math.min(start.y, reach.y),
+          Math.abs(reach.x + reach.width - start.x),
+          Math.abs(reach.y + reach.height - start.y),
+        )
+        context.setLineDash([])
+      }
+
+      const box = handleBox(metrics, view, selection, { rows, columns }, frozen, zoom)
+      context.fillStyle = COLORS.selection
+      context.fillRect(box.x, box.y, box.size, box.size)
+    }
+  }, [
+    columnHeader,
+    columns,
+    frozen,
+    height,
+    mergeAt,
+    metrics,
+    rowHeader,
+    rows,
+    scroll.x,
+    scroll.y,
+    fillTo,
+    gridLines,
+    onFillSeries,
+    selected,
+    selectedCells,
+    selection,
+    styleAt,
+    zoom,
+    valueAt,
+    width,
+    zoom,
+  ])
+
+  /**
+   * Follows a selection the caller moved.
+   *
+   * Typing `Z900` into a name box has to scroll there, and the grid never saw
+   * the gesture that asked for it — only the answer.
+   */
+  useEffect(() => {
+    if (given === undefined) return
+
+    setScroll((was) => {
+      const to = scrollToCell(
+        metrics,
+        { ...was, scrollX: was.x, scrollY: was.y, width, height },
+        given.active,
+      )
+      return to.scrollX === was.x && to.scrollY === was.y ? was : { x: to.scrollX, y: to.scrollY }
+    })
+    // Only when the cell moves: a selection extended by dragging has already
+    // scrolled itself, and re-running on every range would fight the drag.
+  }, [given?.active.row, given?.active.column, height, metrics, width])
+
+  useLayoutEffect(() => {
+    const element = canvas.current
+    if (element === null) return
+
+    // Drawn at the device's own resolution, or every line is a grey smear on a
+    // Retina screen.
+    const ratio = window.devicePixelRatio || 1
+    element.width = Math.round(width * ratio)
+    element.height = Math.round(height * ratio)
+    draw()
+  }, [draw, height, width])
+
+  const canEdit = useCallback(
+    (cell: CellAddress) => onChange !== undefined && (editable?.(cell) ?? true),
+    [editable, onChange],
+  )
+
+  /**
+   * What a cell opens with when somebody begins editing it.
+   *
+   * What is drawn is the answer; what is edited is the question — and for
+   * most cells in most grids they are the same string.
+   */
+  const openedText = useCallback(
+    (cell: CellAddress) => (editableAt ?? valueAt)(cell) ?? '',
+    [editableAt, valueAt],
+  )
+
+  /**
+   * A row or a column made the size its own values need.
+   *
+   * The gesture is a double click on the edge somebody would otherwise drag,
+   * which is where every spreadsheet puts it. What it needs is measured here
+   * rather than by the caller: the font, the canvas and the metrics are all
+   * in this component, and the width of a string in a font is not a question
+   * a workbook can answer.
+   *
+   * Merged cells are left out. A heading merged across four columns says
+   * nothing about how wide the first of them should be, and fitting to it
+   * would make one column as wide as the four.
+   */
+  const fit = useCallback(
+    (axis: 'row' | 'column', index: number) => {
+      const context = canvas.current?.getContext('2d')
+      if (!context || onResize === undefined) return
+
+      const along = axis === 'column' ? rows : columns
+      const cells: FitCell[] = []
+
+      for (let at = 0; at < along && cells.length < FIT_SAMPLE; at += 1) {
+        const cell = axis === 'column' ? { row: at, column: index } : { row: index, column: at }
+
+        const text = valueAt(cell)
+        if (text === null || text === '') continue
+
+        const merge = mergeAt?.(cell)
+        if (merge !== null && merge !== undefined && (merge.rows > 1 || merge.columns > 1)) continue
+
+        cells.push({
+          text,
+          style: styleAt?.(cell) ?? null,
+          width: widthOfColumn(metrics, cell.column) / zoom,
+        })
+      }
+
+      // Measured in the font as the file states it rather than as the screen
+      // shows it: what comes out is written into a row or a column.
+      const wanted =
+        axis === 'column'
+          ? widthNeeded(context, cells, BASE_FONT)
+          : heightNeeded(context, cells, BASE_FONT)
+
+      // Nothing to fit to leaves the size alone: a column of blanks has no
+      // opinion about its width, and collapsing it would hide it.
+      if (wanted <= 0) return
+
+      // No wider than the window. One cell holding a paragraph would otherwise
+      // widen a column past the edge of the screen, which is not what anybody
+      // double-clicking an edge was asking for.
+      const room = (axis === 'column' ? width - metrics.headerWidth : height) / zoom
+      onResize(axis, index, Math.min(wanted, room))
+    },
+    [columns, height, mergeAt, metrics, onResize, rows, styleAt, valueAt, width, zoom],
+  )
+
+  /** Announced and kept, so a caller that controls the selection still hears. */
+  const choose = useCallback(
+    (next: GridSelection, showing: CellAddress = next.active) => {
+      setOwn(next)
+      onSelectionChange?.(next)
+
+      const to = scrollToCell(metrics, { ...viewport }, showing)
+      setScroll({ x: to.scrollX, y: to.scrollY })
+    },
+    // The viewport is rebuilt on each render from scroll and size, which are
+    // already dependencies of what this reads.
+    [metrics, onSelectionChange, viewport],
+  )
+
+  const inside = useCallback(
+    (cell: CellAddress): CellAddress => ({
+      row: Math.max(0, Math.min(cell.row, rows - 1)),
+      column: Math.max(0, Math.min(cell.column, columns - 1)),
+    }),
+    [columns, rows],
+  )
+
+  /** Moving the cursor, which throws away whatever was selected. */
+  const move = useCallback(
+    (cell: CellAddress) => {
+      choose(singleCell(inside(cell)))
+    },
+    [choose, inside],
+  )
+
+  /**
+   * Where `Enter` and `Tab` go.
+   *
+   * Inside the selection when there is one to be inside, which is what stops
+   * the cursor wandering off the end of a block somebody selected in order to
+   * fill it. With one cell selected there is nothing to stay inside, and the
+   * key moves the cursor as it always did.
+   */
+  const advance = useCallback(
+    (order: Order, backward: boolean) => {
+      if (selectedCells > 1) {
+        const to = nextInSelection(selection, selected, order, backward)
+        choose({ ...selection, active: to }, to)
+        return
+      }
+
+      const step = backward ? -1 : 1
+      move(
+        order === 'down'
+          ? { row: selected.row + step, column: selected.column }
+          : { row: selected.row, column: selected.column + step },
+      )
+    },
+    [choose, move, selected, selectedCells, selection],
+  )
+
+  /** Whether a cell holds anything, which is what `Mod` and an arrow follow. */
+  const filled = useCallback(
+    (cell: CellAddress) => {
+      const text = valueAt(cell)
+      return text !== null && text !== ''
+    },
+    [valueAt],
+  )
+
+  const commit = useCallback(
+    (text: string, cell: CellAddress) => {
+      closing.current = true
+      setEditing(null)
+      // The input is about to go; without this the focus goes with it and the
+      // next arrow key lands on the page rather than on the grid.
+      surface.current?.focus()
+      onChange?.(cell, text)
+    },
+    [onChange],
+  )
+
+  /**
+   * Whether the edit being closed has already been dealt with.
+   *
+   * Enter, Tab and Escape all take the focus back to the grid, and blurring
+   * the input is what commits it — so without this, finishing an edit by any
+   * of them would hand the same text over twice, and a cancelled one would be
+   * saved on its way out. A caller that writes into an undo history would see
+   * one edit as two.
+   */
+  const closing = useRef(false)
+
+  const stopEditing = useCallback(() => {
+    closing.current = true
+    setEditing(null)
+    surface.current?.focus()
+  }, [])
+
+  const ARROWS: Record<string, Direction> = {
+    ArrowDown: 'down',
+    ArrowUp: 'up',
+    ArrowRight: 'right',
+    ArrowLeft: 'left',
+  }
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (editing !== null) return
+
+    const counts = { rows, columns }
+    const jumping = event.metaKey || event.ctrlKey
+
+    // Everything. Excel's own `Mod+A` grows from the block outwards first;
+    // that needs a notion of "the block", which arrives with the fill handle
+    // and the sorting that depend on the same idea.
+    if (jumping && event.key.toLowerCase() === 'a') {
+      event.preventDefault()
+      choose(everything(rows, columns), selected)
+      return
+    }
+
+    const direction = ARROWS[event.key]
+    if (direction !== undefined) {
+      event.preventDefault()
+
+      // `Shift` moves the far corner of the range and leaves the near one —
+      // and the active cell — where they are; without it the whole selection
+      // collapses to wherever the cursor landed.
+      const from = event.shiftKey ? lastRange(selection).focus : selected
+      const to = jumping
+        ? edgeFrom(from, direction, counts, filled)
+        : stepFrom(from, direction, counts)
+
+      if (event.shiftKey) choose(extendedTo(selection, to), to)
+      else move(to)
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      advance(event.key === 'Enter' ? 'down' : 'across', event.shiftKey)
+      return
+    }
+
+    if (event.key === 'F2' && canEdit(selected)) {
+      event.preventDefault()
+      setEditing({ cell: selected, text: openedText(selected) })
+      return
+    }
+
+    // Delete empties what is selected, as it does in every spreadsheet. Handed
+    // over as empty text rather than as a value of its own: what emptying a
+    // cell means is the caller's to decide, and for a chart it is a gap rather
+    // than a nought.
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (onDelete !== undefined) {
+        event.preventDefault()
+        onDelete(selection)
+        return
+      }
+
+      if (canEdit(selected)) {
+        event.preventDefault()
+        if (valueAt(selected) !== null && valueAt(selected) !== '') onChange?.(selected, '')
+        return
+      }
+    }
+
+    // Typing into a selected cell replaces what is in it, as every spreadsheet
+    // does: the first keystroke is the first character, not a lost one.
+    if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && canEdit(selected)) {
+      event.preventDefault()
+      setEditing({ cell: selected, text: event.key })
+    }
+  }
+
+  const editor = editing === null ? null : rectangleOfCell(metrics, viewport, editing.cell, frozen)
+
+  /**
+   * What is being edited, as whoever is helping with it needs to see it.
+   *
+   * Built on every render rather than kept, because every part of it — the
+   * text, the caret, where the cell is on screen — changes as somebody types
+   * or scrolls, and a copy kept aside would be the one thing on screen that
+   * was out of date.
+   */
+  const editingState: Editing | null =
+    editing === null || editor === null
+      ? null
+      : {
+          cell: editing.cell,
+          text: editing.text,
+          caret,
+          rect: { x: editor.x, y: editor.y, width: editor.width, height: editor.height },
+          replace: (text, to) => {
+            setEditing({ cell: editing.cell, text })
+            setCaret(to)
+            // After the render that puts the new text in: setting it now
+            // would put the caret on the old text and the browser would move
+            // it back to the end.
+            requestAnimationFrame(() => {
+              editorBox.current?.setSelectionRange(to, to)
+            })
+          },
+        }
+
+  // Told rather than handed back, because a caller that wanted to draw
+  // something beside the editor would otherwise have to guess when it opened.
+  //
+  // Watched by its parts rather than by the object: `replace` is made afresh
+  // on every render, so the object is never the same twice and an effect
+  // watching it would fire on every frame.
+  const told = useRef('')
+  const summary = JSON.stringify([editing?.cell, editing?.text, caret, editor?.x, editor?.y])
+
+  useEffect(() => {
+    if (told.current === summary) return
+    told.current = summary
+    onEditing?.(editingState)
+  })
+
+  return (
+    <div
+      ref={surface}
+      role="grid"
+      aria-label={label}
+      aria-rowcount={rows}
+      aria-colcount={columns}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      onScroll={(event) => {
+        setScroll({ x: event.currentTarget.scrollLeft, y: event.currentTarget.scrollTop })
+      }}
+      style={{ position: 'relative', width, height, overflow: 'auto', outline: 'none', cursor }}
+    >
+      {/* Sized to the whole grid so the scrollbars mean what they say. */}
+      <div
+        style={{
+          width: totalWidth(metrics, columns),
+          height: totalHeight(metrics, rows),
+          position: 'relative',
+        }}
+        onPointerDown={(event) => {
+          const box = event.currentTarget.parentElement?.getBoundingClientRect()
+          if (box === undefined) return
+
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+          const counts = { rows, columns }
+          const adding = event.metaKey || event.ctrlKey
+
+          // The handle before anything else: it sits over the corner cell, and
+          // a click on it is not a click on that cell.
+          if (onFillSeries !== undefined) {
+            const square = handleBox(metrics, viewport, selection, counts, frozen, zoom)
+            if (
+              point.x >= square.x &&
+              point.x <= square.x + square.size &&
+              point.y >= square.y &&
+              point.y <= square.y + square.size
+            ) {
+              filling.current = lastRange(selection)
+              holdPointer(event.currentTarget, event.pointerId, true)
+              return
+            }
+          }
+
+          // An edge before a header: the two gestures start a few points
+          // apart, and taking hold of the edge is the more particular of them.
+          const handle =
+            onResize === undefined ? null : resizeHandleAt(metrics, viewport, point, counts, frozen)
+          if (handle !== null) {
+            resizing.current = {
+              ...handle,
+              from: handle.axis === 'column' ? point.x : point.y,
+            }
+            holdPointer(event.currentTarget, event.pointerId, true)
+            return
+          }
+
+          const header = headerAtPoint(metrics, viewport, point, counts, frozen)
+          if (header !== null) {
+            if (header.kind === 'corner') {
+              choose(everything(rows, columns), selected)
+              return
+            }
+
+            const range =
+              header.kind === 'column'
+                ? wholeColumns(header.index, header.index, rows)
+                : wholeRows(header.index, header.index, columns)
+
+            // Dragging across the headers picks a run of them, the same
+            // gesture as dragging across cells.
+            dragging.current = true
+            holdPointer(event.currentTarget, event.pointerId, true)
+
+            if (event.shiftKey) choose(extendedTo(selection, range.focus), range.focus)
+            else if (adding) choose(withRange(selection, range), range.anchor)
+            else choose({ ranges: [range], active: range.anchor }, range.anchor)
+            return
+          }
+
+          const cell = cellAtPoint(metrics, viewport, point, counts, frozen)
+          if (cell === null) return
+
+          // The arrow before the cell under it: clicking a control is not
+          // clicking the thing the control is sitting on.
+          if (onFilterClick !== undefined && styleAt?.(cell)?.filter !== undefined) {
+            const box = arrowBox(rectangleOfCell(metrics, viewport, cell, frozen), zoom)
+            if (
+              point.x >= box.x &&
+              point.x <= box.x + box.size &&
+              point.y >= box.y &&
+              point.y <= box.y + box.size
+            ) {
+              onFilterClick(cell)
+              return
+            }
+          }
+
+          dragging.current = true
+          holdPointer(event.currentTarget, event.pointerId, true)
+
+          if (event.shiftKey) choose(extendedTo(selection, cell), cell)
+          else if (adding) choose(withRange(selection, { anchor: cell, focus: cell }), cell)
+          else {
+            move(cell)
+            // After the selection, so whatever a click does next happens on a
+            // cell that is already the current one.
+            onCellClick?.(cell)
+          }
+        }}
+        onPointerUp={(event) => {
+          const reaching = filling.current
+          if (reaching !== null && fillTo !== null && onFillSeries !== undefined) {
+            onFillSeries(reaching, { anchor: fillTo, focus: fillTo })
+          }
+
+          filling.current = null
+          setFillTo(null)
+          dragging.current = false
+          resizing.current = null
+          holdPointer(event.currentTarget, event.pointerId, false)
+        }}
+        onDoubleClick={(event) => {
+          const box = event.currentTarget.parentElement?.getBoundingClientRect()
+          if (box === undefined) return
+
+          // The edge before the header, as on the way down: the two gestures
+          // start a few points apart, and this is the more particular of them.
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+
+          // The handle filled to the end of the table beside it, which is the
+          // gesture for a column of a thousand rows that nobody wants to drag.
+          if (onFillSeries !== undefined) {
+            const square = handleBox(metrics, viewport, selection, { rows, columns }, frozen, zoom)
+            if (
+              point.x >= square.x &&
+              point.x <= square.x + square.size &&
+              point.y >= square.y &&
+              point.y <= square.y + square.size
+            ) {
+              const range = lastRange(selection)
+              const bounds = boundsOf(range)
+              const beside = bounds.left > 0 ? bounds.left - 1 : bounds.right + 1
+
+              let last = bounds.bottom
+              while (
+                last + 1 < rows &&
+                (valueAt({ row: last + 1, column: beside }) ?? '') !== '' &&
+                (valueAt({ row: last + 1, column: bounds.left }) ?? '') === ''
+              ) {
+                last += 1
+              }
+
+              if (last > bounds.bottom) {
+                const to = { row: last, column: bounds.right }
+                onFillSeries(range, { anchor: to, focus: to })
+              }
+              return
+            }
+          }
+
+          const handle =
+            onResize === undefined
+              ? null
+              : resizeHandleAt(metrics, viewport, point, { rows, columns }, frozen)
+
+          if (handle !== null) {
+            fit(handle.axis, handle.index)
+            return
+          }
+
+          if (canEdit(selected)) setEditing({ cell: selected, text: openedText(selected) })
+        }}
+        onPointerMove={(event) => {
+          const box = event.currentTarget.parentElement?.getBoundingClientRect()
+          if (box === undefined) return
+
+          const point = { x: event.clientX - box.left, y: event.clientY - box.top }
+
+          const reaching = filling.current
+          if (reaching !== null) {
+            const to = cellAtPoint(metrics, viewport, point, { rows, columns }, frozen)
+            // Along one axis at a time, as every spreadsheet does: a fill that
+            // went both ways at once would have no order to go in.
+            if (to !== null) setFillTo(straightened(boundsOf(reaching), to))
+            return
+          }
+
+          const held = resizing.current
+          if (held !== null && onResize !== undefined) {
+            const was =
+              held.axis === 'column'
+                ? widthOfColumn(metrics, held.index)
+                : heightOfRow(metrics, held.index)
+            const moved = (held.axis === 'column' ? point.x : point.y) - held.from
+
+            // Never to nothing: a column dragged to no width is one nobody can
+            // find again, which is what hiding is for and is reversible.
+            onResize(held.axis, held.index, Math.max(8, (was + moved) / zoom))
+            resizing.current = { ...held, from: held.axis === 'column' ? point.x : point.y }
+            return
+          }
+
+          const over =
+            onResize === undefined
+              ? null
+              : resizeHandleAt(metrics, viewport, point, { rows, columns }, frozen)
+          setCursor(
+            over === null ? 'default' : over.axis === 'column' ? 'col-resize' : 'row-resize',
+          )
+
+          const cell = cellAtPoint(metrics, viewport, point, { rows, columns }, frozen)
+
+          if (dragging.current) {
+            // Dragging past the edge of the cells keeps hold of the last one
+            // it was over, rather than letting go of the range.
+            const header = headerAtPoint(metrics, viewport, point, { rows, columns }, frozen)
+            const to =
+              cell ??
+              (header?.kind === 'column'
+                ? { row: rows - 1, column: header.index }
+                : header?.kind === 'row'
+                  ? { row: header.index, column: columns - 1 }
+                  : null)
+
+            if (to !== null) choose(extendedTo(selection, to), to)
+            return
+          }
+
+          onHoverCell?.(cell)
+        }}
+        onPointerLeave={() => {
+          if (!dragging.current) onHoverCell?.(null)
+        }}
+      >
+        <canvas
+          ref={canvas}
+          // Pinned to the corner of the window rather than the content, so the
+          // painting follows the scroll instead of scrolling away with it.
+          style={{
+            position: 'sticky',
+            top: 0,
+            left: 0,
+            width,
+            height,
+            display: 'block',
+          }}
+        />
+
+        {overlay !== undefined && (
+          <div
+            // Pinned like the canvas and over it, and deaf to the pointer: a
+            // chart sitting on a sheet must not stop a click reaching the cell
+            // it is drawn across.
+            style={{
+              position: 'sticky',
+              top: 0,
+              left: 0,
+              width,
+              height,
+              marginTop: -height,
+              overflow: 'hidden',
+              pointerEvents: 'none',
+            }}
+          >
+            {overlay({ scrollX: scroll.x, scrollY: scroll.y, metrics })}
+          </div>
+        )}
+      </div>
+
+      {editing !== null && editor !== null && (
+        // A textarea rather than an input, for one key: `Alt+Enter` puts a
+        // line break inside a cell, and a single-line field has nowhere to put
+        // one. It is made to look like an input — no resize handle, no
+        // scrollbars, no wrapping it did not ask for.
+        <textarea
+          autoFocus
+          ref={editorBox}
+          rows={1}
+          wrap="off"
+          aria-label={`${columnHeader(editing.cell.column)}${String(editing.cell.row + 1)}`}
+          value={editing.text}
+          onFocus={(event) => {
+            // At the end, not the start. A textarea puts the caret at nought
+            // where an input puts it after the value, which would make the
+            // second character of anything typed land in front of the first.
+            const end = event.currentTarget.value.length
+            event.currentTarget.setSelectionRange(end, end)
+          }}
+          onChange={(event) => {
+            setEditing({ cell: editing.cell, text: event.target.value })
+            setCaret(event.target.selectionStart)
+          }}
+          onSelect={(event) => {
+            setCaret(event.currentTarget.selectionStart)
+          }}
+          onBlur={() => {
+            if (closing.current) {
+              closing.current = false
+              return
+            }
+            commit(editing.text, editing.cell)
+          }}
+          onKeyDown={(event) => {
+            // Whoever is helping gets the key first. While a list of
+            // suggestions is open, Enter belongs to it rather than to the
+            // cell, and only the caller knows whether it is open.
+            if (editingState !== null && onEditingKey?.(event, editingState) === true) {
+              // A key that was dealt with goes no further: without this, an
+              // Enter the helper took would still put a line break in the
+              // cell behind the list.
+              event.preventDefault()
+              return
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              stopEditing()
+              return
+            }
+
+            if (event.key === 'Enter') {
+              event.preventDefault()
+
+              // A line break inside the cell rather than the end of the edit.
+              if (event.altKey) {
+                const field = event.currentTarget
+                const at = field.selectionStart
+                const to = field.selectionEnd
+                setEditing({
+                  cell: editing.cell,
+                  text: `${editing.text.slice(0, at)}\n${editing.text.slice(to)}`,
+                })
+                return
+              }
+
+              // The same value into everything selected, which is one thing
+              // done and has to be one thing the caller can take back.
+              if ((event.metaKey || event.ctrlKey) && onFill !== undefined) {
+                closing.current = true
+                setEditing(null)
+                surface.current?.focus()
+                onFill(selection, editing.text)
+                return
+              }
+
+              commit(editing.text, editing.cell)
+              advance('down', event.shiftKey)
+              return
+            }
+
+            if (event.key === 'Tab') {
+              event.preventDefault()
+              commit(editing.text, editing.cell)
+              advance('across', event.shiftKey)
+            }
+          }}
+          style={{
+            position: 'absolute',
+            left: editor.x,
+            top: editor.y,
+            width: widthOfColumn(metrics, editing.cell.column),
+            height: heightOfRow(metrics, editing.cell.row),
+            font: resized(BASE_FONT, zoom),
+            border: `2px solid ${COLORS.selection}`,
+            padding: '0 2px',
+            outline: 'none',
+            background: COLORS.background,
+            color: COLORS.text,
+            resize: 'none',
+            overflow: 'hidden',
+            whiteSpace: 'pre',
+          }}
+        />
+      )}
+
+      {/* What a screen reader has instead of the painting. */}
+      <span
+        aria-live="polite"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          clipPath: 'inset(50%)',
+        }}
+      >
+        {`${columnHeader(selected.column)}, row ${rowHeader(selected.row)}: ${
+          valueAt(selected) ?? 'empty'
+        }${selectedCells > 1 ? `, ${String(selectedCells)} cells selected` : ''}`}
+      </span>
+    </div>
+  )
+}
+
+/** Keeps the canvas in step with a value that changed outside a render. */
+export function useRedrawOn(value: unknown, redraw: () => void): void {
+  useEffect(redraw, [redraw, value])
+}

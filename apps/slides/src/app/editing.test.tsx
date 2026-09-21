@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { getPartText } from '@orangery/ooxml-core'
 import { isMac } from '@orangery/platform'
+import { writeFill } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -48,7 +49,7 @@ beforeEach(() => {
   })
   // The find strip is a toggle, so a test that left it open would flip it shut
   // for the next one — which is how three of these failed before this line.
-  useViewStore.setState({ finding: false })
+  useViewStore.setState({ finding: false, grid: false, snapToGrid: false, editingGrid: false })
 })
 
 describe('selecting', () => {
@@ -86,8 +87,9 @@ describe('selecting', () => {
     })
 
     const outlines = [...document.querySelectorAll('rect[stroke="#FF7A00"]')]
-    // The frame itself and four corner handles.
-    expect(outlines).toHaveLength(5)
+    // The frame itself, four corners and four edges. The handle that turns the
+    // shape is a circle, so it is not among them.
+    expect(outlines).toHaveLength(9)
   })
 
   it('drops the selection on moving to another slide', async () => {
@@ -524,9 +526,50 @@ describe('the properties panel', () => {
     act(() => {
       useDeckStore.getState().selectShapes([firstShapeId()])
     })
-    await user.click(screen.getByRole('button', { name: 'Fill #FF7A00' }))
+    await user.click(screen.getByRole('button', { name: 'Fill #FF3B30' }))
 
-    expect(partText()).toContain('FF7A00')
+    expect(partText()).toContain('FF3B30')
+  })
+
+  it('writes a theme colour as the slot rather than as the colour it looks like', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill Accent 2' }))
+
+    // The whole difference: a slot follows the theme, a literal does not.
+    expect(partText()).toContain('schemeClr val="accent2"')
+  })
+
+  it('gives the outline a colour, which it had no way to be given before', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Line #007AFF' }))
+
+    expect(partText()).toContain('007AFF')
+  })
+
+  it('fills with a gradient', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill gradient' }))
+
+    expect(partText()).toContain('<a:gradFill')
+    expect(partText()).toContain('<a:gs')
   })
 
   it('changes every selected shape at once, in one step', async () => {
@@ -545,18 +588,18 @@ describe('the properties panel', () => {
 })
 
 describe('tables', () => {
-  it('puts one on the slide and selects it', async () => {
-    await openDeck('empty')
+  /** Opens the grid and sweeps to a size, which is how a table is asked for. */
+  async function insert(rows = 3, columns = 3) {
+    const user = userEvent.setup()
     act(() => {
       runCommand('insert.table', {})
     })
+    await user.click(
+      await screen.findByRole('button', { name: `${String(rows)} by ${String(columns)}` }),
+    )
+  }
 
-    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
-    expect(shapes[0]?.graphic?.kind).toBe('table')
-    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
-  })
-
-  it('draws it on the canvas', async () => {
+  it('asks how big before putting one anywhere', async () => {
     await openDeck('empty')
     render(<App />)
 
@@ -564,16 +607,46 @@ describe('tables', () => {
       runCommand('insert.table', {})
     })
 
+    expect(screen.getByRole('dialog', { name: 'Insert Table' })).toBeInTheDocument()
+    expect(useDeckStore.getState().open?.deck.slides[0]?.shapes).toHaveLength(0)
+  })
+
+  it('puts one on the slide and selects it', async () => {
+    await openDeck('empty')
+    render(<App />)
+    await insert()
+
+    const shapes = useDeckStore.getState().open?.deck.slides[0]?.shapes ?? []
+    expect(shapes[0]?.graphic?.kind).toBe('table')
+    expect(useDeckStore.getState().selection).toEqual([shapes[0]?.id])
+  })
+
+  it('makes it the size that was swept, not a fixed three by three', async () => {
+    await openDeck('empty')
+    render(<App />)
+    await insert(2, 5)
+
+    const table = useDeckStore.getState().open?.deck.slides[0]?.shapes[0]?.graphic?.table
+    expect(table?.rows).toHaveLength(2)
+    expect(table?.rows[0]?.cells).toHaveLength(5)
+  })
+
+  it('draws it on the canvas', async () => {
+    await openDeck('empty')
+    render(<App />)
+    await insert()
+
     // Nine cells, each a rectangle with a text box over it.
     expect(document.querySelectorAll('foreignObject').length).toBeGreaterThanOrEqual(9)
   })
 
   it('takes it back in one step', async () => {
     await openDeck('empty')
+    render(<App />)
     const before = partText()
 
+    await insert()
     act(() => {
-      runCommand('insert.table', {})
       runCommand('edit.undo', {})
     })
 
@@ -636,7 +709,52 @@ describe('find and replace', () => {
     open()
 
     await user.type(screen.getByLabelText('Find'), 'Slide')
-    expect(screen.getByText('8 on 8 slides')).toBeInTheDocument()
+    // Where you are as well as how many there are: a count with no position is
+    // a number you cannot walk through.
+    expect(screen.getByText('1 of 8 on 8 slides')).toBeInTheDocument()
+  })
+
+  it('steps to the next match and to the slide it is on', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.click(screen.getByRole('button', { name: 'Next match' }))
+
+    expect(screen.getByText('2 of 8 on 8 slides')).toBeInTheDocument()
+    expect(useDeckStore.getState().current).toBe(1)
+    // And the shape, because a slide is not an answer to "where is this word".
+    expect(useDeckStore.getState().selection).toHaveLength(1)
+  })
+
+  it('wraps round rather than stopping at the end', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.click(screen.getByRole('button', { name: 'Previous match' }))
+
+    // A search that refuses to continue is one you restart by hand.
+    expect(screen.getByText('8 of 8 on 8 slides')).toBeInTheDocument()
+  })
+
+  it('steps on Enter, and back on Shift+Enter', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    const field = screen.getByLabelText('Find')
+    await user.type(field, 'Slide')
+    await user.type(field, '{Enter}')
+    expect(screen.getByText('2 of 8 on 8 slides')).toBeInTheDocument()
+
+    await user.type(field, '{Shift>}{Enter}{/Shift}')
+    expect(screen.getByText('1 of 8 on 8 slides')).toBeInTheDocument()
   })
 
   it('says so when there is nothing', async () => {
@@ -691,5 +809,404 @@ describe('find and replace', () => {
     open()
 
     expect(screen.getByRole('button', { name: 'Replace all' })).toBeDisabled()
+  })
+
+  it('replaces the one match it is standing on and leaves the rest', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+
+    // The first, which is on slide one; the eight became seven.
+    expect(partText()).toContain('Page 1')
+    expect(screen.getByText('1 of 7 on 7 slides')).toBeInTheDocument()
+  })
+
+  it('goes to the slide the match is on before changing it', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Next match' }))
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+
+    // A word changing on a slide you are not looking at is a word you did not
+    // see change.
+    expect(useDeckStore.getState().current).toBe(1)
+    expect(partText()).toContain('Page')
+  })
+
+  it('stays where it was, so the next match has taken the number', async () => {
+    const user = userEvent.setup()
+    await openDeck('many-slides')
+    render(<App />)
+    open()
+
+    await user.type(screen.getByLabelText('Find'), 'Slide')
+    await user.type(screen.getByLabelText('Replace with'), 'Page')
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
+
+    // Two presses, two slides changed: standing still is what moves on.
+    expect(
+      useDeckStore.getState().open?.deck.slides[1]?.shapes[0]?.text?.paragraphs[0]?.runs[0]?.text,
+    ).toBe('Page 2')
+  })
+})
+
+describe('shadows', () => {
+  it('writes one into the effect list', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Shadow soft' }))
+
+    expect(partText()).toContain('<a:outerShdw')
+    expect(partText()).toContain('<a:effectLst>')
+  })
+
+  it('takes it away again, and the list with it', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Shadow medium' }))
+    await user.click(screen.getByRole('button', { name: 'Shadow none' }))
+
+    // An empty list says "no effects", which is a different answer from not
+    // saying anything.
+    expect(partText()).not.toContain('a:outerShdw')
+    expect(partText()).not.toContain('a:effectLst')
+  })
+
+  it('is drawn, not merely recorded', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Shadow hard' }))
+
+    // Before this, a deck where every box had a shadow was drawn flat.
+    expect(document.querySelector('feDropShadow')).not.toBeNull()
+  })
+})
+
+describe('the gradient editor', () => {
+  const selectAndFill = async (user: ReturnType<typeof userEvent.setup>) => {
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    await user.click(screen.getByRole('button', { name: 'Fill gradient' }))
+  }
+
+  it('appears only once the fill is a gradient', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([firstShapeId()])
+    })
+    expect(screen.queryByRole('group', { name: 'Gradient' })).not.toBeInTheDocument()
+
+    await selectAndFill(user)
+    expect(screen.getByRole('group', { name: 'Gradient' })).toBeInTheDocument()
+  })
+
+  it('moves a stop along', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    fireEvent.change(screen.getByLabelText('Stop 1 position'), { target: { value: '30' } })
+
+    // Thousandths of a percent in the file, percent in the panel.
+    expect(partText()).toContain('pos="30000"')
+  })
+
+  it('turns the gradient round', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    await user.click(screen.getByRole('button', { name: 'Gradient 180 degrees' }))
+
+    expect(partText()).toContain('ang="10800000"')
+  })
+
+  it('adds a stop and takes it away again', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+    expect(screen.getAllByLabelText(/Stop \d position/u)).toHaveLength(2)
+
+    await user.click(screen.getByRole('button', { name: 'Add stop' }))
+    expect(screen.getAllByLabelText(/Stop \d position/u)).toHaveLength(3)
+
+    await user.click(screen.getByRole('button', { name: 'Remove stop 2' }))
+    expect(screen.getAllByLabelText(/Stop \d position/u)).toHaveLength(2)
+  })
+
+  it('will not take a gradient below two stops', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    // Two is the fewest that is still a gradient; below that it is a colour,
+    // and the panel above already does colours.
+    expect(screen.getByRole('button', { name: 'Remove stop 1' })).toBeDisabled()
+  })
+
+  it('gives a stop a theme colour, which follows the theme', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+    await selectAndFill(user)
+
+    await user.click(screen.getByRole('button', { name: 'Stop 1 Accent 3' }))
+
+    expect(partText()).toContain('schemeClr val="accent3"')
+  })
+})
+
+describe('the header and footer dialog', () => {
+  /** Opens a deck with several slides and puts the dialog up. */
+  async function openDialog() {
+    await openDeck('many-slides')
+    render(<App />)
+    act(() => {
+      runCommand('insert.header-footer', {})
+    })
+  }
+
+  const numbered = () => {
+    const deck = useDeckStore.getState().open?.deck
+    return (deck?.slides ?? []).filter((slide) =>
+      slide.shapes.some((shape) => shape.placeholder?.type === 'sldNum'),
+    ).length
+  }
+
+  it('puts the number on every slide when it is applied to all', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    expect(numbered()).toBe(useDeckStore.getState().open?.deck.slides.length)
+  })
+
+  it('puts it on one slide when that is what was asked', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(numbered()).toBe(1)
+  })
+
+  it('writes the footer text into the file', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Footer' }))
+    await user.type(screen.getByRole('textbox', { name: 'Footer text' }), 'Confidential')
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    expect(partText()).toContain('Confidential')
+  })
+
+  it('leaves the deck alone when it is cancelled', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(numbered()).toBe(0)
+    expect(useDeckStore.getState().saved).toBe(true)
+  })
+
+  it('opens on what the slide already shows', async () => {
+    const user = userEvent.setup()
+    await openDialog()
+    await user.click(screen.getByRole('checkbox', { name: 'Slide number' }))
+    await user.click(screen.getByRole('button', { name: 'Apply to All' }))
+
+    act(() => {
+      runCommand('insert.header-footer', {})
+    })
+
+    // Not a form that starts empty: reopening it and pressing Apply again must
+    // not be a way to quietly take the numbers back off.
+    expect(screen.getByRole('checkbox', { name: 'Slide number' })).toBeChecked()
+  })
+})
+
+describe('the format painter', () => {
+  const shapeAt = (index: number) => useDeckStore.getState().open?.deck.slides[0]?.shapes[index]
+
+  /** Gives the first shape an orange fill, then holds its look. */
+  async function pickUpOrange() {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(0)?.id ?? -1])
+    })
+    act(() => {
+      // Through the same write the properties panel uses: the brush should
+      // carry whatever a person could have put there.
+      useDeckStore.getState().edit((slide) => {
+        const shape = slide.shapes[0]
+        return (
+          shape !== undefined &&
+          writeFill(shape, {
+            kind: 'solid',
+            color: { source: { kind: 'srgb', hex: '#FF7A00' }, transforms: [] },
+          })
+        )
+      })
+    })
+    act(() => {
+      runCommand('format.copy-formatting', {})
+    })
+  }
+
+  it('is offered only once there is something to paste', async () => {
+    await openDeck('shapes')
+    render(<App />)
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(0)?.id ?? -1])
+    })
+
+    expect(getCommand('format.paste-formatting')?.isEnabled?.({})).toBe(false)
+  })
+
+  it('paints the look onto the shape that is picked out next', async () => {
+    await pickUpOrange()
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(1)?.id ?? -1])
+    })
+    act(() => {
+      runCommand('format.paste-formatting', {})
+    })
+
+    const painted = shapeAt(1)
+    expect(painted?.properties?.fill).toMatchObject({ kind: 'solid' })
+    expect(partText()).toContain('FF7A00')
+  })
+
+  it('leaves the painted shape where it was and what it was', async () => {
+    await pickUpOrange()
+    const before = shapeAt(1)?.transform
+    const geometry = shapeAt(1)?.properties?.geometry?.preset
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(1)?.id ?? -1])
+    })
+    act(() => {
+      runCommand('format.paste-formatting', {})
+    })
+
+    expect(shapeAt(1)?.transform).toEqual(before)
+    expect(shapeAt(1)?.properties?.geometry?.preset).toBe(geometry)
+  })
+
+  it('is one step to undo', async () => {
+    await pickUpOrange()
+    const steps = useDeckStore.getState().undoStack.length
+    const before = shapeAt(1)?.properties?.fill
+
+    act(() => {
+      useDeckStore.getState().selectShapes([shapeAt(1)?.id ?? -1])
+    })
+    act(() => {
+      runCommand('format.paste-formatting', {})
+    })
+    expect(useDeckStore.getState().undoStack.length).toBe(steps + 1)
+    expect(shapeAt(1)?.properties?.fill).not.toEqual(before)
+
+    act(() => {
+      useDeckStore.getState().undo()
+    })
+    // The whole paint, not the fill and then the outline and then the text.
+    expect(shapeAt(1)?.properties?.fill).toEqual(before)
+  })
+})
+
+describe('the grid', () => {
+  it('is not drawn until it is asked for', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    expect(screen.queryByTestId('grid')).not.toBeInTheDocument()
+  })
+
+  it('appears behind the slide when it is', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('view.grid-and-guides', {})
+    })
+    await user.click(screen.getByRole('checkbox', { name: 'Display grid on screen' }))
+
+    expect(screen.getByTestId('grid')).toBeInTheDocument()
+  })
+
+  it('remembers its spacing in the file rather than in the session', async () => {
+    const user = userEvent.setup()
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('view.grid-and-guides', {})
+    })
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Grid spacing' }), '228600')
+
+    // A grid you set again every morning is not doing its job.
+    const { open } = useDeckStore.getState()
+    expect(getPartText(open?.package ?? { parts: new Map() }, 'ppt/viewProps.xml')).toContain(
+      'cx="228600"',
+    )
+  })
+
+  it('is shown and snapped to as two separate answers', async () => {
+    await openDeck('shapes')
+    render(<App />)
+
+    act(() => {
+      runCommand('view.snap-to-grid', {})
+    })
+
+    // Wanting things lined up is not wanting to look at the lines.
+    expect(getCommand('view.snap-to-grid')?.isActive?.({})).toBe(true)
+    expect(getCommand('view.grid')?.isActive?.({})).toBe(false)
+    expect(screen.queryByTestId('grid')).not.toBeInTheDocument()
   })
 })

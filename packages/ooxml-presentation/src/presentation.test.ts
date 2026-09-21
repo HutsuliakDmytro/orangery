@@ -1,7 +1,22 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readPptxPackage } from './parts'
+import {
+  addRelationship,
+  getPartText,
+  parseRelationships,
+  resolveTarget,
+  serializeRelationships,
+  setPartText,
+} from '@orangery/ooxml-core'
+import {
+  COMMENT_AUTHORS_RELATIONSHIP,
+  COMMENTS_RELATIONSHIP,
+  HANDOUT_MASTER_RELATIONSHIP,
+  MODERN_COMMENTS_RELATIONSHIP,
+  PRESENTATION_PART,
+  readPptxPackage,
+} from './parts'
 import { readPresentation, referencedParts } from './presentation'
 
 const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synthetic')
@@ -116,5 +131,85 @@ describe('referencedParts', () => {
     expect(parts).toContain('ppt/notesSlides/notesSlide1.xml')
     expect(parts).toContain('ppt/slideMasters/slideMaster1.xml')
     expect(parts).toContain('ppt/theme/theme1.xml')
+  })
+})
+
+describe('the parts a deck reaches beyond its slides', () => {
+  /** Adds a part and a relationship to it, as a deck that had one would have. */
+  function attach(
+    pkg: Awaited<ReturnType<typeof open>>,
+    from: string,
+    type: string,
+    target: string,
+  ) {
+    const directory = from.slice(0, from.lastIndexOf('/'))
+    const relsPart = `${directory}/_rels/${from.slice(directory.length + 1)}.rels`
+    const relationships = parseRelationships(getPartText(pkg, relsPart) ?? '')
+
+    addRelationship(relationships, type, target)
+    setPartText(pkg, relsPart, serializeRelationships(relationships))
+    setPartText(pkg, resolveTarget(target, directory), '<x/>')
+  }
+
+  it('finds the handout master, which only a printed deck has', async () => {
+    const pkg = await open('empty')
+    attach(pkg, PRESENTATION_PART, HANDOUT_MASTER_RELATIONSHIP, 'handoutMasters/handoutMaster1.xml')
+
+    const map = readPresentation(pkg)
+    expect(map.handoutMaster).toBe('ppt/handoutMasters/handoutMaster1.xml')
+    expect(referencedParts(map)).toContain('ppt/handoutMasters/handoutMaster1.xml')
+  })
+
+  it('finds a slide’s comments', async () => {
+    const pkg = await open('empty')
+    attach(pkg, 'ppt/slides/slide1.xml', COMMENTS_RELATIONSHIP, '../comments/comment1.xml')
+
+    expect(readPresentation(pkg).slides[0]?.comments).toEqual(['ppt/comments/comment1.xml'])
+  })
+
+  it('finds the ones PowerPoint has written since 2018 as well', async () => {
+    // A reader that knew only the standard name would report every modern deck
+    // as having no comments, which is worse than not looking.
+    const pkg = await open('empty')
+    attach(pkg, 'ppt/slides/slide1.xml', MODERN_COMMENTS_RELATIONSHIP, '../comments/modern1.xml')
+
+    expect(readPresentation(pkg).slides[0]?.comments).toEqual(['ppt/comments/modern1.xml'])
+  })
+
+  it('finds the people the comments belong to', async () => {
+    const pkg = await open('empty')
+    attach(pkg, PRESENTATION_PART, COMMENT_AUTHORS_RELATIONSHIP, 'commentAuthors.xml')
+
+    expect(readPresentation(pkg).commentAuthors).toEqual(['ppt/commentAuthors.xml'])
+  })
+
+  it('lists no comments on a deck that has none', async () => {
+    const map = await mapOf('empty')
+    expect(map.slides[0]?.comments).toEqual([])
+    expect(map.commentAuthors).toEqual([])
+    expect(map.handoutMaster).toBeNull()
+  })
+})
+
+describe('the media a deck uses', () => {
+  it('lists the pictures its slides point at', async () => {
+    const map = await mapOf('picture')
+    expect(map.media.some((path) => path.startsWith('ppt/media/'))).toBe(true)
+  })
+
+  it('lists a film as well as a picture', async () => {
+    const map = await mapOf('media')
+    // A poster frame and the film behind it are two parts, and a deck that
+    // carried only the first would present a still.
+    expect(map.media.length).toBeGreaterThan(1)
+  })
+
+  it('reaches what the layouts and the masters point at, not only the slides', async () => {
+    const map = await mapOf('picture')
+    for (const path of map.media) expect(referencedParts(map)).toContain(path)
+  })
+
+  it('lists nothing for a deck with no pictures in it', async () => {
+    expect((await mapOf('empty')).media).toEqual([])
   })
 })

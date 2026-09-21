@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
+import { getPartText, setPartText } from '@orangery/ooxml-core'
+import { saveDeck } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
@@ -152,5 +154,49 @@ describe('a file that will not open', () => {
     })
 
     expect(useDeckStore.getState().error).toContain('ppt/presentation.xml')
+  })
+})
+
+describe('a graphic this app does not draw', () => {
+  /** Puts a graphic frame of an unknown kind on the slide, as a real deck would. */
+  async function withSmartArt() {
+    await loadFixture('empty')
+    const open = useDeckStore.getState().open
+    const slide = open?.deck.slides[0]
+    if (open == null || slide === undefined) throw new Error('no slide')
+
+    const xml = getPartText(open.package, slide.path) ?? ''
+    const frame =
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="9" name="Diagram"/>' +
+      '<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' +
+      '<p:xfrm><a:off x="1000000" y="1000000"/><a:ext cx="3000000" cy="2000000"/></p:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"/></a:graphic>' +
+      '</p:graphicFrame>'
+
+    setPartText(open.package, slide.path, xml.replace('</p:spTree>', `${frame}</p:spTree>`))
+    await act(async () => {
+      await useDeckStore.getState().load(await saveDeck(open.package), '/decks/smartart.pptx')
+    })
+  }
+
+  it('stands in for it with a box that says what it is', async () => {
+    // A bare rectangle looks like a rectangle somebody drew; the label is what
+    // tells the person their deck has SmartArt in it.
+    await withSmartArt()
+    render(<App />)
+
+    expect(within(screen.getByTestId('canvas')).getByText(/SmartArt/u)).toBeInTheDocument()
+    expect(within(screen.getByTestId('canvas')).getByText(/kept, not drawn/u)).toBeInTheDocument()
+  })
+
+  it('keeps it in the file, which is the whole point of not drawing it', async () => {
+    await withSmartArt()
+
+    const open = useDeckStore.getState().open
+    const slide = open?.deck.slides[0]
+    const text =
+      open == null || slide === undefined ? '' : (getPartText(open.package, slide.path) ?? '')
+
+    expect(text).toContain('drawingml/2006/diagram')
   })
 })

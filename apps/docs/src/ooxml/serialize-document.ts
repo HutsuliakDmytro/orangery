@@ -578,6 +578,16 @@ function buildParagraph(
         }
         break
       }
+      case 'documentChart': {
+        // Written back exactly as it came. Nothing edits a chart yet, so there
+        // is no version of this drawing better than the one the file had — and
+        // the chart part it points at is never rewritten either.
+        const original = stringAttr(child.attrs, 'drawing')
+        if (original !== null) {
+          append(markMap(child.marks), markSignature(child.marks), parsedNodes(original))
+        }
+        break
+      }
       case 'image': {
         const original = stringAttr(child.attrs, 'drawing')
         const relationshipId = stringAttr(child.attrs, 'relationshipId')

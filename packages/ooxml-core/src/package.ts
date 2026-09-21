@@ -95,14 +95,34 @@ export function setPartText(pkg: OoxmlPackage, path: string, text: string): void
   })
 }
 
-export async function writePackage(pkg: OoxmlPackage): Promise<Uint8Array> {
+export interface WriteOptions {
+  /**
+   * Parts to store uncompressed rather than deflate.
+   *
+   * OOXML never needs this; OpenDocument does. Its `mimetype` entry has to be
+   * first and stored, so that a reader can tell what the file is from its first
+   * bytes without unzipping it — and a zip is a container, so which entries are
+   * deflated is a fact about the container rather than about either format.
+   */
+  stored?: readonly string[]
+}
+
+export async function writePackage(
+  pkg: OoxmlPackage,
+  options: WriteOptions = {},
+): Promise<Uint8Array> {
   const zip = new JSZip()
+  const stored = new Set(options.stored ?? [])
 
   for (const part of pkg.parts.values()) {
     // Text parts are re-encoded from `text` so edits are picked up; binary parts
     // go back byte for byte.
     const content = part.text === undefined ? part.bytes : new TextEncoder().encode(part.text)
-    zip.file(part.path, content, { date: part.date, binary: true })
+    zip.file(part.path, content, {
+      date: part.date,
+      binary: true,
+      ...(stored.has(part.path) ? { compression: 'STORE' as const } : {}),
+    })
   }
 
   return zip.generateAsync({

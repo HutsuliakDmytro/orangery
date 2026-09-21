@@ -32,6 +32,8 @@ export interface SlidePart {
 }
 
 export interface Slide extends SlidePart {
+  /** What `p:sldIdLst` calls it — the one name that survives being moved. */
+  id: string
   /** The layout this slide is built on; null only in a malformed deck. */
   layout: string | null
   notes: string | null
@@ -45,6 +47,8 @@ export interface Master extends SlidePart {
 export interface Deck {
   slideSize: SlideSize
   notesSize: SlideSize
+  /** What the first slide is numbered, which is not always one. */
+  firstSlideNum: number
   slides: Slide[]
   /** Keyed by part path, which is how a slide names its layout. */
   layouts: Map<string, SlidePart>
@@ -111,12 +115,15 @@ export function readDeck(pkg: OoxmlPackage): Deck {
 
   const slides = map.slides.flatMap((entry) => {
     const part = readSlidePart(pkg, entry.path)
-    return part === null ? [] : [{ ...part, layout: entry.layout, notes: entry.notes }]
+    return part === null
+      ? []
+      : [{ ...part, id: entry.id, layout: entry.layout, notes: entry.notes }]
   })
 
   return {
     slideSize: map.slideSize,
     notesSize: map.notesSize,
+    firstSlideNum: map.firstSlideNum,
     slides,
     layouts,
     masters,

@@ -3,6 +3,7 @@ import { readDeckFile } from '../document/file'
 import { closeShowWindows, showSource } from '../document/show-windows'
 import { Presenter } from '../components/presenter'
 import { Show } from '../components/show'
+import { stepsPerSlide } from '../render/animation'
 import { useDeckStore } from '../store/deck-store'
 import { useShowStore } from '../store/show-store'
 import { useShowSync } from './show-sync'
@@ -34,8 +35,10 @@ export function ShowWindow({ presenter }: { presenter: boolean }) {
         const bytes = await readDeckFile(source.path)
         await useDeckStore.getState().load(bytes, null)
 
-        const count = useDeckStore.getState().open?.deck.slides.length ?? 0
-        useShowStore.getState().start(source.at, count)
+        const deck = useDeckStore.getState().open?.deck
+        useShowStore
+          .getState()
+          .start(source.at, deck?.slides.length ?? 0, deck === undefined ? [] : stepsPerSlide(deck))
       } catch (cause) {
         setProblem(cause instanceof Error ? cause.message : 'The show could not be opened.')
       }

@@ -2,9 +2,25 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { cleanup, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { readDeck, readPptxPackage, readThemes } from '@orangery/ooxml-presentation'
+import { EMU_PER_PIXEL } from '@orangery/ooxml-drawingml'
+import {
+  applyFooters,
+  moveSlide,
+  NO_FOOTERS,
+  readDeck,
+  readPptxPackage,
+  readThemes,
+  saveDeck,
+  writeSlidePart,
+} from '@orangery/ooxml-presentation'
 import { readBodyProperties } from '@orangery/ooxml-drawingml'
-import { getPartText, parseXml, setPartText } from '@orangery/ooxml-core'
+import {
+  getPartText,
+  parseRelationships,
+  parseXml,
+  serializeRelationships,
+  setPartText,
+} from '@orangery/ooxml-core'
 import { SlideView } from './slide-view'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/pptx/synthetic')
@@ -107,12 +123,35 @@ describe('text', () => {
     expect(screen.getByText('orange')).toHaveStyle({ color: 'rgb(255, 122, 0)' })
   })
 
+  it('states the colour of a run that states none, rather than inheriting one', async () => {
+    // Left to inherit, a slide's words take the colour of the app's chrome —
+    // on the dark theme, near-white on a white slide. The fallback is the
+    // theme's `tx1`, which is what PowerPoint falls back to.
+    await draw('text-formatting')
+
+    expect(screen.getByText('Plain').style.color).toBe('rgb(0, 0, 0)')
+  })
+
+  it('lays text out in pixels, inside a group that scales it back to EMU', async () => {
+    // A 44-point title is 558800 EMU, and Blink clamps `font-size` at ten
+    // thousand pixels: laid out in EMU, the text of every slide is invisible in
+    // Chromium and absent from every exported picture.
+    const { container } = await draw('placeholders')
+    const frame = container.querySelector('foreignObject')
+
+    expect(frame?.parentElement?.getAttribute('transform')).toBe(`scale(${String(EMU_PER_PIXEL)})`)
+    expect(Number(frame?.getAttribute('width'))).toBeLessThan(2000)
+  })
+
   it('gives a placeholder the size it inherits rather than a default', async () => {
     // The slide states nothing; 44pt comes from the master's title style.
     await draw('placeholders')
     const title = screen.getByText('Placeholder inheritance')
 
-    expect(title).toHaveStyle({ fontSize: `${String(44 * 12700)}px` })
+    // In points, which is what the file says and what the browser is asked
+    // for: the text of a slide is laid out in pixels and scaled back into EMU,
+    // because a font size in EMU is past what an engine will lay out.
+    expect(title.style.fontSize).toBe('44pt')
   })
 
   it('wraps text in a foreignObject, since SVG text cannot wrap', async () => {
@@ -206,7 +245,7 @@ describe('autofit', () => {
     // already decided it should not.
     await withAutofit('<a:bodyPr><a:normAutofit fontScale="50000"/></a:bodyPr>')
 
-    expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700 * 0.5)}px` })
+    expect(screen.getByText('large').style.fontSize).toBe('16pt')
   })
 
   it('tightens the lines by what was recorded with it', async () => {
@@ -234,7 +273,7 @@ describe('autofit', () => {
 
   it('leaves text alone where autofit is off', async () => {
     await withAutofit('<a:bodyPr><a:noAutofit/></a:bodyPr>')
-    expect(screen.getByText('large')).toHaveStyle({ fontSize: `${String(32 * 12700)}px` })
+    expect(screen.getByText('large').style.fontSize).toBe('32pt')
   })
 })
 
@@ -352,5 +391,129 @@ describe('a shape the file hides', () => {
 
     expect(container.textContent).toContain('Shown')
     expect(container.textContent).not.toContain('Not shown')
+  })
+})
+
+describe('the fields on a slide', () => {
+  /** The text of the slide-number placeholder, which is the only one drawn bare. */
+  const numberShown = (container: HTMLElement) =>
+    [...container.querySelectorAll('foreignObject')]
+      .map((box) => box.textContent)
+      .find((text) => /^\d+$/u.test(text)) ?? null
+
+  /** Puts the date and the number on every slide, then reopens the deck. */
+  async function withFooters() {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'many-slides.pptx')))
+    const deck = readDeck(pkg)
+    applyFooters(
+      deck,
+      deck.slides,
+      { ...NO_FOOTERS, date: true, slideNumber: true },
+      { now: new Date(2020, 0, 1), locale: 'en-US' },
+    )
+    for (const slide of deck.slides) writeSlidePart(pkg, slide)
+
+    const reopened = await readPptxPackage(await saveDeck(pkg))
+    return { deck: readDeck(reopened), pkg: reopened }
+  }
+
+  it('numbers the slide it is drawn on, not the one the file remembers', async () => {
+    const { pkg } = await withFooters()
+
+    // The third slide, moved to the front after its number was written into it:
+    // the file says 3 and the deck says 1, which is the whole point of drawing
+    // the field rather than its cache.
+    moveSlide(pkg, 2, 0)
+    const reordered = readDeck(await readPptxPackage(await saveDeck(pkg)))
+    const moved = reordered.slides[0]
+    if (moved === undefined) throw new Error('fixture is too short')
+
+    const { container } = render(
+      <SlideView deck={reordered} slide={moved} themes={readThemes(pkg, reordered)} />,
+    )
+
+    // Its title still says what it always said, so the two are told apart.
+    expect(container.textContent).toContain('Slide 3')
+    expect(numberShown(container)).toBe('1')
+  })
+
+  it('shows the day it is being looked at, not the day it was saved', async () => {
+    const { deck, pkg } = await withFooters()
+    const first = deck.slides[0]
+    if (first === undefined) throw new Error('fixture has no slides')
+
+    const { container } = render(
+      <SlideView deck={deck} slide={first} themes={readThemes(pkg, deck)} />,
+    )
+
+    // Cached as the first of January 2020, which is a date nobody is reading it on.
+    expect(container.textContent).not.toContain('2020')
+    expect(container.textContent).toContain(String(new Date().getFullYear()))
+  })
+})
+
+describe('SmartArt', () => {
+  /** A deck whose slide holds a diagram frame with a drawing behind it. */
+  async function withDiagram() {
+    const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'empty.pptx')))
+
+    const drawing =
+      '<dsp:drawing xmlns:dsp="dsp" xmlns:a="a"><dsp:spTree><dsp:nvGrpSpPr/><dsp:grpSpPr/>' +
+      '<dsp:sp><dsp:nvSpPr><dsp:cNvPr id="9" name="Node"/><dsp:cNvSpPr/></dsp:nvSpPr>' +
+      '<dsp:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>' +
+      '<a:prstGeom prst="roundRect"/></dsp:spPr>' +
+      '<dsp:txBody><a:bodyPr/><a:p><a:r><a:t>Idea</a:t></a:r></a:p></dsp:txBody>' +
+      '</dsp:sp></dsp:spTree></dsp:drawing>'
+
+    setPartText(pkg, 'ppt/diagrams/drawing1.xml', drawing)
+
+    const rels = parseRelationships(getPartText(pkg, 'ppt/slides/_rels/slide1.xml.rels') ?? '')
+    rels.set('rId9', {
+      id: 'rId9',
+      type: 'http://schemas.microsoft.com/office/2007/relationships/diagramDrawing',
+      target: '../diagrams/drawing1.xml',
+      external: false,
+    })
+    setPartText(pkg, 'ppt/slides/_rels/slide1.xml.rels', serializeRelationships(rels))
+
+    const slideText = getPartText(pkg, 'ppt/slides/slide1.xml') ?? ''
+    const frame =
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="5" name="Diagram"/>' +
+      '<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' +
+      '<p:xfrm><a:off x="1000000" y="500000"/><a:ext cx="2000000" cy="1000000"/></p:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">' +
+      '<dgm:relIds xmlns:dgm="dgm" r:dm="rId8"/></a:graphicData></a:graphic></p:graphicFrame>'
+    setPartText(
+      pkg,
+      'ppt/slides/slide1.xml',
+      slideText.replace('</p:spTree>', `${frame}</p:spTree>`),
+    )
+
+    const deck = readDeck(pkg)
+    const slide = deck.slides[0]
+    if (slide === undefined) throw new Error('fixture has no slides')
+    return { deck, slide, pkg, themes: readThemes(pkg, deck) }
+  }
+
+  it('draws the shapes PowerPoint drew rather than an empty frame', async () => {
+    const { deck, slide, pkg, themes } = await withDiagram()
+    const { container } = render(
+      <SlideView deck={deck} slide={slide} themes={themes} package={pkg} />,
+    )
+
+    expect(container.textContent).toContain('Idea')
+    expect(container.textContent).not.toContain('SmartArt')
+  })
+
+  it('falls back to a labelled box where the deck carries no drawing', async () => {
+    // A diagram made somewhere that never opened it in PowerPoint. Nothing
+    // here knows what it should look like, and saying so is the honest answer.
+    const { deck, slide, pkg, themes } = await withDiagram()
+    pkg.parts.delete('ppt/diagrams/drawing1.xml')
+
+    const { container } = render(
+      <SlideView deck={deck} slide={slide} themes={themes} package={pkg} />,
+    )
+    expect(container.textContent).toContain('SmartArt')
   })
 })

@@ -122,6 +122,24 @@ export function BoxProperties({ shapes }: { shapes: readonly Shape[] }) {
       <div className="flex items-center gap-1">
         {(['left', 'top', 'right', 'bottom'] as const).map((side) => inset(side))}
       </div>
+
+      <select
+        aria-label="Columns"
+        value={String(properties?.columns?.count ?? 1)}
+        onChange={(event) => {
+          const count = Number(event.target.value)
+          // One column is not a column count, it is the absence of one, and
+          // writing `numCol="1"` would state the default as a decision.
+          apply({ columns: count <= 1 ? null : { count } })
+        }}
+        className="w-full rounded border border-border bg-surface px-1 py-0.5 text-text"
+      >
+        {[1, 2, 3, 4].map((count) => (
+          <option key={count} value={String(count)}>
+            {count === 1 ? 'One column' : `${String(count)} columns`}
+          </option>
+        ))}
+      </select>
     </section>
   )
 }

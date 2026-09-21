@@ -1,13 +1,15 @@
 import {
   children,
   element,
+  ensureChild,
+  findChild,
   removeChild,
   setAttribute,
   tagName,
   upsertChild,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
-import type { Color, Fill } from '@orangery/ooxml-drawingml'
+import type { Color, Fill, Shadow } from '@orangery/ooxml-drawingml'
 import type { Shape } from './shape-tree'
 
 /**
@@ -21,7 +23,7 @@ import type { Shape } from './shape-tree'
  */
 
 /** `a:spPr` in schema order — the sequence PowerPoint checks on open. */
-const SHAPE_PROPERTIES = [
+export const SHAPE_PROPERTIES = [
   'a:xfrm',
   'a:custGeom',
   'a:prstGeom',
@@ -56,7 +58,7 @@ const LINE = [
 const FILL_TAGS = ['a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:grpFill']
 
 /** The `p:spPr` a shape keeps its look in. */
-function propertiesOf(shape: Shape): XmlNode | undefined {
+export function propertiesOf(shape: Shape): XmlNode | undefined {
   return children(shape.node).find((child) => /^p:(sp|cxnSp)Pr$/u.test(tagName(child) ?? ''))
 }
 
@@ -185,4 +187,44 @@ export function writeLine(shape: Shape, change: LineChange): boolean {
 
   if (changed) upsertChild(properties, line, SHAPE_PROPERTIES)
   return changed
+}
+
+/**
+ * The drop shadow a shape states, or none at all.
+ *
+ * Written into `a:effectLst`, which is where every other effect lives too — so
+ * the list is made if it is missing and left alone if it holds anything else. A
+ * shape given a shadow and then taken back to none loses its `a:outerShdw` and
+ * keeps its glow, which is the only behaviour that does not quietly throw away
+ * something nobody mentioned.
+ */
+export function writeShadow(shape: Shape, shadow: Shadow | null): boolean {
+  const properties = propertiesOf(shape)
+  if (properties === undefined) return false
+
+  if (shadow === null) {
+    const list = findChild(properties, 'a:effectLst')
+    if (list === undefined) return false
+
+    removeChild(list, 'a:outerShdw')
+    // An empty list says nothing; leaving it would be stating "no effects",
+    // which is a different answer from not saying.
+    if (children(list).length === 0) removeChild(properties, 'a:effectLst')
+    return true
+  }
+
+  // After the fill and the line, before the 3-D, which is the schema's order.
+  const list = ensureChild(properties, 'a:effectLst', SHAPE_PROPERTIES)
+  removeChild(list, 'a:outerShdw')
+
+  const shadowElement = element('a:outerShdw', {
+    blurRad: String(Math.round(shadow.blur)),
+    dist: String(Math.round(shadow.distance)),
+    dir: String(Math.round(shadow.direction)),
+    rotWithShape: '0',
+  })
+
+  if (shadow.color !== null) children(shadowElement).push(colorElement(shadow.color))
+  children(list).unshift(shadowElement)
+  return true
 }

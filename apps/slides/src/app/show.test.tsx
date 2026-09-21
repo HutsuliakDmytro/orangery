@@ -6,6 +6,8 @@ import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCommand, runCommand } from '@orangery/ui-kit'
 import { App } from './app'
+import { children, parseXml } from '@orangery/ooxml-core'
+import { writeTransform } from '@orangery/ooxml-presentation'
 import { useDeckStore } from '../store/deck-store'
 import { useShowStore } from '../store/show-store'
 import { useViewStore } from '../store/view-store'
@@ -389,15 +391,29 @@ describe('the transition between slides', () => {
 })
 
 describe('a deck with animations', () => {
-  it('shows every object in its final state, animation or not', async () => {
-    // Nothing plays, so nothing may be waiting to appear: a shape that fades in
-    // is simply there.
+  it('holds back a shape until the press that brings it in', async () => {
     await openDeck('animations')
     render(<App />)
     await start()
 
-    const shown = screen.getByTestId('show')
-    expect(shown.textContent).toContain('Fades in')
+    // The room has not been shown it yet; putting it there from the start is
+    // giving away the point of the build.
+    expect(screen.getByTestId('show').textContent).not.toContain('Fades in')
+
+    press('ArrowRight')
+    expect(screen.getByTestId('show').textContent).toContain('Fades in')
+  })
+
+  it('plays the effect rather than snapping the shape on', async () => {
+    await openDeck('animations')
+    render(<App />)
+    await start()
+    press('ArrowRight')
+
+    const animated = [...screen.getByTestId('show').querySelectorAll('g')].filter((group) =>
+      group.getAttribute('style')?.includes('animation-name'),
+    )
+    expect(animated).not.toHaveLength(0)
   })
 
   it('draws nothing the file hides', async () => {
@@ -413,20 +429,44 @@ describe('a deck with animations', () => {
     expect(shown.textContent).not.toContain('Not shown')
   })
 
-  it('advances a whole slide at a time, since there are no builds to step', async () => {
+  it('plays the slide’s builds before moving on from it', async () => {
     await openDeck('animations')
     render(<App />)
     await start()
+
+    // The first press is the build; the slide is what comes after the last one.
+    press('ArrowRight')
+    expect(useShowStore.getState().at).toBe(0)
 
     press('ArrowRight')
     expect(useShowStore.getState().at).toBe(1)
   })
 
-  it('says so in the editor rather than letting it be discovered on stage', async () => {
+  it('takes a build back before it takes the slide back', async () => {
     await openDeck('animations')
     render(<App />)
+    await start()
+    press('ArrowRight')
 
-    expect(screen.getByText(/Animations are kept in the file but do not play/u)).toBeInTheDocument()
+    press('ArrowLeft')
+    expect(useShowStore.getState().at).toBe(0)
+    expect(screen.getByTestId('show').textContent).not.toContain('Fades in')
+  })
+
+  it('lands on a slide’s last build when it is reached backwards', async () => {
+    await openDeck('animations')
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    press('ArrowLeft')
+
+    // The room has already seen all of it; replaying the build would be a lie
+    // about what was said.
+    expect(useShowStore.getState().at).toBe(0)
+    expect(screen.getByTestId('show').textContent).toContain('Fades in')
   })
 })
 
@@ -554,5 +594,188 @@ describe('links in a show', () => {
 
     // It went where the link pointed, not one slide on.
     expect(useShowStore.getState().at).not.toBe(1)
+  })
+})
+
+describe('a morph', () => {
+  /** Two slides holding the same shape in two places, with a morph between. */
+  async function withMorph() {
+    await openDeck('shapes')
+    const { open } = useDeckStore.getState()
+    const slide = open?.deck.slides[0]
+    if (open == null || slide === undefined) throw new Error('nothing opened')
+
+    act(() => {
+      runCommand('slide.duplicate', {})
+    })
+    act(() => {
+      useDeckStore.getState().select(1)
+      useDeckStore
+        .getState()
+        .selectShapes([useDeckStore.getState().open?.deck.slides[1]?.shapes[0]?.id ?? -1])
+      useDeckStore.getState().edit((part) => {
+        const shape = part.shapes[0]
+        return shape?.transform == null
+          ? false
+          : writeTransform(shape, { ...shape.transform, x: shape.transform.x + 2_000_000 })
+      })
+    })
+
+    // The transition goes on the slide being moved to, as PowerPoint puts it.
+    act(() => {
+      useDeckStore.getState().edit((part) => {
+        children(part.root).push(
+          ...parseXml(
+            '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">' +
+              '<mc:Choice Requires="p159"><p:transition xmlns:p14="p14" p14:dur="700">' +
+              '<p159:morph xmlns:p159="p159" option="byObject"/></p:transition></mc:Choice>' +
+              '</mc:AlternateContent>',
+          ),
+        )
+        return true
+      })
+    })
+  }
+
+  it('moves the shapes instead of fading one slide over another', async () => {
+    await withMorph()
+    render(<App />)
+    await start()
+
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+
+    // No slide underneath: a morph is about the shapes, and drawing both would
+    // be the shapes moving over a copy of themselves.
+    expect(screen.queryByTestId('leaving')).not.toBeInTheDocument()
+
+    const moved = [...screen.getByTestId('show').querySelectorAll('g')].filter((group) =>
+      group.getAttribute('style')?.includes('transition: transform'),
+    )
+    expect(moved).not.toHaveLength(0)
+  })
+})
+
+describe('drawing on a slide', () => {
+  /** Starts a show and picks up a tool, as the keyboard would. */
+  async function withTool(tool: 'pen' | 'highlighter' | 'laser' | 'eraser', deck = 'shapes') {
+    await openDeck(deck)
+    render(<App />)
+    await start()
+    act(() => {
+      useShowStore.getState().setTool(tool)
+    })
+  }
+
+  const draw = () => {
+    act(() => {
+      useShowStore.getState().beginStroke({ x: 0, y: 0 })
+      useShowStore.getState().extendStroke({ x: 1_000_000, y: 500_000 })
+    })
+  }
+
+  it('takes the click, so drawing does not advance the slide', async () => {
+    await withTool('pen')
+    const layer = screen.getByTestId('ink')
+
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 })
+    expect(useShowStore.getState().at).toBe(0)
+  })
+
+  it('keeps what was drawn on the slide it was drawn on', async () => {
+    // A deck of several, or going to the next slide would clamp back to this
+    // one and the test would pass without moving.
+    await withTool('pen', 'many-slides')
+    draw()
+
+    act(() => {
+      useShowStore.getState().go(1)
+    })
+    expect(useShowStore.getState().ink[1] ?? []).toEqual([])
+
+    act(() => {
+      useShowStore.getState().go(0)
+    })
+    expect(useShowStore.getState().ink[0]).toHaveLength(1)
+  })
+
+  it('leaves the ink showing when the pen is put down', async () => {
+    await withTool('pen')
+    draw()
+    act(() => {
+      useShowStore.getState().setTool('none')
+    })
+
+    // What was drawn on the slide is on the slide; only the drawing stops.
+    expect(screen.getByTestId('ink').querySelectorAll('path')).toHaveLength(1)
+  })
+
+  it('advances again once the pen is put down', async () => {
+    await withTool('pen', 'many-slides')
+    act(() => {
+      useShowStore.getState().setTool('none')
+    })
+
+    press('ArrowRight')
+    expect(useShowStore.getState().at).toBe(1)
+  })
+
+  it('leaves nothing behind for the laser', async () => {
+    await withTool('laser')
+    const layer = screen.getByTestId('ink')
+
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(layer, { clientX: 40, clientY: 40 })
+
+    // A finger pointed at the screen. One that left a trail would be a pen.
+    expect(useShowStore.getState().ink[0] ?? []).toEqual([])
+  })
+
+  it('rubs out the stroke that was clicked', async () => {
+    await withTool('pen')
+    draw()
+    act(() => {
+      useShowStore.getState().setTool('eraser')
+    })
+
+    const stroke = screen.getByTestId('ink').querySelector('path')
+    if (stroke === null) throw new Error('nothing was drawn')
+    fireEvent.pointerDown(stroke)
+
+    expect(useShowStore.getState().ink[0]).toHaveLength(0)
+  })
+
+  it('asks what to do with it when the show ends', async () => {
+    await withTool('pen')
+    draw()
+    act(() => {
+      useShowStore.getState().end()
+    })
+
+    expect(screen.getByRole('dialog', { name: 'Ink' })).toBeInTheDocument()
+  })
+
+  it('asks nothing when nothing was drawn', async () => {
+    await withTool('pen')
+    act(() => {
+      useShowStore.getState().end()
+    })
+
+    expect(screen.queryByRole('dialog', { name: 'Ink' })).not.toBeInTheDocument()
+  })
+
+  it('puts the marks on the slide when they are kept', async () => {
+    const user = userEvent.setup()
+    await withTool('pen')
+    const before = useDeckStore.getState().open?.deck.slides[0]?.shapes.length ?? 0
+    draw()
+    act(() => {
+      useShowStore.getState().end()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Keep ink' }))
+
+    expect(useDeckStore.getState().open?.deck.slides[0]?.shapes).toHaveLength(before + 1)
   })
 })

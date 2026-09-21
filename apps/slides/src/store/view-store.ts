@@ -16,6 +16,25 @@ interface ViewState {
   theme: Theme
   /** Whether the find and replace strip is showing. */
   finding: boolean
+  /** Whether the template chooser is up. */
+  choosingTemplate: boolean
+  /**
+   * The shape preset armed for drawing, or null.
+   *
+   * Armed rather than placed: choosing a shape says what to draw, and the drag
+   * that follows says where and how big. Placing it at a guessed size in the
+   * middle and letting the person fix it afterwards is two operations where
+   * there should be one.
+   */
+  drawing: string | null
+  /** Whether the shape gallery is up. */
+  choosingShape: boolean
+  /** Whether the grid that asks how big a table should be is up. */
+  choosingTable: boolean
+  /** Whether the date, footer and slide-number dialog is up. */
+  editingFooters: boolean
+  /** The chart data editor, which opens on the chart that is selected. */
+  editingChartData: boolean
   /**
    * Whether the speaker notes are open for editing.
    *
@@ -58,6 +77,30 @@ interface ViewState {
   printLayout: PrintLayout
   /** Whether the rulers and the guides dragged out of them are showing. */
   rulers: boolean
+  /** Whether the grid is drawn behind the slide. */
+  grid: boolean
+  /** Whether the grid and guides dialog is up. */
+  editingGrid: boolean
+  /** Whether the paste special dialog is up. */
+  pasting: boolean
+  /** Whether the comments pane is open beside the slide. */
+  commenting: boolean
+  /**
+   * How far a film of the deck has got, or null when none is being made.
+   *
+   * Setting it to null is also how the recording is stopped: it asks after each
+   * slide, so there is one flag rather than a flag and a signal that could
+   * disagree.
+   */
+  recordingVideo: { at: number; of: number } | null
+  /**
+   * Whether a drag lands on the grid.
+   *
+   * Apart from whether the grid is drawn, as in PowerPoint: people who want
+   * things lined up do not necessarily want to look at the lines, and people
+   * who want the lines are sometimes only measuring.
+   */
+  snapToGrid: boolean
   /** Whether the left pane shows the slides or the words on them. */
   leftPane: 'filmstrip' | 'outline'
   /**
@@ -72,12 +115,24 @@ interface ViewState {
   sizes: { filmstrip: number; properties: number; notes: number }
   setTheme: (theme: Theme) => void
   setFinding: (finding: boolean) => void
+  setChoosingTemplate: (choosing: boolean) => void
+  setDrawing: (preset: string | null) => void
+  setChoosingShape: (choosing: boolean) => void
+  setChoosingTable: (choosing: boolean) => void
+  setEditingFooters: (editing: boolean) => void
+  setEditingChartData: (editing: boolean) => void
   setEditingNotes: (editing: boolean) => void
   setZoom: (zoom: number | null) => void
   toggleSection: (id: string) => void
   setRenamingSection: (id: string | null) => void
   setEditingOutline: (at: { slide: number; shape: number } | null) => void
   setRulers: (showing: boolean) => void
+  setGrid: (showing: boolean) => void
+  setEditingGrid: (editing: boolean) => void
+  setPasting: (pasting: boolean) => void
+  setCommenting: (commenting: boolean) => void
+  setRecordingVideo: (progress: { at: number; of: number } | null) => void
+  setSnapToGrid: (snapping: boolean) => void
   setPrintLayout: (layout: PrintLayout) => void
   setLeftPane: (pane: 'filmstrip' | 'outline') => void
   setContentFit: (fit: 'maximize' | 'fit') => void
@@ -97,12 +152,24 @@ const LIMITS: Record<keyof Panels, { min: number; max: number }> = {
 export const useViewStore = create<ViewState>((set) => ({
   theme: 'dark',
   finding: false,
+  choosingTemplate: false,
+  drawing: null,
+  choosingShape: false,
+  choosingTable: false,
+  editingFooters: false,
+  editingChartData: false,
   editingNotes: false,
   zoom: null,
   collapsedSections: [],
   renamingSection: null,
   editingOutline: null,
   rulers: false,
+  grid: false,
+  editingGrid: false,
+  pasting: false,
+  commenting: false,
+  recordingVideo: null,
+  snapToGrid: false,
   printLayout: 'slides',
   leftPane: 'filmstrip',
   contentFit: 'fit',
@@ -129,6 +196,30 @@ export const useViewStore = create<ViewState>((set) => ({
     set({ rulers: showing })
   },
 
+  setGrid: (showing) => {
+    set({ grid: showing })
+  },
+
+  setEditingGrid: (editing) => {
+    set({ editingGrid: editing })
+  },
+
+  setPasting: (pasting) => {
+    set({ pasting })
+  },
+
+  setCommenting: (commenting) => {
+    set({ commenting })
+  },
+
+  setRecordingVideo: (recordingVideo) => {
+    set({ recordingVideo })
+  },
+
+  setSnapToGrid: (snapping) => {
+    set({ snapToGrid: snapping })
+  },
+
   setPrintLayout: (layout) => {
     set({ printLayout: layout })
   },
@@ -143,6 +234,29 @@ export const useViewStore = create<ViewState>((set) => ({
 
   setTheme: (theme) => {
     set({ theme })
+  },
+
+  setChoosingTemplate: (choosing) => {
+    set({ choosingTemplate: choosing })
+  },
+
+  setDrawing: (preset) => {
+    set({ drawing: preset })
+  },
+
+  setChoosingShape: (choosing) => {
+    set({ choosingShape: choosing })
+  },
+
+  setChoosingTable: (choosing) => {
+    set({ choosingTable: choosing })
+  },
+
+  setEditingFooters: (editing) => {
+    set({ editingFooters: editing })
+  },
+  setEditingChartData: (editing) => {
+    set({ editingChartData: editing })
   },
 
   setFinding: (finding) => {

@@ -1,0 +1,24 @@
+{
+  "name": "@orangery/ooxml-spreadsheet",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SpreadsheetML: a workbook, its sheets and the cells in them.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@orangery/ooxml-core": "workspace:*"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

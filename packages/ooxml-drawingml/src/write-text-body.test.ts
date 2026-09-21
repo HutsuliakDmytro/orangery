@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { findChild, parseXml, serializeNode } from '@orangery/ooxml-core'
 import { readBodyProperties } from './text-body'
-import { autofitKindOf, writeBodyProperties } from './write-text-body'
+import { autofitKindOf, writeAutofitScale, writeBodyProperties } from './write-text-body'
 import type { BodyChange } from './write-text-body'
 
 /** How a text box holds its text: the box, not the words. */
@@ -148,5 +148,63 @@ describe('what the model reads back', () => {
 
   it('reports nothing done for a change that names nothing', () => {
     expect(writeBodyProperties(body('<a:bodyPr/>'), {})).toBe(false)
+  })
+})
+
+describe('recording what the text was shrunk to', () => {
+  const shrinking = (attributes = '') => body(`<a:bodyPr><a:normAutofit ${attributes}/></a:bodyPr>`)
+
+  it('writes the scale into the shape that asked to be shrunk', () => {
+    const node = shrinking()
+    expect(writeAutofitScale(node, 62500)).toBe(true)
+
+    expect(serializeNode(node)).toContain('fontScale="62500"')
+    expect(propertiesOf(node).autofit?.fontScale).toBeCloseTo(0.625, 4)
+  })
+
+  it('writes nothing into a shape that did not ask', () => {
+    // Text meant to run past its box would shrink in PowerPoint on open, which
+    // is the document changed by having been looked at.
+    const node = body('<a:bodyPr/>')
+    expect(writeAutofitScale(node, 50000)).toBe(false)
+    expect(serializeNode(node)).not.toContain('fontScale')
+  })
+
+  it('says full size by saying nothing', () => {
+    const node = shrinking('fontScale="70000"')
+    expect(writeAutofitScale(node, 100000)).toBe(true)
+
+    // An unshrunk shape carries no attribute; writing one would make the deck
+    // differ from its file for no reason.
+    expect(serializeNode(node)).not.toContain('fontScale')
+  })
+
+  it('reports no change when it is already that', () => {
+    const node = shrinking('fontScale="55000"')
+    expect(writeAutofitScale(node, 55000)).toBe(false)
+  })
+
+  it('keeps the line spacing the file already recorded', () => {
+    const node = shrinking('fontScale="85000" lnSpcReduction="10000"')
+    writeAutofitScale(node, 70000)
+
+    // How PowerPoint pairs the two levers is not written down anywhere, and the
+    // text was measured with this one already in effect.
+    expect(serializeNode(node)).toContain('lnSpcReduction="10000"')
+  })
+
+  it('drops the line spacing when the text is back at full size', () => {
+    const node = shrinking('fontScale="70000" lnSpcReduction="20000"')
+    expect(writeAutofitScale(node, 100000)).toBe(true)
+
+    // Otherwise a shape whose text was cut short keeps its lines squashed
+    // under words that now overflow nothing, here and in PowerPoint.
+    expect(serializeNode(node)).not.toContain('lnSpcReduction')
+    expect(serializeNode(node)).not.toContain('fontScale')
+  })
+
+  it('reports no change when it is already unshrunk', () => {
+    const node = shrinking('')
+    expect(writeAutofitScale(node, 100000)).toBe(false)
   })
 })

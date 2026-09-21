@@ -12,6 +12,8 @@ import { FindReplacePanel } from '../components/find-replace-panel'
 import { FootnotesPanel } from '../components/footnotes-panel'
 import { HeaderFooterEditor } from '../components/header-footer-editor'
 import { FormatPickers } from '../components/format-pickers'
+import { ChartDataDialog } from '../components/chart-data-dialog'
+import { ChartPanel } from '../components/chart-panel'
 import { CommentsPanel } from '../components/comments-panel'
 import { OutlinePanel } from '../components/outline-panel'
 import { PageNumbersDialog } from '../components/page-numbers-dialog'
@@ -232,6 +234,7 @@ function Shell() {
             <main className="min-h-0 flex-1">
               <EditorSurface />
             </main>
+            <ChartPanel />
             <CommentsPanel />
           </div>
 
@@ -281,6 +284,7 @@ function Shell() {
       )}
 
       {openPicker === 'styles' && <StylesPanel onClose={closePicker} />}
+      <ChartDataDialog />
 
       {openPicker === 'settings' && <SettingsDialog onClose={closePicker} />}
 

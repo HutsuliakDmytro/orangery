@@ -8,19 +8,30 @@ Product name: **Orangery Slides**. Bundle id `com.orangery.slides`, binary `oran
 ```
 orangery/                       pnpm workspace + cargo workspace
   apps/
-    docs/                       Orangery Docs (existing app, moved here unchanged in step 0)
-    slides/                     this app
+    docs/                       Orangery Docs      .docx
+    slides/                     this app           .pptx
+    sheets/                     Orangery Sheets    .xlsx
   packages/
-    ooxml-core/                 zip package, rels, content types, passthrough machinery, XML utils  ← extracted from docs
-    ooxml-wordprocessing/       document.xml model (Docs only)
-    ooxml-drawingml/            a:* shapes, text bodies, fills, lines, effects, transforms, pictures  ← extracted + extended
-    ooxml-presentation/         p:* presentation, slides, layouts, masters, notes, transitions  ← new
+    ooxml-core/                 zip package, rels, content types, passthrough machinery, XML utils
+    ooxml-drawingml/            a:* shapes, text bodies, fills, lines, effects, transforms, pictures
+    ooxml-presentation/         p:* presentation, slides, layouts, masters, notes, transitions
+    ooxml-spreadsheet/          SpreadsheetML: a workbook, its sheets and the cells in them
+    charts/                     c:* model, SVG renderer and edit model — all three apps
+    grid/                       a grid of cells on a canvas: the chart data editor, and Sheets
+    numfmt/                     Excel number format codes: what a cell shows for what it holds
     editor-text/                ProseMirror schema + extensions for OOXML text (shared: w:r/w:p and a:r/a:p map to one model)
     ui-kit/                     tokens.css, themes, toolbar/dropdown/dialog components, command registry, palette
+    fonts/                      the families that ship, so a file looks the same on every OS
     platform/                   OS abstractions (paths, keys, dialogs)
+    render-diff/                renders a file before and after a round-trip and compares the pages
     tauri-shared/               Rust crate: fs atomic write, autosave, updater, menus scaffolding
+  crates/
+    formula/                    the spreadsheet formula engine (Sheets)
   tests/fixtures/pptx/          real + synthetic decks
 ```
+
+Docs' `.docx` layer is still inside `apps/docs/src/ooxml` rather than in a
+package: it moves out when a second app needs it, and none does.
 
 Rule: **nothing OS-specific outside `packages/platform/`, nothing Docs-specific inside `packages/`.** If a package needs an app-specific branch, the abstraction is wrong.
 
@@ -42,10 +53,10 @@ Rule: **nothing OS-specific outside `packages/platform/`, nothing Docs-specific 
 | Text | ProseMirror via `packages/editor-text` (DrawingML text: `a:p`, `a:r`, `a:pPr` with bullets/levels/autofit) |
 | State | Zustand; slide model is immutable, edits are transactions with undo history |
 | PPTX engine | `packages/ooxml-presentation` + `ooxml-drawingml` — own parser/serializer, JSZip + fast-xml-parser |
-| Charts | `c:chart` parts: **read-only render** (own SVG renderer for bar/line/pie/scatter/area) in MVP, passthrough on save; editing post-MVP |
+| Charts | `c:chart` parts: own SVG renderer for bar/line/pie/doughnut/scatter/area, combination charts and a secondary axis. Editing changes the numbers — both the cache and the embedded workbook, or PowerPoint rebuilds the cache and loses the edit. Categories and the number of points are editable too; the ranges in `c:f` and the workbook's rows move together. |
 | Media | video/audio via `<video>`/`<audio>` from media parts; playback in slideshow |
-| Other formats | ODP import/export (own layer, same approach), PDF export, PNG/JPEG per slide, Keynote `.key` — no |
-| Tests | Vitest, Playwright, cargo test; round-trip corpus + LibreOffice render-diff in CI |
+| Other formats | ODP import/export (own layer, same approach), PDF export, PNG/JPEG per slide, `.thmx` theme export, video via canvas capture (real time, engine's container, narration mixed in), Keynote `.key` — no |
+| Tests | Vitest, Playwright, cargo test; round-trip corpus, package health after edits (`problemsIn`), LibreOffice render-diff in CI |
 
 ## Design system
 
@@ -60,7 +71,7 @@ Icons: `lucide-react`. Focus ring: orange. Keyboard-complete.
 - The in-memory model mirrors PPTX: `Presentation → SlideMaster[] → SlideLayout[] → Slide[]`, each slide has a `spTree` of shapes (`sp`, `pic`, `graphicFrame`, `grpSp`, `cxnSp`). Placeholders (`p:ph`) inherit from layout → master; inheritance is resolved at render time, never baked into the slide on save.
 - Coordinates are EMU internally (OOXML native, 914400/inch). Convert to px only in the renderer. Never store px.
 - Every shape keeps its original XML subtree; on save, only the properties we model are rewritten into it, the rest is preserved (per-shape passthrough, not just per-file).
-- Unknown shape types render as a bounding box with a label and stay untouched.
+- Unknown shape types render as a bounding box with a label and stay untouched. SmartArt is drawn from the `dsp:` drawing part PowerPoint writes beside it — running `dgm:layoutDef` would be writing an interpreter for a language only PowerPoint implements.
 - Theme colors (`schemeClr`) stay symbolic in the model; resolve to RGB only in render. Changing the theme must recolor the deck like PowerPoint does.
 - Text autofit (`normAutofit`, `spAutoFit`) is computed after layout; results are written as PowerPoint does (`fontScale`, `lnSpcReduction`).
 
@@ -71,15 +82,15 @@ Icons: `lucide-react`. Focus ring: orange. Keyboard-complete.
 - Transform handles: move, 8 resize handles, rotate; `Shift` constrains, `Alt` from center, arrows nudge 1 px / `Shift` 10 px.
 - Smart guides: snap to slide center, edges, other shapes' edges/centers, equal spacing. Guides drawn in orange.
 - Undo/redo is per deck, transaction-based, survives autosave.
-- 300-slide deck with images must scroll the filmstrip at 60 fps: thumbnails are rendered lazily to bitmaps and cached, invalidated per slide.
+- 300-slide deck with images must scroll the filmstrip at 60 fps. Measured: only the thumbnails near the window are drawn at all, which beat caching them as bitmaps — a cache makes the second drawing cheap, and not drawing makes the first one cheap too.
 
 ## Slideshow rules
 
 - Separate Tauri window, fullscreen on chosen display; presenter view in another window: current, next, notes, timer, slide grid.
 - Navigation: click/space/arrows/PgUp/PgDn, `B`/`W` black/white, number+Enter goes to slide, `Esc` exits.
-- Transitions in MVP: none, fade, push, wipe. Everything else plays as fade and is preserved in the file.
-- Animations: MVP does not play them (all objects shown in final state); `p:timing` preserved verbatim. Playback is a post-MVP phase.
-- Laser pointer / pen: post-MVP.
+- Transitions: none, fade, push, wipe, and Morph. Everything else plays as fade and is preserved in the file. Morph pairs the shapes of the two slides by creation id, then name, then kind and text, and refuses to pair where the answer would be a guess.
+- Animations play: the main sequence is read from `p:timing` and each click step is one press. Effects this app does not model play as a fade, the same rule transitions follow. Motion paths are not played — the shape sits where it ends. Editing patches `p:timing` in place — a new effect is a new subtree, a removed one is a dropped node — so an effect we cannot describe survives beside one we can. Only effects that can be written exactly are offered: appear, fade, wipe, zoom, pulse.
+- Pen, highlighter, laser and eraser during a show, on PowerPoint's own keys. Ink kept at the end is written as freeform shapes rather than as InkML: the room sees the same thing and the file opens everywhere, but ours can be selected afterwards and PowerPoint's is ink.
 
 ## File rules
 
@@ -109,7 +120,7 @@ pnpm --filter slides tauri build
 
 ## Out of scope for MVP
 
-Animation playback and editing, chart editing, SmartArt editing (render via passthrough preview or bounding box), collaboration, cloud, recording narration, embedded fonts, Keynote import, mobile.
+collaboration, cloud, Keynote import, mobile.
 
 ## Known hard problems
 

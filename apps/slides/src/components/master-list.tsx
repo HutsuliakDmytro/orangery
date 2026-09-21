@@ -42,7 +42,7 @@ export function MasterList() {
         >
           <SlideView
             deck={open.deck}
-            slide={{ ...part, layout: null, notes: null }}
+            slide={{ ...part, id: '', layout: null, notes: null }}
             themes={open.themes}
             package={open.package}
             className="min-w-0 flex-1 border border-border"

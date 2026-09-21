@@ -343,6 +343,34 @@ pub fn close_is_confirmed(label: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Hands a close request to the window that received it.
+///
+/// Returns whether the close should be held back. The frontend owns "is there
+/// anything unsaved?", because only it knows what is open.
+///
+/// Addressed to the one window rather than emitted at large. `Emitter::emit`
+/// reaches every webview whatever it is called on, so with a second window open
+/// closing either would ask both — and the other would answer for itself by
+/// closing too.
+///
+/// By label rather than by `WebviewWindow`: that target only matches a listener
+/// the runtime classified the same way, and which of the three kinds a webview's
+/// listeners are registered as is not ours to decide. A label matches all of
+/// them, and a label is what we mean.
+pub fn close_requested<R: tauri::Runtime>(window: &tauri::Window<R>) -> bool {
+    if close_is_confirmed(window.label()) {
+        return false;
+    }
+
+    let _ = tauri::Emitter::emit_to(
+        window,
+        tauri::EventTarget::labeled(window.label()),
+        "window:close-requested",
+        window.label(),
+    );
+    true
+}
+
 #[tauri::command]
 pub fn confirm_close(window: tauri::Window) -> Result<(), AppError> {
     if let Ok(mut confirmed) = confirmed_windows().lock() {
@@ -371,6 +399,29 @@ mod close_tests {
     }
 }
 
+/// Paths the OS handed the app at launch: a double-click, "Open With", or a
+/// path typed on the command line.
+///
+/// Emitted rather than acted on, because opening one means parsing OOXML and
+/// that lives in the frontend. The delay is not politeness: the event is sent
+/// during setup, when there is no webview yet to receive it.
+pub fn emit_launch_paths<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let opened: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|argument| !argument.starts_with('-'))
+        .collect();
+
+    if opened.is_empty() {
+        return;
+    }
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        let _ = tauri::Emitter::emit(&handle, "document:open-path", opened);
+    });
+}
+
 /// Opens a new window, optionally on a given file.
 ///
 /// One window holds one document (CLAUDE.md), so "New Window" and "open a second
@@ -396,9 +447,19 @@ pub async fn open_window<R: tauri::Runtime>(
     if let Some(path) = path {
         // The webview has to exist before it can receive this.
         let target = window.clone();
+        let addressee = label.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            let _ = tauri::Emitter::emit(&target, "document:open-path", vec![path]);
+            // To the new window and no other. Emitted at large, this would also
+            // reach the window that asked for it — which, on being told to open
+            // a file it had just handed away, would open another window for it,
+            // and another, for as long as anyone watched.
+            let _ = tauri::Emitter::emit_to(
+                &target,
+                tauri::EventTarget::labeled(&addressee),
+                "document:open-path",
+                vec![path],
+            );
         });
     }
 

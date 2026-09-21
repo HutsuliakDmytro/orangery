@@ -186,7 +186,13 @@ describe('a shape that grows to its text', () => {
     // In EMU, because that is what a shape's height is. The measurement is in
     // the pixels the text is laid out in, and writing one into the other
     // collapses the box to nothing.
-    expect(firstHeight()).toBe(Math.round(BOX * 1.5) * EMU_PER_PIXEL)
+    //
+    // Plus the insets — the space the shape keeps around its words, which it
+    // has to hold as well as the words. They are read from the file (this
+    // fixture states none, so PowerPoint's own) rather than measured off the
+    // box: measuring them put the shape's own height into the answer, and a
+    // height worked out from itself is a height that need never settle.
+    expect(firstHeight()).toBe(Math.round(BOX * 1.5) * EMU_PER_PIXEL + 45720 + 45720)
   })
 
   it('leaves a shape whose words already fit', async () => {

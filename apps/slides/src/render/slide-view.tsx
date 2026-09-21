@@ -54,7 +54,7 @@ import { TableView } from './table-view'
 import type { GradientDefinition } from './paint'
 import { effectStyle, STILL } from './animation'
 import type { SlideAnimation } from './animation'
-import { scaleFor } from './autofit'
+import { DEFAULT_INSETS, heightForText, scaleFor } from './autofit'
 import { MorphGroup } from './morph-group'
 import { isLinePreset, pathFor } from './geometry'
 import { applyDrag, applyRotation, SIZING_HANDLES, useDrag } from './use-drag'
@@ -698,6 +698,8 @@ function ShapeText({
    */
   const box = useRef<HTMLDivElement>(null)
   const words = useRef<HTMLDivElement>(null)
+  /** The last height this asked for, so it cannot ask for it twice running. */
+  const asked = useRef<number | null>(null)
 
   /**
    * What autofit has already done to this text.
@@ -734,18 +736,35 @@ function ShapeText({
       return
     }
 
-    // The other way round: the shape gives instead of the text. The height a
-    // shape needs is its words plus the space it keeps around them, and the
-    // padding is already in the outer box's measurement.
+    // The other way round: the shape gives instead of the text.
     //
     // Back into EMU on the way out. The measurement is in the pixels the text
     // is laid out in and the shape's height is in the file's own unit; writing
     // the one into the other collapses the box to nothing the moment the deck
     // is opened — and marks it edited on the way.
     if (autofit.kind === 'shape' && onAutofitHeight !== undefined) {
-      const padding = outer.clientHeight - inner.clientHeight
-      const wanted = (inner.scrollHeight + Math.max(padding, 0)) * EMU_PER_PIXEL
-      if (Math.abs(wanted - transform.height) > TOLERANCE) onAutofitHeight(shape.id, wanted)
+      const wanted = heightForText(inner.scrollHeight, shape.text?.bodyProperties?.insets)
+
+      // Grown, never shrunk. A shape whose words already fit is a shape
+      // nobody has touched, and taking its spare room away on open would
+      // rewrite the geometry of a file that was only being looked at — which
+      // is the one thing this program promises not to do. Growing follows
+      // words that stopped fitting, and words stop fitting because somebody
+      // typed them.
+      //
+      // It is also the second reason this cannot loop: the height only ever
+      // goes up, and it goes up to a number that does not depend on it.
+      if (wanted - transform.height <= TOLERANCE) return
+
+      // And never twice with the same answer. If the deck will not take the
+      // height — a placeholder whose geometry belongs to its layout, a write
+      // the store declines — then asking again changes nothing, and asking for
+      // ever is the loop this is written to make impossible rather than
+      // unlikely.
+      if (asked.current === wanted) return
+      asked.current = wanted
+
+      onAutofitHeight(shape.id, wanted)
     }
   })
 
@@ -807,10 +826,12 @@ function ShapeText({
             width: '100%',
             height: '100%',
             // PowerPoint's defaults when the shape states none.
-            paddingLeft: pixels(insets?.left ?? 91440),
-            paddingRight: pixels(insets?.right ?? 91440),
-            paddingTop: pixels(insets?.top ?? 45720),
-            paddingBottom: pixels(insets?.bottom ?? 45720),
+            // The same defaults the height above is worked out from: two
+            // numbers for one fact is two numbers that drift apart.
+            paddingLeft: pixels(insets?.left ?? DEFAULT_INSETS.left),
+            paddingRight: pixels(insets?.right ?? DEFAULT_INSETS.right),
+            paddingTop: pixels(insets?.top ?? DEFAULT_INSETS.top),
+            paddingBottom: pixels(insets?.bottom ?? DEFAULT_INSETS.bottom),
             boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',

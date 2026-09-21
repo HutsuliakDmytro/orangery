@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { scaleFor, SCALES } from './autofit'
+import { EMU_PER_PIXEL } from '@orangery/ooxml-drawingml'
+import { heightForText, scaleFor, SCALES } from './autofit'
 
 /**
  * Deciding how far text has to shrink.
@@ -84,5 +85,58 @@ describe('nothing to measure', () => {
     // A shape that has not been laid out yet, or one with no height at all.
     expect(scaleFor(70000, { content: 0, box: 100 })).toBe(70000)
     expect(scaleFor(70000, { content: 50, box: 0 })).toBe(70000)
+  })
+})
+
+/**
+ * The height a shape gives its words, and the loop it used to be.
+ *
+ * A shape that asks to fit its text is measured after layout and resized from
+ * the measurement. The first version worked the height out from
+ * `outer.clientHeight - inner.clientHeight`, where `outer` is the shape — so
+ * the shape's own height was an input to the height it was about to be given.
+ * Measure, resize, measure again: on one real deck that never settled, and a
+ * layout effect that writes to the store on every pass is React's "maximum
+ * update depth exceeded". The window came down and the deck could not be
+ * opened at all.
+ *
+ * The fix is the property asserted here: the answer depends on the words and
+ * on what the file says the shape keeps around them, and on nothing else.
+ */
+describe('the height a shape needs for its words', () => {
+  it('is the words plus the insets the file states', () => {
+    // 100 px of text, and an inset of a tenth of an inch top and bottom.
+    expect(heightForText(100, { top: 91440, bottom: 91440 })).toBe(
+      Math.round(100 * EMU_PER_PIXEL) + 182880,
+    )
+  })
+
+  it('falls back to what PowerPoint keeps when the shape says nothing', () => {
+    expect(heightForText(100, null)).toBe(Math.round(100 * EMU_PER_PIXEL) + 45720 + 45720)
+    expect(heightForText(100, { top: null, bottom: null })).toBe(heightForText(100, null))
+  })
+
+  it('does not depend on the height of the shape, which is what made it loop', () => {
+    // The same words in a box of any height want the same box back. This is
+    // the whole property: a function of the thing it sets cannot settle.
+    const wanted = heightForText(240, { top: 45720, bottom: 45720 })
+
+    expect(heightForText(240, { top: 45720, bottom: 45720 })).toBe(wanted)
+  })
+
+  it('settles: asking again with the answer it gave returns the same answer', () => {
+    const insets = { top: 45720, bottom: 45720 }
+    const once = heightForText(180, insets)
+    const twice = heightForText(180, insets)
+
+    expect(twice).toBe(once)
+  })
+
+  it('grows with the words and with nothing else', () => {
+    const insets = { top: 0, bottom: 0 }
+
+    expect(heightForText(200, insets) - heightForText(100, insets)).toBe(
+      Math.round(200 * EMU_PER_PIXEL) - Math.round(100 * EMU_PER_PIXEL),
+    )
   })
 })

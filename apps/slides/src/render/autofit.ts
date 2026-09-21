@@ -1,3 +1,5 @@
+import { EMU_PER_PIXEL } from '@orangery/ooxml-drawingml'
+
 /**
  * Working out how far text has to shrink to fit the box it is in.
  *
@@ -53,4 +55,37 @@ export function scaleFor(current: number, measured: { content: number; box: numb
   // not be "shrink again" on the next measurement.
   const wanted = snap((current * measured.box * ROOM) / measured.content)
   return wanted > current ? wanted : current
+}
+
+/** What PowerPoint keeps around the words of a shape that states nothing. */
+export const DEFAULT_INSETS = { left: 91440, right: 91440, top: 45720, bottom: 45720 }
+
+/**
+ * The height a shape needs to hold its words.
+ *
+ * The words, plus the space the shape keeps around them — and that space is
+ * the insets the file states, which are the same insets the renderer draws as
+ * padding. It is not measured off the box.
+ *
+ * Measuring it is what this did first: `outer.clientHeight - inner.clientHeight`,
+ * where `outer` is the shape. The shape's own height was therefore inside the
+ * number, so what came out was a function of the height it was about to set —
+ * measure, resize, measure again, resize again. On most decks that settled in
+ * a pass or two and nobody could tell. On one it did not, and a loop between a
+ * layout effect and the store is React's "maximum update depth exceeded": the
+ * tree comes down, and a deck that cannot be opened at all is the worst thing
+ * a reader can do.
+ *
+ * Nothing here reads the shape's height, which is the whole of why it settles.
+ * What it depends on is the text and the width, and neither of those is what
+ * this is about to change.
+ */
+export function heightForText(
+  content: number,
+  insets?: { top: number | null; bottom: number | null } | null,
+): number {
+  const top = insets?.top ?? DEFAULT_INSETS.top
+  const bottom = insets?.bottom ?? DEFAULT_INSETS.bottom
+
+  return Math.round(content * EMU_PER_PIXEL + top + bottom)
 }

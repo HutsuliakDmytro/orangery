@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -25,25 +25,50 @@ import { SlideView } from '../render/slide-view'
  * the repository.
  */
 
-const directory =
-  process.env['ORANGERY_CORPUS'] ?? join(process.cwd(), '../../tests/fixtures/office')
+/** Whether somebody named a corpus, as opposed to there merely not being one. */
+const asked = process.env['ORANGERY_CORPUS']
 
+const directory = asked ?? join(process.cwd(), '../../tests/fixtures/office')
+
+/**
+ * The decks at a path, which may be one deck.
+ *
+ * A directory is what a corpus is, and a single file is what somebody has in
+ * their hand when something goes wrong with it. Taking both is a line of code;
+ * telling somebody their path was the wrong shape costs them the run.
+ */
 async function decksIn(where: string): Promise<string[]> {
-  try {
-    const entries = await readdir(where, { withFileTypes: true })
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.pptx'))
-      .map((entry) => join(where, entry.name))
-  } catch {
-    // No corpus is not a failure. It is the ordinary state of a checkout.
-    return []
-  }
+  const found = await stat(where).catch(() => null)
+  if (found === null) return []
+
+  if (found.isFile()) return where.toLowerCase().endsWith('.pptx') ? [where] : []
+
+  const entries = await readdir(where, { withFileTypes: true }).catch(() => [])
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.pptx'))
+    .map((entry) => join(where, entry.name))
 }
 
 const decks = await decksIn(directory)
 
 afterEach(() => {
   cleanup()
+})
+
+/**
+ * A corpus asked for by name and not found is a mistake, not an absence.
+ *
+ * Skipping quietly is right for a checkout that simply has no corpus. It is
+ * wrong for somebody who has just typed a path: a silent skip looks exactly
+ * like a deck that drew without complaint, which is the opposite of the answer
+ * they were after.
+ */
+describe.skipIf(asked === undefined)('the corpus that was asked for', () => {
+  it('is where it was said to be', () => {
+    expect(
+      decks.length > 0 ? [] : [`ORANGERY_CORPUS is ${String(asked)}, and there is no .pptx there.`],
+    ).toEqual([])
+  })
 })
 
 describe.skipIf(decks.length === 0)('a deck somebody else made', () => {

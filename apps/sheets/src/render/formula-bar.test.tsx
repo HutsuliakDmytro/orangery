@@ -181,3 +181,52 @@ describe('the references in a formula', () => {
     expect(typing).toHaveBeenLastCalledWith(null)
   })
 })
+
+/**
+ * The colours behind the text, and the copy of the text they nearly cost.
+ *
+ * An `<input>` cannot hold colours, so a formula's references are drawn on a
+ * mirror behind it and the input's own text is made transparent. Both halves
+ * of that are conditional on the same thing, and for a while only one of them
+ * was: anything that was not a formula was drawn twice, once by the input and
+ * once by the mirror, a fraction of a line apart. On screen a cell holding a
+ * sentence looked struck through by itself.
+ *
+ * jsdom draws nothing, so what is asserted is the cause rather than the look.
+ * An input's value is not text content, so anything `getByText` can find is a
+ * second copy of the words drawn behind the first.
+ */
+describe('the mirror behind the input', () => {
+  it('is not there for text, which would otherwise be drawn twice', () => {
+    bar({ text: 'Інтеграції та синхронізація' })
+
+    expect(box().value).toBe('Інтеграції та синхронізація')
+    expect(screen.queryByText('Інтеграції та синхронізація')).toBeNull()
+  })
+
+  it('is not there for a number either', () => {
+    bar({ text: '1234.5' })
+
+    expect(box().value).toBe('1234.5')
+    expect(screen.queryByText('1234.5')).toBeNull()
+  })
+
+  it('is there for a formula, which is what it exists for', () => {
+    bar({ text: '=SUM(A1:B2)+C3' })
+
+    // The input holds the text and the mirror holds the pieces, so the
+    // references are in the document as elements of their own.
+    expect(screen.getByText('A1:B2')).toBeInTheDocument()
+    expect(screen.getByText('C3')).toBeInTheDocument()
+  })
+
+  it('gives each reference of a formula a colour of its own', () => {
+    bar({ text: '=A1+B2' })
+
+    const first = screen.getByText('A1').getAttribute('style')
+    const second = screen.getByText('B2').getAttribute('style')
+
+    expect(first).toMatch(/color/u)
+    expect(first).not.toBe(second)
+  })
+})

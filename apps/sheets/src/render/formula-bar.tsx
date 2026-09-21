@@ -84,6 +84,17 @@ export function FormulaBar({
     setTyped(text)
   }
 
+  /**
+   * Whether anything is being drawn behind the input.
+   *
+   * Only a formula has references to colour, and the mirror exists for one
+   * reason: to put colours behind an input that has been made transparent.
+   * Drawn behind an input that has not been, it is a second copy of the same
+   * words a fraction of a line from the first — which is what every cell
+   * holding text looked like in the formula bar, struck through by itself.
+   */
+  const isFormula = typed.startsWith('=')
+
   const offer = suggest(typed, caret, functions ?? functionsKnownSoFar())
   const showing = offer?.matches ?? []
   const picked = showing[Math.min(highlighted, showing.length - 1)]
@@ -118,19 +129,21 @@ export function FormulaBar({
           The two are kept in step by being the same text in the same font at
           the same scroll.
         */}
-        <div
-          ref={mirror}
-          aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre font-mono text-xs leading-[inherit]"
-        >
-          {colored(typed)}
-        </div>
+        {isFormula && (
+          <div
+            ref={mirror}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre font-mono text-xs leading-[inherit]"
+          >
+            {colored(typed)}
+          </div>
+        )}
         <input
           ref={box}
           aria-label="Formula bar"
           className="relative min-w-0 w-full bg-transparent font-mono text-xs outline-none placeholder:text-muted"
           style={{
-            color: typed.startsWith('=') ? 'transparent' : undefined,
+            color: isFormula ? 'transparent' : undefined,
             caretColor: 'currentColor',
           }}
           onScroll={(event) => {

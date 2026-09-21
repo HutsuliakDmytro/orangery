@@ -47,11 +47,12 @@ import { insertChart, insertPicture, refreshCharts } from '../document/charts'
 import { makeTable, toggleTotals } from '../document/tables'
 import { addRule, removeRule, rulesAt } from '../document/rules'
 import type { LookName, RuleKind } from '../document/rules'
-import { writeDefinedNames } from '@orangery/ooxml-spreadsheet'
+import { writeCalculationMode, writeDefinedNames } from '@orangery/ooxml-spreadsheet'
 import type { DefinedName } from '@orangery/ooxml-spreadsheet'
 import type { NewChartKind } from '@orangery/charts'
 import {
   applyReport,
+  calculateManually,
   closeEngine,
   goalSeek,
   inputsFor,
@@ -113,6 +114,15 @@ export interface WorkbookState {
   edited: boolean
   /** What can be taken back, and what can be put back after that. */
   history: History
+  /**
+   * Whether a workbook on manual calculation has changes waiting.
+   *
+   * Excel's "Calculate" in the status bar, and the whole of what makes manual
+   * calculation safe: the numbers on the sheet are out of date, and the only
+   * thing worse than a sheet that is out of date is one that is out of date
+   * and does not say so.
+   */
+  waiting: boolean
   /** What went wrong the last time something was opened, for the banner. */
   problem: string | null
   /**
@@ -268,6 +278,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
   selection: singleCell({ row: 0, column: 0 }),
   edited: false,
   history: emptyHistory(),
+  waiting: false,
   problem: null,
   notice: null,
   traced: null,
@@ -297,6 +308,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       selection: singleCell({ row: 0, column: 0 }),
       edited: false,
       history: emptyHistory(),
+      waiting: false,
       problem: null,
       notice: noticeFor(open),
       session,
@@ -323,6 +335,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       selection: singleCell({ row: 0, column: 0 }),
       edited: true,
       history: emptyHistory(),
+      waiting: false,
       problem: null,
       notice,
       session,
@@ -350,6 +363,7 @@ export const useWorkbookStore = create<WorkbookState>((set) => ({
       selection: singleCell({ row: 0, column: 0 }),
       edited: false,
       history: emptyHistory(),
+      waiting: false,
       problem: null,
       notice: null,
       session: newSession(),
@@ -1261,6 +1275,13 @@ async function followUp(
   if (cells.length > 0) {
     const report: Report = await setCells(session, cells)
     applyOutcome(session, report)
+
+    // On manual calculation the engine works the typed cell out and stops,
+    // so what is on the rest of the sheet is now a set of answers to an older
+    // question. Saying so is the point: the sheet is out of date either way,
+    // and a sheet that does not admit it is the trap manual calculation is
+    // famous for.
+    if (open.workbook.manualCalculation) useWorkbookStore.setState({ waiting: true })
   }
 
   // A table that moved and a name that moved are both things the engine was
@@ -1660,5 +1681,35 @@ export async function recalculateWorkbook(): Promise<void> {
   const { open, session } = useWorkbookStore.getState()
   if (open === null) return
 
-  applyOutcome(session, await recalculate(session, open.workbook.date1904))
+  const report = await recalculate(session, open.workbook.date1904)
+  applyOutcome(session, report)
+
+  if (useWorkbookStore.getState().session === session) {
+    useWorkbookStore.setState({ waiting: false })
+  }
+}
+
+/**
+ * Whether the workbook works itself out as it is typed into.
+ *
+ * Excel's Calculation Options, and it is the workbook's property rather than
+ * this program's — so it goes into `xl/workbook.xml` at once, the way a sheet's
+ * colour does, and comes back with the file on the next machine.
+ *
+ * Switching to automatic works the workbook out there and then. Anything else
+ * would leave a sheet that says it is up to date and is not, which is the one
+ * state this setting exists to avoid.
+ */
+export async function setCalculation(manual: boolean): Promise<void> {
+  const { open, session } = useWorkbookStore.getState()
+  if (open === null || open.workbook.manualCalculation === manual) return
+
+  writeCalculationMode(open.pkg, manual)
+  useWorkbookStore.setState({
+    open: { ...open, workbook: { ...open.workbook, manualCalculation: manual } },
+    edited: true,
+  })
+
+  await calculateManually(session, manual)
+  if (!manual) await recalculateWorkbook()
 }

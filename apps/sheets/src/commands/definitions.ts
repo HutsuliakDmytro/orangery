@@ -21,6 +21,7 @@ import {
   tableFromSelection,
   totalsRowHere,
   recalculateWorkbook,
+  setCalculation,
   traceHere,
   useWorkbookStore,
 } from '../store/workbook-store'
@@ -519,6 +520,34 @@ export const viewCommands: readonly Command[] = [
       // screen — so it starts from the values as they were typed rather than
       // from another pass over the same suspicion.
       void recalculateWorkbook()
+    },
+  },
+  {
+    // Excel's Calculation Options, as a pair rather than a switch: what
+    // somebody looks for in a menu is the state they want, and "Manual" with
+    // a tick beside it answers the question a switch makes them work out.
+    id: 'view.calculation.automatic',
+    label: 'Calculation: Automatic',
+    group: 'view',
+    keywords: ['calculate', 'auto', 'recalculate', 'options'],
+    isEnabled: hasWorkbook,
+    isActive: () => !(useWorkbookStore.getState().open?.workbook.manualCalculation ?? false),
+    run: () => {
+      void setCalculation(false)
+    },
+  },
+  {
+    id: 'view.calculation.manual',
+    label: 'Calculation: Manual',
+    group: 'view',
+    keywords: ['calculate', 'manual', 'recalculate', 'options'],
+    isEnabled: hasWorkbook,
+    isActive: () => useWorkbookStore.getState().open?.workbook.manualCalculation ?? false,
+    run: () => {
+      // A workbook, not a program: this goes into the file, so a model
+      // somebody put on manual because of what it costs to work out stays on
+      // manual on the next machine.
+      void setCalculation(true)
     },
   },
   {

@@ -32,13 +32,14 @@ const handlers = () => ({
   onMove: vi.fn(),
   onHide: vi.fn(),
   onColor: vi.fn(),
+  onRecalculate: vi.fn(),
 })
 
 const tabs = (given: Partial<ReturnType<typeof handlers>> = {}) => {
   const called = { ...handlers(), ...given }
   const shown = open.sheets.filter((one) => !one.hidden)
 
-  render(<SheetTabs open={open} sheets={shown} current={0} {...called} />)
+  render(<SheetTabs open={open} sheets={shown} current={0} waiting={false} {...called} />)
   return { ...called, shown }
 }
 

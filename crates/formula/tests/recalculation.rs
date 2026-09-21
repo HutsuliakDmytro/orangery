@@ -650,3 +650,133 @@ fn a_search_that_found_nothing_puts_the_cell_back() {
     );
     assert_eq!(number(&engine, "A1"), 5.0);
 }
+
+/// A workbook told to wait until it is asked.
+///
+/// Excel's manual calculation, and the reason it exists: a model whose full
+/// recalculation takes three seconds is a model nobody can type into if every
+/// keystroke pays for one. The bargain is that the sheet is out of date and
+/// says so, until somebody asks.
+mod on_manual {
+    use super::*;
+
+    fn manual() -> Engine {
+        let mut engine = engine();
+        engine.calculate_manually(true);
+        engine
+    }
+
+    #[test]
+    fn a_change_stops_where_it_was_made() {
+        let mut engine = manual();
+        set(&mut engine, "A1", 1.0);
+        formula(&mut engine, "B1", "A1*2");
+        assert_eq!(number(&engine, "B1"), 2.0);
+
+        set(&mut engine, "A1", 5.0);
+
+        // The cell that was typed in holds what was typed; the sum that reads
+        // it holds what it came to when it was last worked out.
+        assert_eq!(number(&engine, "A1"), 5.0);
+        assert_eq!(number(&engine, "B1"), 2.0);
+    }
+
+    #[test]
+    fn the_formula_somebody_typed_is_worked_out() {
+        // The answer to the question just asked. A cell that stayed blank
+        // until a second, differently named command was found would read as
+        // a program that had lost what was typed into it.
+        let mut engine = manual();
+        set(&mut engine, "A1", 4.0);
+        formula(&mut engine, "B1", "A1*2");
+
+        assert_eq!(number(&engine, "B1"), 8.0);
+    }
+
+    #[test]
+    fn nothing_is_said_about_the_cells_that_were_left_standing() {
+        let mut engine = manual();
+        set(&mut engine, "A1", 1.0);
+        formula(&mut engine, "B1", "A1*2");
+
+        let changed = set_and_report(&mut engine, "A1", 5.0);
+
+        assert_eq!(changed.cells.len(), 1);
+        assert_eq!(changed.cells[0].0, ("Sheet1".to_string(), 0, 0));
+    }
+
+    #[test]
+    fn a_chain_catches_up_all_at_once_when_it_is_asked_to() {
+        let mut engine = manual();
+        set(&mut engine, "A1", 1.0);
+        formula(&mut engine, "B1", "A1*2");
+        formula(&mut engine, "C1", "B1+1");
+
+        set(&mut engine, "A1", 5.0);
+        let changed = engine.recalculate();
+
+        assert_eq!(number(&engine, "B1"), 10.0);
+        assert_eq!(number(&engine, "C1"), 11.0);
+
+        // And the window is told about both, or it would go on showing the
+        // numbers it had.
+        assert_eq!(changed.cells.len(), 2);
+    }
+
+    #[test]
+    fn a_volatile_formula_waits_with_everything_else() {
+        // `NOW()` is a different time every time it is worked out, and on
+        // manual that is exactly as often as somebody asks.
+        let mut engine = manual();
+        formula(&mut engine, "A1", "RAND()");
+        let first = number(&engine, "A1");
+
+        set(&mut engine, "B1", 1.0);
+        assert_eq!(number(&engine, "A1"), first);
+
+        engine.recalculate();
+        assert_ne!(number(&engine, "A1"), first);
+    }
+
+    #[test]
+    fn the_graph_is_kept_up_to_date_while_the_values_are_not() {
+        // Nothing is forgotten in the meantime: a formula written while the
+        // workbook waited takes part in the recalculation when it comes.
+        let mut engine = manual();
+        set(&mut engine, "A1", 2.0);
+        formula(&mut engine, "B1", "A1*3");
+        set(&mut engine, "A1", 4.0);
+
+        engine.recalculate();
+
+        assert_eq!(number(&engine, "B1"), 12.0);
+    }
+
+    #[test]
+    fn goal_seek_still_works_because_somebody_asked_for_it() {
+        // It searches by trying, and a try that never reaches the cell it is
+        // watching is not one. The workbook goes back on manual afterwards.
+        let mut engine = manual();
+        set(&mut engine, "A1", 1.0);
+        formula(&mut engine, "B1", "A1*3+2");
+
+        assert!(engine
+            .goal_seek(("Sheet1", 0, 1), 20.0, ("Sheet1", 0, 0))
+            .is_some());
+        assert!((number(&engine, "A1") - 6.0).abs() < 1e-6);
+
+        set(&mut engine, "A1", 1.0);
+        assert!((number(&engine, "B1") - 20.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_cycle_is_still_a_cycle_when_the_workbook_catches_up() {
+        let mut engine = manual();
+        formula(&mut engine, "A1", "B1+1");
+        formula(&mut engine, "B1", "A1+1");
+
+        let changed = engine.recalculate();
+
+        assert_eq!(changed.circular.len(), 2);
+    }
+}

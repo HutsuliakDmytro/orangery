@@ -331,4 +331,11 @@ describe('what a workbook says about itself', () => {
   it('reads the workbook asking to be recalculated before it is shown', () => {
     expect(workbook().fullCalcOnLoad).toBe(true)
   })
+
+  it('reads whether the workbook works itself out as it is typed into', () => {
+    // A property of the workbook rather than of the program: somebody who set
+    // a model of a million formulas to manual should not have to do it again
+    // on the next machine.
+    expect(workbook().manualCalculation).toBe(false)
+  })
 })

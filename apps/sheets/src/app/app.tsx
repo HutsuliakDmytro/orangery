@@ -41,6 +41,7 @@ import {
   removeRuleHere,
   rulesHere,
   clearTrace,
+  recalculateWorkbook,
   seekGoal,
   setDefinedNames,
   traceHere,
@@ -76,6 +77,7 @@ function Shell() {
   const current = useWorkbookStore((state) => state.current)
   const problem = useWorkbookStore((state) => state.problem)
   const notice = useWorkbookStore((state) => state.notice)
+  const waiting = useWorkbookStore((state) => state.waiting)
   const dismiss = useWorkbookStore((state) => state.dismiss)
   const select = useWorkbookStore((state) => state.select)
   const selection = useWorkbookStore((state) => state.selection)
@@ -675,6 +677,10 @@ function Shell() {
           onMove={moveSheet}
           onHide={hideSheet}
           onColor={colorTab}
+          waiting={waiting}
+          onRecalculate={() => {
+            void recalculateWorkbook()
+          }}
         />
       )}
 

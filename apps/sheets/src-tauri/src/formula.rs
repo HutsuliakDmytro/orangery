@@ -243,6 +243,8 @@ pub struct Opening {
     /// Where the random numbers start, so that two recalculations of one
     /// workbook in one sitting agree about a column of them.
     pub seed: u64,
+    /// Whether the workbook works itself out as it is typed into.
+    pub manual: bool,
 }
 
 /// A workbook loaded, without anything being worked out.
@@ -265,6 +267,7 @@ pub fn formula_open(
         DateSystem::Excel1900
     });
     engine.seed_random(workbook.seed);
+    engine.calculate_manually(workbook.manual);
     engine.set_tables(workbook.tables.into_iter().map(Into::into).collect());
     for defined in workbook.names {
         engine.set_name(&defined.name, &defined.formula);
@@ -408,6 +411,25 @@ pub fn formula_clear(
     let engine = engines.get_mut(&book).ok_or_else(unopened)?;
 
     Ok(Report::of(engine.clear(&sheet, row, column)))
+}
+
+/// Whether this workbook works itself out as it is typed into.
+///
+/// Excel's Calculation Options, and it is the workbook's property rather than
+/// the program's — so the window reads it from the file, says it here, and
+/// writes it back. Answers nothing: switching to automatic is a recalculation
+/// somebody asked for, and the window asks for it by name.
+#[tauri::command]
+pub fn formula_calculation(
+    books: tauri::State<'_, Workbooks>,
+    book: String,
+    manual: bool,
+) -> Result<(), String> {
+    let mut engines = books.engines()?;
+    let engine = engines.get_mut(&book).ok_or_else(unopened)?;
+
+    engine.calculate_manually(manual);
+    Ok(())
 }
 
 /// Everything worked out again — `F9`, and a file that asks for it on open.

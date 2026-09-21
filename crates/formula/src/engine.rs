@@ -64,6 +64,13 @@ pub struct Engine {
     /// out: a filter and a hidden row are things done to a sheet. They are
     /// here because `SUBTOTAL` asks about them, and the window is what knows.
     out_of_sight: FastMap<String, (FastSet<i64>, FastSet<i64>)>,
+    /// Whether the workbook works itself out as it is typed into.
+    ///
+    /// The workbook's own property, read from its file and written back to
+    /// it: somebody who put a model of a million formulas on manual did so
+    /// because of that model. Here it means one thing — a change stops where
+    /// it was made, and the sheet that reads it waits to be asked.
+    manual: bool,
     /// Where `RAND` gets its answers.
     ///
     /// A sequence rather than a source of entropy: the seed comes from
@@ -86,6 +93,15 @@ pub enum Edit {
     /// A formula, without its leading `=`.
     Formula(String),
     Empty,
+}
+
+/// Whether a change is followed through the sheet, or stops where it was made.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Spread {
+    /// Everything that reads the cell, and everything that reads those.
+    Onwards,
+    /// The cell itself and nothing else — a workbook on manual calculation.
+    Stops,
 }
 
 /// What a batch of edits came to.
@@ -150,6 +166,18 @@ impl Engine {
     /// Which morning this workbook counts days from — `date1904` in the file.
     pub fn set_date_system(&mut self, system: DateSystem) {
         self.system = system;
+    }
+
+    /// Whether a change is worked through the workbook or waited on.
+    ///
+    /// Excel's Calculation Options, and it belongs to the workbook rather
+    /// than to the program. On manual, the cell somebody typed in is still
+    /// worked out — the answer to what was just asked — and everything that
+    /// reads it keeps the value it had until a full recalculation is asked
+    /// for. Nothing is forgotten in the meantime: the graph is kept up to
+    /// date, so the recalculation when it comes is an ordinary one.
+    pub fn calculate_manually(&mut self, manual: bool) {
+        self.manual = manual;
     }
 
     /// What a name in this workbook stands for, as the formula behind it.
@@ -547,7 +575,7 @@ impl Engine {
         }
 
         let formulas: Vec<CellId> = self.graph.formulas().cloned().collect();
-        self.recalculate_from(&formulas)
+        self.work_out(&formulas, Spread::Onwards)
     }
 
     /// The value one cell needs for another to come out at a number.
@@ -569,6 +597,23 @@ impl Engine {
     /// show the sheet as it now stands; putting it back is the caller's to
     /// do, and the history it already keeps is how.
     pub fn goal_seek(
+        &mut self,
+        target: (&str, i64, i64),
+        wanted: f64,
+        changing: (&str, i64, i64),
+    ) -> Option<f64> {
+        // A search by trying needs the trying to reach the cell it is
+        // watching, so a workbook on manual is worked out for the length of
+        // the search and put back on manual afterwards. Somebody asked for
+        // this answer, which is the same thing `F9` is.
+        let manual = std::mem::replace(&mut self.manual, false);
+        let found = self.search_for_goal(target, wanted, changing);
+        self.manual = manual;
+
+        found
+    }
+
+    fn search_for_goal(
         &mut self,
         target: (&str, i64, i64),
         wanted: f64,
@@ -630,6 +675,12 @@ impl Engine {
     /// table of a hundred thousand rows recalculates the handful of cells
     /// that are about it rather than the workbook.
     pub fn recalculate_totals(&mut self) -> Changed {
+        // A workbook on manual is not worked out because a row went out of
+        // sight, any more than because a number was typed.
+        if self.manual {
+            return Changed::default();
+        }
+
         let totals: Vec<CellId> = self
             .contents
             .iter()
@@ -642,8 +693,19 @@ impl Engine {
         self.recalculate_from(&totals)
     }
 
-    /// The cells that changed, worked out in an order that respects the graph.
+    /// What an edit comes to, as far as this workbook is worked out at all.
     fn recalculate_from(&mut self, changed: &[CellId]) -> Changed {
+        let spread = if self.manual {
+            Spread::Stops
+        } else {
+            Spread::Onwards
+        };
+
+        self.work_out(changed, spread)
+    }
+
+    /// The cells that changed, worked out in an order that respects the graph.
+    fn work_out(&mut self, changed: &[CellId], spread: Spread) -> Changed {
         let mut result = Changed::default();
 
         // The cell that was typed into has changed by definition; the rest
@@ -688,14 +750,17 @@ impl Engine {
         // are worked out, not reported — a volatile cell whose answer came
         // out the same is not a cell that changed.
         let mut seeds: Vec<CellId> = changed.to_vec();
-        let already: FastSet<CellId> = changed.iter().cloned().collect();
-        seeds.extend(
-            self.graph
-                .volatile()
-                .filter(|cell| !already.contains(*cell))
-                .cloned(),
-        );
-        seeds.extend(blocked);
+
+        if spread == Spread::Onwards {
+            let already: FastSet<CellId> = changed.iter().cloned().collect();
+            seeds.extend(
+                self.graph
+                    .volatile()
+                    .filter(|cell| !already.contains(*cell))
+                    .cloned(),
+            );
+            seeds.extend(blocked);
+        }
 
         // A formula that spills fills cells the graph has no edges for: what
         // depends on the third cell of a spill depends on a cell nobody has
@@ -707,7 +772,10 @@ impl Engine {
         let mut pending = seeds;
 
         for _round in 0..8 {
-            let plan = self.graph.order_from(&pending);
+            let plan = match spread {
+                Spread::Onwards => self.graph.order_from(&pending),
+                Spread::Stops => self.graph.order_only(&pending),
+            };
             let mut spilled: Vec<CellId> = Vec::new();
 
             for cell in plan.order {

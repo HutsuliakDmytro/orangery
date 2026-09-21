@@ -37,6 +37,7 @@ pub fn run() {
             formula::formula_set_many,
             formula::formula_out_of_sight,
             formula::formula_clear,
+            formula::formula_calculation,
             formula::formula_recalculate,
             formula::formula_value,
             formula::formula_functions,

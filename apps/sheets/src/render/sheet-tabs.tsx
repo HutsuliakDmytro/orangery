@@ -26,6 +26,9 @@ export interface SheetTabsProps {
   onMove: (path: string, before: number) => void
   onHide: (path: string, hidden: boolean) => void
   onColor: (path: string, color: string | null) => void
+  /** Whether a workbook on manual calculation has changes waiting. */
+  waiting: boolean
+  onRecalculate: () => void
 }
 
 const COLORS: { label: string; value: string | null }[] = [
@@ -52,6 +55,8 @@ export function SheetTabs({
   onMove,
   onHide,
   onColor,
+  waiting,
+  onRecalculate,
 }: SheetTabsProps) {
   /** The tab whose menu is open, if one is. */
   const [menu, setMenu] = useState<number | null>(null)
@@ -224,6 +229,25 @@ export function SheetTabs({
           }}
         >
           {`${String(hidden.length)} hidden`}
+        </button>
+      )}
+
+      {open.workbook.manualCalculation && (
+        // Excel's "Calculate" in the status bar, and the whole of what makes
+        // manual calculation safe: a sheet showing the answers to an older
+        // question has to say so, and the saying of it is also the button
+        // that puts it right.
+        <button
+          type="button"
+          className={`ml-auto px-3 text-xs ${waiting ? 'text-accent' : 'text-muted hover:text-text'}`}
+          title={
+            waiting
+              ? 'This workbook is on manual calculation and something has changed since it was last worked out.'
+              : 'This workbook is on manual calculation.'
+          }
+          onClick={onRecalculate}
+        >
+          {waiting ? 'Calculate' : 'Manual'}
         </button>
       )}
     </nav>

@@ -63,6 +63,15 @@ export interface Workbook {
    * shown, because whoever wrote it knew its cached values were stale.
    */
   fullCalcOnLoad: boolean
+  /**
+   * `calcMode` — whether the workbook works itself out as it is typed into.
+   *
+   * A property of the workbook rather than of the program, which is what
+   * Excel makes it and what it has to be: somebody who set a model of a
+   * million formulas to manual did so because of that model, and they should
+   * not have to do it again on the next machine.
+   */
+  manualCalculation: boolean
 }
 
 const WORKBOOK_PART = 'xl/workbook.xml'
@@ -91,6 +100,10 @@ export function readWorkbook(pkg: OoxmlPackage): Workbook | null {
     fullCalcOnLoad:
       attribute(calculation ?? {}, 'fullCalcOnLoad') === '1' ||
       attribute(calculation ?? {}, 'fullCalcOnLoad') === 'true',
+    // `manual`, and also `autoNoTable` — which is automatic for everything
+    // but data tables, a feature this program does not have, so what is left
+    // of it here is automatic.
+    manualCalculation: attribute(calculation ?? {}, 'calcMode') === 'manual',
     definedNames: names === undefined ? [] : readDefinedNames(names),
     sheets:
       sheets === undefined

@@ -1110,3 +1110,102 @@ describe('starting a workbook, and being told about one', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 })
+
+describe('a workbook that waits to be worked out', () => {
+  const mode = () => useWorkbookStore.getState().open?.workbook.manualCalculation
+
+  /** A command chosen, with whatever it starts allowed to finish. */
+  const choose = async (id: string) => {
+    await act(async () => {
+      runCommand(id, {})
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  it('is on automatic until somebody says otherwise', async () => {
+    render(<App />)
+    await load()
+
+    expect(mode()).toBe(false)
+    expect(getCommand('view.calculation.automatic')?.isActive?.({})).toBe(true)
+  })
+
+  it('goes on manual, and the workbook is the thing that remembers', async () => {
+    render(<App />)
+    await load()
+
+    await choose('view.calculation.manual')
+
+    expect(mode()).toBe(true)
+    expect(getCommand('view.calculation.manual')?.isActive?.({})).toBe(true)
+
+    // Written into the part rather than held in the window: it is the
+    // workbook's property, and it has to survive the file.
+    const open = useWorkbookStore.getState().open
+    if (open === null) throw new Error('nothing is open')
+
+    const saved = await openWorkbook(await workbookBytes(open, { edited: true }))
+    expect(saved.workbook.manualCalculation).toBe(true)
+  })
+
+  it('says so along the bottom, where Excel says it', async () => {
+    render(<App />)
+    await load()
+
+    await choose('view.calculation.manual')
+
+    expect(await screen.findByRole('button', { name: 'Manual' })).toBeInTheDocument()
+  })
+
+  it('asks to be worked out once something has changed', async () => {
+    render(<App />)
+    await load()
+
+    await choose('view.calculation.manual')
+
+    const typist = await atTheGrid()
+    await typist.keyboard('12{Enter}')
+
+    // The numbers on the sheet are now answers to an older question, and the
+    // one thing worse than a sheet that is out of date is one that does not
+    // say so.
+    expect(await screen.findByRole('button', { name: 'Calculate' })).toBeInTheDocument()
+  })
+
+  it('stops asking once it has been', async () => {
+    render(<App />)
+    await load()
+
+    await choose('view.calculation.manual')
+
+    const typist = await atTheGrid()
+    await typist.keyboard('12{Enter}')
+    await screen.findByRole('button', { name: 'Calculate' })
+
+    await choose('view.recalculate')
+
+    expect(await screen.findByRole('button', { name: 'Manual' })).toBeInTheDocument()
+  })
+
+  it('says nothing at all while it is on automatic', async () => {
+    render(<App />)
+    await load()
+
+    const typist = await atTheGrid()
+    await typist.keyboard('12{Enter}')
+
+    expect(screen.queryByRole('button', { name: 'Calculate' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Manual' })).toBeNull()
+  })
+
+  it('goes back to automatic, and stops saying anything', async () => {
+    render(<App />)
+    await load()
+
+    await choose('view.calculation.manual')
+    await choose('view.calculation.automatic')
+
+    expect(mode()).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Manual' })).toBeNull()
+  })
+})

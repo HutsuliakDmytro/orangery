@@ -336,6 +336,30 @@ impl Graph {
             }
         }
 
+        self.order_within(affected)
+    }
+
+    /// The order to work these cells in, and nothing that follows from them.
+    ///
+    /// What a workbook on manual calculation does with an edit: the cell
+    /// somebody typed in is worked out, and the sheet that reads it is left
+    /// standing until somebody asks. The set is not expanded, so the walk
+    /// costs what the edit costs rather than what the workbook costs.
+    ///
+    /// A full recalculation hands in every formula there is, so it needs no
+    /// expanding either and goes through here as well.
+    pub fn order_only(&self, cells: &[CellId]) -> Recalculation {
+        self.order_within(
+            cells
+                .iter()
+                .filter(|cell| self.precedents.contains_key(*cell))
+                .cloned()
+                .collect(),
+        )
+    }
+
+    /// The order to work a set of formulas out in, and what could not be ordered.
+    fn order_within(&self, affected: FastSet<CellId>) -> Recalculation {
         // Kahn's algorithm over the affected set: a formula is ready when
         // everything it depends on inside the set has been done.
         //

@@ -135,6 +135,7 @@ export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
       definedNames: [],
       activeSheet: 0,
       fullCalcOnLoad: false,
+      manualCalculation: false,
     },
     sheets,
     styles: readStyles(getPartText(pkg, 'xl/styles.xml') ?? ''),

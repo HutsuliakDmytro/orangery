@@ -482,8 +482,21 @@ export async function openEngine(book: string, open: OpenWorkbook): Promise<void
       // The seed is the session's, so the same workbook recalculated twice
       // in one sitting does not invent a different column of random numbers.
       seed: Math.floor(Math.random() * 2 ** 32) + 1,
+      manual: open.workbook.manualCalculation,
     },
   })
+}
+
+/**
+ * Whether the workbook works itself out as it is typed into.
+ *
+ * The engine is told because it is the engine that stops: on manual, an edit
+ * is worked out only as far as the cell it was made in, and the rest of the
+ * sheet keeps the numbers it had until a recalculation is asked for.
+ */
+export async function calculateManually(book: string, manual: boolean): Promise<void> {
+  if (!isTauri()) return
+  await invoke('formula_calculation', { book, manual })
 }
 
 export async function closeEngine(book: string): Promise<void> {

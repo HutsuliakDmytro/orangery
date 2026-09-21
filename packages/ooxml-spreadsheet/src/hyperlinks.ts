@@ -2,6 +2,7 @@ import { addRelationship } from '@orangery/ooxml-core'
 import type { Relationship } from '@orangery/ooxml-core'
 import { attribute, children, parseXml, tagName } from '@orangery/ooxml-core'
 import { formatReference, parseRange } from './reference'
+import { withoutCells } from './sheet-data'
 import type { CellRange } from './reference'
 
 /**
@@ -44,7 +45,7 @@ export function readHyperlinks(
   xml: string,
   relationships: ReadonlyMap<string, Relationship>,
 ): Hyperlink[] {
-  const root = parseXml(xml).find((node) => tagName(node) === 'worksheet')
+  const root = parseXml(withoutCells(xml)).find((node) => tagName(node) === 'worksheet')
   if (root === undefined) return []
 
   const list = children(root).find((node) => tagName(node) === 'hyperlinks')

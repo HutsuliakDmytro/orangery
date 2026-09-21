@@ -20,6 +20,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test:unit",
     "lint": "eslint .",
     "test:unit": "vitest run",
+    "test:speed": "MEASURE_SPEED=1 vitest run src/test/performance.test.ts",
     "icon": "tauri icon src-tauri/icons/icon.svg"
   },
   "dependencies": {

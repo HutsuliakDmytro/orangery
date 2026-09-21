@@ -10,16 +10,29 @@ import { buildLargeWorkbook } from './large-workbook'
  * A workbook of two hundred thousand cells opens in under two seconds, and a
  * window of them is formatted in under the eight milliseconds a frame has.
  * Both budgets are stated several times looser than the real cost: a shared
- * machine is not a bench, and a test that fails when something else is busy
- * teaches people to ignore it. What they catch is the change that turns a
- * linear cost into a quadratic one, and that is an order of magnitude rather
- * than a factor of two.
+ * machine is not a bench. What they catch is the change that turns a linear
+ * cost into a quadratic one, and that is an order of magnitude rather than a
+ * factor of two.
+ *
+ * The timed ones are asked for by name rather than run with the rest, which
+ * is what the engine's own benchmarks do and for the reason they do it: `pnpm
+ * check` at the root runs every package's suite at once, and a machine with
+ * ten of them on it opens this workbook in six seconds rather than half of
+ * one. A test that fails because something else was busy is a test people
+ * learn to ignore, and a suite that cries wolf stops being read at all.
+ *
+ *     pnpm --filter sheets test:speed
+ *
+ * The shape of the model is not a measurement and stays where it is.
  */
 
 const CELLS = 200_000
 
+/** Whether the clock is being read, which is only when somebody asked. */
+const timed = process.env['MEASURE_SPEED'] === '1'
+
 describe('a workbook the size of a real one', () => {
-  it('opens in under two seconds', { retry: 2 }, async () => {
+  it.skipIf(!timed)('opens in under two seconds', { retry: 2 }, async () => {
     const built = await buildLargeWorkbook()
     expect(built.rows * built.columns).toBe(CELLS)
 
@@ -50,7 +63,7 @@ describe('a workbook the size of a real one', () => {
 })
 
 describe('a window of cells', () => {
-  it('is formatted inside a frame', { retry: 2 }, async () => {
+  it.skipIf(!timed)('is formatted inside a frame', { retry: 2 }, async () => {
     const built = await buildLargeWorkbook()
     const open = await openWorkbook(built.bytes)
     const sheet = open.sheets[0]

@@ -9,6 +9,7 @@ import {
 import type { XmlNode } from '@orangery/ooxml-core'
 import { movedEnd, movedStart } from './band'
 import type { BandChange } from './formulas'
+import { withoutCells } from './sheet-data'
 
 /**
  * What sits on top of a worksheet rather than in it.
@@ -214,7 +215,7 @@ export function readSheetDrawings(xml: string): SheetDrawing[] {
 
 /** The drawing part a worksheet points at, or null where it has none. */
 export function drawingRelationshipId(sheetXml: string): string | null {
-  const root = parseXml(sheetXml).find((node) => localName(node) === 'worksheet')
+  const root = parseXml(withoutCells(sheetXml)).find((node) => localName(node) === 'worksheet')
   if (root === undefined) return null
 
   const drawing = findChild(root, 'drawing')

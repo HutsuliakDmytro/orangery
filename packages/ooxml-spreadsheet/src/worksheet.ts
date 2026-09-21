@@ -8,6 +8,7 @@ import type { DataValidation } from './validation'
 import { readPageSetupIn } from './page'
 import type { PageSetup } from './page'
 import { readSparklinesIn } from './sparkline'
+import { withoutCells } from './sheet-data'
 import type { SparklineGroup } from './sparkline'
 import type { ConditionalFormat } from './conditional'
 import { readAutoFilter } from './autofilter'
@@ -266,7 +267,7 @@ function readMerges(root: XmlNode): CellRange[] {
 }
 
 export function readWorksheet(xml: string): Worksheet | null {
-  const root = parseXml(xml).find((node) => tagName(node) === 'worksheet')
+  const root = parseXml(withoutCells(xml)).find((node) => tagName(node) === 'worksheet')
   if (root === undefined) return null
 
   const dimension = findChild(root, 'dimension')

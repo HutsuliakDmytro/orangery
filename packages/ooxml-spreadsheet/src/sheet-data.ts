@@ -343,6 +343,22 @@ export function writeSheetData(sheet: SheetCells): string {
 }
 
 /**
+ * The part without its cells, for the readers that are about everything else.
+ *
+ * Nothing else in a worksheet is inside `sheetData`: the views, the columns,
+ * the merges, the rules, the validations, the page setup and the hyperlinks
+ * are all its siblings. A reader after those that hands the whole part to an
+ * XML parser builds a tree of two hundred thousand `<c>` elements to walk
+ * past them — which is the cost this file exists to avoid, paid again by the
+ * parts of the file that have no use for the cells at all.
+ *
+ * Cut as text, because a parser that could be told to skip an element would
+ * have to be told by every caller that ever parses a sheet.
+ */
+export const withoutCells = (xml: string): string =>
+  xml.replace(/<sheetData(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/sheetData>)/u, '<sheetData/>')
+
+/**
  * A worksheet with its cells replaced and everything else left alone.
  *
  * Textual on purpose: every other element of the part keeps its own bytes,

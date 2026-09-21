@@ -97,8 +97,28 @@ for (const path of decks) {
       await new Promise((resolve) => setTimeout(resolve, 1500))
     }, bytes)
 
-    // Said first, because the stack is the answer and a blank window is only
-    // the symptom.
+    /**
+     * What the boundary caught, which is the answer when there is one.
+     *
+     * A render that throws is caught rather than thrown at the window now, so
+     * it never reaches `pageerror`: it reaches the boundary, which draws the
+     * message and the component stack. Read here and put in the failure, so
+     * that one run gives the whole answer rather than the news that there is
+     * one.
+     */
+    // Counted rather than waited for: there is usually no alert, and waiting
+    // for one that is not coming spends the timeout on every healthy deck.
+    const alerts = page.getByRole('alert')
+    const caught = (await alerts.count()) > 0 ? await alerts.first().textContent() : null
+
+    expect(
+      caught === null ? [] : [caught.replace(/\s+/gu, ' ').trim()],
+      'the window caught an error while drawing this deck',
+    ).toEqual([])
+
+    // Nothing thrown outside a render either — an effect, a handler, a
+    // listener. Those never reach a boundary and would take the window down
+    // without a word.
     expect(thrown, 'the page threw while opening the deck').toEqual([])
 
     // And the window is still a window. `main` is the part that is there

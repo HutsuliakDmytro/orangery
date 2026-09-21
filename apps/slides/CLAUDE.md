@@ -8,19 +8,30 @@ Product name: **Orangery Slides**. Bundle id `com.orangery.slides`, binary `oran
 ```
 orangery/                       pnpm workspace + cargo workspace
   apps/
-    docs/                       Orangery Docs (existing app, moved here unchanged in step 0)
-    slides/                     this app
+    docs/                       Orangery Docs      .docx
+    slides/                     this app           .pptx
+    sheets/                     Orangery Sheets    .xlsx
   packages/
-    ooxml-core/                 zip package, rels, content types, passthrough machinery, XML utils  ← extracted from docs
-    ooxml-wordprocessing/       document.xml model (Docs only)
-    ooxml-drawingml/            a:* shapes, text bodies, fills, lines, effects, transforms, pictures  ← extracted + extended
-    ooxml-presentation/         p:* presentation, slides, layouts, masters, notes, transitions  ← new
+    ooxml-core/                 zip package, rels, content types, passthrough machinery, XML utils
+    ooxml-drawingml/            a:* shapes, text bodies, fills, lines, effects, transforms, pictures
+    ooxml-presentation/         p:* presentation, slides, layouts, masters, notes, transitions
+    ooxml-spreadsheet/          SpreadsheetML: a workbook, its sheets and the cells in them
+    charts/                     c:* model, SVG renderer and edit model — all three apps
+    grid/                       a grid of cells on a canvas: the chart data editor, and Sheets
+    numfmt/                     Excel number format codes: what a cell shows for what it holds
     editor-text/                ProseMirror schema + extensions for OOXML text (shared: w:r/w:p and a:r/a:p map to one model)
     ui-kit/                     tokens.css, themes, toolbar/dropdown/dialog components, command registry, palette
+    fonts/                      the families that ship, so a file looks the same on every OS
     platform/                   OS abstractions (paths, keys, dialogs)
+    render-diff/                renders a file before and after a round-trip and compares the pages
     tauri-shared/               Rust crate: fs atomic write, autosave, updater, menus scaffolding
+  crates/
+    formula/                    the spreadsheet formula engine (Sheets)
   tests/fixtures/pptx/          real + synthetic decks
 ```
+
+Docs' `.docx` layer is still inside `apps/docs/src/ooxml` rather than in a
+package: it moves out when a second app needs it, and none does.
 
 Rule: **nothing OS-specific outside `packages/platform/`, nothing Docs-specific inside `packages/`.** If a package needs an app-specific branch, the abstraction is wrong.
 

@@ -25,6 +25,23 @@ const TYPING_BUDGET_MS = 50
 const MEASURE_ITERATIONS = 20
 
 /**
+ * Whether the clock is being read, which is only when somebody asked.
+ *
+ * `pnpm --filter docs test:speed`. The ratios below were written to survive a
+ * slow machine and they do — what does not survive it is the work itself:
+ * building a two-hundred-page document twenty times over takes longer than a
+ * test is allowed to take when the whole workspace's suites are running beside
+ * it, and the failure that comes back says "timed out" rather than anything
+ * about this code. The engine's benchmarks settled this with `#[ignore]` and
+ * Sheets with the same flag as this one; a suite that cries wolf stops being
+ * read at all.
+ *
+ * The two that assert the shape of the corpus rather than the clock stay where
+ * they are.
+ */
+const timed = process.env['MEASURE_SPEED'] === '1'
+
+/**
  * Why these two may be retried.
  *
  * They measure wall-clock time on a machine running the whole workspace's
@@ -135,14 +152,14 @@ describe('large document', () => {
     expect(editor.state.doc.content.childCount).toBe(200 * 6)
   })
 
-  it('keeps a keystroke under the budget', () => {
+  it.skipIf(!timed)('keeps a keystroke under the budget', () => {
     editor = createTestEditor('<p></p>')
     editor.commands.setContent(buildLargeDocument(200))
 
     expect(timeTyping(editor)).toBeLessThan(TYPING_BUDGET_MS)
   })
 
-  it('does not slow down markedly as the document grows', () => {
+  it.skipIf(!timed)('does not slow down markedly as the document grows', () => {
     editor = createTestEditor('<p></p>')
 
     editor.commands.setContent(buildLargeDocument(20))
@@ -161,24 +178,28 @@ describe('derived views', () => {
   /** What a ten-fold document is allowed to cost, on this machine, today. */
   const allowanceFrom = (small: number) => Math.max(small * GROWTH_ALLOWANCE, NOISE_FLOOR_MS)
 
-  it('builds the outline of a 200-page document in step with its size', { retry: 2 }, () => {
-    editor = createTestEditor('<p></p>')
+  it.skipIf(!timed)(
+    'builds the outline of a 200-page document in step with its size',
+    { retry: 2 },
+    () => {
+      editor = createTestEditor('<p></p>')
 
-    // ProseMirror documents are immutable, so the small one survives being
-    // replaced in the editor and can still be measured against.
-    editor.commands.setContent(buildLargeDocument(20))
-    const smallDoc = editor.state.doc
-    editor.commands.setContent(buildLargeDocument(200))
-    const largeDoc = editor.state.doc
+      // ProseMirror documents are immutable, so the small one survives being
+      // replaced in the editor and can still be measured against.
+      editor.commands.setContent(buildLargeDocument(20))
+      const smallDoc = editor.state.doc
+      editor.commands.setContent(buildLargeDocument(200))
+      const largeDoc = editor.state.doc
 
-    const { small, large } = ratioOf(
-      () => buildOutline(smallDoc),
-      () => buildOutline(largeDoc),
-    )
+      const { small, large } = ratioOf(
+        () => buildOutline(smallDoc),
+        () => buildOutline(largeDoc),
+      )
 
-    expect(buildOutline(largeDoc)).toHaveLength(200)
-    expect(large).toBeLessThan(allowanceFrom(small))
-  })
+      expect(buildOutline(largeDoc)).toHaveLength(200)
+      expect(large).toBeLessThan(allowanceFrom(small))
+    },
+  )
 
   /**
    * Counting words is measured against half of itself rather than against a
@@ -195,20 +216,24 @@ describe('derived views', () => {
    * machine; a pass over the document hiding inside the per-word work would
    * show as four.
    */
-  it('counts words of a 200-page document in step with its size', { retry: 2 }, () => {
-    editor = createTestEditor('<p></p>')
+  it.skipIf(!timed)(
+    'counts words of a 200-page document in step with its size',
+    { retry: 2 },
+    () => {
+      editor = createTestEditor('<p></p>')
 
-    editor.commands.setContent(buildLargeDocument(100))
-    const halfText = editor.getText({ blockSeparator: '\n' })
-    editor.commands.setContent(buildLargeDocument(200))
-    const wholeText = editor.getText({ blockSeparator: '\n' })
+      editor.commands.setContent(buildLargeDocument(100))
+      const halfText = editor.getText({ blockSeparator: '\n' })
+      editor.commands.setContent(buildLargeDocument(200))
+      const wholeText = editor.getText({ blockSeparator: '\n' })
 
-    const { small: half, large: whole } = ratioOf(
-      () => computeStatistics(halfText),
-      () => computeStatistics(wholeText),
-    )
+      const { small: half, large: whole } = ratioOf(
+        () => computeStatistics(halfText),
+        () => computeStatistics(wholeText),
+      )
 
-    expect(computeStatistics(wholeText).words).toBeGreaterThan(90_000)
-    expect(whole).toBeLessThan(Math.max(half * 4, NOISE_FLOOR_MS))
-  })
+      expect(computeStatistics(wholeText).words).toBeGreaterThan(90_000)
+      expect(whole).toBeLessThan(Math.max(half * 4, NOISE_FLOOR_MS))
+    },
+  )
 })

@@ -106,3 +106,41 @@ describe('a window of cells', () => {
     expect(Math.min(...times)).toBeLessThan(8)
   })
 })
+
+/**
+ * The size the plan states for the release, which is a different question.
+ *
+ * Two hundred thousand cells is a file people have; a million rows is the
+ * file somebody exports from a system and then asks a spreadsheet to open.
+ * Excel stops at 1,048,576 rows, so this is the largest sheet that exists —
+ * five columns of it, because a million-row export is narrow. A quarter of a
+ * gigabyte of zipped XML.
+ *
+ * Both budgets are printed rather than only asserted. A number that is inside
+ * its budget and moving is worth seeing before the day it goes outside.
+ */
+describe('the largest sheet there is', () => {
+  it.skipIf(!timed)('opens a million rows inside its budget', { timeout: 600_000 }, async () => {
+    const built = await buildLargeWorkbook(1_000_000, 5)
+
+    // Measured against a heap the builder has let go of: the 250 MB of XML it
+    // made is not what the model costs, and counting it would make the model
+    // look twice the size it is.
+    global.gc?.()
+    const before = process.memoryUsage().heapUsed
+
+    const started = performance.now()
+    const open = await openWorkbook(built.bytes)
+    const took = (performance.now() - started) / 1000
+
+    const heap = (process.memoryUsage().heapUsed - before) / 1e9
+
+    process.stderr.write(
+      `    a million rows: open ${took.toFixed(2)} s, model ${heap.toFixed(2)} GB\n`,
+    )
+
+    expect(open.sheets[0]?.cells.rows.size).toBe(1_000_000)
+    expect(took).toBeLessThan(8)
+    expect(heap).toBeLessThan(1.5)
+  })
+})

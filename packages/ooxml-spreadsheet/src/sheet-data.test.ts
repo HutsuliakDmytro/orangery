@@ -1,3 +1,4 @@
+import { compareXml, describeDifferences } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { cellAt, cellsOfRow, extentOf, rowsWithCells } from './cells'
 import { readSheetData, replaceSheetData, scanSheetData, writeSheetData } from './sheet-data'
@@ -347,5 +348,63 @@ describe('a formula with more on it than we model', () => {
 
   it('carries nothing when there is nothing to carry', () => {
     expect(at(readSheetData(sheet('<f>B1*2</f>')), 'A1')?.formula?.carried).toBeNull()
+  })
+})
+
+/**
+ * A row's style, and the flag that says it has one.
+ *
+ * `s` is the style and `customFormat` says the row has one of its own. Reading
+ * the first only when the second was there lost the style of every row that
+ * stated one without it — POI's `56702.xlsx` writes `s="0"` and no
+ * `customFormat` — and writing the pair from one value lost the flag of every
+ * row that stated it alone, which is what LibreOffice's
+ * `RowImportCellStyleIssue.xlsx` does on every row it has. Ten files of the
+ * full corpus between them.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/27
+ */
+describe('a row that states a style, a flag, or both', () => {
+  const sheet = (row: string) => `<worksheet><sheetData>${row}</sheetData></worksheet>`
+
+  it('reads a style stated without customFormat', () => {
+    const read = readSheetData(sheet('<row r="1" spans="1:9" s="0" outlineLevel="0"/>'))
+
+    expect(read.properties.get(0)?.style).toBe(0)
+  })
+
+  it('writes that style back, and does not invent the flag', () => {
+    const read = readSheetData(sheet('<row r="1" s="4"/>'))
+    const written = writeSheetData(read)
+
+    expect(written).toContain('s="4"')
+    expect(written).not.toContain('customFormat')
+  })
+
+  it('carries the flag of a row that states it without a style', () => {
+    const read = readSheetData(sheet('<row r="1" customFormat="1" x14ac:dyDescent="0.3"/>'))
+
+    expect(read.properties.get(0)?.carried).toEqual({
+      customFormat: '1',
+      'x14ac:dyDescent': '0.3',
+    })
+    expect(writeSheetData(read)).toContain('customFormat="1"')
+  })
+
+  it('keeps both when the row states both', () => {
+    const written = writeSheetData(readSheetData(sheet('<row r="1" s="7" customFormat="1"/>')))
+
+    expect(written).toContain('s="7"')
+    expect(written).toContain('customFormat="1"')
+  })
+
+  it('leaves a sheet of such rows structurally as it found it', () => {
+    const source = sheet(
+      '<row r="1" customFormat="1"/><row r="2" s="0" outlineLevel="0"/>' +
+        '<row r="3" s="7" customFormat="1" ht="20" customHeight="1"/>',
+    )
+    const rewritten = replaceSheetData(source, readSheetData(source))
+
+    expect(describeDifferences(compareXml(source, rewritten))).toBe('no differences')
   })
 })

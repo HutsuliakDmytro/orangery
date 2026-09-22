@@ -27,6 +27,16 @@ const MODELLED_CELL = new Set(['r', 's', 't'])
 
 /** The same for `<f>`: `ca`, `bx` and the data-table attributes are carried. */
 const MODELLED_FORMULA = new Set(['t', 'si', 'ref'])
+/**
+ * `customFormat` is not here on purpose: it is carried.
+ *
+ * A row states its style as `s` and says it has one with `customFormat`, and
+ * reading the first only when the second is present lost the style of every
+ * row that stated one without it — POI's `56702.xlsx` writes `s="0"` and no
+ * `customFormat` — while writing the pair from one value lost the flag of
+ * every row that stated it without a style, which LibreOffice writes. The two
+ * are written back as they were read.
+ */
 const MODELLED_ROW = new Set([
   'r',
   'ht',
@@ -34,7 +44,6 @@ const MODELLED_ROW = new Set([
   'hidden',
   'outlineLevel',
   's',
-  'customFormat',
   'collapsed',
 ])
 
@@ -180,7 +189,7 @@ export function scanSheetData(xml: string, handlers: SheetDataHandlers): void {
       customHeight: flag(attributes['customHeight']),
       hidden: flag(attributes['hidden']),
       outlineLevel: numberOr(attributes['outlineLevel'], null),
-      style: flag(attributes['customFormat']) ? numberOr(attributes['s'], null) : null,
+      style: numberOr(attributes['s'], null),
       collapsed: flag(attributes['collapsed']),
       carried: carriedFrom(attributes, MODELLED_ROW),
     })
@@ -315,7 +324,7 @@ function rowXml(
         (row.customHeight ? ' customHeight="1"' : '') +
         (row.hidden ? ' hidden="1"' : '') +
         attribute('outlineLevel', row.outlineLevel) +
-        (row.style === null ? '' : ` s="${String(row.style)}" customFormat="1"`) +
+        attribute('s', row.style) +
         (row.collapsed ? ' collapsed="1"' : '') +
         carriedAttributes(row.carried))
 

@@ -1,4 +1,5 @@
 import {
+  preservingRoot,
   attribute,
   buildXml,
   children,
@@ -153,5 +154,5 @@ export function rebuildPart(xml: string, paragraphs: XmlNode[], kind: HeaderFoot
   const others = children(root).filter((node) => tagName(node) !== 'w:p')
   root[tag] = [...paragraphs, ...others]
 
-  return withDeclaration(buildXml(roots))
+  return preservingRoot(xml, roots)
 }

@@ -1,18 +1,17 @@
 import {
+  writeRelationships,
+  setPartXml,
   CONTENT_TYPES_PART,
   addRelationship,
   attribute,
-  buildXml,
   children,
   element,
   findByTarget,
   getPartText,
   parseRelationships,
   parseXml,
-  serializeRelationships,
   setPartText,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import {
@@ -58,7 +57,7 @@ function ensureOverride(pkg: OoxmlPackage): void {
   ;(list as XmlNode[]).push(
     element('Override', { PartName: partName, ContentType: COMMENTS_CONTENT_TYPE }),
   )
-  setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
+  setPartXml(pkg, CONTENT_TYPES_PART, roots)
 }
 
 function ensureRelationship(pkg: OoxmlPackage): void {
@@ -66,7 +65,7 @@ function ensureRelationship(pkg: OoxmlPackage): void {
   if (findByTarget(relationships, 'comments.xml')) return
 
   addRelationship(relationships, COMMENTS_RELATIONSHIP, 'comments.xml')
-  setPartText(pkg, DOCUMENT_RELS_PART, serializeRelationships(relationships))
+  writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
 }
 
 /** Every comment id the body still points at. */
@@ -103,7 +102,7 @@ export function writeComments(
   // than adding an empty part to a document that never had one.
   if (kept.size === 0 && getPartText(pkg, COMMENTS_PART) === undefined) return
 
-  setPartText(pkg, COMMENTS_PART, serializeComments(kept))
+  setPartText(pkg, COMMENTS_PART, serializeComments(kept, getPartText(pkg, COMMENTS_PART)))
   ensureOverride(pkg)
   ensureRelationship(pkg)
 }

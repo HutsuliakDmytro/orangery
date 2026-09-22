@@ -4,7 +4,7 @@ import {
   element,
   parseIntAttribute,
   parseXml,
-  serializeNode,
+  preservingRoot,
   tagName,
   textNode,
 } from '@orangery/ooxml-core'
@@ -112,7 +112,10 @@ function buildComment(comment: Comment): XmlNode {
   )
 }
 
-export function serializeComments(comments: ReadonlyMap<number, Comment>): string {
+export function serializeComments(
+  comments: ReadonlyMap<number, Comment>,
+  previous?: string,
+): string {
   const root = element(
     'w:comments',
     {
@@ -121,7 +124,9 @@ export function serializeComments(comments: ReadonlyMap<number, Comment>): strin
     [...comments.values()].sort((a, b) => a.id - b.id).map(buildComment),
   )
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n${serializeNode(root)}`
+  // Word declares a dozen namespaces on this root and a comment may use any of
+  // them; the file's own root is kept and ours only fills in what it lacked.
+  return preservingRoot(previous, [root])
 }
 
 /** The markers that anchor a comment to a stretch of text. */

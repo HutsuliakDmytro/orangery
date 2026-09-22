@@ -1,5 +1,5 @@
 import {
-  buildXml,
+  preservingRoot,
   children,
   deserializeNode,
   element,
@@ -9,7 +9,6 @@ import {
   pointsToTwips,
   tagName,
   textNode,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import { PAGINATION_PROPERTIES, paragraphSignature, runSignature } from './parse-document'
@@ -39,6 +38,10 @@ import type { TocEntry } from './toc-field'
 export interface SerializeOptions {
   /** `w:document` attributes from the source, so namespaces survive. */
   documentAttributes: Record<string, string>
+  /** The root's children before the body — `w:background` — as the file wrote them. */
+  documentPrelude?: string | null
+  /** The part as it was read, so its declaration and root survive the rewrite. */
+  previous?: string
   /** Original `w:sectPr`, appended to the body unchanged. */
   sectionProperties: string | null
   /** Match the source's `xml:space` convention — see `detectSpaceConvention`. */
@@ -840,16 +843,27 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
   }
   body.push(...parsedNodes(options.sectionProperties))
 
-  const document = element('w:document', options.documentAttributes, [element('w:body', {}, body)])
+  const document = element('w:document', options.documentAttributes, [
+    ...parsedNodes(options.documentPrelude ?? null),
+    element('w:body', {}, body),
+  ])
 
-  return withDeclaration(buildXml([document]))
+  return preservingRoot(options.previous, [document])
 }
 
-/** Convenience for the common case of serialising what `parseDocument` produced. */
-export function serializeParsed(parsed: ParsedDocument): string {
+/**
+ * Convenience for the common case of serialising what `parseDocument` produced.
+ *
+ * `previous` is the part it was parsed from, where the caller still has it:
+ * without it the declaration and the root attributes are ours rather than the
+ * file's, which is the difference this whole seam exists for.
+ */
+export function serializeParsed(parsed: ParsedDocument, previous?: string): string {
   return serializeDocument(parsed.doc, {
     documentAttributes: parsed.documentAttributes,
+    documentPrelude: parsed.documentPrelude,
     sectionProperties: parsed.sectionProperties,
     alwaysPreserveSpace: parsed.alwaysPreserveSpace,
+    previous,
   })
 }

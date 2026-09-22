@@ -1,6 +1,6 @@
 import {
+  preservingRoot,
   attribute,
-  buildXml,
   children,
   element,
   formatColor,
@@ -9,7 +9,6 @@ import {
   pointsToHalfPoints,
   pointsToTwips,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import type { StyleFormatting, StyleType } from './styles'
@@ -148,7 +147,7 @@ export function upsertStyle(stylesXml: string, definition: StyleDefinition): str
   if (existing === -1) styles.push(built)
   else styles.splice(existing, 1, built)
 
-  return withDeclaration(buildXml(roots))
+  return preservingRoot(stylesXml, roots)
 }
 
 /** An id that no style in the file is using yet. */

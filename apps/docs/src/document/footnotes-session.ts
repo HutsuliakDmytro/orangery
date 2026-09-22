@@ -1,18 +1,17 @@
 import {
+  writeRelationships,
+  setPartXml,
   CONTENT_TYPES_PART,
   addRelationship,
   attribute,
-  buildXml,
   children,
   element,
   findByTarget,
   getPartText,
   parseRelationships,
   parseXml,
-  serializeRelationships,
   setPartText,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import {
@@ -77,7 +76,7 @@ function ensureOverride(pkg: OoxmlPackage): void {
   ;(list as XmlNode[]).push(
     element('Override', { PartName: partName, ContentType: FOOTNOTES_CONTENT_TYPE }),
   )
-  setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
+  setPartXml(pkg, CONTENT_TYPES_PART, roots)
 }
 
 function ensureRelationship(pkg: OoxmlPackage): void {
@@ -85,7 +84,7 @@ function ensureRelationship(pkg: OoxmlPackage): void {
   if (findByTarget(relationships, 'footnotes.xml')) return
 
   addRelationship(relationships, FOOTNOTES_RELATIONSHIP, 'footnotes.xml')
-  setPartText(pkg, DOCUMENT_RELS_PART, serializeRelationships(relationships))
+  writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
 }
 
 /**
@@ -130,7 +129,7 @@ export function writeFootnotes(
     })
   }
 
-  setPartText(pkg, FOOTNOTES_PART, serializeFootnotes(merged))
+  setPartText(pkg, FOOTNOTES_PART, serializeFootnotes(merged, getPartText(pkg, FOOTNOTES_PART)))
   ensureOverride(pkg)
   ensureRelationship(pkg)
 }

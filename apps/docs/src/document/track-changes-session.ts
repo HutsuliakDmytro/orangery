@@ -1,14 +1,12 @@
 import {
+  setPartXml,
   attribute,
-  buildXml,
   children,
   element,
   getPartText,
   parseToggle,
   parseXml,
-  setPartText,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { SETTINGS_PART } from '../ooxml/parts'
@@ -63,5 +61,5 @@ export function writeTrackChanges(pkg: OoxmlPackage, on: boolean): void {
     settings.unshift(element(FLAG))
   }
 
-  setPartText(pkg, SETTINGS_PART, withDeclaration(buildXml(roots)))
+  setPartXml(pkg, SETTINGS_PART, roots)
 }

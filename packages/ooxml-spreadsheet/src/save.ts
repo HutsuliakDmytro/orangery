@@ -1,7 +1,7 @@
 import {
+  writeRelationships,
   getPartText,
   parseRelationships,
-  serializeRelationships,
   setPartText,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
@@ -123,7 +123,7 @@ export function writeWorkbook(
       written = replaceHyperlinks(written, writeHyperlinks(sheet.links, relationships))
       // Written even where the list is empty: a part with no relationships
       // left is still a part Excel expects to find if the sheet names one.
-      if (relationships.size > 0) setPartText(pkg, path, serializeRelationships(relationships))
+      if (relationships.size > 0) writeRelationships(pkg, path, relationships)
     }
 
     setPartText(pkg, sheet.path, written)
@@ -149,7 +149,7 @@ export function removeCalcChain(pkg: OoxmlPackage): boolean {
   for (const [id, relationship] of relationships) {
     if (relationship.type === CALC_CHAIN_TYPE) relationships.delete(id)
   }
-  setPartText(pkg, relationshipsPart, serializeRelationships(relationships))
+  writeRelationships(pkg, relationshipsPart, relationships)
 
   const types = getPartText(pkg, '[Content_Types].xml')
   if (types !== undefined) {

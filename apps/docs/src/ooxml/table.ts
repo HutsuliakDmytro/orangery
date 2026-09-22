@@ -36,6 +36,66 @@ export interface TableCellProperties {
 
 const MODELLED_TABLE_PROPERTIES = new Set(['w:tblGrid', 'w:tblPr', 'w:tr'])
 
+/** A cell of a row, and the content control it stands inside if it does. */
+interface RowCell {
+  cell: XmlNode
+  control: { properties: string; key: number } | null
+}
+
+/**
+ * Keys for the content controls in a document, so two cells wrapped by the
+ * same one can be recognised as a pair when the row is written back.
+ */
+let controlKeyCounter = 0
+
+/**
+ * The cells of a row, including the ones inside a content control.
+ *
+ * Word wraps a cell in `w:sdt` when the cell is bound to something — a
+ * repeating row, a rich-text control, a field somebody fills in. The wrapper
+ * stands among the cells rather than before them, and a reader that took only
+ * `w:tc` children never saw the cell at all: not in the editor, and not in the
+ * file it saved afterwards.
+ *
+ * The wrapper's own markup rides on the cells it holds, so the writer can put
+ * it back around them.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/28
+ */
+function cellsOfRow(row: XmlNode): RowCell[] {
+  const found: RowCell[] = []
+
+  for (const child of children(row)) {
+    const tag = tagName(child)
+
+    if (tag === 'w:tc') {
+      found.push({ cell: child, control: null })
+      continue
+    }
+
+    if (tag !== 'w:sdt') continue
+
+    const content = findChild(child, 'w:sdtContent')
+    if (content === undefined) continue
+
+    // Everything the control says about itself: `w:sdtPr`, `w:sdtEndPr`, and
+    // anything else that is not the content it wraps.
+    const properties = children(child)
+      .filter((part) => tagName(part) !== null && tagName(part) !== 'w:sdtContent')
+      .map((part) => serializeNode(part))
+      .join('')
+
+    controlKeyCounter += 1
+    const key = controlKeyCounter
+
+    for (const inside of children(content)) {
+      if (tagName(inside) === 'w:tc') found.push({ cell: inside, control: { properties, key } })
+    }
+  }
+
+  return found
+}
+
 function cellProperties(cell: XmlNode): {
   colspan: number
   vMerge: string | null
@@ -88,11 +148,11 @@ export function parseTable(
   const content: ProseMirrorNodeJson[] = []
 
   for (const row of rows) {
-    const cells = children(row).filter((cell) => tagName(cell) === 'w:tc')
+    const cells = cellsOfRow(row)
     const rowContent: ProseMirrorNodeJson[] = []
     let column = 0
 
-    for (const cell of cells) {
+    for (const { cell, control } of cells) {
       const properties = cellProperties(cell)
 
       if (properties.vMerge === 'continue') {
@@ -132,6 +192,9 @@ export function parseTable(
           // none of which we model. Keeping it whole lets an untouched cell be
           // written back exactly as found — the same approach `w:rFonts` uses.
           ...(tcPr ? { tcPr: serializeNode(tcPr), tcPrColspan: properties.colspan } : {}),
+          // The content control this cell stands inside, if any: its
+          // properties, and a key shared by every cell of the same one.
+          ...(control === null ? {} : { sdt: control.properties, sdtKey: control.key }),
         },
         content: parseCellContent(cell),
       }
@@ -245,6 +308,9 @@ export function serializeTable(
   for (const row of rows) {
     const cellNodes: XmlNode[] = []
     let column = 0
+    // The content control the previous cell was written into, so that two
+    // cells of one control do not become two controls.
+    let openControl: unknown = undefined
 
     const skipCovered = () => {
       while ((covered.get(column) ?? 0) > 0) {
@@ -300,13 +366,32 @@ export function serializeTable(
       }
 
       const content = serializeCellContent(cell)
-      cellNodes.push(
-        element('w:tc', {}, [
-          ...propertyNodes,
-          // A cell must contain at least one paragraph or Word rejects the file.
-          ...(content.length > 0 ? content : [element('w:p')]),
-        ]),
-      )
+      const written = element('w:tc', {}, [
+        ...propertyNodes,
+        // A cell must contain at least one paragraph or Word rejects the file.
+        ...(content.length > 0 ? content : [element('w:p')]),
+      ])
+
+      // Back inside the content control it came out of, and beside the cells
+      // that shared it — a wrapper around two cells goes back as one wrapper.
+      const control = cell.attrs?.['sdt']
+      const key = cell.attrs?.['sdtKey']
+      const last = cellNodes[cellNodes.length - 1]
+
+      if (typeof control === 'string' && key !== undefined && key === openControl && last) {
+        const held = children(last).find((part) => tagName(part) === 'w:sdtContent')
+        if (held) {
+          held['w:sdtContent'] = [...children(held), written]
+        } else cellNodes.push(written)
+      } else if (typeof control === 'string') {
+        openControl = key
+        cellNodes.push(
+          element('w:sdt', {}, [...parseFragment(control), element('w:sdtContent', {}, [written])]),
+        )
+      } else {
+        openControl = undefined
+        cellNodes.push(written)
+      }
 
       if (rowspan > 1) {
         for (let offset = 0; offset < colspan; offset += 1) {

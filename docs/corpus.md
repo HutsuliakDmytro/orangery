@@ -182,8 +182,8 @@ OOXML reader to open a `.doc` tells you only that it is not a zip.
 
 `hostile/` is 75 files that are not meant to open: encrypted packages, POI's
 `clusterfuzz-testcase-minimized-*` fixtures, LibreOffice's CVE samples. They are
-run anyway, and the answer is the one wanted: 56 of them fail to open with a
-sentence naming what is wrong, the slowest in 156 ms, and none of them take the
+run anyway, and the answer is the one wanted: 54 of them fail to open with a
+sentence naming what is wrong, the slowest in 4 ms, and none of them take the
 process down. Nineteen open despite their names, which is fine — a file called
 `bad_*` that is merely unusual is still a file.
 

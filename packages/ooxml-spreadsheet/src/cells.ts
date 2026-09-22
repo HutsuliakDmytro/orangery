@@ -30,6 +30,15 @@ export interface Formula {
   shared: number | null
   /** The range an array formula spills over, or a shared group covers. */
   ref: string | null
+  /**
+   * Attributes of `<f>` this does not model, kept so they survive a save.
+   *
+   * `ca="1"` is the important one: it marks a formula as always-calculate, and
+   * a workbook whose `OFFSET` or `INDIRECT` lost it is a workbook that stops
+   * refreshing. `bx`, `aca`, `del1`, `dtr` and the data-table attributes are
+   * the same kind of thing — read by Excel, edited by nobody here.
+   */
+  carried: Record<string, string> | null
 }
 
 export interface Cell {

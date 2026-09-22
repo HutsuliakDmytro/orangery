@@ -117,7 +117,7 @@ describe('a shared formula, written back', () => {
     if (cell === null) throw new Error('the sheet lost a cell')
 
     cell.formula = {
-      ...(cell.formula ?? { kind: 'normal', shared: null, ref: null }),
+      ...(cell.formula ?? { kind: 'normal', shared: null, ref: null, carried: null }),
       text: 'A3*2',
     }
     const written = writeSheetData(cells)

@@ -313,3 +313,39 @@ describe('a cell that closes itself', () => {
     expect(at(sheet, 'A2')?.value).toBe('4')
   })
 })
+
+/**
+ * What an `<f>` says that this does not model.
+ *
+ * `ca="1"` marks a formula as always-calculate: a workbook whose `OFFSET` or
+ * `INDIRECT` lost it is one that stops refreshing. Thirteen files of the full
+ * corpus, and the same answer as everywhere else — carry it.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/16
+ */
+describe('a formula with more on it than we model', () => {
+  const sheet = (formula: string) =>
+    `<worksheet><sheetData><row r="1"><c r="A1">${formula}<v>1</v></c></row></sheetData></worksheet>`
+
+  it('carries ca through a round-trip', () => {
+    const read = readSheetData(sheet('<f ca="1">OFFSET(B1,0,0)</f>'))
+    const cell = at(read, 'A1')
+
+    expect(cell?.formula?.carried).toEqual({ ca: '1' })
+    expect(writeSheetData(read)).toContain('ca="1"')
+  })
+
+  it('keeps the formula itself, and the attributes it does model', () => {
+    const read = readSheetData(sheet('<f t="array" ref="A1:A2" ca="1">ROW(A1:A2)</f>'))
+    const written = writeSheetData(read)
+
+    expect(written).toContain('t="array"')
+    expect(written).toContain('ref="A1:A2"')
+    expect(written).toContain('ca="1"')
+    expect(written).toContain('ROW(A1:A2)')
+  })
+
+  it('carries nothing when there is nothing to carry', () => {
+    expect(at(readSheetData(sheet('<f>B1*2</f>')), 'A1')?.formula?.carried).toBeNull()
+  })
+})

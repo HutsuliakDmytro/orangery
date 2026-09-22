@@ -208,7 +208,7 @@ describe('formulas on the other sheets', () => {
       style: 0,
       rich: null,
       carried: null,
-      formula: { text, kind: 'normal', shared: null, ref: null },
+      formula: { text, kind: 'normal', shared: null, ref: null, carried: null },
     })
   }
 

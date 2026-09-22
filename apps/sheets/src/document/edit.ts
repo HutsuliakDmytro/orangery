@@ -81,7 +81,7 @@ export function applyEdit(
       type: 'n',
       value: null,
       style: existing?.style ?? null,
-      formula: { text: formula, kind: 'normal', shared: null, ref: null },
+      formula: { text: formula, kind: 'normal', shared: null, ref: null, carried: null },
       rich: null,
       carried: existing?.carried ?? null,
     }

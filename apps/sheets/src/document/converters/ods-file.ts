@@ -53,7 +53,13 @@ export async function workbookFromOds(bytes: Uint8Array): Promise<OpenWorkbook> 
       if (cell.formula !== null) {
         const existing = sheet.cells.rows.get(cell.row)?.get(cell.column)
         if (existing !== undefined) {
-          existing.formula = { text: cell.formula, kind: 'normal', shared: null, ref: null }
+          existing.formula = {
+            text: cell.formula,
+            kind: 'normal',
+            shared: null,
+            ref: null,
+            carried: null,
+          }
         }
       }
 

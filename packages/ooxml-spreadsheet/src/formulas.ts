@@ -450,7 +450,7 @@ export function expandFormulas(sheet: SheetCells): void {
         const cell = cellAt(sheet, { row, column })
         if (cell === null || cell.formula !== null) continue
 
-        cell.formula = { text: array.text, kind: 'array', shared: null, ref: null }
+        cell.formula = { text: array.text, kind: 'array', shared: null, ref: null, carried: null }
       }
     }
   }
@@ -487,7 +487,7 @@ export function collapsedFormula(cell: Cell, masters: Map<number, SharedMaster>)
 
   return formula.text === expected
     ? { ...formula, text: '' }
-    : { text: formula.text, kind: 'normal', shared: null, ref: null }
+    : { text: formula.text, kind: 'normal', shared: null, ref: null, carried: null }
 }
 
 /** A reference as it stands in a formula, with where it stands. */

@@ -204,6 +204,20 @@ describe('a document that states xml:space on some runs and not others', () => {
     expect(describeDifferences(compareXml(document, rewritten))).toBe('no differences')
   })
 
+  it('writes it on a run that did not state it but would lose a space', () => {
+    // The model's silence must not outrank the text in front of it: a run read
+    // without the attribute, whose text has an edge space, still gets it.
+    const source =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n` +
+      `<w:document xmlns:w="${WORD}"><w:body><w:p>` +
+      `<w:r><w:t> edged </w:t></w:r>` +
+      `</w:p></w:body></w:document>`
+
+    expect(serializeParsed(parseDocument(source), source)).toContain(
+      '<w:t xml:space="preserve"> edged </w:t>',
+    )
+  })
+
   it('still writes it where text would lose a space without it', () => {
     // Text that never came from a file — typed, or pasted — has no run to
     // follow, and the rule is the serialiser's own.

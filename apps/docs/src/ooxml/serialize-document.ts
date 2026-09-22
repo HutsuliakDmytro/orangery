@@ -203,35 +203,32 @@ function previousRunProperties(previous: string | null): XmlNode {
 
 /**
  * Word requires `xml:space="preserve"` or leading and trailing spaces are
- * dropped. `stated` is what the run the text came from had: true keeps it,
- * false leaves it off, and null — text nobody read out of a file — falls back
- * to writing it exactly where it is needed.
+ * dropped.
+ *
+ * `stated` is what the run the text came from had, and it can only add: a run
+ * that declared it keeps it whether or not the text needs it, and a run that
+ * did not still gets it when the text would lose a space without it. Letting
+ * `false` suppress the attribute would make the model's silence outrank the
+ * text in front of it, which is the one way this can lose somebody's typing.
  */
-function buildTextElement(text: string, stated: boolean | null): XmlNode {
-  const needsPreserve = stated ?? (text !== text.trim() || text === '')
+function buildTextElement(text: string, stated: boolean): XmlNode {
+  const needsPreserve = stated || text !== text.trim() || text === ''
   return element('w:t', needsPreserve ? { 'xml:space': 'preserve' } : {}, [textNode(text)])
 }
 
 /**
  * Whether the run this text belongs to declared `xml:space`.
  *
- * Null when the run did not come from a file — typed text, or a paste — and
- * the serialiser's own rule applies. `false` only when the source run was read
- * and said nothing, which is the case that must not become `true`: adding the
- * attribute is harmless and taking it off is not, but writing it where Word
- * would not is still a difference in a file nobody edited.
+ * False for typed text and for a run that was read and said nothing — in both
+ * cases the serialiser's own rule decides, which is to write the attribute
+ * exactly where a space would otherwise be lost.
  */
-function preserveSpaceOf(marks: Map<string, Mark>): boolean | null {
-  const run = marks.get('preservedRunProperties')
-  if (run === undefined) return null
-
-  const stated = run.attrs?.['preserveSpace']
-  if (stated === true) return true
-  return stated === null || stated === undefined ? false : Boolean(stated)
+function preserveSpaceOf(marks: Map<string, Mark>): boolean {
+  return marks.get('preservedRunProperties')?.attrs?.['preserveSpace'] === true
 }
 
 /** The content of a run: text with tabs split out into their own elements. */
-function buildRunContent(text: string, stated: boolean | null): XmlNode[] {
+function buildRunContent(text: string, stated: boolean): XmlNode[] {
   const nodes: XmlNode[] = []
 
   const segments = text.split('\t')

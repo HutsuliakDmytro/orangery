@@ -43,10 +43,19 @@ async function decksIn(where: string): Promise<string[]> {
 
   if (found.isFile()) return where.toLowerCase().endsWith('.pptx') ? [where] : []
 
+  // Walked rather than listed: the public corpus sorts itself into `docx/`,
+  // `pptx/` and `xlsx/`, and a corpus somebody points at may be laid out any
+  // way they like.
   const entries = await readdir(where, { withFileTypes: true }).catch(() => [])
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.pptx'))
-    .map((entry) => join(where, entry.name))
+  const decks: string[] = []
+
+  for (const entry of entries) {
+    const path = join(where, entry.name)
+    if (entry.isDirectory()) decks.push(...(await decksIn(path)))
+    else if (entry.isFile() && entry.name.toLowerCase().endsWith('.pptx')) decks.push(path)
+  }
+
+  return decks.sort()
 }
 
 const decks = await decksIn(directory)

@@ -223,11 +223,10 @@ describe('a row with table property exceptions', () => {
   })
 
   it('carries only what stands before the first cell', () => {
-    // A content control in a row wraps cells rather than preceding them, and
+    // A content control in a row wraps cells rather than preceding them, so
     // "everything that is not a cell" swept one to the front — which
     // `pnpm corpus:render` caught as half a percent of moved pixels in
-    // `word2010win-footnotes-01.docx`. A row-level `w:sdt` is not carried and
-    // not read either, which is its own bug and its own issue.
+    // `word2010win-footnotes-01.docx`.
     const withControl = document(
       '<w:tr><w:trPr><w:trHeight w:val="454"/></w:trPr>' +
         '<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>First</w:t></w:r></w:p></w:tc>' +
@@ -238,6 +237,74 @@ describe('a row with table property exceptions', () => {
 
     expect(rewritten).toContain('<w:trHeight w:val="454"/>')
     expect(rewritten.indexOf('w:trHeight')).toBeLessThan(rewritten.indexOf('First'))
-    expect(rewritten).not.toContain('w:sdtContent')
+    expect(rewritten.indexOf('First')).toBeLessThan(rewritten.indexOf('w:sdt'))
+  })
+})
+
+/**
+ * A table cell inside a content control.
+ *
+ * Word wraps a cell in `w:sdt` when it is bound to something: a repeating row,
+ * a rich-text control, a field somebody fills in. The wrapper stands among the
+ * cells rather than before them, and the parser's cell loop read `w:tc`
+ * children and nothing else — so the cell was not in the editor, and not in
+ * the file that was saved afterwards either.
+ *
+ * `word2010win-footnotes-01.docx` in the public corpus has one, holding the
+ * text `Rich_text_in_cell`.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/28
+ */
+describe('a table cell inside a content control', () => {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  const control = (cells: string) =>
+    `<w:sdt><w:sdtPr><w:id w:val="288325205"/><w:placeholder><w:docPart w:val="DefaultPlaceholder_1082065158"/></w:placeholder></w:sdtPr><w:sdtEndPr/><w:sdtContent>${cells}</w:sdtContent></w:sdt>`
+  const cell = (text: string) =>
+    `<w:tc><w:tcPr><w:tcW w:w="1915" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`
+
+  const document = (row: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n` +
+    `<w:document xmlns:w="${W}"><w:body><w:tbl>` +
+    `<w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>` +
+    `<w:tblGrid><w:gridCol w:w="1915"/><w:gridCol w:w="1915"/></w:tblGrid>${row}</w:tbl></w:body></w:document>`
+
+  const row = `<w:tr>${cell('Plain')}${control(cell('Bound'))}</w:tr>`
+
+  it('reads the cell that is inside it', () => {
+    const parsed = parseDocument(document(row))
+
+    expect(JSON.stringify(parsed.doc)).toContain('Bound')
+  })
+
+  it('gives it to the editor as an ordinary cell, so it draws', () => {
+    const table = (parseDocument(document(row)).doc.content ?? [])[0]
+    const cells = (table?.content ?? [])[0]?.content ?? []
+
+    expect(cells.length).toBe(2)
+    expect(cells.every((one) => one.type === 'tableCell')).toBe(true)
+  })
+
+  it('writes it back inside its control, in the place it was', () => {
+    const source = document(row)
+    const rewritten = serializeParsed(parseDocument(source), source)
+
+    expect(rewritten).toContain('<w:id w:val="288325205"/>')
+    expect(rewritten.indexOf('Plain')).toBeLessThan(rewritten.indexOf('w:sdt'))
+    expect(rewritten.indexOf('w:sdtContent')).toBeLessThan(rewritten.indexOf('Bound'))
+  })
+
+  it('leaves the table with no differences at all', () => {
+    const source = document(row)
+    const rewritten = serializeParsed(parseDocument(source), source)
+
+    expect(describeDifferences(compareXml(source, rewritten))).toBe('no differences')
+  })
+
+  it('puts two cells of one control back into one control', () => {
+    const source = document(`<w:tr>${control(cell('First') + cell('Second'))}</w:tr>`)
+    const rewritten = serializeParsed(parseDocument(source), source)
+
+    expect(rewritten.match(/<w:sdt>/gu)?.length).toBe(1)
+    expect(describeDifferences(compareXml(source, rewritten))).toBe('no differences')
   })
 })

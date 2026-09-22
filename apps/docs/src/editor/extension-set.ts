@@ -200,6 +200,15 @@ export function buildExtensions(): Extensions {
           tcPrColspan: { default: null },
           tcPrRowspan: { default: null },
           mergedCells: { default: null },
+          /**
+           * The content control this cell stands inside, if it does.
+           *
+           * `sdt` is the control's own markup and `sdtKey` is shared by every
+           * cell of one control, so a wrapper around two cells goes back as
+           * one wrapper rather than two.
+           */
+          sdt: { default: null },
+          sdtKey: { default: null },
         }
       },
     }),

@@ -143,17 +143,23 @@ export function parseTable(
       column += properties.colspan
     }
 
-    // Everything the row states before its cells, kept in order: `w:trPr`
-    // holds the height and "repeat as header row", and `w:tblPrEx` — table
-    // property exceptions, where a row disagrees with its table about borders
-    // or margins — comes before it and was being dropped.
-    const properties = children(row)
-      .filter((child) => {
-        const tag = tagName(child)
-        return tag !== null && tag !== 'w:tc'
-      })
-      .map((child) => serializeNode(child))
-      .join('')
+    // Everything the row states *before* its first cell, kept in order:
+    // `w:trPr` holds the height and "repeat as header row", and `w:tblPrEx` —
+    // table property exceptions, where a row disagrees with its table about
+    // borders or margins — comes before it and was being dropped.
+    //
+    // Before the first cell rather than "everything that is not a cell": a
+    // `w:sdt` in a row wraps cells and stands among them, and moving one to
+    // the front reorders the row.
+    const leading: XmlNode[] = []
+    for (const child of children(row)) {
+      const tag = tagName(child)
+      if (tag === null) continue
+      if (tag === 'w:tc' || tag === 'w:sdt') break
+      leading.push(child)
+    }
+
+    const properties = leading.map((child) => serializeNode(child)).join('')
 
     content.push({
       type: 'tableRow',

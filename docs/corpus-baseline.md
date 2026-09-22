@@ -1,9 +1,12 @@
 # Corpus baseline
 
-What every corpus run answers today, 22 September 2026, on the corpus described
-in `docs/corpus.md`. Nothing here has been fixed — the point of the first run is
-to have a number to be better than, and the issues it produced are listed at the
-bottom.
+What every corpus run answers, on the corpus described in `docs/corpus.md`. The
+first run was 22 September 2026 and fixed nothing: the point of it was to have
+a number to be better than. Every number below is the current one, and
+[what has moved](#what-has-moved) says which fix moved it.
+
+The rule the baseline exists for: **no number here may get worse**. A change
+that makes one worse needs the reason written down beside it.
 
 Reproduce with:
 
@@ -17,7 +20,7 @@ pnpm --filter charts corpus                  # what the charts are
 
 ## Open → save → compare → open again
 
-**The public corpus — 140 files, 15 MB, 14 seconds.**
+**The public corpus — 140 files, 15 MB, 13 seconds.**
 
 | Format  |   Files |     ok |   diff | crash | timeout |   oom |
 | ------- | ------: | -----: | -----: | ----: | ------: | ----: |
@@ -92,7 +95,7 @@ run should not report it as an open question for much longer.
 Every `<f>` loaded into `crates/formula`, recalculated, and compared against the
 `<v>` its own writer cached beside it.
 
-**Public corpus: 27 workbooks with formulas, 1,942 cells compared, 201 matched.**
+**Public corpus: 27 workbooks with formulas, 1,942 cells compared, 227 matched.**
 
 That number is two workbooks:
 
@@ -102,8 +105,8 @@ That number is two workbooks:
 | `excel2016win-arrayformulas-02.xlsx` |      266 |      18 | `MMULT`, `MINVERSE`, `MDETERM`, `TRANSPOSE` — [#11](../../issues/11), [#13](../../issues/13) |
 | the other 25                         |      236 |     183 | 46 mismatches, listed in [#12](../../issues/12)–[#14](../../issues/14)                       |
 
-Excluding those two workbooks the engine agrees with Excel about 78% of the
-cells it is asked about; including them, 10%. Both numbers are worth keeping:
+Excluding those two workbooks the engine agrees with Excel about 89% of the
+cells it is asked about; including them, 12%. Both numbers are worth keeping:
 the first says how the arithmetic is doing, the second says what one missing
 one-line function costs when somebody's workbook is built on it.
 
@@ -157,6 +160,17 @@ and one of those two is ours: LibreOffice converts `word2013win-cjk-01.docx` and
 refuses the file we saved from it. The other is LibreOffice failing on the
 original. Everything here is [#18](../../issues/18), with the individual causes
 filed separately.
+
+## What has moved
+
+Each row is one fix, measured on the same files before and after it.
+
+| Fix                                                                                             | Corpus                                      | Before           | After                |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------- | ---------------- | -------------------- |
+| [#2](../../issues/2) a self-closing `<c/>` swallowing the cells after it ([#19](../../pull/19)) | 628 workbooks                               | ok 215, diff 411 | **ok 232**, diff 394 |
+|                                                                                                 | — files losing or gaining elements          | 79               | **17**               |
+|                                                                                                 | — unexplained differences, total            | 218,926          | **44,680**           |
+|                                                                                                 | public corpus, formula cells matching Excel | 201              | **227**              |
 
 ## What this baseline is for
 

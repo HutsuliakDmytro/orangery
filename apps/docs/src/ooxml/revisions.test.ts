@@ -22,7 +22,6 @@ const write = (xml: string) =>
   serializeDocument(parseDocument(xml).doc, {
     documentAttributes: {},
     sectionProperties: null,
-    alwaysPreserveSpace: false,
   })
 
 const marksOf = (index: number) =>
@@ -123,7 +122,6 @@ describe('a change of formatting', () => {
     const xml = serializeDocument(doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     // The run says how it looks now, and then what it looked like before.
@@ -159,7 +157,6 @@ describe('a change of formatting', () => {
       serializeDocument(doc, {
         documentAttributes: {},
         sectionProperties: null,
-        alwaysPreserveSpace: false,
       }),
     ).toContain('<w:rPrChange w:id="1" w:author="Ada"><w:rPr/></w:rPrChange>')
   })

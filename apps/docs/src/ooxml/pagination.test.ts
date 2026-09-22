@@ -13,7 +13,6 @@ const write = (xml: string) =>
   serializeDocument(parseDocument(xml).doc, {
     documentAttributes: {},
     sectionProperties: null,
-    alwaysPreserveSpace: false,
   })
 
 describe('pagination properties', () => {
@@ -54,7 +53,6 @@ describe('pagination properties', () => {
     const xml = serializeDocument(parsed.doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     expect(xml).toContain('<w:keepNext/>')
@@ -72,7 +70,6 @@ describe('pagination properties', () => {
     const xml = serializeDocument(parsed.doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     // The toggles sit between the style and the spacing, which is where the

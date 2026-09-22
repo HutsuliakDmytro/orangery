@@ -240,7 +240,6 @@ describe('a list of figures', () => {
     const xml = serializeDocument(editor.getJSON() as ProseMirrorNodeJson, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     // The builder escapes the quotes around the sequence name; Word reads them

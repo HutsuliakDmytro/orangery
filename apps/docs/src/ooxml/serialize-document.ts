@@ -45,7 +45,6 @@ export interface SerializeOptions {
   /** Original `w:sectPr`, appended to the body unchanged. */
   sectionProperties: string | null
   /** Match the source's `xml:space` convention — see `detectSpaceConvention`. */
-  alwaysPreserveSpace?: boolean
   /**
    * Reserves a numbering id for a list the editor created.
    *
@@ -204,31 +203,51 @@ function previousRunProperties(previous: string | null): XmlNode {
 
 /**
  * Word requires `xml:space="preserve"` or leading and trailing spaces are
- * dropped. `always` follows a source that declared it everywhere.
+ * dropped. `stated` is what the run the text came from had: true keeps it,
+ * false leaves it off, and null — text nobody read out of a file — falls back
+ * to writing it exactly where it is needed.
  */
-function buildTextElement(text: string, always: boolean): XmlNode {
-  const needsPreserve = always || text !== text.trim() || text === ''
+function buildTextElement(text: string, stated: boolean | null): XmlNode {
+  const needsPreserve = stated ?? (text !== text.trim() || text === '')
   return element('w:t', needsPreserve ? { 'xml:space': 'preserve' } : {}, [textNode(text)])
 }
 
+/**
+ * Whether the run this text belongs to declared `xml:space`.
+ *
+ * Null when the run did not come from a file — typed text, or a paste — and
+ * the serialiser's own rule applies. `false` only when the source run was read
+ * and said nothing, which is the case that must not become `true`: adding the
+ * attribute is harmless and taking it off is not, but writing it where Word
+ * would not is still a difference in a file nobody edited.
+ */
+function preserveSpaceOf(marks: Map<string, Mark>): boolean | null {
+  const run = marks.get('preservedRunProperties')
+  if (run === undefined) return null
+
+  const stated = run.attrs?.['preserveSpace']
+  if (stated === true) return true
+  return stated === null || stated === undefined ? false : Boolean(stated)
+}
+
 /** The content of a run: text with tabs split out into their own elements. */
-function buildRunContent(text: string, alwaysPreserveSpace: boolean): XmlNode[] {
+function buildRunContent(text: string, stated: boolean | null): XmlNode[] {
   const nodes: XmlNode[] = []
 
   const segments = text.split('\t')
   segments.forEach((segment, index) => {
     if (index > 0) nodes.push(element('w:tab'))
-    if (segment !== '') nodes.push(buildTextElement(segment, alwaysPreserveSpace))
+    if (segment !== '') nodes.push(buildTextElement(segment, stated))
   })
 
   return nodes
 }
 
-function buildRun(text: string, marks: Map<string, Mark>, alwaysPreserveSpace: boolean): XmlNode {
+function buildRun(text: string, marks: Map<string, Mark>): XmlNode {
   const properties = buildRunProperties(marks)
   return element('w:r', {}, [
     ...(properties ? [properties] : []),
-    ...buildRunContent(text, alwaysPreserveSpace),
+    ...buildRunContent(text, preserveSpaceOf(marks)),
   ])
 }
 
@@ -457,7 +476,6 @@ function commentIdsIn(node: ProseMirrorNodeJson): number[] {
 
 function buildParagraph(
   node: ProseMirrorNodeJson,
-  alwaysPreserveSpace: boolean,
   caption?: CaptionNumber,
   sectionBreak?: string,
   comments: CommentState = NO_COMMENTS,
@@ -544,7 +562,7 @@ function buildParagraph(
                 : anchor !== null
                   ? { 'w:anchor': anchor }
                   : {},
-              [buildRun(child.text ?? '', marks, alwaysPreserveSpace)],
+              [buildRun(child.text ?? '', marks)],
             ),
           )
           break
@@ -553,7 +571,7 @@ function buildParagraph(
         append(
           marks,
           markSignature(child.marks),
-          buildRunContent(child.text ?? '', alwaysPreserveSpace),
+          buildRunContent(child.text ?? '', preserveSpaceOf(marks)),
         )
         break
       }
@@ -642,7 +660,6 @@ function buildParagraph(
 }
 
 interface BlockContext {
-  alwaysPreserveSpace: boolean
   allocateNumbering?: (kind: 'bullet' | 'ordered') => number
   /** Numbering reference inherited from the list this block sits in. */
   numbering?: { numId: number; level: number }
@@ -703,8 +720,6 @@ function buildList(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[] 
 }
 
 function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[] {
-  const alwaysPreserveSpace = context.alwaysPreserveSpace
-
   switch (node.type) {
     case 'bulletList':
     case 'orderedList':
@@ -725,7 +740,6 @@ function buildBlock(node: ProseMirrorNodeJson, context: BlockContext): XmlNode[]
       return [
         buildParagraph(
           withNumbering,
-          alwaysPreserveSpace,
           context.captions?.get(node),
           context.sectionBreak,
           context.comments,
@@ -795,7 +809,6 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
   const commentState: CommentState = { open: [], ahead: [] }
 
   const context: BlockContext = {
-    alwaysPreserveSpace: options.alwaysPreserveSpace ?? false,
     captions,
     comments: commentState,
     ...(options.allocateNumbering ? { allocateNumbering: options.allocateNumbering } : {}),
@@ -863,7 +876,6 @@ export function serializeParsed(parsed: ParsedDocument, previous?: string): stri
     documentAttributes: parsed.documentAttributes,
     documentPrelude: parsed.documentPrelude,
     sectionProperties: parsed.sectionProperties,
-    alwaysPreserveSpace: parsed.alwaysPreserveSpace,
     previous,
   })
 }

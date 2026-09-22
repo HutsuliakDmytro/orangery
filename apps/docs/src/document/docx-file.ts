@@ -76,8 +76,6 @@ export interface OpenDocx {
   trackChanges: boolean
   /** The scheme numbering the heading styles, or null when they are not. */
   headingNumbering: HeadingNumberScheme | null
-  /** Whether the source declared `xml:space` on every run. */
-  alwaysPreserveSpace: boolean
   documentAttributes: Record<string, string>
   /** The `w:document` children that are not the body, kept as the file wrote them. */
   documentPrelude: string | null
@@ -150,7 +148,6 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     footnotes,
     comments: readComments(pkg),
     trackChanges: readTrackChanges(pkg),
-    alwaysPreserveSpace: parsed.alwaysPreserveSpace,
     numbering,
     headingNumbering: readHeadingNumbering(pkg),
     section: parseSection(parsed.sectionProperties),
@@ -192,7 +189,6 @@ export async function saveDocx(
     previous: getPartText(open.pkg, DOCUMENT_PART),
     // Page setup may have changed it since the file was opened.
     sectionProperties: serializeSection(options.section ?? open.section),
-    alwaysPreserveSpace: open.alwaysPreserveSpace,
     allocateNumbering: allocate,
     // Captions count within a chapter exactly when the chapters are numbered.
     captionsByChapter: (options.headingNumbering ?? open.headingNumbering) !== null,

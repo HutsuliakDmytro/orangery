@@ -13,7 +13,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseDocument } from './parse-document'
-import { serializeParsed } from './serialize-document'
+import { serializeDocument, serializeParsed } from './serialize-document'
 
 const CORPUS_ROOT = join(process.cwd(), 'tests/fixtures/docx')
 
@@ -162,5 +162,59 @@ describe('what surrounds the body', () => {
     expect(rewritten.startsWith('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')).toBe(
       true,
     )
+  })
+})
+
+/**
+ * `xml:space`, which is a fact about a run rather than about a document.
+ *
+ * Word writes it where the space would otherwise be dropped, Google Docs on
+ * every run, LibreOffice on some runs and not others. It used to be one flag
+ * for the whole file — "every run had it" — so the mixed convention lost the
+ * attribute from the runs that did not need it, and a conforming reader is
+ * then free to drop a space somebody typed. Fifteen files in the full corpus.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/16
+ */
+describe('a document that states xml:space on some runs and not others', () => {
+  const WORD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  const document =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n` +
+    `<w:document xmlns:w="${WORD}"><w:body><w:p>` +
+    `<w:r><w:t xml:space="preserve">kept</w:t></w:r>` +
+    `<w:r><w:t>plain</w:t></w:r>` +
+    `<w:r><w:t xml:space="preserve"> spaced </w:t></w:r>` +
+    `</w:p></w:body></w:document>`
+
+  it('keeps it on the run that had it', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(rewritten).toContain('<w:t xml:space="preserve">kept</w:t>')
+  })
+
+  it('does not put it on the run that did not', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(rewritten).toContain('<w:t>plain</w:t>')
+  })
+
+  it('leaves the document with no differences at all', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(describeDifferences(compareXml(document, rewritten))).toBe('no differences')
+  })
+
+  it('still writes it where text would lose a space without it', () => {
+    // Text that never came from a file — typed, or pasted — has no run to
+    // follow, and the rule is the serialiser's own.
+    const typed = serializeDocument(
+      {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: ' leading' }] }],
+      },
+      { documentAttributes: {}, sectionProperties: null },
+    )
+
+    expect(typed).toContain('<w:t xml:space="preserve"> leading</w:t>')
   })
 })

@@ -25,7 +25,6 @@ const write = () =>
   serializeDocument(editor.getJSON() as ProseMirrorNodeJson, {
     documentAttributes: {},
     sectionProperties: null,
-    alwaysPreserveSpace: false,
   })
 
 describe('inserting a section break', () => {

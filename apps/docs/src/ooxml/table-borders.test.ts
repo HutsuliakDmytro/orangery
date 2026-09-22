@@ -7,6 +7,8 @@ import {
   tagName,
 } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
+import { parseDocument } from './parse-document'
+import { serializeParsed } from './serialize-document'
 import {
   bordersFrom,
   borderToCss,
@@ -177,5 +179,46 @@ describe('borderToCss', () => {
   it('renders none as none', () => {
     expect(borderToCss({ style: 'none', width: 0, color: null })).toBe('none')
     expect(borderToCss(undefined)).toBe('none')
+  })
+})
+
+/**
+ * What a row states before its cells.
+ *
+ * `w:trPr` is the height and "repeat as header row". `w:tblPrEx` comes before
+ * it — the table property exceptions a row carries when it disagrees with its
+ * table about borders, margins or width — and was dropped, because the parser
+ * kept `w:trPr` by name rather than keeping what it did not model.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/6
+ */
+describe('a row with table property exceptions', () => {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  const document = (row: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n` +
+    `<w:document xmlns:w="${W}"><w:body><w:tbl>` +
+    `<w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>` +
+    `<w:tblGrid><w:gridCol w:w="4675"/></w:tblGrid>${row}</w:tbl></w:body></w:document>`
+
+  const row =
+    '<w:tr>' +
+    '<w:tblPrEx><w:tblBorders><w:top w:val="single" w:sz="4" w:color="FF0000"/></w:tblBorders></w:tblPrEx>' +
+    '<w:trPr><w:trHeight w:val="454"/></w:trPr>' +
+    '<w:tc><w:tcPr><w:tcW w:w="4675" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>One</w:t></w:r></w:p></w:tc>' +
+    '</w:tr>'
+
+  it('keeps the exceptions, and the row properties after them', () => {
+    const rewritten = serializeParsed(parseDocument(document(row)))
+
+    expect(rewritten).toContain('<w:tblPrEx>')
+    expect(rewritten).toContain('w:color="FF0000"')
+    expect(rewritten.indexOf('w:tblPrEx')).toBeLessThan(rewritten.indexOf('w:trPr'))
+  })
+
+  it('leaves the table with no differences at all', () => {
+    const source = document(row)
+    const rewritten = serializeParsed(parseDocument(source), source)
+
+    expect(describeDifferences(compareXml(source, rewritten))).toBe('no differences')
   })
 })

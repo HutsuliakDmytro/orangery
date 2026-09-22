@@ -303,3 +303,42 @@ describe('text columns', () => {
     ).not.toContain('w:cols')
   })
 })
+
+/**
+ * The paper a page is, which its size does not say.
+ *
+ * `w:pgSz/@w:code` is the paper form: 9 is A4, 1 is US Letter, 70 is A6. The
+ * width and height survive a save, so the page keeps its size in twips — and a
+ * printer driver asked for "the A4 tray" reads the code, and a document that
+ * lost it prints from wherever the default is. 261 files of the full corpus.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/16
+ */
+describe('what w:pgSz says beyond its size', () => {
+  const sectPr = (pgSz: string) =>
+    `<w:sectPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${pgSz}<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`
+
+  it('carries the paper code through a round-trip', () => {
+    const section = parseSection(sectPr('<w:pgSz w:w="11906" w:h="16838" w:code="9"/>'))
+
+    expect(section.carried['w:pgSz']).toEqual({ 'w:code': '9' })
+    expect(serializeSection(section)).toContain('w:code="9"')
+  })
+
+  it('keeps it when the page is turned on its side', () => {
+    const section = parseSection(
+      sectPr('<w:pgSz w:w="16838" w:h="11906" w:orient="landscape" w:code="9"/>'),
+    )
+    const written = serializeSection(section)
+
+    expect(written).toContain('w:orient="landscape"')
+    expect(written).toContain('w:code="9"')
+  })
+
+  it('carries nothing when the page says nothing beyond its size', () => {
+    const section = parseSection(sectPr('<w:pgSz w:w="12240" w:h="15840"/>'))
+
+    expect(section.carried['w:pgSz']).toEqual({})
+    expect(serializeSection(section)).not.toContain('w:code')
+  })
+})

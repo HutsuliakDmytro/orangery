@@ -143,11 +143,21 @@ export function parseTable(
       column += properties.colspan
     }
 
-    const trPr = findChild(row, 'w:trPr')
+    // Everything the row states before its cells, kept in order: `w:trPr`
+    // holds the height and "repeat as header row", and `w:tblPrEx` — table
+    // property exceptions, where a row disagrees with its table about borders
+    // or margins — comes before it and was being dropped.
+    const properties = children(row)
+      .filter((child) => {
+        const tag = tagName(child)
+        return tag !== null && tag !== 'w:tc'
+      })
+      .map((child) => serializeNode(child))
+      .join('')
+
     content.push({
       type: 'tableRow',
-      // Row height and "repeat as header row" live here and are not modelled.
-      ...(trPr ? { attrs: { trPr: serializeNode(trPr) } } : {}),
+      ...(properties === '' ? {} : { attrs: { trPr: properties } }),
       content: rowContent,
     })
   }

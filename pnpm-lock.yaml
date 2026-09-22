@@ -11,6 +11,12 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.10.0(jiti@2.7.0))
+      '@orangery/ooxml-core':
+        specifier: workspace:*
+        version: link:packages/ooxml-core
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       eslint:
         specifier: ^10.10.0
         version: 10.10.0(jiti@2.7.0)
@@ -26,12 +32,27 @@ importers:
       globals:
         specifier: ^17.12.0
         version: 17.12.0
+      jszip:
+        specifier: ^3.10.2
+        version: 3.10.2
       prettier:
         specifier: ^3.9.7
         version: 3.9.7
+      react:
+        specifier: ^19.2.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.3.0(react@19.3.0)
       typescript-eslint:
         specifier: ^8.70.0
         version: 8.70.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3)
+      vite:
+        specifier: ^7.1.0
+        version: 7.3.6(@types/node@22.20.3)(jiti@2.7.0)(lightningcss@1.33.0)
+      vite-node:
+        specifier: ^6.0.0
+        version: 6.0.0(@types/node@22.20.3)(esbuild@0.28.2)(jiti@2.7.0)
 
   apps/docs:
     dependencies:

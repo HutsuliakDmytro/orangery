@@ -16,6 +16,13 @@ coverage/
 test-results/
 playwright-report/
 
+# corpus runs — the reports are outputs, and `docs/corpus-baseline.md` is the
+# part of them worth keeping
+corpus-inventory.json
+corpus-report*.json
+corpus-recalc*.json
+corpus-charts/
+
 # editor / os
 .DS_Store
 .vscode/*

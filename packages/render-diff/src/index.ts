@@ -45,6 +45,14 @@ export interface RenderDiffOptions {
   roundTrip: (input: string, output: string) => Promise<void>
   /** `process.argv.slice(2)`, for the two flags this takes. */
   argv?: string[]
+  /**
+   * The subdirectories of `corpus` to look in, if not `synthetic` and `real`.
+   *
+   * An app's own corpus is split by where the files came from; the office
+   * corpus in `tests/fixtures/office` is split by format, because a hundred
+   * and forty files in one directory is not a thing anybody can look at.
+   */
+  groups?: readonly string[]
 }
 
 export interface Arguments {
@@ -176,10 +184,11 @@ export async function comparePages(
 export async function corpusFiles(
   corpus: string,
   extension: string,
+  groups: readonly string[] = ['synthetic', 'real'],
 ): Promise<{ label: string; path: string }[]> {
   const files: { label: string; path: string }[] = []
 
-  for (const group of ['synthetic', 'real']) {
+  for (const group of groups) {
     const directory = join(corpus, group)
 
     let entries: string[]
@@ -206,7 +215,7 @@ export async function renderDiff(options: RenderDiffOptions): Promise<number> {
   await requireTool('soffice')
   await requireTool('pdftoppm')
 
-  const files = await corpusFiles(options.corpus, options.extension)
+  const files = await corpusFiles(options.corpus, options.extension, options.groups)
   if (files.length === 0) {
     throw new Error(`No corpus files found in ${options.corpus}.`)
   }

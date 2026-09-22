@@ -1,5 +1,6 @@
 import {
   attribute,
+  attributes,
   children,
   element,
   parseIntAttribute,
@@ -80,6 +81,16 @@ export interface SectionProperties {
   differentFirstPage: boolean
   /** Children of `w:sectPr` we do not model, serialised and written back as-is. */
   preserved: string[]
+  /**
+   * Attributes of the children we do model but do not edit.
+   *
+   * `w:pgSz/@w:code` is the one that matters: it is the paper the page is —
+   * `9` for A4, `1` for US Letter, `70` for A6 — and the width and height do
+   * not say it. A printer driver asked for "the A4 tray" reads the code, and a
+   * document that lost it prints from wherever the default is. 261 files of
+   * the corpus.
+   */
+  carried: Record<string, Record<string, string>>
 }
 
 const PAGE_NUMBER_FORMATS = new Set<string>([
@@ -154,9 +165,21 @@ export const DEFAULT_SECTION: SectionProperties = {
   columns: null,
   differentFirstPage: false,
   preserved: [],
+  carried: {},
 }
 
 const MODELLED = new Set(['w:pgSz', 'w:pgMar', 'w:pgNumType', 'w:titlePg', 'w:cols'])
+
+/** What `w:pgSz` says that this models; `w:code` and anything else is carried. */
+const MODELLED_PAGE_SIZE = new Set(['w:w', 'w:h', 'w:orient'])
+
+/** What an element leaves over once the modelled attributes are taken out. */
+function carriedFrom(
+  own: Record<string, string>,
+  modelled: ReadonlySet<string>,
+): Record<string, string> {
+  return Object.fromEntries(Object.entries(own).filter(([name]) => !modelled.has(name)))
+}
 
 /** Matches a known page size within half a point, which covers rounding in twips. */
 export function pageSizeIdFor(width: number, height: number): PageSizeId | null {
@@ -180,6 +203,7 @@ export function parseSection(xml: string | null): SectionProperties {
     ...DEFAULT_SECTION,
     margins: { ...DEFAULT_MARGINS },
     preserved: [],
+    carried: {},
   }
 
   for (const child of children(root)) {
@@ -192,6 +216,7 @@ export function parseSection(xml: string | null): SectionProperties {
       if (height !== null) section.height = twipsToPoints(height)
       // Word omits `w:orient` for portrait, so absence means portrait.
       section.orientation = attribute(child, 'w:orient') === 'landscape' ? 'landscape' : 'portrait'
+      section.carried['w:pgSz'] = carriedFrom(attributes(child), MODELLED_PAGE_SIZE)
       continue
     }
 
@@ -258,6 +283,7 @@ export function serializeSection(section: SectionProperties): string {
       'w:w': String(pointsToTwips(section.width)),
       'w:h': String(pointsToTwips(section.height)),
       ...(section.orientation === 'landscape' ? { 'w:orient': 'landscape' } : {}),
+      ...(section.carried['w:pgSz'] ?? {}),
     }),
   )
 

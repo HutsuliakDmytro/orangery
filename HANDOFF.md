@@ -1,234 +1,190 @@
-# Handoff — where this stands, 2026-09-20
+# Handoff — where this stands, 2026-09-22
 
-Written so the next session can start working rather than start reading. It
-says what exists, where it is, what state it is in, and what is waiting on
-what. Everything here is checkable: if a claim and the code disagree, the code
-is right and this file is stale.
+Written so that somebody who has never seen the repository can say what should
+happen next. It states what exists, what shipped, what is open and what is
+waiting on what. Everything here is checkable: if a claim and the code
+disagree, the code is right and this file is stale.
 
 ## The one-paragraph version
 
-Two phases of work: the shared chart engine (`packages/charts`, phase 0 of
-`apps/sheets/PLAN.md`) and the spreadsheet itself (phase 1). Charts are read,
-drawn, edited and inserted in Docs and Slides. The spreadsheet reads `.xlsx` —
-cells, styles, colours, tables, comments, conditional formatting, drawings,
-shared and array formulas, rich text — formats what it reads through
-`packages/numfmt`, and shows all of it: values, bars, icon sets, wrapped and
-rotated text, half-bold cells, charts and pictures over the grid, notes on
-hover. It **saves**, and a file opened and saved untouched comes back with an
-empty diff. And it can now be **selected in, typed into and undone**: a value
-typed gets the type and the format it implies, the file grows the style entry
-that needs, and a step is one thing somebody did however many cells it
-touched, cut, copied, pasted, formatted from a toolbar, reshaped by putting
-rows and columns in and out, hidden and resized — and every one of those can
-be taken back. The toolbar does fonts, colours, alignment, borders, number
-formats and merging, a table can be sorted and filtered, and a workbook can be
-started from nothing, saved anywhere, and recovered after a crash. A `.csv`
-comes in through a wizard that guesses out loud and goes out as what was on
-screen. Since then: auto-fit on a double-clicked edge, Paste Special, a sort
-dialog with custom orders, filters by condition, the fill handle, the tabs
-along the bottom (add, duplicate, rename, move, hide, colour, delete), Find
-and Replace, and freezing, zoom and gridlines. All of it is on the branch
-`charts`, 51 commits; `main` has not moved, and the last thirty-three are not
-pushed.
+Orangery is a desktop office suite whose native format is OOXML — not an
+import format, the format. Three apps: **Docs** (`.docx`), **Slides**
+(`.pptx`) and **Sheets** (`.xlsx`). The guarantee they are all built around is
+that opening a file and saving it without edits gives back the file that was
+opened, byte for byte, for every part the app has no opinion about. Two of the
+three shipped their first pre-release yesterday, for macOS, Windows and Linux.
+The next work is not more features — it is putting the three apps in front of
+people and collecting the real files that break them, because everything that
+broke in the last week was found by a person looking at a screen and none of it
+by the 5,481 automated tests.
 
-## Where the work is
+## Where things are
 
-- Branch `charts`. Merge with `git merge charts`, or open a pull request.
-- Working tree clean apart from this file, which is deliberately untracked.
+- Branch: `main`. Everything is merged; nothing is in flight.
+- Releases: `sheets-v0.1.0` and `slides-v0.1.0`, both pre-release, both with
+  four assets (macOS universal `.dmg`, Windows `.exe`, `.deb`, `.AppImage`).
+  Docs is at the older `v0.1.0` tag and has not been re-released.
+- CI: `check.yml` (lint, typecheck, unit, e2e on three OSes, LibreOffice
+  render-diff, clippy, cargo test) and `build.yml` (three apps × three
+  platforms; a `<app>-v*` tag publishes a GitHub release). Green.
+- Tests: 5,202 TypeScript unit tests, 279 Rust tests, ~70 Playwright e2e per
+  app. Timed benchmarks are opt-in by name, not part of `pnpm check`
+  (`pnpm --filter <app> test:speed`, `cargo test -p formula -- --ignored`).
 
-## What exists now
+## What each app is
 
-### Packages
+**Docs** — word processor. Styles, numbering, tables, sections, headers and
+footers, comments, track changes, ODT/RTF/MD/HTML conversion, print and PDF.
+93 plan items done, 9 open.
 
-| Package                                                                     | What it is                                                                                                                                                                                                                                                                                                                                                          |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ooxml-core`                                                                | The zip package, relationships, content types, XML. Unchanged except for use.                                                                                                                                                                                                                                                                                       |
-| `ooxml-drawingml`                                                           | `a:*` shapes, text, colours, themes. Gained `dataUrlFrom` (moved out of Docs — showing a picture is the same question in every app).                                                                                                                                                                                                                                |
-| `ooxml-presentation`                                                        | `p:*`. Unchanged this session.                                                                                                                                                                                                                                                                                                                                      |
-| `charts`                                                                    | All of `c:*`: model, SVG renderer, edit operations, serialiser, templates, corpus harness. 216 tests.                                                                                                                                                                                                                                                               |
-| **`ooxml-spreadsheet`**                                                     | Workbook, worksheet, streaming `sheetData`, styles with the `apply*` cascade, colours, tables, comments, conditional formatting (`conditional.ts` reads, `highlight.ts` judges), drawings (`drawing.ts`), shared and array formulas (`formulas.ts`), rich text (`rich-text.ts`), the serialiser (`save.ts`), **style deduplication** (`styles-edit.ts`). 231 tests. |
-| `numfmt`                                                                    | Serial dates, format-code parser, formatter, the matrix of value-code-expected rows. 176 tests.                                                                                                                                                                                                                                                                     |
-| **`grid`**                                                                  | The canvas grid: virtualised, styled cells, merges, frozen panes, keyboard editing, **zoom, wrapping, rotation, data bars, icon shapes, corner marks, an overlay layer**. 80 tests.                                                                                                                                                                                 |
-| `ui-kit`, `platform`, `fonts`, `editor-text`, `render-diff`, `tauri-shared` | Unchanged.                                                                                                                                                                                                                                                                                                                                                          |
+**Slides** — presentation editor. Masters, layouts, placeholder inheritance,
+shapes with DrawingML geometry, tables, text with PowerPoint's autofit,
+animations and transitions read and played, a slideshow with presenter view,
+pen and laser, ODP, raster export. 121 done, 21 open.
 
-### Apps
+**Sheets** — spreadsheet. A `<canvas>` grid that scrolls a million rows,
+a streaming `sheetData` reader, Excel number formats, a formula engine in Rust
+(250+ functions, incremental recalculation on a dependency graph, dynamic
+arrays with spill, Goal Seek, defined names, structured table references),
+charts on a sheet, sorting, filtering, tables, conditional formatting,
+validation, CSV wizard and ODS conversion, print and PDF. 43 done, 49 partly
+done with notes, 12 open.
 
-- **Docs** — charts render, insert, restyle, and their numbers can be edited.
-- **Slides** — chart data editor is the shared grid in a dialog; properties
-  panel and five insert commands beside it.
-- **Sheets** — opens a workbook (dialog, double-click, drop), shows it —
-  styles, number formats, conditional formatting, charts, pictures, notes,
-  zoom, sheet tabs — lets you select, type into a block, clear, fill, cut,
-  copy, paste, format, insert and delete rows and columns, hide them, drag
-  their edges, and undo, and saves it back atomically with a backup. No
-  formula engine.
+Shared: `packages/ooxml-core` (the package: zip, relationships, content types,
+passthrough), `ooxml-drawingml`, `ooxml-presentation`, `ooxml-spreadsheet`,
+`charts` (one `c:*` model and SVG renderer for all three apps), `grid`,
+`numfmt`, `editor-text`, `ui-kit`, `fonts`, `platform`, `render-diff`,
+`tauri-shared`, and the Rust crate `crates/formula`.
 
-## Sheets, in detail
+## Measured, not hoped for
 
-Read `apps/sheets/CLAUDE.md` for the rules and `apps/sheets/PLAN.md` for the
-phases; the two ADRs are the decisions worth knowing before touching anything:
+- 200k-cell workbook opens in **0.15 s** (was 1.27 s until three readers
+  stopped building an XML tree of the whole sheet to reach an element beside
+  `sheetData` rather than inside it).
+- 1M rows × 5 columns, 251 MB of zipped XML: opens in **4.8 s** against a
+  budget of 5, model costs **~1.0 GB** against a budget of 1. Both inside,
+  **both with no margin**. The cost is known: 540 ns per cell to parse (four
+  regexes and two objects each) and ~200 bytes per cell retained (a cell object
+  whose number is stored as a string, plus a Map entry per row).
+- 1M formulas recalculate in **1.85 s**; one edit with 10k dependents in
+  **7 ms**; 100k formulas in a chain in **0.15 s**.
+- A viewport of cells formats in **0.84 ms** against a budget of 8.
 
-- `docs/adr/0001-charts-model.md` — one chart engine for three apps.
-- `docs/adr/0002-xlsx-roundtrip.md` — three tiers: cells modelled and
-  regenerated, small parts patched in place, somebody else's program never
-  parsed.
+## What is open, and why
 
+### Waiting on real files — three items, one cause
+
+`tests/fixtures/office/` is **empty**. Every fixture in the repository is
+synthetic, written by a generator to hold exactly what the test that reads it
+needs. Nothing here has ever been written by Word, PowerPoint, Excel, Google or
+LibreOffice. Three plan items are blocked on this and cannot be unblocked by
+writing more code:
+
+- 30+ real workbooks for the `.xlsx` round-trip corpus;
+- 20 workbooks with formulas, to check our results against the values Excel
+  cached in the file — the only way to test "the numbers are right" that is not
+  testing ourselves against ourselves;
+- 30 charts for a render diff against PowerPoint and Excel.
+
+The harnesses all exist and skip when the directory is empty
+(`packages/charts/src/corpus.test.ts`, `apps/slides/src/test/corpus.test.tsx`,
+`apps/slides/tests/e2e/corpus.spec.ts`). They read `ORANGERY_CORPUS` so a file
+that cannot be committed never has to be.
+
+This is not theoretical. The first real deck anybody pointed at this found a
+bug in an hour.
+
+### Never done by hand
+
+`docs/qa-checklist.md` exists for each app (Sheets 71 items, Slides 143 plus a
+separate projector checklist, Docs 42) and **has not been run once**. No human
+has installed the shipped build and looked at it. Beta testing has not started.
+
+### Deferred on purpose — do not "fix" these
+
+- **Signing and notarization** — `[-]` in every plan, deliberately. This is why
+  the releases are pre-release and why macOS and Windows warn.
+- Engineering and database functions in the formula engine, until somebody asks.
+- Text to columns, Remove duplicates, Flash Fill.
+- Solver (Goal Seek is done).
+- Pivot table _editing_ — pivots render from cached values and are carried
+  back untouched.
+
+### Update 1 — Windows and Linux
+
+Now concrete, because both platforms build and their e2e is green:
+
+- Ctrl shortcuts and `Alt` menus.
+- WebKitGTK canvas performance on Linux — the plan says to check this early
+  because it may be worse than WebView2, and nobody has.
+- Fonts: Calibri → Carlito. Column widths in this format are stated in
+  _characters_, so they depend on the default font's `maxDigitWidth` and drift
+  between operating systems. Untested on three OSes.
+- CSV: default to Windows-1251 for files from Russian/Ukrainian Excel. The
+  wizard already offers it and shows the result; it does not guess it yet.
+- A suite installer (one DMG, three apps) — Update 2 in the Slides plan.
+
+### Open decisions
+
+1. **Updater: one channel per app, or one for the suite?** Docs and Sheets each
+   have their own endpoint in `tauri.conf.json`; the Slides plan has a recorded
+   decision (2026-09-18) that the channel is shared across the suite and
+   deferred to "Update 2 — suite distribution". All are `active: false`, so
+   nothing ships either way, but three configs currently hold two intentions.
+
+2. **Sheets memory.** ~200 bytes per cell is what puts the 1M-row budget on the
+   line. Reducing it is not micro-optimisation, it is a question about how a
+   cell is laid out in memory — numbers are currently stored as strings. Worth
+   deciding before a workbook bigger than the budget arrives, not after.
+
+3. **Whether to re-release Docs.** It is at the old `v0.1.0` tag from before the
+   per-app tag scheme, and it has gained the shared chart engine since.
+
+## What the tests do not cover, and it matters
+
+Everything found by a person in the last week was about **what is on the
+screen**, and none of it was visible to a suite that runs in jsdom, where a
+canvas records nothing and every text measurement is zero:
+
+- A real deck took the Slides window down: a layout effect worked a shape's
+  height out from `outer.clientHeight - inner.clientHeight`, where `outer` is
+  the shape — so the answer was a function of the height it was about to set.
+  Measure, resize, measure again, until React gave up with "maximum update
+  depth exceeded".
+- The Sheets formula bar drew every cell that was not a formula **twice**: the
+  coloured mirror behind the input was drawn always, while the input only went
+  transparent for a formula. On screen it read as text struck through by itself.
+- A window that stopped drawing said nothing at all — React unmounts the tree
+  and the window goes to the background colour, which in this suite is black.
+  There was no error boundary in any of the three apps.
+
+All three are fixed and covered. The pattern is the finding: the automated
+suite is strong on what a file _means_ and blind to what a window _shows_.
+Playwright specs now exist for the parts that only a real engine can answer,
+and they are the thing to extend when the next one of these turns up.
+
+## How to check any of this
+
+```sh
+pnpm install
+pnpm check                          # format, lint, typecheck, unit tests, everything
+cargo test                          # the Rust side, including the formula engine
+pnpm --filter <app> test:e2e        # Playwright, Chromium and WebKit
+pnpm --filter <app> test:speed      # the timed benchmarks, by name
+pnpm --filter <app> tauri dev       # run it
+pnpm --filter <app> tauri build     # package it
+
+ORANGERY_CORPUS=/path/to/real/files pnpm --filter slides test:e2e
 ```
-apps/sheets/src/
-  app/            the window, commands wiring, external open, shortcuts
-  commands/       open, close, next/previous sheet
-  document/       file.ts (paths in), workbook.ts (bytes to a model),
-                  save.ts (a model back to bytes), edit.ts (typing into a cell),
-                  history.ts (taking it back), clipboard.ts (cells in and out),
-                  shown.ts (what a cell reads as),
-                  structure.ts (rows and columns, hiding, merging),
-                  sort.ts (putting a table in order),
-                  filter.ts (the arrows, and what they hide),
-                  new.ts (a workbook from nothing),
-                  autosave.ts (a copy a crash cannot reach),
-                  csv.ts (the format nobody specified),
-                  csv-file.ts (a table in from, or out to, a text file),
-                  series.ts (what comes after what), fill.ts (dragging a corner),
-                  find.ts (finding it, and replacing it),
-                  sheets.ts (the tabs, package and model together),
-                  view.ts (freezing, zoom, gridlines)
-  render/         …and toolbar.tsx, the strip of buttons above the grid,
-                  csv-wizard.tsx, the questions a text file cannot answer,
-                  sort-dialog.tsx, filter-menu.tsx, find-panel.tsx,
-                  sheet-tabs.tsx
-  render/         sheet-view.tsx      the seam between a workbook and the grid
-                  sheet-drawings.tsx  charts and pictures over the canvas
-                  sheet-notes.ts      comments, indexed by cell
-                  note-box.tsx        the yellow box on hover
-                  icon-sets.tsx       Excel's icon sets as grid shapes
-  store/          workbook-store.ts
-  test/           the 200k-cell workbook and the budgets
-```
 
-`sheet-view.tsx` is where to look first. It answers the grid one cell at a
-time — shared strings, the style cascade, the theme, the format code, the
-conditional rules — and caches the expensive halves.
+Plans live in `apps/<app>/PLAN.md` (Ukrainian, with the reasoning for each
+decision), rules in `apps/<app>/CLAUDE.md` and the root `CLAUDE.md`,
+architecture decisions in `apps/<app>/docs/adr/`.
 
-### Seams worth knowing
+## If you are deciding what to do next
 
-- **A history step holds five kinds of change** (`document/history.ts`): a
-  cell, the column runs, a row's properties, the merges, or the autofilter.
-  Anything new that is not a cell change — a data validation, say — adds a
-  sixth rather than finding a way to pretend it is a cell.
-- **Two things deliberately stay out of the history.** Adding, deleting or
-  renaming a sheet, as in Excel — a step able to give a deleted sheet back
-  would have to hold a whole worksheet part — and the view (freezing, zoom,
-  gridlines), because a view is where somebody is standing rather than what
-  they have written. Both patch their part as they go, so the model and the
-  bytes never disagree; deleting asks first instead of being undoable.
-- **The worksheet is patched element by element** (`save.ts` and the
-  `replace*` functions beside it): `sheetData`, then `<cols>`, then
-  `<mergeCells>`. Anything else the app learns to edit inside a worksheet adds
-  another `replaceX`, and each is left out for a sheet nobody touched so the
-  bytes stay the bytes.
-
-- **The grid knows shapes, not SpreadsheetML.** It draws an arrow and a
-  circle; which of them `3TrafficLights1` amounts to is `icon-sets.ts`, in the
-  app. Same for the corner mark: the grid draws a triangle in a colour and has
-  no opinion about what it means.
-- **Zoom is folded into the metrics**, not applied as a canvas transform, so
-  hit-testing and scroll extents are measured in the units things are painted
-  in. `zoomedMetrics` is exported for anything drawing over the grid.
-- **The overlay is the grid's `overlay` prop**: the grid owns the scroll, so
-  it says where the layer sits; the caller says what goes in it.
-
-## What is blocked, and on what
-
-1. **Real files from Office.** Three items of phase 0 and the whole corpus of
-   phase 1 wait on ten to fifteen real `.xlsx`/`.pptx`/`.docx` files with
-   charts and awkward formatting. Drop them in `tests/fixtures/office/` (see
-   the README there) and `pnpm --filter charts corpus` reports what they hold.
-   Blocked: `cs:chartStyle`, the render diff, the 300-row format matrix, the
-   claim that Excel opens what we write, and the icon-set colours — which are
-   read off the product today and want a diff against a real workbook.
-2. **The formula engine (phase 3).** Conditional formatting is complete except
-   for what needs one: `expression` rules, a `cellIs` whose operand is a
-   reference, a `cfvo` of type `formula`. They are read and deliberately not
-   judged.
-3. **The Slides release.** `apps/slides/PLAN.md` phase 4 needs a beta, manual
-   QA on hardware, signing, and somebody to decide to publish.
-
-## What to do next
-
-Phase 1 is done apart from what is blocked, and phase 2 has had most of its
-list: selection, typing, the toolbar, undo, sorting, filtering, CSV,
-auto-fit, Paste Special, the fill handle, sheet management, Find and Replace,
-freezing and zoom. What is left, in the plan's order:
-
-1. **Hyperlinks and comments** (`PLAN.md` line 95). Comments are read and
-   shown already; writing one means `threadedComments` plus the legacy
-   `comments` part Excel still expects beside it, and a `vmlDrawing` for
-   where the yellow box sits.
-2. **ODS**, the last unticked part of the files line. Import first: an `.ods`
-   is a zip of flat XML with a table model close enough to read into the same
-   cells, and far enough away (`table:number-columns-repeated`, its own style
-   language, its own date syntax) that it wants a package of its own rather
-   than a branch inside `ooxml-spreadsheet`. Export is the harder half and
-   worth deciding separately: an `.ods` this app writes is a file whose round
-   trip we have not promised.
-3. **Format Cells** — the custom number-format dialog — and group/outline.
-4. **Split panes and several windows**, the rest of the view line. A split is
-   the same element with a different state, counted in twentieths of a point,
-   and it wants the grid to learn a second kind of frozen edge.
-
-Smaller ones for a short session: `Mod+;` and `Mod+Shift+;` for today's date
-and time, `vmlDrawing` for where a note's yellow box actually sits, or the
-column-autocomplete the plan asks for under cell editing.
-
-## How to work here
-
-- `pnpm check` at the root is the gate: format, lint, typecheck and tests for
-  every package and app. Green before a commit.
-- `cargo` is not on the default PATH; use
-  `PATH="$HOME/.cargo/bin:$PATH" cargo check -p orangery-sheets`.
-- Commits are scoped by package or app (`charts:`, `spreadsheet:`, `grid:`,
-  `numfmt:`, `sheets:`, `docs:`, `slides:`) with a body saying what was decided
-  and why, not what changed.
-- Tests state what a person would notice. Where a case is unsettled it is left
-  out rather than guessed: an invented expectation looks like evidence while
-  being an opinion.
-- `apps/sheets/tests/fixtures/xlsx/budget.xlsx` is built by hand and grown by
-  hand. The first sheet is the plain one — values, formats, conditional rules,
-  a chart, a picture, comments — and the second holds the awkward cases: 150 %
-  zoom, a wrapped cell, a rotated one. Keep it that way; assertions about
-  plain things belong on the plain sheet.
-
-## Known rough edges
-
-- **This machine, as of the 20th of September 2026, is thrashing**: 9.6 GB of
-  11.3 GB swap in use, uptime 32 days, dozens of stale dev servers from other
-  projects. It makes `pnpm check` unreliable in a way that looks exactly like
-  a regression — vitest workers time out before they start, and one arbitrary
-  test of `apps/docs/src/ooxml/roundtrip.test.ts` exceeds its 30 s budget. It
-  is a different test every run, and the whole file passes 81/81 in twenty
-  seconds when run alone. `packages/ooxml-presentation` does the same thing —
-  seven files, one timeout each, 764 s per file, and 743/743 in eight seconds
-  alone. Worse, `apps/slides` reported 60, then 56, then 59 test files on
-  three consecutive runs of the same code: under this much pressure vitest
-  silently under-reports rather than failing, so a green full run means less
-  than it looks. Check the swap before believing either colour, and verify a
-  package by running it on its own:
-  `node node_modules/vitest/vitest.mjs run` from inside it, which also skips
-  the two-minute corepack network probe that `pnpm` stalls on
-  (`COREPACK_ENABLE_NETWORK=0` skips that too).
-- `apps/docs/src/test/performance.test.ts` measures wall-clock ratios while
-  the whole workspace runs its tests. Allowed two retries; a single failure in
-  a full run that passes alone is what it is, not a regression.
-- The `editor-text` unhandled error is fixed: the tests' editors were never
-  destroyed, so ProseMirror work scheduled on a jsdom document landed after
-  the environment had gone.
-- The grid draws borders per cell, so a shared edge is drawn twice. That is
-  what the format describes.
-- Sheets renders a split pane as an ordinary sheet: only frozen panes are held.
-- Drawings scroll with the sheet even when anchored inside a frozen pane, and
-  everything in the overlay is above everything on the canvas. Both are
-  simplifications, written down where they are made.
-- A `dxf` fill beats a colour scale on the same cell. Strictly it should be
-  whichever rule has the lower priority number; the simpler rule is right
-  whenever the stated colour came from the newer rule, which is where Excel
-  puts one.
+The honest summary: the code is further along than the evidence for it. Three
+apps build on three platforms, two of them have shipped, 5,481 tests are green,
+and nobody has opened the result and looked at it. The cheapest thing that
+would change the most is a person, a real file and the checklist that is
+already written.

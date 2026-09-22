@@ -1,10 +1,10 @@
 import {
+  writeRelationships,
   addRelationship,
   ensureOverride,
   getPartText,
   parseRelationships,
   partDirectory,
-  serializeRelationships,
   setPartText,
 } from '@orangery/ooxml-core'
 import { replaceTableParts, writeTable } from '@orangery/ooxml-spreadsheet'
@@ -56,7 +56,7 @@ export function writeTables(open: OpenWorkbook, sheet: OpenSheet): void {
     ids.push(link.id)
   }
 
-  setPartText(open.pkg, relationshipsPath, serializeRelationships(relationships))
+  writeRelationships(open.pkg, relationshipsPath, relationships)
   setPartText(open.pkg, sheet.path, replaceTableParts(getPartText(open.pkg, sheet.path) ?? '', ids))
 }
 

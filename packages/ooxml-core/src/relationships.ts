@@ -1,4 +1,5 @@
-import { attribute, buildXml, children, element, parseXml, tagName, withDeclaration } from './xml'
+import { attribute, children, element, parseXml, tagName } from './xml'
+import { preservingRoot } from './preserve'
 
 /**
  * Package relationships — `word/_rels/document.xml.rels`.
@@ -48,7 +49,10 @@ export function parseRelationships(xml: string): Map<string, Relationship> {
   return relationships
 }
 
-export function serializeRelationships(relationships: Map<string, Relationship>): string {
+export function serializeRelationships(
+  relationships: Map<string, Relationship>,
+  previous?: string,
+): string {
   const nodes = [...relationships.values()].map((relationship) =>
     element('Relationship', {
       Id: relationship.id,
@@ -58,15 +62,16 @@ export function serializeRelationships(relationships: Map<string, Relationship>)
     }),
   )
 
-  return withDeclaration(
-    buildXml([
-      element(
-        'Relationships',
-        { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-        nodes,
-      ),
-    ]),
-  )
+  // `previous` is the part as it was read: a `.rels` LibreOffice wrote has no
+  // `standalone` in its declaration and ours does, which is a difference in
+  // every `.rels` we rewrite and a change to nothing at all.
+  return preservingRoot(previous, [
+    element(
+      'Relationships',
+      { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+      nodes,
+    ),
+  ])
 }
 
 /**
@@ -130,6 +135,23 @@ export function resolveTarget(target: string, base: string): string {
 export function partDirectory(path: string): string {
   const cut = path.lastIndexOf('/')
   return cut === -1 ? '' : path.slice(0, cut)
+}
+
+/**
+ * Writes a relationships part, keeping the declaration it had.
+ *
+ * The form to reach for: the package has the old text, so a caller that only
+ * wants to add a relationship does not have to remember to keep the rest.
+ */
+export function writeRelationships(
+  pkg: { parts: Map<string, { path: string; text?: string; bytes: Uint8Array; date: Date }> },
+  path: string,
+  relationships: Map<string, Relationship>,
+): void {
+  const previous = pkg.parts.get(path)?.text
+  const text = serializeRelationships(relationships, previous)
+  const bytes = new TextEncoder().encode(text)
+  pkg.parts.set(path, { path, text, bytes, date: pkg.parts.get(path)?.date ?? new Date() })
 }
 
 export function findByTarget(

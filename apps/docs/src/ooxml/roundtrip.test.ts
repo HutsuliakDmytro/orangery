@@ -49,7 +49,7 @@ describe('document.xml round-trip', () => {
     const pkg = await readDocxPackage(await readFile(path))
     const original = getPartText(pkg, DOCUMENT_PART) ?? ''
 
-    const rewritten = serializeParsed(parseDocument(original))
+    const rewritten = serializeParsed(parseDocument(original), original)
     const differences = compareXml(original, rewritten)
 
     expect(describeDifferences(differences)).toBe('no differences')
@@ -109,5 +109,58 @@ describe('the package itself', () => {
 
     const saved = await readDocxPackage(await writePackage(pkg))
     expect(describeProblems(problemsIn(saved))).toBe('')
+  })
+})
+
+/**
+ * The root of `word/document.xml`, and what hangs off it beside the body.
+ *
+ * `w:background` is a page colour or a watermark's fill, and the only child
+ * ECMA-376 lets the root have other than `w:body`. A serialiser that writes a
+ * document as a root with a body in it drops it — 34 documents in the full
+ * corpus — and the declaration a part was written with was being replaced with
+ * ours in every regenerated part.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/16
+ */
+describe('what surrounds the body', () => {
+  const WORD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  const document =
+    `<?xml version='1.0' encoding='utf-8'?>\n` +
+    `<w:document xmlns:w="${WORD}" xmlns:v="urn:schemas-microsoft-com:vml">` +
+    `<w:background w:color="FFE599"><v:background id="_x0000_s1025"/></w:background>` +
+    `<w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>`
+
+  it('keeps w:background, with what is inside it', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(rewritten).toContain('<w:background w:color="FFE599">')
+    expect(rewritten).toContain('<v:background id="_x0000_s1025"/>')
+  })
+
+  it('keeps it in front of the body, where the schema puts it', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(rewritten.indexOf('w:background')).toBeLessThan(rewritten.indexOf('<w:body>'))
+  })
+
+  it('keeps the declaration the document was written with', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(rewritten.startsWith(`<?xml version='1.0' encoding='utf-8'?>\n`)).toBe(true)
+  })
+
+  it('reports no differences at all for such a document', () => {
+    const rewritten = serializeParsed(parseDocument(document), document)
+
+    expect(describeDifferences(compareXml(document, rewritten))).toBe('no differences')
+  })
+
+  it('writes our own declaration when there was no part to keep one from', () => {
+    const rewritten = serializeParsed(parseDocument(document))
+
+    expect(rewritten.startsWith('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')).toBe(
+      true,
+    )
   })
 })

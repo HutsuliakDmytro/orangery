@@ -27,10 +27,12 @@ export {
   parseRelationships,
   resolveTarget,
   serializeRelationships,
+  writeRelationships,
 } from './relationships'
 export type { Relationship } from './relationships'
 
 export { decodeBytes, encodeBytes } from './base64'
+export { declarationOf, preservingRoot, rootAttributesOf, setPartXml } from './preserve'
 export * from './xml'
 export * from './units'
 export { compareXml, describeDifferences } from './compare'

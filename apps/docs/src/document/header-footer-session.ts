@@ -1,18 +1,17 @@
 import {
+  writeRelationships,
+  setPartXml,
   CONTENT_TYPES_PART,
   addRelationship,
   attribute,
-  buildXml,
   children,
   element,
   getPartText,
   parseRelationships,
   parseXml,
   resolveTarget,
-  serializeRelationships,
   setPartText,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import {
@@ -96,7 +95,7 @@ function ensureOverride(pkg: OoxmlPackage, partName: string, contentType: string
   if (!Array.isArray(list)) return
 
   ;(list as XmlNode[]).push(element('Override', { PartName: partName, ContentType: contentType }))
-  setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
+  setPartXml(pkg, CONTENT_TYPES_PART, roots)
 }
 
 /**
@@ -131,7 +130,7 @@ export function writeHeaderFooter(
     kind === 'header' ? HEADER_RELATIONSHIP : FOOTER_RELATIONSHIP,
     path.replace(/^word\//u, ''),
   )
-  setPartText(pkg, DOCUMENT_RELS_PART, serializeRelationships(relationships))
+  writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
 
   // The reference joins the preserved children of `w:sectPr`, which is where
   // the parser found the ones the file already had.

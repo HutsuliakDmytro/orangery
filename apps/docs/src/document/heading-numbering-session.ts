@@ -1,6 +1,7 @@
 import {
+  setPartXml,
+  preservingRoot,
   attribute,
-  buildXml,
   children,
   element,
   findChild,
@@ -9,7 +10,6 @@ import {
   serializeNode,
   setPartText,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { NUMBERING_PART, STYLES_PART } from '../ooxml/parts'
@@ -162,7 +162,7 @@ export function writeHeadingNumbering(
     instance === undefined ? freeId(list, 'w:num', 'w:numId', 1) : idOf(instance, 'w:numId')
   if (instance === undefined) list.push(buildNum(numId, abstractId))
 
-  setPartText(pkg, NUMBERING_PART, withDeclaration(buildXml(roots)))
+  setPartXml(pkg, NUMBERING_PART, roots)
   setPartText(pkg, STYLES_PART, applyToHeadingStyles(styles, numId))
 
   return { createdNumberingPart: !hadPart }
@@ -203,5 +203,5 @@ function applyToHeadingStyles(stylesXml: string, numId: number | null): string {
     list[index] = parseXml(rebuilt)[0] as XmlNode
   }
 
-  return withDeclaration(buildXml(roots))
+  return preservingRoot(stylesXml, roots)
 }

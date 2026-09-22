@@ -1,4 +1,10 @@
-import { buildXml, getPartText, setPartText, writePackage } from '@orangery/ooxml-core'
+import {
+  buildXml,
+  declarationOf as declarationOfPart,
+  getPartText,
+  setPartText,
+  writePackage,
+} from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import type { Deck, SlidePart } from './deck'
 
@@ -14,14 +20,13 @@ import type { Deck, SlidePart } from './deck'
 /**
  * The XML declaration the part was written with, or none.
  *
- * Not normalised to ours. PowerPoint writes double quotes and a CRLF,
+ * Decks got this right first — PowerPoint writes double quotes and a CRLF,
  * python-pptx writes single quotes and a newline, and a part we did not
- * otherwise change must come back exactly as it was — including the twenty-odd
- * bytes nobody looks at.
+ * otherwise change must come back exactly as it was. It is `@orangery/ooxml-core`'s
+ * now, because documents and workbooks turned out to need the same thing;
+ * re-exported here so that a deck's own callers do not have to care.
  */
-export function declarationOf(text: string): string {
-  return /^\s*<\?xml[^?]*\?>\r?\n?/u.exec(text)?.[0] ?? ''
-}
+export const declarationOf = (text: string): string => declarationOfPart(text)
 
 /** Serialises a parsed root back into its part, keeping the original preamble. */
 export function writePart(pkg: OoxmlPackage, path: string, root: XmlNode): void {

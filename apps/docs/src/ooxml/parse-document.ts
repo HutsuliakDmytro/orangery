@@ -51,6 +51,16 @@ export interface ParsedDocument {
   /** Attributes of the `w:document` root, so namespaces survive. */
   documentAttributes: Record<string, string>
   /**
+   * The root's children other than `w:body`, as they were written.
+   *
+   * `w:background` — a page colour, or a watermark's fill — is the only one
+   * ECMA-376 allows, and it was being dropped by a serialiser that writes a
+   * document as a root with a body in it. Carried rather than modelled: it is
+   * not something this editor changes, so the file's own bytes are the right
+   * thing to write back.
+   */
+  documentPrelude: string | null
+  /**
    * Whether the source put `xml:space="preserve"` on every `w:t`.
    *
    * There is no rule to infer here — it is a writer preference. Word adds it
@@ -809,11 +819,20 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
       warnings: [{ tag: 'w:document', message: 'document.xml has no <w:document> root.' }],
       sectionProperties: null,
       documentAttributes: {},
+      documentPrelude: null,
       alwaysPreserveSpace: false,
     }
   }
 
   const body = findChild(document, 'w:body')
+
+  // Everything the root holds that is not the body, kept verbatim and put back
+  // in front of it on save.
+  const prelude = children(document)
+    .filter((child) => tagName(child) !== 'w:body' && tagName(child) !== null)
+    .map((child) => serializeNode(child))
+    .join('')
+
   const blocks: ProseMirrorNodeJson[] = []
   let sectionProperties: string | null = null
 
@@ -862,6 +881,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
     warnings,
     sectionProperties,
     documentAttributes: attributesOf(document),
+    documentPrelude: prelude === '' ? null : prelude,
     alwaysPreserveSpace: detectSpaceConvention(xml),
   }
 }
@@ -872,6 +892,12 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
  * Counted rather than sampled: a document that uses it on most runs but not all
  * has no convention to follow, and our own rule — add it only where whitespace
  * would be lost — is the safe fallback.
+ *
+ * That fallback is also the one case this seam does not cover: a file that
+ * declared `xml:space` on some runs and not others loses it from the runs that
+ * did not need it, and putting it back needs the attribute to be carried per
+ * run rather than per document. Fourteen files in the full corpus, and a
+ * question about the run model rather than about the serialiser.
  */
 export function detectSpaceConvention(xml: string): boolean {
   let total = 0

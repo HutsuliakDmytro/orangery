@@ -48,8 +48,8 @@ async function roundTrip(input: string, output: string): Promise<void> {
 
   if (format === 'docx') {
     const pkg = await readDocxPackage(bytes)
-    const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
-    setPartText(pkg, DOCUMENT_PART, serializeParsed(parsed))
+    const text = getPartText(pkg, DOCUMENT_PART) ?? ''
+    setPartText(pkg, DOCUMENT_PART, serializeParsed(parseDocument(text), text))
     await writeFile(output, await writePackage(pkg))
     return
   }

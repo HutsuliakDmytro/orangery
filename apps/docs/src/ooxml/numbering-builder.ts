@@ -1,12 +1,11 @@
 import {
-  buildXml,
+  preservingRoot,
   children,
   element,
   parseXml,
   pointsToTwips,
   serializeNode,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import type { NumberingCatalogue } from './numbering'
@@ -146,17 +145,15 @@ export function mergeNumbering(existingXml: string | undefined, added: readonly 
           'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
         }
 
-  return withDeclaration(
-    buildXml([
-      element('w:numbering', attributes, [
-        ...other,
-        ...abstract,
-        ...abstractAdded,
-        ...nums,
-        ...numsAdded,
-      ]),
+  return preservingRoot(existingXml, [
+    element('w:numbering', attributes, [
+      ...other,
+      ...abstract,
+      ...abstractAdded,
+      ...nums,
+      ...numsAdded,
     ]),
-  )
+  ])
 }
 
 /** Serialised form of a definition, for storing on a list node. */

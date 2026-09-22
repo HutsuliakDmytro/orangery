@@ -150,3 +150,47 @@ describe('footnoteText', () => {
     expect(footnoteText(empty.get(1) as never)).toBe('')
   })
 })
+
+/**
+ * The root of a part Word wrote, kept.
+ *
+ * Word declares a dozen namespaces on `w:footnotes` because a footnote may
+ * hold VML, an OLE object or an equation. The writer knew about two of them,
+ * so a saved file lost the rest — and a footnote using one of those prefixes
+ * would have been written as XML with an undeclared prefix, which is a file
+ * Word refuses to open. Ten files in the public corpus, 507 in the full one.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/5
+ */
+describe('a footnotes part that already exists', () => {
+  const WORD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  const previous =
+    `<?xml version='1.0' encoding='utf-8' standalone='yes'?>\n` +
+    `<w:footnotes xmlns:w="${WORD}" xmlns:v="urn:schemas-microsoft-com:vml" ` +
+    `xmlns:o="urn:schemas-microsoft-com:office:office" ` +
+    `xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">` +
+    `<w:footnote w:id="1"><w:p/></w:footnote></w:footnotes>`
+
+  it('keeps every namespace it declared', () => {
+    const written = serializeFootnotes(parseFootnotes(previous), previous)
+
+    for (const namespace of ['xmlns:v', 'xmlns:o', 'xmlns:m', 'xmlns:w']) {
+      expect(written).toContain(namespace)
+    }
+  })
+
+  it('keeps the declaration the file was written with', () => {
+    const written = serializeFootnotes(parseFootnotes(previous), previous)
+
+    expect(written.startsWith(`<?xml version='1.0' encoding='utf-8' standalone='yes'?>\n`)).toBe(
+      true,
+    )
+  })
+
+  it('still writes a whole part when there was not one before', () => {
+    const written = serializeFootnotes(parseFootnotes(previous))
+
+    expect(written).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
+    expect(written).toContain(`xmlns:w="${WORD}"`)
+  })
+})

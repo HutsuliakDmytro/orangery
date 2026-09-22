@@ -1,12 +1,11 @@
 import {
   attribute,
-  buildXml,
   children,
   element,
   parseIntAttribute,
   parseXml,
+  preservingRoot,
   tagName,
-  withDeclaration,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 
@@ -64,7 +63,7 @@ export function parseFootnotes(xml: string): Map<number, Footnote> {
   return footnotes
 }
 
-export function serializeFootnotes(footnotes: Map<number, Footnote>): string {
+export function serializeFootnotes(footnotes: Map<number, Footnote>, previous?: string): string {
   const nodes = [...footnotes.values()]
     // Word writes the separators first, then notes in id order.
     .sort((a, b) => a.id - b.id)
@@ -79,18 +78,19 @@ export function serializeFootnotes(footnotes: Map<number, Footnote>): string {
       ),
     )
 
-  return withDeclaration(
-    buildXml([
-      element(
-        'w:footnotes',
-        {
-          'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-          'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-        },
-        nodes,
-      ),
-    ]),
-  )
+  // The root the file had, not the root we would have written: a footnote may
+  // hold VML or an equation, and a prefix whose declaration we dropped is a
+  // file Word will not open.
+  return preservingRoot(previous, [
+    element(
+      'w:footnotes',
+      {
+        'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+        'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+      },
+      nodes,
+    ),
+  ])
 }
 
 /** Next free id, skipping the reserved ones. */

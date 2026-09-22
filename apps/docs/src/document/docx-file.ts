@@ -1,17 +1,16 @@
 import {
+  writeRelationships,
+  setPartXml,
   CONTENT_TYPES_PART,
   addRelationship,
-  buildXml,
   element,
   findByTarget,
   getPartText,
   parseRelationships,
   parseXml,
   resolveTarget,
-  serializeRelationships,
   setPartText,
   tagName,
-  withDeclaration,
   writePackage,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
@@ -80,6 +79,8 @@ export interface OpenDocx {
   /** Whether the source declared `xml:space` on every run. */
   alwaysPreserveSpace: boolean
   documentAttributes: Record<string, string>
+  /** The `w:document` children that are not the body, kept as the file wrote them. */
+  documentPrelude: string | null
 }
 
 /**
@@ -154,6 +155,7 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     headingNumbering: readHeadingNumbering(pkg),
     section: parseSection(parsed.sectionProperties),
     documentAttributes: parsed.documentAttributes,
+    documentPrelude: parsed.documentPrelude,
   }
 }
 
@@ -184,6 +186,10 @@ export async function saveDocx(
 
   const xml = serializeDocument(doc, {
     documentAttributes: open.documentAttributes,
+    documentPrelude: open.documentPrelude,
+    // The part as it was read: its declaration and its root come back as they
+    // were, and only the body is rebuilt.
+    previous: getPartText(open.pkg, DOCUMENT_PART),
     // Page setup may have changed it since the file was opened.
     sectionProperties: serializeSection(options.section ?? open.section),
     alwaysPreserveSpace: open.alwaysPreserveSpace,
@@ -300,7 +306,7 @@ function declareNumberingPart(pkg: OoxmlPackage): void {
   const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
   if (!findByTarget(relationships, 'numbering.xml')) {
     addRelationship(relationships, NUMBERING_RELATIONSHIP, 'numbering.xml')
-    setPartText(pkg, DOCUMENT_RELS_PART, serializeRelationships(relationships))
+    writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
   }
 
   const contentTypes = getPartText(pkg, CONTENT_TYPES_PART)
@@ -316,7 +322,7 @@ function declareNumberingPart(pkg: OoxmlPackage): void {
           ContentType: NUMBERING_CONTENT_TYPE,
         }),
       )
-      setPartText(pkg, CONTENT_TYPES_PART, withDeclaration(buildXml(roots)))
+      setPartXml(pkg, CONTENT_TYPES_PART, roots)
     }
   }
 }

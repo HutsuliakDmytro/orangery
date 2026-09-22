@@ -9,10 +9,34 @@ This directory is for the second kind: documents saved by the programs we have
 to be compatible with. Nothing generates them, and nothing here is committed
 unless it can be — drop files in, and the corpus tests pick them up.
 
-## What is wanted
+## What is here
 
-Charts first, because that is what is blocked on them (`apps/sheets/PLAN.md`,
-phase 0):
+140 files, 15 MB, in `docx/`, `pptx/` and `xlsx/`: Apache POI's and
+python-docx/python-pptx's test data, picked to cover a matrix of feature against
+generator — 24 different writers, from Word 2007 to Excel for Mac 2016 to
+OnlyOffice. `manifest.json` says where each one came from and which feature it
+was picked for; `LICENSES.md` says why each may be committed.
+
+`docs/corpus.md` is how they were chosen and what runs against them.
+`docs/corpus-baseline.md` is what those runs say today.
+
+The name of a file says what it is for: `excel2016win-pivot-01.xlsx` is a pivot
+table written by Excel 2016 for Windows. The writer comes from
+`docProps/app.xml`, so a file POI keeps that LibreOffice wrote is called
+`libreoffice-…` — the licence follows where it came from, the name follows who
+wrote it.
+
+Three times as many files again are kept outside git, in `~/corpus-full`,
+because LibreOffice's test data is MPL-2.0 and this repository is MIT. Set
+`ORANGERY_CORPUS` to point any of the tests below at it.
+
+## What is still wanted
+
+Charts were what was blocked (`apps/sheets/PLAN.md`, phase 0), and the selection
+now holds 80 of them in 19 files — including `cs:chartStyle` in 55, which no
+synthetic fixture had. The table below is what a corpus of real files should
+cover; the columns nothing fills are Google's and Apple's writers, which are not
+in any of the projects it was built from:
 
 | Source | Why it matters |
 | --- | --- |

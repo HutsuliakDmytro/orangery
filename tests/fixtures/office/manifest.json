@@ -1,0 +1,2681 @@
+[
+ {
+  "name": "word2013win-charts-01.docx",
+  "format": "docx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings",
+   "inlineimage"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "15.0000",
+   "slug": "word2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/61745.docx",
+  "size": 37030,
+  "sha1": "576312507ff6552e2dfa261a887b42acc15be065"
+ },
+ {
+  "name": "word2016win-charts-01.docx",
+  "format": "docx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings",
+   "inlineimage",
+   "media",
+   "numbering"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/chartex.docx",
+  "size": 133304,
+  "sha1": "8ceb5c2ce77401e9f9b7cd92dfa801164d0480db"
+ },
+ {
+  "name": "unknown-numbering-01.docx",
+  "format": "docx",
+  "feature": "numbering",
+  "features": [
+   "numbering",
+   "rtl"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/61787.docx",
+  "size": 7047,
+  "sha1": "a37ab400534d17498bcd257b9b40b3ffa382f61f"
+ },
+ {
+  "name": "libreoffice-numbering-01.docx",
+  "format": "docx",
+  "feature": "numbering",
+  "features": [
+   "numbering",
+   "tables"
+  ],
+  "generator": {
+   "application": "LibreOffice/25.2.1.2$MacOSX_AARCH64 LibreOffice_project/d3abf4aee5fd705e4a92bba33a32f40bc4e56f49",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/bug69628.docx",
+  "size": 7510,
+  "sha1": "669e9229c148dcb4014605114f85d3d41efc0a8c"
+ },
+ {
+  "name": "unknown-tables-01.docx",
+  "format": "docx",
+  "feature": "tables",
+  "features": [
+   "sdt",
+   "tables"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Bug66263-table.docx",
+  "size": 1970,
+  "sha1": "3e6050da770dbddd1e39420059e688e1f4881143"
+ },
+ {
+  "name": "libreoffice-tables-01.docx",
+  "format": "docx",
+  "feature": "tables",
+  "features": [
+   "rtl",
+   "tables"
+  ],
+  "generator": {
+   "application": "LibreOffice/7.3.6.2$Linux_X86_64 LibreOffice_project/30$Build-2",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/bug66312.docx",
+  "size": 4500,
+  "sha1": "0d62d06fdbcf8496f1d0905bb96a143212b8db66"
+ },
+ {
+  "name": "word2010win-anchored-01.docx",
+  "format": "docx",
+  "feature": "anchored",
+  "features": [
+   "anchored",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "14.0000",
+   "slug": "word2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/WithGIF.docx",
+  "size": 20875,
+  "sha1": "3492894c2d68640d9f7ca068183f53cd193c8a34"
+ },
+ {
+  "name": "word2016win-anchored-01.docx",
+  "format": "docx",
+  "feature": "anchored",
+  "features": [
+   "anchored",
+   "stylesheavy"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/shapes-with-text.docx",
+  "size": 27520,
+  "sha1": "e965267d6d0685d94bfff04cbac7c70c715a07bc"
+ },
+ {
+  "name": "libreoffice-inlineimage-01.docx",
+  "format": "docx",
+  "feature": "inlineimage",
+  "features": [
+   "inlineimage",
+   "media"
+  ],
+  "generator": {
+   "application": "LibreOffice/4.2.3.3$Linux_X86_64 LibreOffice_project/420m0$Build-3",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/56392.docx",
+  "size": 11211,
+  "sha1": "37739fb9a6f7fd245f4d64c667fb820782cd78ed"
+ },
+ {
+  "name": "word2007win-inlineimage-01.docx",
+  "format": "docx",
+  "feature": "inlineimage",
+  "features": [
+   "customxml",
+   "fields",
+   "footers",
+   "footnotes",
+   "inlineimage",
+   "media",
+   "numbering",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/form_footnotes.docx",
+  "size": 27824,
+  "sha1": "39fb2693bd8caeef14cf9b67dea6e09af9b7f310"
+ },
+ {
+  "name": "word2016win-sections-01.docx",
+  "format": "docx",
+  "feature": "sections",
+  "features": [
+   "sections",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "python-docx",
+  "origin": "python-docx/repo/tests/test_files/sct-inner-content.docx",
+  "size": 12051,
+  "sha1": "f3c368774ac7f2ad6a2c5900656549be249144c3"
+ },
+ {
+  "name": "word2007win-sections-01.docx",
+  "format": "docx",
+  "feature": "sections",
+  "features": [
+   "headers",
+   "sections"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Headers.docx",
+  "size": 13076,
+  "sha1": "8207d5059fa8a4cc890af1b9eac08a3ec348e804"
+ },
+ {
+  "name": "unknown-headers-01.docx",
+  "format": "docx",
+  "feature": "headers",
+  "features": [
+   "headers",
+   "media"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/zero-length.docx",
+  "size": 10469,
+  "sha1": "197c0688007223fa17d7109d2fe5e546035cec51"
+ },
+ {
+  "name": "word2007win-headers-01.docx",
+  "format": "docx",
+  "feature": "headers",
+  "features": [
+   "headers"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/ThreeColHead.docx",
+  "size": 12508,
+  "sha1": "c338df06aadd2c54d73888935cdf721b63436f37"
+ },
+ {
+  "name": "word2007win-footnotes-01.docx",
+  "format": "docx",
+  "feature": "footnotes",
+  "features": [
+   "customxml",
+   "footnotes"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/footnotes.docx",
+  "size": 12823,
+  "sha1": "9391d43163176ae56d2baa169d42e4b6d6334195"
+ },
+ {
+  "name": "word2010win-footnotes-01.docx",
+  "format": "docx",
+  "feature": "footnotes",
+  "features": [
+   "customxml",
+   "footers",
+   "footnotes",
+   "headers",
+   "sdt",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "14.0000",
+   "slug": "word2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Bug54849.docx",
+  "size": 27566,
+  "sha1": "4c696b3ac74557954bb0caca36b594f16d8aa2e9"
+ },
+ {
+  "name": "word2010win-fields-01.docx",
+  "format": "docx",
+  "feature": "fields",
+  "features": [
+   "fields"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "14.0000",
+   "slug": "word2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/FldSimple.docx",
+  "size": 12837,
+  "sha1": "10a7ff6e17f612f7fae61e97ce0b51e158c9d4a0"
+ },
+ {
+  "name": "word2013win-fields-01.docx",
+  "format": "docx",
+  "feature": "fields",
+  "features": [
+   "fields",
+   "numbering",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "15.0000",
+   "slug": "word2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/65099.docx",
+  "size": 17126,
+  "sha1": "db5562d8a686736baf930f364b57725e12c25fee"
+ },
+ {
+  "name": "libreoffice-comments-01.docx",
+  "format": "docx",
+  "feature": "comments",
+  "features": [
+   "comments"
+  ],
+  "generator": {
+   "application": "LibreOffice/6.0.7.3$Linux_X86_64 LibreOffice_project/00m0$Build-3",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/comment.docx",
+  "size": 4926,
+  "sha1": "12cbdf91c5c2662f6d7c444bf7f09d1fc8b9db8b"
+ },
+ {
+  "name": "word2016win-comments-01.docx",
+  "format": "docx",
+  "feature": "comments",
+  "features": [
+   "comments",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/testComment.docx",
+  "size": 65298,
+  "sha1": "d9a6a7bfa3610ddbde3692251fe7440f326b641e"
+ },
+ {
+  "name": "word2007win-trackchanges-01.docx",
+  "format": "docx",
+  "feature": "trackchanges",
+  "features": [
+   "customxml",
+   "fields",
+   "numbering",
+   "trackchanges"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/delins.docx",
+  "size": 17720,
+  "sha1": "d1a23c5d7d39d57b517b2e6f2decbdb1580564b6"
+ },
+ {
+  "name": "word2010win-trackchanges-01.docx",
+  "format": "docx",
+  "feature": "trackchanges",
+  "features": [
+   "footers",
+   "headers",
+   "trackchanges"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "14.0000",
+   "slug": "word2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Tika-792.docx",
+  "size": 17913,
+  "sha1": "401992de12067682d16e794678201e546306d55a"
+ },
+ {
+  "name": "word2007win-stylesheavy-01.docx",
+  "format": "docx",
+  "feature": "stylesheavy",
+  "features": [
+   "stylesheavy"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/52288.docx",
+  "size": 12788,
+  "sha1": "49ae2d5f720688eac00bcc5785eb3f76697a8ad9"
+ },
+ {
+  "name": "word2016win-stylesheavy-01.docx",
+  "format": "docx",
+  "feature": "stylesheavy",
+  "features": [
+   "stylesheavy"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/emptyPPr.docx",
+  "size": 13349,
+  "sha1": "59a73339d4d5c3a855be9d848720bb64a49627b4"
+ },
+ {
+  "name": "libreoffice-rtl-01.docx",
+  "format": "docx",
+  "feature": "rtl",
+  "features": [
+   "rtl",
+   "tables"
+  ],
+  "generator": {
+   "application": "LibreOffice/7.5.5.2$Linux_X86_64 LibreOffice_project/50$Build-2",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Bug66988.docx",
+  "size": 4875,
+  "sha1": "0be74b0e1c65bb92ef383a937910fb156958f71f"
+ },
+ {
+  "name": "word2007win-rtl-01.docx",
+  "format": "docx",
+  "feature": "rtl",
+  "features": [
+   "comments",
+   "customxml",
+   "embeddings",
+   "headers",
+   "media",
+   "rtl",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/WordWithAttachments.docx",
+  "size": 144959,
+  "sha1": "2ed5521f2d8297afc61e937d7909cd7de5e04fe8"
+ },
+ {
+  "name": "word2016win-cjk-01.docx",
+  "format": "docx",
+  "feature": "cjk",
+  "features": [
+   "cjk"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/61470.docx",
+  "size": 12523,
+  "sha1": "2cabe3a2607cf903f72d636fac4f5017e8825be9"
+ },
+ {
+  "name": "word2013win-cjk-01.docx",
+  "format": "docx",
+  "feature": "cjk",
+  "features": [
+   "anchored",
+   "cjk",
+   "customxml",
+   "footnotes",
+   "numbering",
+   "sections",
+   "stylesheavy",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "15.0000",
+   "slug": "word2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/bug65649.docx",
+  "size": 474844,
+  "sha1": "54064ba65ddc1976d2d26f5c21b369d845120355"
+ },
+ {
+  "name": "unknown-sdt-01.docx",
+  "format": "docx",
+  "feature": "sdt",
+  "features": [
+   "sdt"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Bug66263-paragraph.docx",
+  "size": 2012,
+  "sha1": "84b08ecb5f04477fe5dfa41af53ca2db552f250d"
+ },
+ {
+  "name": "word2016win-sdt-01.docx",
+  "format": "docx",
+  "feature": "sdt",
+  "features": [
+   "sdt"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "16.0000",
+   "slug": "word2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Bug62859.docx",
+  "size": 17326,
+  "sha1": "5887207d1f238d8bd2eca8690d54b701fee21f10"
+ },
+ {
+  "name": "word2007win-embeddings-01.docx",
+  "format": "docx",
+  "feature": "embeddings",
+  "features": [
+   "embeddings",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/EmbeddedDocument.docx",
+  "size": 13268,
+  "sha1": "f4d4bd0e8c59eb9325b03c9289e9138ba52c6880"
+ },
+ {
+  "name": "word2007win-vba-01.docm",
+  "format": "docx",
+  "feature": "vba",
+  "features": [
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/SimpleMacro.docm",
+  "size": 15517,
+  "sha1": "4f25a453e58d0a2e462b7f4d0b1e5a08b788dca2"
+ },
+ {
+  "name": "unknown-plain-01.docx",
+  "format": "docx",
+  "feature": "plain",
+  "features": [
+   "footers"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/Bug60341.docx",
+  "size": 2297,
+  "sha1": "de417617ba6f8301f3f8f244a20129b8892989bb"
+ },
+ {
+  "name": "libreoffice-plain-01.docx",
+  "format": "docx",
+  "feature": "plain",
+  "features": [
+   "rtl"
+  ],
+  "generator": {
+   "application": "LibreOffice/24.2.0.3$Linux_X86_64 LibreOffice_project/420$Build-3",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/unicode-path.docx",
+  "size": 5720,
+  "sha1": "75f0cb429caa48c0837ab88b974cbf7bc6a0b08c"
+ },
+ {
+  "name": "powerpoint2013mac-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings",
+   "manylayouts",
+   "placeholders"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "15.0033",
+   "slug": "powerpoint2013mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/radar-chart.pptx",
+  "size": 43689,
+  "sha1": "f5e2642a508c681ac20d8641923bdb91e2e6e820"
+ },
+ {
+  "name": "powerpoint2010win-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings",
+   "manylayouts",
+   "placeholders"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/pie-chart.pptx",
+  "size": 55297,
+  "sha1": "f0c77b6fe2de93d087187522a4b7b3692b401f0d"
+ },
+ {
+  "name": "powerpoint2016win-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings",
+   "manylayouts",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/chart-texture-bg.pptx",
+  "size": 55730,
+  "sha1": "d5fd5ca010972221f2aac5d03bd674db99e18e75"
+ },
+ {
+  "name": "powerpoint2010mac-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/cht-gridlines-props.pptx",
+  "size": 62864,
+  "sha1": "13739e1aa6de09a8474f886d8510850a75490be2"
+ },
+ {
+  "name": "powerpoint2016mac-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0016",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/cht-axis-props.pptx",
+  "size": 366536,
+  "sha1": "e62ed8eb538e5ccb5b349fd432c217412e1e881e"
+ },
+ {
+  "name": "powerpoint2007win-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings",
+   "manylayouts",
+   "manyslides",
+   "media",
+   "multimaster",
+   "notes",
+   "placeholders",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "12.0000",
+   "slug": "powerpoint2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/aascu.org_workarea_downloadasset.aspx_id=5864.pptx",
+  "size": 403643,
+  "sha1": "5eeac3953092d83b85ece4ae6c966ae8413afb08"
+ },
+ {
+  "name": "libreoffice-charts-01.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "manylayouts",
+   "media",
+   "multimaster",
+   "tables"
+  ],
+  "generator": {
+   "application": "LibreOffice/5.1.3.2$Windows_x86 LibreOffice_project/644e4637d1d8544fd9f56425bd6cec110e49301b",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/LIBRE_OFFICE-100610-0.pptx",
+  "size": 743904,
+  "sha1": "264002a4589fe2bbbd8d0f626a4473ee45cf1f28"
+ },
+ {
+  "name": "powerpoint2010mac-charts-02.pptx",
+  "format": "pptx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "embeddings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/cht-chart-type.pptx",
+  "size": 1393564,
+  "sha1": "0d529a59716ffbb237931f8e0118f0df417ad945"
+ },
+ {
+  "name": "powerpoint2016mac-multimaster-01.pptx",
+  "format": "pptx",
+  "feature": "multimaster",
+  "features": [
+   "customxml",
+   "media",
+   "multimaster",
+   "tables",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/bug68703.pptx",
+  "size": 60711,
+  "sha1": "339b3239cb8a17f090d74a00ca20b3705e701223"
+ },
+ {
+  "name": "unknown-multimaster-01.pptx",
+  "format": "pptx",
+  "feature": "multimaster",
+  "features": [
+   "manylayouts",
+   "manyslides",
+   "media",
+   "multimaster"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/ececapstonespring2012.pptx",
+  "size": 178541,
+  "sha1": "676166e83cce8148e716713650df2504d1ce114f"
+ },
+ {
+  "name": "libreoffice-manylayouts-01.pptx",
+  "format": "pptx",
+  "feature": "manylayouts",
+  "features": [
+   "manylayouts",
+   "tables"
+  ],
+  "generator": {
+   "application": "LibreOffice/5.3.2.2$Linux_X86_64 LibreOffice_project/30m0$Build-2",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/bug60993.pptx",
+  "size": 21942,
+  "sha1": "1b4f1eae58cf3c95b042096eeae0550fec412143"
+ },
+ {
+  "name": "powerpoint2016win-manylayouts-01.pptx",
+  "format": "pptx",
+  "feature": "manylayouts",
+  "features": [
+   "manylayouts",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/table_test.pptx",
+  "size": 28935,
+  "sha1": "e247d9586e9c65800ffd8337d94f80d4bca4cb0e"
+ },
+ {
+  "name": "unknown-placeholders-01.pptx",
+  "format": "pptx",
+  "feature": "placeholders",
+  "features": [
+   "notes",
+   "placeholders",
+   "transitions"
+  ],
+  "generator": {
+   "application": null,
+   "version": "12.0000",
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/49386-null_dates.pptx",
+  "size": 17124,
+  "sha1": "5ac44b251a7e7d08b1f58e7d44a90a03ae878a2f"
+ },
+ {
+  "name": "powerpoint2010mac-placeholders-01.pptx",
+  "format": "pptx",
+  "feature": "placeholders",
+  "features": [
+   "notes",
+   "placeholders"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/ph-inherit-props.pptx",
+  "size": 23566,
+  "sha1": "5b078e3fdf0a9c120e6668ed2ff289f3dcac8264"
+ },
+ {
+  "name": "powerpoint2010mac-groups-01.pptx",
+  "format": "pptx",
+  "feature": "groups",
+  "features": [
+   "groups"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/shp-groupshape.pptx",
+  "size": 23786,
+  "sha1": "f202ed3a92ac46d385cbb632dc6b22341b04391b"
+ },
+ {
+  "name": "powerpoint2016mac-groups-01.pptx",
+  "format": "pptx",
+  "feature": "groups",
+  "features": [
+   "groups",
+   "manylayouts"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/63200.pptx",
+  "size": 36778,
+  "sha1": "c0bb174ff8cf12d5938c4342f5e77761ae4f1615"
+ },
+ {
+  "name": "powerpoint2016mac-tables-01.pptx",
+  "format": "pptx",
+  "feature": "tables",
+  "features": [
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0016",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/txt-text.pptx",
+  "size": 16051,
+  "sha1": "7169da6971f1e1dd36210711f5f18a137db58ba5"
+ },
+ {
+  "name": "powerpoint2010mac-tables-01.pptx",
+  "format": "pptx",
+  "feature": "tables",
+  "features": [
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/tbl-cell.pptx",
+  "size": 28247,
+  "sha1": "5d795104f635f16d40e0a751816268ff410675aa"
+ },
+ {
+  "name": "powerpoint2016win-smartart-01.pptx",
+  "format": "pptx",
+  "feature": "smartart",
+  "features": [
+   "manylayouts",
+   "smartart"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/SmartArt.pptx",
+  "size": 41382,
+  "sha1": "c359b4005a5dfb29079504a3c17d01cb599f62a4"
+ },
+ {
+  "name": "powerpoint2016mac-smartart-01.pptx",
+  "format": "pptx",
+  "feature": "smartart",
+  "features": [
+   "manylayouts",
+   "smartart"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/smartart-rotated-text.pptx",
+  "size": 43459,
+  "sha1": "e172f202d6f50ad511980a11bc2821ac0dbfc1d0"
+ },
+ {
+  "name": "libreoffice-media-01.pptx",
+  "format": "pptx",
+  "feature": "media",
+  "features": [
+   "media",
+   "transitions"
+  ],
+  "generator": {
+   "application": "LibreOffice/25.8.7.3$Linux_X86_64 LibreOffice_project/580$Build-3",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/crop-to-0.pptx",
+  "size": 10314,
+  "sha1": "76bce4520f2b4cb9b7c077d7fb15b48c14351818"
+ },
+ {
+  "name": "powerpoint2010mac-media-01.pptx",
+  "format": "pptx",
+  "feature": "media",
+  "features": [
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/shp-connector-props.pptx",
+  "size": 22899,
+  "sha1": "becee92f5571ec91fdabb64a771c62ab73ae59a9"
+ },
+ {
+  "name": "powerpoint2016mac-av-01.pptx",
+  "format": "pptx",
+  "feature": "av",
+  "features": [
+   "av",
+   "manylayouts",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/EmbeddedAudio.pptx",
+  "size": 90047,
+  "sha1": "170936e840ba0bf2cbeb6aa90302adb3d9403224"
+ },
+ {
+  "name": "powerpoint2007win-animations-01.pptx",
+  "format": "pptx",
+  "feature": "animations",
+  "features": [
+   "animations",
+   "embeddings",
+   "manylayouts",
+   "media",
+   "notes",
+   "placeholders",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft PowerPoint 7.0",
+   "version": "12.0000",
+   "slug": "powerpoint2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/45541_Footer.pptx",
+  "size": 307913,
+  "sha1": "d1b70345370ccd9fd4836d313dbf3a8486d43ad7"
+ },
+ {
+  "name": "powerpoint2010win-animations-01.pptx",
+  "format": "pptx",
+  "feature": "animations",
+  "features": [
+   "animations",
+   "groups",
+   "manylayouts",
+   "manyslides",
+   "media",
+   "notes",
+   "placeholders",
+   "smartart",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/customGeo.pptx",
+  "size": 1046067,
+  "sha1": "cc239933ff28ff086d33513c596d73bd585fa5dd"
+ },
+ {
+  "name": "libreoffice-transitions-01.pptx",
+  "format": "pptx",
+  "feature": "transitions",
+  "features": [
+   "media",
+   "transitions"
+  ],
+  "generator": {
+   "application": "LibreOffice/25.8.4.2$Linux_X86_64 LibreOffice_project/580$Build-2",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/picture-transparency.pptx",
+  "size": 11793,
+  "sha1": "7805d5cd7ce788662f7e6d6956d93b0b66662ec2"
+ },
+ {
+  "name": "powerpoint2016mac-transitions-01.pptx",
+  "format": "pptx",
+  "feature": "transitions",
+  "features": [
+   "manylayouts",
+   "notes",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/missing-blip-fill.pptx",
+  "size": 40732,
+  "sha1": "5752518479c335b369ee1cfd6aae61eb893ecb7d"
+ },
+ {
+  "name": "powerpoint2010mac-notes-01.pptx",
+  "format": "pptx",
+  "feature": "notes",
+  "features": [
+   "notes"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/sld-notes.pptx",
+  "size": 22964,
+  "sha1": "f54a6ee2593858f65f52491ff01b7c19a1fab3b2"
+ },
+ {
+  "name": "powerpoint2010win-notes-01.pptx",
+  "format": "pptx",
+  "feature": "notes",
+  "features": [
+   "notes"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/prProps.pptx",
+  "size": 30976,
+  "sha1": "a3ec38ac9467a99de96c57e26dd7ea6fd3efd4fa"
+ },
+ {
+  "name": "powerpoint2016win-sections-01.pptx",
+  "format": "pptx",
+  "feature": "sections",
+  "features": [
+   "customxml",
+   "embeddings",
+   "media",
+   "notes",
+   "sections"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/bug65551.pptx",
+  "size": 34383,
+  "sha1": "1eaef2d893df63fc7ea26e3eb5deace172f54db7"
+ },
+ {
+  "name": "powerpoint2010win-customgeometry-01.pptx",
+  "format": "pptx",
+  "feature": "customgeometry",
+  "features": [
+   "customgeometry",
+   "groups",
+   "manylayouts",
+   "media",
+   "placeholders",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/shapes.pptx",
+  "size": 68822,
+  "sha1": "907fdfe54356132a1cbd5b03ecc59261cb786c5c"
+ },
+ {
+  "name": "powerpoint2007win-customgeometry-01.pptx",
+  "format": "pptx",
+  "feature": "customgeometry",
+  "features": [
+   "animations",
+   "customgeometry",
+   "groups",
+   "manylayouts",
+   "manyslides",
+   "media",
+   "notes",
+   "placeholders",
+   "tables",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "12.0000",
+   "slug": "powerpoint2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/ca.ubc.cs.people_~emhill_presentations_HowWeRefactor.pptx",
+  "size": 2059644,
+  "sha1": "665b838e19af7c1b502c26756c77c2b942c4047f"
+ },
+ {
+  "name": "powerpoint2007win-comments-01.pptx",
+  "format": "pptx",
+  "feature": "comments",
+  "features": [
+   "animations",
+   "comments",
+   "embeddings",
+   "manylayouts",
+   "media",
+   "notes",
+   "placeholders",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft PowerPoint 7.0",
+   "version": "12.0000",
+   "slug": "powerpoint2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/45545_Comment.pptx",
+  "size": 308394,
+  "sha1": "c8dbf26137817bee39d5bfe97cc502bdda337da2"
+ },
+ {
+  "name": "powerpoint2010mac-plain-01.pptx",
+  "format": "pptx",
+  "feature": "plain",
+  "features": [],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "14.0000",
+   "slug": "powerpoint2010mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/sld-blank.pptx",
+  "size": 16703,
+  "sha1": "c5f9b8ac942c35866026d2d9c4a91c94af056f5f"
+ },
+ {
+  "name": "powerpoint2016mac-plain-01.pptx",
+  "format": "pptx",
+  "feature": "plain",
+  "features": [],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0016",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/txt-text-frame.pptx",
+  "size": 27659,
+  "sha1": "8b4dc5cdf5083eb4401d6ccc0a30d05ff20b98b4"
+ },
+ {
+  "name": "unknown-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "pivots",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/64450.xlsx",
+  "size": 9881,
+  "sha1": "93375f5394a5c757512203e10393b63fd309552a"
+ },
+ {
+  "name": "excel2007win-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/WithChart.xlsx",
+  "size": 10138,
+  "sha1": "5b0dc4bf34d2ac0edfdb9ea9b40b01f7e5809f28"
+ },
+ {
+  "name": "excel2013win-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/56557.xlsx",
+  "size": 10483,
+  "sha1": "2f152f46212cc520d0089561ced1104c98e65669"
+ },
+ {
+  "name": "excel2010win-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "formulas",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/60509.xlsx",
+  "size": 12057,
+  "sha1": "1081765304597d0b36887d1161193cf34ded61fc"
+ },
+ {
+  "name": "excel-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "formulas",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": null,
+   "slug": "excel"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/clone_sheet.xlsx",
+  "size": 12465,
+  "sha1": "19dfa91abe68bb1d8082444af997759c06673283"
+ },
+ {
+  "name": "excel2016win-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/chartTitle_withTitleFormula.xlsx",
+  "size": 13515,
+  "sha1": "e3c9bb1d32cfd7fe890ffe6f800eaad81f625264"
+ },
+ {
+  "name": "excel2007mac-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "date1904",
+   "formulas",
+   "freeze",
+   "numfmt",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh Excel",
+   "version": "12.0000",
+   "slug": "excel2007mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/47813.xlsx",
+  "size": 54880,
+  "sha1": "b381881e01ac179be5f9f450e7567af41e4f91b2"
+ },
+ {
+  "name": "onlyoffice54139-charts-01.xlsx",
+  "format": "xlsx",
+  "feature": "charts",
+  "features": [
+   "charts",
+   "comments",
+   "conditional",
+   "formulas",
+   "freeze",
+   "media",
+   "merges",
+   "numfmt",
+   "pivots",
+   "sharedstrings",
+   "tables"
+  ],
+  "generator": {
+   "application": "ONLYOFFICE/5.4.1.39",
+   "version": null,
+   "slug": "onlyoffice54139"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/LIBRE_OFFICE-128382-0.xlsx",
+  "size": 1839194,
+  "sha1": "340fb8e0c5baff7c9d455616869b251e2f52cca7"
+ },
+ {
+  "name": "excel2007win-numfmt-01.xlsx",
+  "format": "xlsx",
+  "feature": "numfmt",
+  "features": [
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/64508.xlsx",
+  "size": 4304,
+  "sha1": "dd2c9431bf629e12145547897626e4ce676559a4"
+ },
+ {
+  "name": "excel-numfmt-01.xlsx",
+  "format": "xlsx",
+  "feature": "numfmt",
+  "features": [
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": null,
+   "slug": "excel"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/56295.xlsx",
+  "size": 4773,
+  "sha1": "f7d91a0a28faff14314b2374578f5e4faf6810bb"
+ },
+ {
+  "name": "unknown-sharedstrings-01.xlsx",
+  "format": "xlsx",
+  "feature": "sharedstrings",
+  "features": [
+   "inlinestrings",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/xlsx-jdbc.xlsx",
+  "size": 3072,
+  "sha1": "5187f96d79bc930a5df9cd0ec70ae933d8228db9"
+ },
+ {
+  "name": "poi-sharedstrings-01.xlsx",
+  "format": "xlsx",
+  "feature": "sharedstrings",
+  "features": [
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Apache POI",
+   "version": null,
+   "slug": "poi"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/link-external-workbook-a.xlsx",
+  "size": 3274,
+  "sha1": "4ab3fcfb948f3bdf5fc22bd8d8897b6e0a808694"
+ },
+ {
+  "name": "unknown-inlinestrings-01.xlsx",
+  "format": "xlsx",
+  "feature": "inlinestrings",
+  "features": [
+   "inlinestrings",
+   "merges",
+   "numfmt"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/52348.xlsx",
+  "size": 5292,
+  "sha1": "460698b845bf99509e83b612b5f039487ec6a23b"
+ },
+ {
+  "name": "libreoffice-inlinestrings-01.xlsx",
+  "format": "xlsx",
+  "feature": "inlinestrings",
+  "features": [
+   "formulas",
+   "inlinestrings",
+   "numfmt"
+  ],
+  "generator": {
+   "application": "LibreOffice/4.1.4.2$Linux_X86_64 LibreOffice_project/410$Build-2",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/52575_main.xlsx",
+  "size": 5377,
+  "sha1": "5f0dc3a7559e62532251c1385ccee6280b4a6236"
+ },
+ {
+  "name": "poi-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "externallinks",
+   "formulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Apache POI",
+   "version": null,
+   "slug": "poi"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/link-external-workbook-b.xlsx",
+  "size": 4080,
+  "sha1": "f13dd2ca332bad9028f1c53d9ba473ee94499179"
+ },
+ {
+  "name": "unknown-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "arrayformulas",
+   "formulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/66365.xlsx",
+  "size": 4753,
+  "sha1": "a7cfe45e801c6da66ab5ae7a589719119cd5c16b"
+ },
+ {
+  "name": "libreoffice-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "formulas",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "LibreOffice/25.2.7.2$Linux_X86_64 LibreOffice_project/520$Build-2",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/70005-countifs.xlsx",
+  "size": 5971,
+  "sha1": "4e8ede9fe423aaf61f0114ad0663621fa57d6235"
+ },
+ {
+  "name": "excel2016win-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "formulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/56822-Countifs.xlsx",
+  "size": 6686,
+  "sha1": "2d223f669dfbdc0d4a199f16957aaea0d9c3d39d"
+ },
+ {
+  "name": "excel2010win-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "definednames",
+   "formulas"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/56315.xlsx",
+  "size": 7815,
+  "sha1": "9b8d75ce59e6ccef569e59fdf95bc7a4ada8a3dd"
+ },
+ {
+  "name": "excel2007win-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "formulas",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/50755_workday_formula_example.xlsx",
+  "size": 7928,
+  "sha1": "9838391a6f122e430a2c2b47ab0c16a2a9820a99"
+ },
+ {
+  "name": "excel2013win-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "formulas",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/TestShiftRowSharedFormula.xlsx",
+  "size": 8527,
+  "sha1": "422033a8f0abd8816e3b087ac19182706e733f1f"
+ },
+ {
+  "name": "excel2013mac-formulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "formulas",
+  "features": [
+   "conditional",
+   "formulas",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh Excel",
+   "version": "15.0300",
+   "slug": "excel2013mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/test_conditional_formatting.xlsx",
+  "size": 10203,
+  "sha1": "954cd65c54f3c79a3d6d1f99ae49aeefb4a3b0cc"
+ },
+ {
+  "name": "excel2007win-sharedformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "sharedformulas",
+  "features": [
+   "formulas",
+   "sharedformulas"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/49872.xlsx",
+  "size": 8302,
+  "sha1": "6d2f834b917b8b7a4a25d8aafa60cd2612b70192"
+ },
+ {
+  "name": "excel2010win-sharedformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "sharedformulas",
+  "features": [
+   "formulas",
+   "sharedformulas"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/61869.xlsx",
+  "size": 8820,
+  "sha1": "250fc067f0c1c9d146ee6aa2c8e38852b10c3c27"
+ },
+ {
+  "name": "excel2013win-sharedformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "sharedformulas",
+  "features": [
+   "formulas",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/59132.xlsx",
+  "size": 9064,
+  "sha1": "6a6be89e7960e705420a152ed76b305e6c46a20d"
+ },
+ {
+  "name": "excel2016win-sharedformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "sharedformulas",
+  "features": [
+   "formulas",
+   "sharedformulas"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/bug65306.xlsx",
+  "size": 9515,
+  "sha1": "0160a38aabbf502bb7ec848bac57054013d6416e"
+ },
+ {
+  "name": "excel2013win-arrayformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "arrayformulas",
+  "features": [
+   "arrayformulas",
+   "formulas",
+   "merges",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/XSSFSheet.copyRows.xlsx",
+  "size": 9883,
+  "sha1": "6a78d97012d804529c7961f79ba2eadf304684ff"
+ },
+ {
+  "name": "excel2010win-arrayformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "arrayformulas",
+  "features": [
+   "arrayformulas",
+   "formulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/57798.xlsx",
+  "size": 10420,
+  "sha1": "edf39c9a5949dccd554154156831be1079815194"
+ },
+ {
+  "name": "excel2016win-arrayformulas-01.xlsx",
+  "format": "xlsx",
+  "feature": "arrayformulas",
+  "features": [
+   "arrayformulas",
+   "dynamicarrays",
+   "formulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel Online",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/xlookup.xlsx",
+  "size": 12031,
+  "sha1": "a1dcbe8299152ef8f2722c8cb9050e0662aa8c34"
+ },
+ {
+  "name": "excel2016win-arrayformulas-02.xlsx",
+  "format": "xlsx",
+  "feature": "arrayformulas",
+  "features": [
+   "arrayformulas",
+   "formulas",
+   "merges",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/MatrixFormulaEvalTestData.xlsx",
+  "size": 14875,
+  "sha1": "e31b18111a222aeece0e4fc602c6d29aeae1458e"
+ },
+ {
+  "name": "excel2007win-definednames-01.xlsx",
+  "format": "xlsx",
+  "feature": "definednames",
+  "features": [
+   "definednames"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/51963.xlsx",
+  "size": 7138,
+  "sha1": "0100f51ee840464b47a58965590cf8eeb4bf6103"
+ },
+ {
+  "name": "excel2013win-definednames-01.xlsx",
+  "format": "xlsx",
+  "feature": "definednames",
+  "features": [
+   "definednames",
+   "merges",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/1_NoIden.xlsx",
+  "size": 8038,
+  "sha1": "05f2c83c778db1fba32c0cb0688d66052fe8608a"
+ },
+ {
+  "name": "excel2010win-tables-01.xlsx",
+  "format": "xlsx",
+  "feature": "tables",
+  "features": [
+   "sharedstrings",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/56170.xlsx",
+  "size": 8577,
+  "sha1": "df9aa6164743b2a028743e5c2c27b279783a6f2f"
+ },
+ {
+  "name": "excel2013win-tables-01.xlsx",
+  "format": "xlsx",
+  "feature": "tables",
+  "features": [
+   "formulas",
+   "sharedstrings",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/evaluate_formula_with_structured_table_references.xlsx",
+  "size": 9198,
+  "sha1": "20581129874d9cb112f9747263344caa231414d0"
+ },
+ {
+  "name": "excel2016win-conditional-01.xlsx",
+  "format": "xlsx",
+  "feature": "conditional",
+  "features": [
+   "conditional",
+   "numfmt"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/61060-conditional-number-formatting.xlsx",
+  "size": 8224,
+  "sha1": "3bb03f56f393e67ee560a61a7f9e2f5931368749"
+ },
+ {
+  "name": "excel2007win-conditional-01.xlsx",
+  "format": "xlsx",
+  "feature": "conditional",
+  "features": [
+   "conditional",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/Themes2.xlsx",
+  "size": 9719,
+  "sha1": "894fba5a81704aaf25b6ec287d022d0a8b7a7435"
+ },
+ {
+  "name": "poi-validation-01.xlsx",
+  "format": "xlsx",
+  "feature": "validation",
+  "features": [
+   "sharedstrings",
+   "validation"
+  ],
+  "generator": {
+   "application": "Apache POI",
+   "version": null,
+   "slug": "poi"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/DataValidationListTooLong.xlsx",
+  "size": 3286,
+  "sha1": "b0e5ca83a10d715bcddd12817797cbe8c6e3f5d8"
+ },
+ {
+  "name": "excel2007win-validation-01.xlsx",
+  "format": "xlsx",
+  "feature": "validation",
+  "features": [
+   "merges",
+   "sharedstrings",
+   "validation"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/DataValidations-49244.xlsx",
+  "size": 10705,
+  "sha1": "971fd1256c4ff603caceecb4697cabe34cd231f0"
+ },
+ {
+  "name": "libreoffice-merges-01.xlsx",
+  "format": "xlsx",
+  "feature": "merges",
+  "features": [
+   "merges",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "LibreOffice/5.1.4.2$Linux_X86_64 LibreOffice_project/10m0$Build-2",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/60384.xlsx",
+  "size": 6611,
+  "sha1": "292c83d7e3c3ad7fb5897822179760938f4ac5b2"
+ },
+ {
+  "name": "excel2013win-merges-01.xlsx",
+  "format": "xlsx",
+  "feature": "merges",
+  "features": [
+   "merges",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/61605.xlsx",
+  "size": 11032,
+  "sha1": "e873a2b4c2b443432b02eefa5076ca22f04b236b"
+ },
+ {
+  "name": "excel2016mac-freeze-01.xlsx",
+  "format": "xlsx",
+  "feature": "freeze",
+  "features": [
+   "date1904",
+   "formulas",
+   "freeze",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh Excel",
+   "version": "16.0300",
+   "slug": "excel2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/DateFormatNumberTests.xlsx",
+  "size": 10981,
+  "sha1": "9b6476001eadef33f969aa096c1609d5462999b0"
+ },
+ {
+  "name": "unknown-freeze-01.xlsx",
+  "format": "xlsx",
+  "feature": "freeze",
+  "features": [
+   "definednames",
+   "formulas",
+   "freeze",
+   "merges",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": null,
+   "version": "12.0000",
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/47737.xlsx",
+  "size": 11369,
+  "sha1": "96860032350889ccfe1109c80cd1814d26b1deff"
+ },
+ {
+  "name": "excel2010win-pivots-01.xlsx",
+  "format": "xlsx",
+  "feature": "pivots",
+  "features": [
+   "formulas",
+   "pivots",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/54436.xlsx",
+  "size": 12180,
+  "sha1": "f5c1e285d0740c8390d4d7856b7ab1ef2f1d38b5"
+ },
+ {
+  "name": "excel2016win-pivots-01.xlsx",
+  "format": "xlsx",
+  "feature": "pivots",
+  "features": [
+   "numfmt",
+   "pivots",
+   "sharedstrings",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/ExcelPivotTableSample.xlsx",
+  "size": 19460,
+  "sha1": "7c48090f9bad59655e25bc72d50b2d04e5e6158e"
+ },
+ {
+  "name": "excel2013win-vba-01.xlsm",
+  "format": "xlsx",
+  "feature": "vba",
+  "features": [
+   "definednames",
+   "formulas",
+   "sharedstrings",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/testNames.xlsm",
+  "size": 13290,
+  "sha1": "6d6263feab2f22e43da9d828296c7059c513c135"
+ },
+ {
+  "name": "excel2010win-vba-01.xlsm",
+  "format": "xlsx",
+  "feature": "vba",
+  "features": [
+   "sharedstrings",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/SimpleMacro.xlsm",
+  "size": 13796,
+  "sha1": "b72dbcfb4e1c97e7b89fc5c852e5b45b30c2828d"
+ },
+ {
+  "name": "excel2010win-comments-01.xlsx",
+  "format": "xlsx",
+  "feature": "comments",
+  "features": [
+   "comments",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/55814.xlsx",
+  "size": 9286,
+  "sha1": "a9ec559c99f642a899bb6983ad2bc2649994f018"
+ },
+ {
+  "name": "excel2013win-comments-01.xlsx",
+  "format": "xlsx",
+  "feature": "comments",
+  "features": [
+   "comments"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "15.0300",
+   "slug": "excel2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/52425.xlsx",
+  "size": 9439,
+  "sha1": "4c43788f5e6dbd3fd1248ec3edbc2857f2f0c5c4"
+ },
+ {
+  "name": "libreoffice-externallinks-01.xlsx",
+  "format": "xlsx",
+  "feature": "externallinks",
+  "features": [
+   "externallinks",
+   "formulas",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "LibreOffice/7.3.7.2$Linux_X86_64 LibreOffice_project/30$Build-2",
+   "version": "15.0000",
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/bug67784.xlsx",
+  "size": 6211,
+  "sha1": "f18a503bf1f54bb552b215fbdeb77954b86ec005"
+ },
+ {
+  "name": "excel2010win-externallinks-01.xlsx",
+  "format": "xlsx",
+  "feature": "externallinks",
+  "features": [
+   "externallinks",
+   "formulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/ref-56737.xlsx",
+  "size": 10427,
+  "sha1": "ae896f0bd9c69ad0bf278f4415d6d937b0e3f8ff"
+ },
+ {
+  "name": "excel2016mac-date1904-01.xlsx",
+  "format": "xlsx",
+  "feature": "date1904",
+  "features": [
+   "date1904",
+   "formulas",
+   "freeze",
+   "numfmt",
+   "sharedformulas",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh Excel",
+   "version": "16.0300",
+   "slug": "excel2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/DateFormatTests.xlsx",
+  "size": 12394,
+  "sha1": "83f5783ca6cbe005f4459ffd7ee57d3c0c8fa779"
+ },
+ {
+  "name": "excel2007mac-date1904-01.xlsx",
+  "format": "xlsx",
+  "feature": "date1904",
+  "features": [
+   "date1904",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh Excel",
+   "version": "12.0000",
+   "slug": "excel2007mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/workbookProtection_workbook_structure_protected.xlsx",
+  "size": 28727,
+  "sha1": "0a1a29403e98ae348005b8a9916345c49e2a5f76"
+ },
+ {
+  "name": "excel2010win-large-01.xlsm",
+  "format": "xlsx",
+  "feature": "large",
+  "features": [
+   "definednames",
+   "formulas",
+   "merges",
+   "numfmt",
+   "sharedstrings",
+   "validation",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/mv-calculator-final-2-20-2013.xlsm",
+  "size": 603138,
+  "sha1": "95af7176c04efcc5a54b32f4ac8a725a5cd9b11f"
+ },
+ {
+  "name": "unknown-plain-02.xlsx",
+  "format": "xlsx",
+  "feature": "plain",
+  "features": [],
+  "generator": {
+   "application": null,
+   "version": null,
+   "slug": "unknown"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/59021.xlsx",
+  "size": 1933,
+  "sha1": "a331a4690f38af754d96e92516dcdaa4b05ac99d"
+ },
+ {
+  "name": "libreoffice-plain-02.xlsx",
+  "format": "xlsx",
+  "feature": "plain",
+  "features": [
+   "numfmt"
+  ],
+  "generator": {
+   "application": "LibreOffice/3.5$Linux_X86_64 LibreOffice_project/350m1$Build-2",
+   "version": null,
+   "slug": "libreoffice"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/55640.xlsx",
+  "size": 6184,
+  "sha1": "c9ffd4dc42289e5594ba794fa265d5472b1bcb98"
+ },
+ {
+  "name": "excel2016win-customxml-01.xlsx",
+  "format": "xlsx",
+  "feature": "customxml",
+  "features": [
+   "charts",
+   "conditional",
+   "customxml",
+   "definednames",
+   "formulas",
+   "media",
+   "merges",
+   "numfmt",
+   "sharedstrings",
+   "tables"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/simple-monthly-budget.xlsx",
+  "size": 18700,
+  "sha1": "c081e124ab96a9fd4bce81082241724662b9d633"
+ },
+ {
+  "name": "excel2007win-embeddings-01.xlsx",
+  "format": "xlsx",
+  "feature": "embeddings",
+  "features": [
+   "embeddings",
+   "media",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/WithEmbeded.xlsx",
+  "size": 23668,
+  "sha1": "94790302d87365a3b8c9519713bfc919a0cfd7f5"
+ },
+ {
+  "name": "powerpoint2016win-sections-02.pptx",
+  "format": "pptx",
+  "feature": "sections",
+  "features": [
+   "customxml",
+   "manylayouts",
+   "manyslides",
+   "media",
+   "notes",
+   "placeholders",
+   "sections",
+   "smartart"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/60810.pptx",
+  "size": 874522,
+  "sha1": "39d82602e7b36ecd2e95c0ce33957741ab927a20"
+ },
+ {
+  "name": "powerpoint2016mac-vba-01.pptm",
+  "format": "pptx",
+  "feature": "vba",
+  "features": [
+   "av",
+   "embeddings",
+   "media",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0016",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "python-pptx",
+  "origin": "python-pptx/repo/features/steps/test_files/act-props.pptm",
+  "size": 982098,
+  "sha1": "c2ded86d8b6655ff1b6614a4a3aadd7f41f17011"
+ },
+ {
+  "name": "excel2016win-customxml-02.xlsx",
+  "format": "xlsx",
+  "feature": "customxml",
+  "features": [
+   "customxml",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel Online",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/bug69769.xlsx",
+  "size": 13976,
+  "sha1": "0478e8a67701cecf3233992f39af8e32e2576d11"
+ },
+ {
+  "name": "word2007win-vba-02.docm",
+  "format": "docx",
+  "feature": "vba",
+  "features": [
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/60158.docm",
+  "size": 15617,
+  "sha1": "8c34722143dc6d08a96f5dfda5ed39a34877c775"
+ },
+ {
+  "name": "excel2010win-customxml-01.xlsx",
+  "format": "xlsx",
+  "feature": "customxml",
+  "features": [
+   "customxml",
+   "definednames",
+   "externallinks",
+   "numfmt",
+   "sharedstrings"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "14.0300",
+   "slug": "excel2010win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/54399.xlsx",
+  "size": 17761,
+  "sha1": "f1637ce651630c1603578b6e005824e0abf3bcec"
+ },
+ {
+  "name": "word2010mac-trackchanges-01.docx",
+  "format": "docx",
+  "feature": "trackchanges",
+  "features": [
+   "trackchanges"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh Word",
+   "version": "14.0000",
+   "slug": "word2010mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/58067.docx",
+  "size": 28709,
+  "sha1": "b109edbfb51ed6b3d0efa626aa59390b66cfb9f5"
+ },
+ {
+  "name": "powerpoint2007win-vba-01.pptm",
+  "format": "pptx",
+  "feature": "vba",
+  "features": [
+   "manylayouts",
+   "placeholders",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "12.0000",
+   "slug": "powerpoint2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/SimpleMacro.pptm",
+  "size": 41578,
+  "sha1": "e1a492bef5b589ca8bd32972670924c5853e9496"
+ },
+ {
+  "name": "word2007win-vba-03.docm",
+  "format": "docx",
+  "feature": "vba",
+  "features": [
+   "customxml",
+   "fields",
+   "inlineimage",
+   "media",
+   "numbering",
+   "tables",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Office Word",
+   "version": "12.0000",
+   "slug": "word2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/document/45690.docm",
+  "size": 49596,
+  "sha1": "1e2fc57cae2edfa2f78b439c4a859a48c6a79dd2"
+ },
+ {
+  "name": "excel2016win-embeddings-01.xlsx",
+  "format": "xlsx",
+  "feature": "embeddings",
+  "features": [
+   "embeddings",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "16.0300",
+   "slug": "excel2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/bug64512_embed.xlsx",
+  "size": 49746,
+  "sha1": "4fdf8a7a41d8029875834b8e1f0bba8a38084231"
+ },
+ {
+  "name": "excel2007win-embeddings-02.xlsm",
+  "format": "xlsx",
+  "feature": "embeddings",
+  "features": [
+   "comments",
+   "definednames",
+   "embeddings",
+   "media",
+   "sharedstrings",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Excel",
+   "version": "12.0000",
+   "slug": "excel2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/spreadsheet/ExcelWithAttachments.xlsm",
+  "size": 62646,
+  "sha1": "b433d012f07327ec4140ade917fa821183d83858"
+ },
+ {
+  "name": "powerpoint2016win-av-01.pptx",
+  "format": "pptx",
+  "feature": "av",
+  "features": [
+   "av",
+   "manylayouts",
+   "media"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/EmbeddedVideo.pptx",
+  "size": 201418,
+  "sha1": "0b20504b4d64f3159f22848f8595441829909bb1"
+ },
+ {
+  "name": "powerpoint2007win-vba-02.pptm",
+  "format": "pptx",
+  "feature": "vba",
+  "features": [
+   "embeddings",
+   "manylayouts",
+   "media",
+   "notes",
+   "placeholders",
+   "vba"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "12.0000",
+   "slug": "powerpoint2007win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/PPTWithAttachments.pptm",
+  "size": 235317,
+  "sha1": "bec17e08d3129a0ce98f2cf75af8787c8031ead3"
+ },
+ {
+  "name": "powerpoint2016mac-embeddedfonts-01.pptx",
+  "format": "pptx",
+  "feature": "embeddedfonts",
+  "features": [
+   "embeddedfonts",
+   "notes",
+   "placeholders"
+  ],
+  "generator": {
+   "application": "Microsoft Macintosh PowerPoint",
+   "version": "16.0000",
+   "slug": "powerpoint2016mac"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/placeholder-layout-color.pptx",
+  "size": 346876,
+  "sha1": "dbe723a8197835c0aaa594900109011f53d39eb9"
+ },
+ {
+  "name": "powerpoint2013win-sections-01.pptx",
+  "format": "pptx",
+  "feature": "sections",
+  "features": [
+   "embeddings",
+   "media",
+   "multimaster",
+   "placeholders",
+   "sections",
+   "transitions"
+  ],
+  "generator": {
+   "application": "Microsoft Office PowerPoint",
+   "version": "15.0000",
+   "slug": "powerpoint2013win"
+  },
+  "source": "poi",
+  "origin": "poi/repo/test-data/slideshow/bug64693.pptx",
+  "size": 881432,
+  "sha1": "b478290b5afca328e569a68f93b423f0a2e3d968"
+ }
+]

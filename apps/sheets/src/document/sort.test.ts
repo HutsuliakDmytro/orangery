@@ -115,7 +115,7 @@ describe('what moves with a row', () => {
       type: 'n',
       value: '0',
       style: null,
-      formula: { text: 'A11*2', kind: 'normal', shared: null, ref: null },
+      formula: { text: 'A11*2', kind: 'normal', shared: null, ref: null, carried: null },
       rich: null,
       carried: null,
     })

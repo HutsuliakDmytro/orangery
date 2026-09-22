@@ -115,7 +115,7 @@ function writer(open: OpenWorkbook, sheet: OpenSheet): Writer {
         {
           type: 'n',
           value: null,
-          formula: { text, kind: 'normal', shared: null, ref: null },
+          formula: { text, kind: 'normal', shared: null, ref: null, carried: null },
           rich: null,
           carried: null,
         },
@@ -132,6 +132,7 @@ function writer(open: OpenWorkbook, sheet: OpenSheet): Writer {
         style: null,
         outlineLevel: null,
         collapsed: false,
+        carried: null,
       })
     },
   }

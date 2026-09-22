@@ -1,4 +1,4 @@
-import { attribute, children, findChild, parseXml, tagName } from '@orangery/ooxml-core'
+import { attribute, attributes, children, findChild, parseXml, tagName } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
 import { parseRange } from './reference'
 import type { CellRange } from './reference'
@@ -43,9 +43,25 @@ export interface ColumnRange {
   hidden: boolean
   /** Whether the width was chosen rather than inherited. */
   custom: boolean
+  /**
+   * The format every cell of the run inherits, as an index into `cellXfs`.
+   *
+   * Read whether or not the run also says `customFormat`: that attribute
+   * belongs to a row, and a `<col>` states its style on its own. Gating on it
+   * lost the style of every column Excel ever wrote — which is the column of
+   * dates that comes back as numbers.
+   */
   style: number | null
   outlineLevel: number | null
   collapsed: boolean
+  /**
+   * Attributes of `<col>` this does not model, kept so they survive a save.
+   *
+   * `bestFit` is the common one — it says the width was computed rather than
+   * dragged, and Excel uses it when it re-fits a column — and `customFormat`
+   * and `phonetic` turn up as well. None of them is something this edits.
+   */
+  carried: Record<string, string> | null
 }
 
 export interface FrozenPanes {
@@ -229,6 +245,27 @@ function readView(root: XmlNode): SheetView {
   }
 }
 
+/** What a `<col>` states that this models; everything else is carried. */
+const MODELLED_COLUMN = new Set([
+  'min',
+  'max',
+  'width',
+  'hidden',
+  'customWidth',
+  'style',
+  'outlineLevel',
+  'collapsed',
+])
+
+/** What a tag leaves over once the modelled attributes are taken out of it. */
+function carriedFrom(
+  own: Record<string, string>,
+  modelled: ReadonlySet<string>,
+): Record<string, string> | null {
+  const rest = Object.entries(own).filter(([name]) => !modelled.has(name))
+  return rest.length === 0 ? null : Object.fromEntries(rest)
+}
+
 function readColumns(root: XmlNode): ColumnRange[] {
   const cols = findChild(root, 'cols')
   if (cols === undefined) return []
@@ -247,9 +284,10 @@ function readColumns(root: XmlNode): ColumnRange[] {
         width: number(col, 'width'),
         hidden: flag(col, 'hidden', false),
         custom: flag(col, 'customWidth', false),
-        style: flag(col, 'customFormat', false) ? number(col, 'style') : null,
+        style: number(col, 'style'),
         outlineLevel: number(col, 'outlineLevel'),
         collapsed: flag(col, 'collapsed', false),
+        carried: carriedFrom(attributes(col), MODELLED_COLUMN),
       },
     ]
   })

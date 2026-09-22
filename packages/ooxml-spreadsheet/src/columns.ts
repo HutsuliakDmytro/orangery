@@ -26,7 +26,11 @@ const DEFAULT_LOOK: ColumnLook = {
   style: null,
   outlineLevel: null,
   collapsed: false,
+  carried: null,
 }
+
+const carriedAlike = (a: ColumnLook['carried'], b: ColumnLook['carried']): boolean =>
+  JSON.stringify(a ?? {}) === JSON.stringify(b ?? {})
 
 const sameLook = (a: ColumnLook, b: ColumnLook): boolean =>
   a.width === b.width &&
@@ -34,7 +38,10 @@ const sameLook = (a: ColumnLook, b: ColumnLook): boolean =>
   a.custom === b.custom &&
   a.style === b.style &&
   a.outlineLevel === b.outlineLevel &&
-  a.collapsed === b.collapsed
+  a.collapsed === b.collapsed &&
+  // Two runs that differ only in what they carry are still two runs: joining
+  // them would drop one side's attributes, which is what carrying is against.
+  carriedAlike(a.carried, b.carried)
 
 const lookOf = (range: ColumnRange): ColumnLook => ({
   width: range.width,
@@ -43,6 +50,7 @@ const lookOf = (range: ColumnRange): ColumnLook => ({
   style: range.style,
   outlineLevel: range.outlineLevel,
   collapsed: range.collapsed,
+  carried: range.carried,
 })
 
 /**
@@ -104,6 +112,14 @@ export const widthOfColumnIn = (columns: readonly ColumnRange[], column: number)
 const attribute = (name: string, value: string | number | null): string =>
   value === null ? '' : ` ${name}="${String(value)}"`
 
+/** The attributes the model does not hold, written back as they were read. */
+const carriedAttributes = (carried: Record<string, string> | null): string =>
+  carried === null
+    ? ''
+    : Object.entries(carried)
+        .map(([name, value]) => ` ${name}="${value}"`)
+        .join('')
+
 /** The runs as the element a worksheet keeps them in, or nothing for none. */
 export function writeColumns(columns: readonly ColumnRange[]): string {
   if (columns.length === 0) return ''
@@ -118,9 +134,12 @@ export function writeColumns(columns: readonly ColumnRange[]): string {
         attribute('width', range.width) +
         (range.custom || range.width !== null ? ' customWidth="1"' : '') +
         (range.hidden ? ' hidden="1"' : '') +
-        (range.style === null ? '' : ` style="${String(range.style)}" customFormat="1"`) +
+        // `style` alone: `customFormat` is a row's attribute, and writing it
+        // on a column added markup Excel had not put there.
+        attribute('style', range.style) +
         attribute('outlineLevel', range.outlineLevel) +
         (range.collapsed ? ' collapsed="1"' : '') +
+        carriedAttributes(range.carried) +
         '/>',
     )
     .join('')

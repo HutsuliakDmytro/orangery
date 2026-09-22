@@ -427,7 +427,7 @@ function spilled(
     formula:
       anchorCell?.formula == null
         ? null
-        : { text: anchorCell.formula.text, kind: 'array', shared: null, ref: null },
+        : { text: anchorCell.formula.text, kind: 'array', shared: null, ref: null, carried: null },
     rich: null,
     carried: existing?.carried ?? null,
   })

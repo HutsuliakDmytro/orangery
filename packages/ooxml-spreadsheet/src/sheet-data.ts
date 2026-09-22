@@ -24,6 +24,9 @@ import { elementPattern } from './patterns'
 
 /** The attributes a cell states that this models; the rest are carried. */
 const MODELLED_CELL = new Set(['r', 's', 't'])
+
+/** The same for `<f>`: `ca`, `bx` and the data-table attributes are carried. */
+const MODELLED_FORMULA = new Set(['t', 'si', 'ref'])
 const MODELLED_ROW = new Set([
   'r',
   'ht',
@@ -141,6 +144,7 @@ function formulaFrom(fragment: string): Formula | null {
     kind,
     shared: numberOr(attributes['si'], null),
     ref: attributes['ref'] ?? null,
+    carried: carriedFrom(attributes, MODELLED_FORMULA),
   }
 }
 
@@ -277,6 +281,7 @@ function cellXml(cell: Cell, masters: Map<number, SharedMaster>): string {
       : `<f${written.kind === 'normal' ? '' : ` t="${written.kind}"`}` +
         attribute('ref', written.ref) +
         attribute('si', written.shared) +
+        carriedAttributes(written.carried) +
         (written.text === '' ? '/>' : `>${encodeText(written.text)}</f>`)
 
   // A rich string goes back as the markup it came from: rebuilding an `<rPr>`

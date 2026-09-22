@@ -1,3 +1,4 @@
+import { compareXml, describeDifferences } from '@orangery/ooxml-core'
 import { describe, expect, it } from 'vitest'
 import { replaceColumns, widthOfColumnIn, withColumns, writeColumns } from './columns'
 import { readWorksheet } from './worksheet'
@@ -121,5 +122,69 @@ describe('writing the runs back', () => {
 
   it('takes the element away when the last run goes', () => {
     expect(replaceColumns(SHEET, [])).not.toContain('<cols>')
+  })
+})
+
+/**
+ * What a `<col>` says that this does not model.
+ *
+ * Two bugs with one cause — a writer stating only what the model holds.
+ * `style` on a column is the format every cell in it inherits, and it was read
+ * only when the run also said `customFormat`, which is a row's attribute and
+ * which Excel does not write on a column: the style of every column Excel ever
+ * wrote was being dropped. `bestFit` is not modelled at all and is carried.
+ *
+ * 251 files of the full corpus.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/3
+ */
+describe('a column with more on it than we model', () => {
+  const sheet = (cols: string) =>
+    `<worksheet xmlns="x"><cols>${cols}</cols><sheetData/></worksheet>`
+
+  it('reads the style of a column that does not say customFormat', () => {
+    const read = readWorksheet(sheet('<col min="1" max="3" width="9" style="7"/>'))
+
+    expect(read?.columns[0]?.style).toBe(7)
+  })
+
+  it('writes the style back without inventing customFormat', () => {
+    const read = readWorksheet(sheet('<col min="1" max="3" width="9" style="7"/>'))
+    const written = writeColumns(read?.columns ?? [])
+
+    expect(written).toContain('style="7"')
+    expect(written).not.toContain('customFormat')
+  })
+
+  it('carries bestFit through a round-trip', () => {
+    const source = sheet('<col min="2" max="2" width="12" customWidth="1" bestFit="1"/>')
+    const read = readWorksheet(source)
+
+    expect(read?.columns[0]?.carried).toEqual({ bestFit: '1' })
+    expect(writeColumns(read?.columns ?? [])).toContain('bestFit="1"')
+  })
+
+  it('keeps two runs apart when only what they carry differs', () => {
+    const read = readWorksheet(
+      sheet('<col min="1" max="1" width="9" bestFit="1"/><col min="2" max="2" width="9"/>'),
+    )
+    const written = writeColumns(read?.columns ?? [])
+
+    expect(written).toContain('min="1" max="1"')
+    expect(written).toContain('min="2" max="2"')
+  })
+
+  it('leaves a whole sheet of columns as it found them', () => {
+    // Structurally: the writer states the attributes in its own order, which
+    // is what `compareXml` exists to ignore and what Excel does not read.
+    const source = sheet(
+      '<col min="1" max="1" width="18.5" customWidth="1" style="3"/>' +
+        '<col min="2" max="4" width="9.140625" bestFit="1" customWidth="1"/>' +
+        '<col min="5" max="5" hidden="1" width="0" customWidth="1"/>',
+    )
+    const read = readWorksheet(source)
+
+    const differences = compareXml(source, replaceColumns(source, read?.columns ?? []))
+    expect(describeDifferences(differences)).toBe('no differences')
   })
 })

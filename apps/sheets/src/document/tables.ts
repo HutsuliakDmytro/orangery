@@ -226,7 +226,7 @@ const formula = (row: number, column: number, text: string): Cell => ({
   type: 'n',
   value: null,
   style: null,
-  formula: { text, kind: 'normal', shared: null, ref: null },
+  formula: { text, kind: 'normal', shared: null, ref: null, carried: null },
   rich: null,
   carried: null,
 })

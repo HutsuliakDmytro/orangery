@@ -1,5 +1,6 @@
 import { formatReference } from './reference'
 import type { FrozenPanes } from './worksheet'
+import { elementPattern, openingPattern } from './patterns'
 
 /**
  * `<sheetView>` — how a sheet is looked at rather than what is in it.
@@ -25,7 +26,7 @@ export interface ViewChange {
   panes?: FrozenPanes | null
 }
 
-const SHEET_VIEW = /<sheetView(\s[^>]*)?(\/>|>[\s\S]*?<\/sheetView>)/u
+const SHEET_VIEW = elementPattern('sheetView')
 
 /**
  * The `<pane>` element for a freeze at a cell.
@@ -73,7 +74,7 @@ export function changeView(xml: string, change: ViewChange): string {
     const written = viewElement('', change)
     if (written === '') return xml
 
-    const data = /<sheetData(?:\s[^>]*)?(?:\/>|>)/u.exec(xml)
+    const data = openingPattern('sheetData').exec(xml)
     if (data === null) return xml
 
     return xml.slice(0, data.index) + `<sheetViews>${written}</sheetViews>` + xml.slice(data.index)
@@ -117,9 +118,7 @@ function rewritten(found: RegExpExecArray, change: ViewChange): string {
  * repairs a file whose `<selection pane="bottomLeft">` has no bottom left.
  */
 const withoutPanes = (body: string): string =>
-  body
-    .replace(/<pane(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/pane>)/gu, '')
-    .replace(/<selection(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/selection>)/gu, '')
+  body.replace(elementPattern('pane', 'gu'), '').replace(elementPattern('selection', 'gu'), '')
 
 /** A whole `<sheetView>` for a part that had none. */
 function viewElement(_: string, change: ViewChange): string {

@@ -4,6 +4,7 @@ import { columnToIndex, indexToColumn, parseRange } from './reference'
 import type { CellRange } from './reference'
 import type { StyleColor } from './styles'
 import { textOf } from './workbook'
+import { elementPattern, selfClosedPattern } from './patterns'
 
 /**
  * Conditional formatting, as the file states it.
@@ -434,7 +435,7 @@ export function writeConditionalFormats(formats: readonly ConditionalFormat[]): 
  * of it would leave the other half in whatever order it was read.
  */
 export function replaceConditionalFormats(xml: string, written: string): string {
-  const pattern = /<conditionalFormatting(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/conditionalFormatting>)/gu
+  const pattern = elementPattern('conditionalFormatting', 'gu')
   const found = [...xml.matchAll(pattern)]
 
   if (found.length > 0) {
@@ -453,8 +454,10 @@ export function replaceConditionalFormats(xml: string, written: string): string 
     )
   if (before !== null) return xml.slice(0, before.index) + written + xml.slice(before.index)
 
-  const after =
-    /<\/mergeCells>|<autoFilter(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/autoFilter>)|<\/sheetData>|<sheetData(?:\s[^>]*)?\/>/gu
+  const after = new RegExp(
+    `</mergeCells>|${elementPattern('autoFilter').source}|</sheetData>|${selfClosedPattern('sheetData').source}`,
+    'gu',
+  )
   let last: RegExpExecArray | null = null
   for (const match of xml.matchAll(after)) last = match
   if (last === null) return xml

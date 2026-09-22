@@ -4,6 +4,7 @@ import { attribute, children, parseXml, tagName } from '@orangery/ooxml-core'
 import { formatReference, parseRange } from './reference'
 import { withoutCells } from './sheet-data'
 import type { CellRange } from './reference'
+import { elementPattern, selfClosedPattern } from './patterns'
 
 /**
  * `<hyperlinks>` — the cells that are also a way somewhere else.
@@ -193,7 +194,7 @@ function idFor(link: Hyperlink, relationships: Map<string, Relationship>): strin
  * repair.
  */
 export function replaceHyperlinks(xml: string, written: string): string {
-  const existing = /<hyperlinks(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/hyperlinks>)/u.exec(xml)
+  const existing = elementPattern('hyperlinks').exec(xml)
 
   if (existing !== null) {
     return xml.slice(0, existing.index) + written + xml.slice(existing.index + existing[0].length)
@@ -209,8 +210,17 @@ export function replaceHyperlinks(xml: string, written: string): string {
     )
   if (before !== null) return xml.slice(0, before.index) + written + xml.slice(before.index)
 
-  const after =
-    /<\/conditionalFormatting>|<dataValidations(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/dataValidations>)|<\/mergeCells>|<autoFilter(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/autoFilter>)|<\/sheetData>|<sheetData(?:\s[^>]*)?\/>/gu
+  const after = new RegExp(
+    [
+      '</conditionalFormatting>',
+      elementPattern('dataValidations').source,
+      '</mergeCells>',
+      elementPattern('autoFilter').source,
+      '</sheetData>',
+      selfClosedPattern('sheetData').source,
+    ].join('|'),
+    'gu',
+  )
 
   let last: RegExpExecArray | null = null
   for (const match of xml.matchAll(after)) last = match

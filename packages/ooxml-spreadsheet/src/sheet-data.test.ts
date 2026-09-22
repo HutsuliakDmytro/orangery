@@ -240,3 +240,76 @@ describe('a sheet the size of a real one', () => {
     expect(written.length).toBeGreaterThan(1_000_000)
   })
 })
+
+/**
+ * The cell that carries a style and nothing else.
+ *
+ * `<c r="A1" s="1"/>` is in nearly every sheet anybody has — a column that was
+ * formatted before it was filled in — and for as long as the scanner's pattern
+ * let a greedy `[^>]*` eat the closing slash, every cell after one of them was
+ * swallowed and its value handed to the empty cell that swallowed it. A string
+ * came back as a number, in a different column, on screen as well as on save.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/2
+ */
+describe('a cell that closes itself', () => {
+  const ROW =
+    '<worksheet><sheetData><row r="1" spans="1:4">' +
+    '<c r="A1" s="1"/><c r="B1" s="2"/><c r="C1" s="3" t="s"><v>0</v></c><c r="D1" s="4"><v>42</v></c>' +
+    '</row></sheetData></worksheet>'
+
+  it('leaves the cells after it where they were', () => {
+    const sheet = readSheetData(ROW)
+
+    expect(rowsWithCells(sheet)).toEqual([0])
+    expect(cellsOfRow(sheet, 0).map((cell) => cell.column)).toEqual([0, 1, 2, 3])
+  })
+
+  it('keeps its own style and stays empty', () => {
+    const cell = at(readSheetData(ROW), 'A1')
+
+    expect(cell?.style).toBe(1)
+    expect(cell?.value).toBeNull()
+  })
+
+  it('does not take the value of the next cell, or lose its type', () => {
+    const sheet = readSheetData(ROW)
+
+    expect(at(sheet, 'C1')?.type).toBe('s')
+    expect(at(sheet, 'C1')?.value).toBe('0')
+    expect(at(sheet, 'D1')?.value).toBe('42')
+  })
+
+  it('writes back what it read', () => {
+    const sheet = readSheetData(ROW)
+    const written = writeSheetData(sheet)
+
+    expect(written).toContain('<c r="A1" s="1"/>')
+    expect(written).toContain('<c r="C1" s="3" t="s"><v>0</v></c>')
+    expect(written).toContain('<c r="D1" s="4"><v>42</v></c>')
+  })
+
+  it('does the same for a row that exists only for its height', () => {
+    const sheet = readSheetData(
+      '<worksheet><sheetData>' +
+        '<row r="1" ht="30" customHeight="1"/><row r="2"><c r="A2"><v>1</v></c></row>' +
+        '</sheetData></worksheet>',
+    )
+
+    expect(rowsWithCells(sheet)).toEqual([1])
+    expect(sheet.properties.get(0)?.height).toBe(30)
+    expect(at(sheet, 'A2')?.value).toBe('1')
+  })
+
+  it('does the same for a shared formula stated without a body', () => {
+    const sheet = readSheetData(
+      '<worksheet><sheetData><row r="1">' +
+        '<c r="A1"><f t="shared" ref="A1:A2" si="0">B1*2</f><v>2</v></c></row>' +
+        '<row r="2"><c r="A2"><f t="shared" si="0"/><v>4</v></c></row>' +
+        '</sheetData></worksheet>',
+    )
+
+    expect(at(sheet, 'A2')?.formula?.kind).toBe('shared')
+    expect(at(sheet, 'A2')?.value).toBe('4')
+  })
+})

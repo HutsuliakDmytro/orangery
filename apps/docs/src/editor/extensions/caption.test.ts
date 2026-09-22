@@ -27,7 +27,6 @@ const write = () =>
   serializeDocument(editor.getJSON() as ProseMirrorNodeJson, {
     documentAttributes: {},
     sectionProperties: null,
-    alwaysPreserveSpace: false,
     captionsByChapter: useViewStore.getState().headingNumbering !== null,
   })
 

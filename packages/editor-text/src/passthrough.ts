@@ -107,6 +107,20 @@ export const PreservedRunProperties = Mark.create({
       /** The original `w:rPr`, written back when nothing modelled changed. */
       rPrOriginal: { default: null },
       rPrSignature: { default: null },
+      /**
+       * Whether the run's text declared `xml:space="preserve"`.
+       *
+       * A writer preference rather than a rule: Word writes it where the space
+       * would otherwise be dropped, Google Docs writes it on every run, and
+       * LibreOffice on some runs and not others. It used to be one flag for the
+       * whole document — "every run had it" — which meant a document with the
+       * mixed convention lost the attribute from the runs that did not need it,
+       * and a conforming reader is then free to drop a space somebody typed.
+       *
+       * Null for text that did not come from a file, where the serialiser's own
+       * rule applies: write it when the text would lose something without it.
+       */
+      preserveSpace: { default: null },
     }
   },
 

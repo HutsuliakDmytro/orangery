@@ -19,7 +19,6 @@ const write = (xml: string) =>
   serializeDocument(parseDocument(xml).doc, {
     documentAttributes: {},
     sectionProperties: null,
-    alwaysPreserveSpace: false,
   })
 
 describe('reading a section break', () => {

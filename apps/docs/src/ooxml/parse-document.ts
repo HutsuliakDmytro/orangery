@@ -60,15 +60,6 @@ export interface ParsedDocument {
    * thing to write back.
    */
   documentPrelude: string | null
-  /**
-   * Whether the source put `xml:space="preserve"` on every `w:t`.
-   *
-   * There is no rule to infer here — it is a writer preference. Word adds it
-   * when whitespace would otherwise be collapsed; Google Docs adds it to every
-   * run. Matching the document's own convention is what keeps a file it wrote
-   * byte-identical after a save.
-   */
-  alwaysPreserveSpace: boolean
 }
 
 export type { ProseMirrorMarkJson, ProseMirrorNodeJson } from './prosemirror-json'
@@ -409,10 +400,20 @@ function parseRun(
   // in the same runs it came from. Word splits runs for reasons of its own —
   // revision tracking, spell-check state — and merging two runs that happen to
   // share properties would rewrite structure nobody asked us to touch.
+  // Whether this run's own text asked for its spaces to be kept. A writer
+  // preference, and one that differs between runs of the same document, so it
+  // belongs to the run rather than to the file.
+  const preserveSpace = children(run).some(
+    (child) =>
+      (tagName(child) === 'w:t' || tagName(child) === 'w:delText') &&
+      attribute(child, 'xml:space') === 'preserve',
+  )
+
   allMarks.push({
     type: 'preservedRunProperties',
     attrs: {
       runKey: nextRunKey(),
+      ...(preserveSpace ? { preserveSpace: true } : {}),
       ...(preserved.length > 0 ? { xml: preserved.join('') } : {}),
       ...(original === null ? {} : { rPrOriginal: original, rPrSignature: runSignature(marks) }),
     },
@@ -820,7 +821,6 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
       sectionProperties: null,
       documentAttributes: {},
       documentPrelude: null,
-      alwaysPreserveSpace: false,
     }
   }
 
@@ -882,33 +882,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
     sectionProperties,
     documentAttributes: attributesOf(document),
     documentPrelude: prelude === '' ? null : prelude,
-    alwaysPreserveSpace: detectSpaceConvention(xml),
   }
-}
-
-/**
- * True when every `w:t` in the source declared `xml:space="preserve"`.
- *
- * Counted rather than sampled: a document that uses it on most runs but not all
- * has no convention to follow, and our own rule — add it only where whitespace
- * would be lost — is the safe fallback.
- *
- * That fallback is also the one case this seam does not cover: a file that
- * declared `xml:space` on some runs and not others loses it from the runs that
- * did not need it, and putting it back needs the attribute to be carried per
- * run rather than per document. Fourteen files in the full corpus, and a
- * question about the run model rather than about the serialiser.
- */
-export function detectSpaceConvention(xml: string): boolean {
-  let total = 0
-  let withSpace = 0
-
-  for (const match of xml.matchAll(/<w:t(\s[^>]*)?>/gu)) {
-    total += 1
-    if (match[1]?.includes('xml:space') === true) withSpace += 1
-  }
-
-  return total > 0 && withSpace === total
 }
 
 /**

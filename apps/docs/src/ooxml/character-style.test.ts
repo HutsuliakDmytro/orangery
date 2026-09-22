@@ -16,7 +16,6 @@ const write = (xml: string) =>
   serializeDocument(parseDocument(xml).doc, {
     documentAttributes: {},
     sectionProperties: null,
-    alwaysPreserveSpace: false,
   })
 
 const marksOf = (xml: string) =>
@@ -56,7 +55,6 @@ describe('writing it back', () => {
     const xml = serializeDocument(parsed.doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     expect(xml.indexOf('w:rStyle')).toBeLessThan(xml.indexOf('<w:b/>'))

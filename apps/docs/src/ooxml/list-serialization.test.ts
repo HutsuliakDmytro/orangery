@@ -200,7 +200,6 @@ describe('reading a list back out of a document', () => {
     const xml = serializeDocument(doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
       // An allocator is offered and must go unused: the paragraphs already say
       // which definition they belong to.
       allocateNumbering: () => 99,

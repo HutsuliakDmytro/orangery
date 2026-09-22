@@ -117,7 +117,6 @@ describe('tab stops through a document', () => {
     const xml = serializeDocument(parseDocument(source).doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     expect(xml).toContain('<w:tab w:val="right" w:leader="dot" w:pos="9360"/>')
@@ -131,7 +130,6 @@ describe('tab stops through a document', () => {
     const xml = serializeDocument(parsed.doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     expect(xml).toContain('<w:tab w:val="right" w:leader="dot" w:pos="4320"/>')
@@ -150,7 +148,6 @@ describe('tab stops through a document', () => {
     const xml = serializeDocument(parsed.doc, {
       documentAttributes: {},
       sectionProperties: null,
-      alwaysPreserveSpace: false,
     })
 
     const order = ['w:numPr', 'w:tabs', 'w:spacing'].map((tag) => xml.indexOf(tag))

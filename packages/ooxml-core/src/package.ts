@@ -20,6 +20,18 @@ export const CONTENT_TYPES_PART = '[Content_Types].xml'
 /** Parts whose bytes are text; everything else (media) stays binary. */
 const TEXT_PART = /\.(xml|rels)$/i
 
+/**
+ * The relationship that names a package's main part.
+ *
+ * `word/document.xml` is a convention, not a rule: what makes a part the
+ * document is `_rels/.rels` pointing its `officeDocument` relationship at it.
+ * Only used to explain a package we could not open — see `readPackage`.
+ */
+const OFFICE_DOCUMENT = /Target="([^"]+)"[^>]*officeDocument"|officeDocument"[^>]*Target="([^"]+)"/u
+
+/** What an OpenDocument file says it is, in the entry it keeps first and stored. */
+const OPEN_DOCUMENT = /^application\/vnd\.oasis\.opendocument\.(\w+)/u
+
 export interface OoxmlPart {
   /** Path inside the zip, e.g. `word/styles.xml`. */
   path: string
@@ -56,7 +68,20 @@ export async function readPackage(
   data: ArrayBuffer | Uint8Array,
   requiredPart?: string,
 ): Promise<OoxmlPackage> {
-  const zip = await JSZip.loadAsync(data)
+  let zip: JSZip
+  try {
+    zip = await JSZip.loadAsync(data)
+  } catch (error) {
+    // JSZip says things like "Bug : uncompressed data size mismatch", which is
+    // an accurate description of a file somebody fuzzed and no use at all to
+    // the person who double-clicked it.
+    throw new OoxmlFormatError(
+      `this file is not a readable zip, so it is not an Office package: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+  }
+
   const parts = new Map<string, OoxmlPart>()
 
   // `zip.files` preserves the order entries appeared in the archive.
@@ -64,18 +89,76 @@ export async function readPackage(
     const entry = zip.files[path]
     if (!entry || entry.dir) continue
 
-    const bytes = await entry.async('uint8array')
-    const part: OoxmlPart = { path, bytes, date: entry.date }
-    if (isTextPart(path)) part.text = new TextDecoder().decode(bytes)
+    const name = packagePath(path)
+    let bytes: Uint8Array
+    try {
+      bytes = await entry.async('uint8array')
+    } catch (error) {
+      // A zip whose directory reads and whose entries do not: the archive is
+      // damaged, and which part it stopped on is the useful half of that.
+      throw new OoxmlFormatError(
+        `this package is damaged: ${name} could not be read out of it (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      )
+    }
 
-    parts.set(path, part)
+    const part: OoxmlPart = { path: name, bytes, date: entry.date }
+    if (isTextPart(name)) part.text = new TextDecoder().decode(bytes)
+
+    parts.set(name, part)
   }
 
   if (requiredPart !== undefined && !parts.has(requiredPart)) {
-    throw new OoxmlFormatError(`not the expected package: ${requiredPart} is missing`)
+    throw new OoxmlFormatError(whyNotAPackage(parts, requiredPart))
   }
 
   return { parts }
+}
+
+/**
+ * A zip entry name as a part name.
+ *
+ * The zip specification says `/`, and some writers — old Java ones especially,
+ * and whatever produced LibreOffice's `tdf76115.xlsx` — use the separator the
+ * platform they ran on prefers. Excel and Word read those files, so the
+ * separator is a fact about the archive rather than about the package, and it
+ * is normalised here where the archive stops.
+ */
+function packagePath(entry: string): string {
+  return entry.includes('\\') ? entry.replace(/\\/gu, '/') : entry
+}
+
+/**
+ * Why the package is not the one that was asked for.
+ *
+ * "word/document.xml is missing" is true and unhelpful: the interesting cases
+ * are a file that is not a `.docx` at all, and a `.docx` whose main part is
+ * called something else — which is legal, and which we do not read yet. Saying
+ * which one it is costs a lookup and saves somebody an afternoon.
+ */
+function whyNotAPackage(parts: ReadonlyMap<string, OoxmlPart>, requiredPart: string): string {
+  const declared = new TextDecoder().decode(parts.get('mimetype')?.bytes ?? new Uint8Array())
+  const openDocument = OPEN_DOCUMENT.exec(declared.trim())
+  if (openDocument !== null) {
+    const kind =
+      {
+        text: 'text (.odt)',
+        spreadsheet: 'spreadsheet (.ods)',
+        presentation: 'presentation (.odp)',
+      }[openDocument[1] ?? ''] ?? openDocument[1]
+    return `this is an OpenDocument ${String(kind)} rather than an Office package, whatever it has been named`
+  }
+
+  const relationships = parts.get('_rels/.rels')?.text ?? ''
+  const found = OFFICE_DOCUMENT.exec(relationships)
+  const target = (found?.[1] ?? found?.[2])?.replace(/^\//u, '')
+
+  if (target !== undefined && target !== requiredPart && parts.has(target)) {
+    return `this package keeps its main part at ${target} rather than ${requiredPart}; a name other than the conventional one is legal and is not read yet`
+  }
+
+  return `not the expected package: ${requiredPart} is missing`
 }
 
 export function getPartText(pkg: OoxmlPackage, path: string): string | undefined {

@@ -2,6 +2,7 @@
 // supported one and produces byte-identical output for our option set.
 import XmlBuilder from 'fast-xml-builder'
 import { XMLParser } from 'fast-xml-parser'
+import { OoxmlFormatError } from './package'
 
 /**
  * XML parsing tuned for round-trip fidelity.
@@ -70,7 +71,19 @@ const builder = new XmlBuilder(builderOptions)
 export type XmlNode = Record<string, unknown>
 
 export function parseXml(xml: string): XmlNode[] {
-  return parser.parse(xml) as XmlNode[]
+  try {
+    return parser.parse(xml) as XmlNode[]
+  } catch (error) {
+    // The parser's own refusals — a document nested five hundred deep, an
+    // external entity pointing at `/etc/passwd` — are it defending itself
+    // against a file built to break readers. Both are the right answer and
+    // neither is a sentence anybody can act on, so they are given one.
+    throw new OoxmlFormatError(
+      `this part's XML cannot be read, and is probably not meant to be: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+  }
 }
 
 export function buildXml(nodes: XmlNode[]): string {

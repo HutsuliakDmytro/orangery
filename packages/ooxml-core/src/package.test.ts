@@ -168,3 +168,76 @@ describe('storing a part uncompressed', () => {
     expect(stored.parts.get('mimetype')?.bytes).toEqual(deflated.parts.get('mimetype')?.bytes)
   })
 })
+
+/**
+ * Packages Word and Excel open, and the ones they do not.
+ *
+ * Every case here is a file out of the corpus that took the reader down or was
+ * refused with a sentence nobody could act on. The rule the fixes share: a
+ * package either opens or says something true about why it did not.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/9
+ */
+describe('a package written by something unusual', () => {
+  it('reads entries whose names use the separator Windows prefers', async () => {
+    // LibreOffice's tdf76115.xlsx and POI's 49609.xlsx are both like this, and
+    // Excel opens both.
+    const zip = new JSZip()
+    zip.file(CONTENT_TYPES_PART, '<Types/>')
+    zip.file('xl\\workbook.xml', '<workbook/>')
+    zip.file('xl\\worksheets\\sheet1.xml', '<worksheet/>')
+
+    const pkg = await readPackage(
+      await zip.generateAsync({ type: 'uint8array' }),
+      'xl/workbook.xml',
+    )
+
+    expect([...pkg.parts.keys()]).toEqual([
+      CONTENT_TYPES_PART,
+      'xl/workbook.xml',
+      'xl/worksheets/sheet1.xml',
+    ])
+    expect(getPartText(pkg, 'xl/worksheets/sheet1.xml')).toBe('<worksheet/>')
+  })
+
+  it('says so when the main part is somewhere else', async () => {
+    const data = await build([
+      [CONTENT_TYPES_PART, '<Types/>'],
+      [
+        '_rels/.rels',
+        '<Relationships><Relationship Id="rId1" Target="word/trial.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/></Relationships>',
+      ],
+      ['word/trial.xml', '<w:document/>'],
+    ])
+
+    await expect(readPackage(data, 'word/document.xml')).rejects.toThrow(
+      /main part at word\/trial\.xml/u,
+    )
+  })
+
+  it('names the format when the file is an OpenDocument one', async () => {
+    const data = await build([
+      ['mimetype', 'application/vnd.oasis.opendocument.text'],
+      ['content.xml', '<office:document-content/>'],
+    ])
+
+    await expect(readPackage(data, 'word/document.xml')).rejects.toThrow(
+      /OpenDocument text \(\.odt\)/u,
+    )
+  })
+
+  it('still says what is missing when nothing explains it', async () => {
+    const data = await build([[CONTENT_TYPES_PART, '<Types/>']])
+
+    await expect(readPackage(data, 'word/document.xml')).rejects.toThrow(
+      /word\/document\.xml is missing/u,
+    )
+  })
+
+  it('answers a file that is not a zip with a sentence, not a zip library error', async () => {
+    const promise = readPackage(new TextEncoder().encode('this is not a zip at all'))
+
+    await expect(promise).rejects.toBeInstanceOf(OoxmlFormatError)
+    await expect(promise).rejects.toThrow(/not a readable zip/u)
+  })
+})

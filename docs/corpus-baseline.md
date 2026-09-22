@@ -41,11 +41,19 @@ forgives, and 48 have at least one difference nothing explains.
 | xlsx    |       658 |       217 |       419 |     22 |       0 |     0 |
 | **all** | **2,669** | **1,429** | **1,178** | **62** |   **0** | **0** |
 
-Of the 62 `crash`, 56 are the `hostile/` pile — encrypted packages, POI's
+Of the 59 `crash`, 54 are the `hostile/` pile — encrypted packages, POI's
 fuzzer fixtures, LibreOffice's CVE samples — and failing to open them is the
-right answer. All 75 hostile files are answered with a sentence naming what is
-wrong, the slowest in 156 ms, and none takes the process down. The other six are
-[#9](../../issues/9): files Word and Excel open and we do not.
+right answer. Every one of the 59, hostile or not, is now an `OoxmlFormatError`
+with a sentence naming what is wrong: a file that is not a zip, a package whose
+entry will not inflate, an OpenDocument file wearing a `.docx` name, XML built
+to exhaust a reader. None takes the process down and the slowest answers in
+4 ms.
+
+The five that are not hostile are refusals rather than faults, with one
+exception: `tdf104713_undefinedStyles.docx` keeps its main part at
+`word/trial.xml`, which is legal and which Word opens. Reading it needs the
+main part's name to stop being a constant, which is a change to more than the
+reader — see [#9](../../issues/9).
 
 No file anywhere took thirty seconds, and no file exhausted a gigabyte of heap.
 Slides round-trips every deck in both corpora without a single structural

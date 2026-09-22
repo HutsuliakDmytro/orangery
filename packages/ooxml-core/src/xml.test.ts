@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { OoxmlFormatError } from './package'
 import {
   attribute,
   attributes,
@@ -183,5 +184,37 @@ describe('findDescendant', () => {
 
   it('returns undefined when nothing matches', () => {
     expect(tree === undefined ? undefined : findDescendant(tree, 'a:srcRect')).toBeUndefined()
+  })
+})
+
+/**
+ * What the parser refuses, said in words.
+ *
+ * `deep-table-cell.docx` and `ExternalEntityInText.docx` are in Apache POI's
+ * test data because they are attacks: one is nested until a recursive reader
+ * runs out of stack, the other points an entity at a file on the machine. The
+ * parser is right to refuse both — and "Maximum nested tags exceeded" reaching
+ * a person who double-clicked a document is not an answer.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/9
+ */
+describe('XML that cannot be read', () => {
+  it('refuses an external entity as a format error', () => {
+    const xml =
+      '<?xml version="1.0"?><!DOCTYPE p [<!ENTITY x SYSTEM "file:///etc/passwd">]><p>&x;</p>'
+
+    expect(() => parseXml(xml)).toThrow(OoxmlFormatError)
+    expect(() => parseXml(xml)).toThrow(/probably not meant to be/u)
+  })
+
+  it('keeps what the parser said inside the sentence it gives', () => {
+    try {
+      parseXml(
+        '<?xml version="1.0"?><!DOCTYPE p [<!ENTITY x SYSTEM "http://example.invalid">]><p>&x;</p>',
+      )
+      expect.unreachable('the parser takes external entities')
+    } catch (error) {
+      expect((error as Error).message).toContain('External entities are not supported')
+    }
   })
 })

@@ -9,6 +9,7 @@ import {
   tagName,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
+import { workbookPart } from './parts'
 
 /**
  * A workbook, read far enough to find the cells.
@@ -74,10 +75,8 @@ export interface Workbook {
   manualCalculation: boolean
 }
 
-const WORKBOOK_PART = 'xl/workbook.xml'
-
 export function readWorkbook(pkg: OoxmlPackage): Workbook | null {
-  const root = parseXml(getPartText(pkg, WORKBOOK_PART) ?? '').find(
+  const root = parseXml(getPartText(pkg, workbookPart(pkg)) ?? '').find(
     (node) => tagName(node) === 'workbook',
   )
   if (root === undefined) return null

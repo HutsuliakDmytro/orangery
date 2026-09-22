@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { FOOTNOTES_PART, parseFootnotes, separatorFootnotes } from '../ooxml/footnotes'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
 import { collectFootnotes, writeFootnotes } from './footnotes-session'
-import { DOCUMENT_RELS_PART } from './media'
+import { CONVENTIONAL_DOCUMENT_RELS_PART } from './media'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
@@ -93,7 +93,9 @@ describe('writeFootnotes', () => {
     expect(pkg.parts.has(FOOTNOTES_PART)).toBe(true)
     expect(getPartText(pkg, CONTENT_TYPES_PART)).toContain('/word/footnotes.xml')
 
-    const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+    const relationships = parseRelationships(
+      getPartText(pkg, CONVENTIONAL_DOCUMENT_RELS_PART) ?? '',
+    )
     expect([...relationships.values()].some((entry) => entry.target === 'footnotes.xml')).toBe(true)
   })
 
@@ -154,7 +156,9 @@ describe('writeFootnotes', () => {
     writeFootnotes(pkg, new Map(), docWith([{ id: 1, text: 'x' }]))
     writeFootnotes(pkg, new Map(), docWith([{ id: 1, text: 'x' }]))
 
-    const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+    const relationships = parseRelationships(
+      getPartText(pkg, CONVENTIONAL_DOCUMENT_RELS_PART) ?? '',
+    )
     const pointing = [...relationships.values()].filter((entry) => entry.target === 'footnotes.xml')
     expect(pointing).toHaveLength(1)
   })

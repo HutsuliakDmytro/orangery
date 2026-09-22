@@ -8,6 +8,12 @@
  */
 
 export {
+  CONVENTIONAL_WORKBOOK_PART,
+  WORKBOOK_CONTENT_TYPES,
+  workbookPart,
+  workbookRelsPart,
+} from './parts'
+export {
   cellsOfRange,
   columnToIndex,
   extendedRange,

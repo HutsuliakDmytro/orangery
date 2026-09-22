@@ -25,7 +25,7 @@ import {
 } from '../ooxml/footnotes'
 import type { Footnote } from '../ooxml/footnotes'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
-import { DOCUMENT_RELS_PART } from './media'
+import { documentRelsPart } from '../ooxml/parts'
 
 /**
  * Writing the document's footnotes back into the package.
@@ -80,11 +80,11 @@ function ensureOverride(pkg: OoxmlPackage): void {
 }
 
 function ensureRelationship(pkg: OoxmlPackage): void {
-  const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, documentRelsPart(pkg)) ?? '')
   if (findByTarget(relationships, 'footnotes.xml')) return
 
   addRelationship(relationships, FOOTNOTES_RELATIONSHIP, 'footnotes.xml')
-  writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
+  writeRelationships(pkg, documentRelsPart(pkg), relationships)
 }
 
 /**

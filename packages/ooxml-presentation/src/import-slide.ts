@@ -34,8 +34,8 @@ import {
   NOTES_MASTER_RELATIONSHIP,
   NOTES_SLIDE_RELATIONSHIP,
   PRESENTATION_ORDER,
-  PRESENTATION_PART,
-  PRESENTATION_RELS_PART,
+  presentationPart,
+  presentationRelsPart,
   SLIDE_LAYOUT_RELATIONSHIP,
   SLIDE_MASTER_RELATIONSHIP,
   SLIDE_RELATIONSHIP,
@@ -321,13 +321,19 @@ function adoptNotesMaster(context: Copying, sourcePath: string): string | null {
   const found = presentationRoot(context.into)
   if (found === null) return target
 
-  const relationships = parseRelationships(getPartText(context.into, PRESENTATION_RELS_PART) ?? '')
+  const relationships = parseRelationships(
+    getPartText(context.into, presentationRelsPart(context.into)) ?? '',
+  )
   const relationship = addRelationship(
     relationships,
     NOTES_MASTER_RELATIONSHIP,
-    relativeTo(PRESENTATION_PART, target),
+    relativeTo(presentationPart(context.into), target),
   )
-  setPartText(context.into, PRESENTATION_RELS_PART, serializeRelationships(relationships))
+  setPartText(
+    context.into,
+    presentationRelsPart(context.into),
+    serializeRelationships(relationships),
+  )
 
   const list = element('p:notesMasterIdLst', {}, [
     element('p:notesMasterId', { 'r:id': relationship.id }),
@@ -432,9 +438,9 @@ export function importSlide(
   })
   blankReferences(into, path, dropped)
 
-  const relationships = parseRelationships(getPartText(into, PRESENTATION_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(into, presentationRelsPart(into)) ?? '')
   const relationship = addRelationship(relationships, SLIDE_RELATIONSHIP, `slides/${name}`)
-  setPartText(into, PRESENTATION_RELS_PART, serializeRelationships(relationships))
+  setPartText(into, presentationRelsPart(into), serializeRelationships(relationships))
 
   const entries = children(list)
   const index = Math.min(Math.max(at, 0), entries.length)

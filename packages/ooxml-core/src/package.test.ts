@@ -6,6 +6,7 @@ import {
   isTextPart,
   OoxmlFormatError,
   readPackage,
+  relsPartFor,
   setPartText,
   writePackage,
 } from './package'
@@ -239,5 +240,113 @@ describe('a package written by something unusual', () => {
 
     await expect(promise).rejects.toBeInstanceOf(OoxmlFormatError)
     await expect(promise).rejects.toThrow(/not a readable zip/u)
+  })
+})
+
+/**
+ * The main part, found the way the format says to find it.
+ *
+ * `word/document.xml` is a convention. What makes a part the main one is
+ * `_rels/.rels` pointing its `officeDocument` relationship at it, and
+ * LibreOffice's `tdf104713_undefinedStyles.docx` — which Word opens — calls it
+ * `word/trial.xml`.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/9
+ */
+describe('which part a package is about', () => {
+  const WORD_MAIN = [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
+  ]
+
+  const rels = (target: string) =>
+    `<Relationships><Relationship Id="rId1" Target="${target}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/></Relationships>`
+
+  const types = (part: string, contentType = WORD_MAIN[0] ?? '') =>
+    `<Types><Override PartName="${part}" ContentType="${contentType}"/></Types>`
+
+  it('follows the relationship rather than the convention', async () => {
+    const data = await build([
+      [CONTENT_TYPES_PART, types('/word/trial.xml')],
+      ['_rels/.rels', rels('word/trial.xml')],
+      ['word/trial.xml', '<w:document/>'],
+    ])
+
+    const pkg = await readPackage(data, {
+      conventional: 'word/document.xml',
+      contentType: WORD_MAIN,
+    })
+
+    expect(pkg.main).toBe('word/trial.xml')
+  })
+
+  it('takes an absolute target the same way', async () => {
+    const data = await build([
+      [CONTENT_TYPES_PART, types('/word/trial.xml')],
+      ['_rels/.rels', rels('/word/trial.xml')],
+      ['word/trial.xml', '<w:document/>'],
+    ])
+
+    expect((await readPackage(data)).main).toBe('word/trial.xml')
+  })
+
+  it('falls back to the conventional name when nothing names a main part', async () => {
+    const data = await build([
+      [CONTENT_TYPES_PART, types('/word/document.xml')],
+      ['word/document.xml', '<w:document/>'],
+    ])
+
+    const pkg = await readPackage(data, {
+      conventional: 'word/document.xml',
+      contentType: WORD_MAIN,
+    })
+
+    expect(pkg.main).toBe('word/document.xml')
+  })
+
+  it('refuses a package whose main part is another format', async () => {
+    const data = await build([
+      [
+        CONTENT_TYPES_PART,
+        types(
+          '/ppt/presentation.xml',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml',
+        ),
+      ],
+      ['_rels/.rels', rels('ppt/presentation.xml')],
+      ['ppt/presentation.xml', '<p:presentation/>'],
+    ])
+
+    await expect(
+      readPackage(data, { conventional: 'word/document.xml', contentType: WORD_MAIN }),
+    ).rejects.toThrow(/which calls itself .*presentationml.*word\/document\.xml/u)
+  })
+
+  it('takes a package whose content types say nothing about the main part', async () => {
+    // Unusual, and not grounds for refusing a file whose relationship already
+    // said what it is.
+    const data = await build([
+      [CONTENT_TYPES_PART, '<Types/>'],
+      ['_rels/.rels', rels('word/trial.xml')],
+      ['word/trial.xml', '<w:document/>'],
+    ])
+
+    const pkg = await readPackage(data, {
+      conventional: 'word/document.xml',
+      contentType: WORD_MAIN,
+    })
+
+    expect(pkg.main).toBe('word/trial.xml')
+  })
+})
+
+describe('relsPartFor', () => {
+  it('puts the rels beside the part it belongs to', () => {
+    expect(relsPartFor('word/trial.xml')).toBe('word/_rels/trial.xml.rels')
+    expect(relsPartFor('xl/workbook.xml')).toBe('xl/_rels/workbook.xml.rels')
+    expect(relsPartFor('ppt/slides/slide1.xml')).toBe('ppt/slides/_rels/slide1.xml.rels')
+  })
+
+  it('takes a part at the root of the package', () => {
+    expect(relsPartFor('document.xml')).toBe('_rels/document.xml.rels')
   })
 })

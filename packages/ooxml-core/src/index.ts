@@ -10,12 +10,14 @@ export {
   CONTENT_TYPES_PART,
   getPartText,
   isTextPart,
+  mainPartOf,
   OoxmlFormatError,
   readPackage,
+  relsPartFor,
   setPartText,
   writePackage,
 } from './package'
-export type { OoxmlPackage, OoxmlPart } from './package'
+export type { OoxmlPackage, OoxmlPart, PackageExpectation } from './package'
 
 export {
   addRelationship,

@@ -13,14 +13,15 @@ import { writeFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getPartText, setPartText, writePackage } from '@orangery/ooxml-core'
 import { main } from '@orangery/render-diff'
-import { DOCUMENT_PART, readDocxPackage } from '../src/ooxml/parts'
+import { documentPart, readDocxPackage } from '../src/ooxml/parts'
 import { parseDocument } from '../src/ooxml/parse-document'
 import { serializeParsed } from '../src/ooxml/serialize-document'
 
 async function roundTrip(inputPath: string, outputPath: string): Promise<void> {
   const pkg = await readDocxPackage(await readFile(inputPath))
-  const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
-  setPartText(pkg, DOCUMENT_PART, serializeParsed(parsed))
+  const part = documentPart(pkg)
+  const text = getPartText(pkg, part) ?? ''
+  setPartText(pkg, part, serializeParsed(parseDocument(text), text))
   await writeFile(outputPath, await writePackage(pkg))
 }
 

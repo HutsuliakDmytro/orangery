@@ -23,7 +23,7 @@ import {
 } from '../ooxml/comments'
 import type { Comment } from '../ooxml/comments'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
-import { DOCUMENT_RELS_PART } from './media'
+import { documentRelsPart } from '../ooxml/parts'
 
 /**
  * The document's comments, in the package.
@@ -61,11 +61,11 @@ function ensureOverride(pkg: OoxmlPackage): void {
 }
 
 function ensureRelationship(pkg: OoxmlPackage): void {
-  const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, documentRelsPart(pkg)) ?? '')
   if (findByTarget(relationships, 'comments.xml')) return
 
   addRelationship(relationships, COMMENTS_RELATIONSHIP, 'comments.xml')
-  writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
+  writeRelationships(pkg, documentRelsPart(pkg), relationships)
 }
 
 /** Every comment id the body still points at. */

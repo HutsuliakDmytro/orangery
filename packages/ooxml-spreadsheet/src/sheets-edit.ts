@@ -7,6 +7,7 @@ import {
   setPartText,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
+import { workbookPart } from './parts'
 
 /**
  * Adding, removing and rearranging the sheets of a workbook.
@@ -24,7 +25,6 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
  * regenerated one would lose them.
  */
 
-const WORKBOOK_PART = 'xl/workbook.xml'
 const WORKBOOK_RELS = 'xl/_rels/workbook.xml.rels'
 const WORKSHEET_RELATIONSHIP =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'
@@ -103,7 +103,7 @@ export function addSheet(
   name: string,
   options: { at?: number; copyOf?: string } = {},
 ): { path: string; name: string; at: number } | null {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return null
 
   const entries = entriesOf(xml)
@@ -133,7 +133,7 @@ export function addSheet(
   const list = entries.map((entry) => entry.text)
   list.splice(at, 0, written)
 
-  setPartText(pkg, WORKBOOK_PART, withEntries(xml, list))
+  setPartText(pkg, workbookPart(pkg), withEntries(xml, list))
 
   // A copy carries the other sheet's bytes, which is what makes a duplicate a
   // duplicate: its formats, its widths, its conditional rules, all of it.
@@ -191,7 +191,7 @@ const unescaped = (text: string): string =>
  * opening.
  */
 export function removeSheet(pkg: OoxmlPackage, at: number): boolean {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return false
 
   const entries = entriesOf(xml)
@@ -208,7 +208,7 @@ export function removeSheet(pkg: OoxmlPackage, at: number): boolean {
 
   setPartText(
     pkg,
-    WORKBOOK_PART,
+    workbookPart(pkg),
     withEntries(
       xml,
       entries.filter((_, index) => index !== at).map((entry) => entry.text),
@@ -220,7 +220,7 @@ export function removeSheet(pkg: OoxmlPackage, at: number): boolean {
 
 /** A sheet renamed, leaving everything else about it as it was. */
 export function renameSheet(pkg: OoxmlPackage, at: number, name: string): string | null {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return null
 
   const entries = entriesOf(xml)
@@ -238,7 +238,7 @@ export function renameSheet(pkg: OoxmlPackage, at: number, name: string): string
 
   setPartText(
     pkg,
-    WORKBOOK_PART,
+    workbookPart(pkg),
     withEntries(
       xml,
       entries.map((one, index) => (index === at ? written : one.text)),
@@ -250,7 +250,7 @@ export function renameSheet(pkg: OoxmlPackage, at: number, name: string): string
 
 /** A sheet moved to another position among its neighbours. */
 export function moveSheet(pkg: OoxmlPackage, from: number, to: number): boolean {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return false
 
   const entries = entriesOf(xml).map((entry) => entry.text)
@@ -260,7 +260,7 @@ export function moveSheet(pkg: OoxmlPackage, from: number, to: number): boolean 
   entries.splice(from, 1)
   entries.splice(to, 0, moving)
 
-  setPartText(pkg, WORKBOOK_PART, withEntries(xml, entries))
+  setPartText(pkg, workbookPart(pkg), withEntries(xml, entries))
   return true
 }
 
@@ -275,7 +275,7 @@ export function setSheetState(
   at: number,
   state: 'visible' | 'hidden' | 'veryHidden',
 ): boolean {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return false
 
   const entries = entriesOf(xml)
@@ -288,7 +288,7 @@ export function setSheetState(
 
   setPartText(
     pkg,
-    WORKBOOK_PART,
+    workbookPart(pkg),
     withEntries(
       xml,
       entries.map((one, index) => (index === at ? written : one.text)),

@@ -13,7 +13,7 @@ import {
   withDeclaration,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
-import { PRESENTATION_ORDER, PRESENTATION_PART } from './parts'
+import { PRESENTATION_ORDER, presentationPart } from './parts'
 
 /**
  * Sections: the named runs a long deck is divided into.
@@ -44,7 +44,7 @@ export interface Section {
 }
 
 function presentationRoot(pkg: OoxmlPackage): { roots: XmlNode[]; root: XmlNode } | null {
-  const roots = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '')
+  const roots = parseXml(getPartText(pkg, presentationPart(pkg)) ?? '')
   const root = roots.find((node) => tagName(node) === 'p:presentation')
   return root === undefined ? null : { roots, root }
 }
@@ -171,7 +171,7 @@ export function writeSections(pkg: OoxmlPackage, sections: readonly Section[]): 
     if (rest.length === 0) removeChild(found.root, 'p:extLst')
     else children(extensions).splice(0, children(extensions).length, ...rest)
 
-    setPartText(pkg, PRESENTATION_PART, withDeclaration(buildXml(found.roots)))
+    setPartText(pkg, presentationPart(pkg), withDeclaration(buildXml(found.roots)))
     return true
   }
 
@@ -197,7 +197,7 @@ export function writeSections(pkg: OoxmlPackage, sections: readonly Section[]): 
   else siblings[existing] = ext
 
   upsertChild(found.root, extensions, PRESENTATION_ORDER)
-  setPartText(pkg, PRESENTATION_PART, withDeclaration(buildXml(found.roots)))
+  setPartText(pkg, presentationPart(pkg), withDeclaration(buildXml(found.roots)))
   return true
 }
 

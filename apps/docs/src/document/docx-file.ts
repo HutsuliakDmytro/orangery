@@ -14,7 +14,7 @@ import {
   writePackage,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
-import { DOCUMENT_PART, NUMBERING_PART, readDocxPackage } from '../ooxml/parts'
+import { documentRelsPart, documentPart, NUMBERING_PART, readDocxPackage } from '../ooxml/parts'
 import { parseTheme, resolveColor } from '@orangery/ooxml-drawingml'
 import { allSeries, patchedWorkbook, readChart } from '@orangery/charts'
 import type { ChartCategories, ChartValues } from '@orangery/charts'
@@ -25,7 +25,6 @@ import {
   NUMBERING_CONTENT_TYPE,
   NUMBERING_RELATIONSHIP,
 } from '../ooxml/numbering-builder'
-import { DOCUMENT_RELS_PART } from './media'
 import type { NumberingCatalogue } from '../ooxml/numbering'
 import { parseDocument } from '../ooxml/parse-document'
 import type { ParseWarning, ProseMirrorNodeJson } from '../ooxml/parse-document'
@@ -131,7 +130,7 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
   // run of ordinary paragraphs.
   const numbering = parseNumbering(getPartText(pkg, NUMBERING_PART) ?? '')
 
-  const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '', {
+  const parsed = parseDocument(getPartText(pkg, documentPart(pkg)) ?? '', {
     theme,
     resolveImage,
     resolveChart,
@@ -186,7 +185,7 @@ export async function saveDocx(
     documentPrelude: open.documentPrelude,
     // The part as it was read: its declaration and its root come back as they
     // were, and only the body is rebuilt.
-    previous: getPartText(open.pkg, DOCUMENT_PART),
+    previous: getPartText(open.pkg, documentPart(open.pkg)),
     // Page setup may have changed it since the file was opened.
     sectionProperties: serializeSection(options.section ?? open.section),
     allocateNumbering: allocate,
@@ -203,7 +202,7 @@ export async function saveDocx(
     if (createdNumberingPart) declareNumberingPart(open.pkg)
   }
 
-  setPartText(open.pkg, DOCUMENT_PART, xml)
+  setPartText(open.pkg, documentPart(open.pkg), xml)
   // A chart is a part of its own, held in the node that draws it so the undo
   // history owns it; here is where the node's copy becomes the file's.
   await writeCharts(open.pkg, doc)
@@ -299,10 +298,10 @@ function writeNumbering(pkg: OoxmlPackage, added: readonly XmlNode[]): void {
  * so this runs whichever way the part came to exist.
  */
 function declareNumberingPart(pkg: OoxmlPackage): void {
-  const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, documentRelsPart(pkg)) ?? '')
   if (!findByTarget(relationships, 'numbering.xml')) {
     addRelationship(relationships, NUMBERING_RELATIONSHIP, 'numbering.xml')
-    writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
+    writeRelationships(pkg, documentRelsPart(pkg), relationships)
   }
 
   const contentTypes = getPartText(pkg, CONTENT_TYPES_PART)

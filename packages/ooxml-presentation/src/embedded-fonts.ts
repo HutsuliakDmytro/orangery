@@ -9,7 +9,7 @@ import {
   tagName,
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
-import { PRESENTATION_PART, PRESENTATION_RELS_PART } from './parts'
+import { presentationPart, presentationRelsPart } from './parts'
 
 /**
  * The fonts a deck carries with it.
@@ -47,13 +47,13 @@ export interface EmbeddedFont {
 }
 
 export function readEmbeddedFonts(pkg: OoxmlPackage): EmbeddedFont[] {
-  const root = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '').find(
+  const root = parseXml(getPartText(pkg, presentationPart(pkg)) ?? '').find(
     (node) => tagName(node) === 'p:presentation',
   )
   const list = root === undefined ? undefined : findChild(root, 'p:embeddedFontLst')
   if (list === undefined) return []
 
-  const relationships = parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, presentationRelsPart(pkg)) ?? '')
 
   return children(list).flatMap((embedded) => {
     if (tagName(embedded) !== 'p:embeddedFont') return []

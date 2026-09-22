@@ -1,4 +1,4 @@
-import { readPackage } from '@orangery/ooxml-core'
+import { mainPartOf, readPackage, relsPartFor } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 
 /**
@@ -8,15 +8,53 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
  * about `ppt/`; these names are what makes a zip a deck rather than a document.
  */
 
-export const PRESENTATION_PART = 'ppt/presentation.xml'
-export const PRESENTATION_RELS_PART = 'ppt/_rels/presentation.xml.rels'
+/**
+ * What PowerPoint calls the presentation part, and what a new deck is given.
+ *
+ * Not what an opened deck's presentation part is: that is whatever
+ * `_rels/.rels` points its `officeDocument` relationship at, which is usually
+ * this and legally anything. Ask `presentationPart(pkg)`.
+ */
+export const CONVENTIONAL_PRESENTATION_PART = 'ppt/presentation.xml'
+
+/**
+ * What `[Content_Types].xml` may call it for the package to be a deck.
+ *
+ * A slideshow, a template and a deck with macros in it are all decks as far as
+ * opening one goes, and each says so differently.
+ */
+export const PRESENTATION_CONTENT_TYPES = [
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml',
+  'application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml',
+  'application/vnd.openxmlformats-officedocument.presentationml.template.main+xml',
+  'application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml',
+  'application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml',
+  'application/vnd.ms-powerpoint.template.macroEnabled.main+xml',
+]
+
+/** The presentation part of this package, by name or by relationship. */
+export function presentationPart(pkg: OoxmlPackage): string {
+  return mainPartOf(pkg, CONVENTIONAL_PRESENTATION_PART)
+}
+
+/** Where that part keeps its relationships, which follows its name. */
+export function presentationRelsPart(pkg: OoxmlPackage): string {
+  return relsPartFor(presentationPart(pkg))
+}
+
+/** Where a deck written the usual way keeps its presentation relationships. */
+export const CONVENTIONAL_PRESENTATION_RELS_PART = 'ppt/_rels/presentation.xml.rels'
+
 export const PRES_PROPS_PART = 'ppt/presProps.xml'
 export const VIEW_PROPS_PART = 'ppt/viewProps.xml'
 export const TABLE_STYLES_PART = 'ppt/tableStyles.xml'
 
 /** Reading a `.pptx`: a package without a presentation part is not one. */
 export function readPptxPackage(data: ArrayBuffer | Uint8Array): Promise<OoxmlPackage> {
-  return readPackage(data, PRESENTATION_PART)
+  return readPackage(data, {
+    conventional: CONVENTIONAL_PRESENTATION_PART,
+    contentType: PRESENTATION_CONTENT_TYPES,
+  })
 }
 
 const RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'

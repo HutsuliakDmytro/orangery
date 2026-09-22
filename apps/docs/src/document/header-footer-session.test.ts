@@ -7,21 +7,21 @@ import {
   textValue,
 } from '@orangery/ooxml-core'
 import type { XmlNode } from '@orangery/ooxml-core'
-import { DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
+import { CONVENTIONAL_DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseDocument } from '../ooxml/parse-document'
 import { parseSection } from '../ooxml/section'
 import { textFromParagraphs } from './header-footer-text'
-import { DOCUMENT_RELS_PART } from './media'
+import { CONVENTIONAL_DOCUMENT_RELS_PART } from './media'
 import { readHeaderFooter, writeHeaderFooter } from './header-footer-session'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
 async function open(name: string) {
   const pkg = await readDocxPackage(await readFile(join(FIXTURES, `${name}.docx`)))
-  const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
+  const parsed = parseDocument(getPartText(pkg, CONVENTIONAL_DOCUMENT_PART) ?? '')
   return { pkg, section: parseSection(parsed.sectionProperties) }
 }
 
@@ -75,7 +75,9 @@ describe('writeHeaderFooter', () => {
     const { pkg, section } = await open('plain-paragraphs')
     const updated = writeHeaderFooter(pkg, section, 'footer', [paragraph('Page')])
 
-    const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+    const relationships = parseRelationships(
+      getPartText(pkg, CONVENTIONAL_DOCUMENT_RELS_PART) ?? '',
+    )
     const referenced = updated.preserved.join('').match(/r:id="(rId\d+)"/u)?.[1]
 
     expect(referenced).toBeDefined()
@@ -100,10 +102,10 @@ describe('writeHeaderFooter', () => {
 
   it('leaves the document part untouched', async () => {
     const { pkg, section } = await open('plain-paragraphs')
-    const before = getPartText(pkg, DOCUMENT_PART)
+    const before = getPartText(pkg, CONVENTIONAL_DOCUMENT_PART)
 
     writeHeaderFooter(pkg, section, 'header', [paragraph('Top')])
-    expect(getPartText(pkg, DOCUMENT_PART)).toBe(before)
+    expect(getPartText(pkg, CONVENTIONAL_DOCUMENT_PART)).toBe(before)
   })
 })
 

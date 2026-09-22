@@ -10,7 +10,11 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import { readEmbeddedFonts } from './embedded-fonts'
-import { PRESENTATION_PART, PRESENTATION_RELS_PART, readPptxPackage } from './parts'
+import {
+  CONVENTIONAL_PRESENTATION_PART,
+  CONVENTIONAL_PRESENTATION_RELS_PART,
+  readPptxPackage,
+} from './parts'
 
 /**
  * The fonts a deck carries with it.
@@ -27,7 +31,9 @@ const FIXTURES = join(process.cwd(), '../../apps/slides/tests/fixtures/pptx/synt
 async function withFonts(list: string, parts: readonly string[] = []): Promise<OoxmlPackage> {
   const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'empty.pptx')))
 
-  const relationships = parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '')
+  const relationships = parseRelationships(
+    getPartText(pkg, CONVENTIONAL_PRESENTATION_RELS_PART) ?? '',
+  )
   for (const [index, part] of parts.entries()) {
     // The ids have to be the ones the list names, so they are made in order.
     addRelationship(
@@ -41,17 +47,17 @@ async function withFonts(list: string, parts: readonly string[] = []): Promise<O
       date: new Date(0),
     })
   }
-  setPartText(pkg, PRESENTATION_RELS_PART, serializeRelationships(relationships))
+  setPartText(pkg, CONVENTIONAL_PRESENTATION_RELS_PART, serializeRelationships(relationships))
 
-  const text = getPartText(pkg, PRESENTATION_PART) ?? ''
-  setPartText(pkg, PRESENTATION_PART, text.replace('<p:sldSz', `${list}<p:sldSz`))
+  const text = getPartText(pkg, CONVENTIONAL_PRESENTATION_PART) ?? ''
+  setPartText(pkg, CONVENTIONAL_PRESENTATION_PART, text.replace('<p:sldSz', `${list}<p:sldSz`))
   return pkg
 }
 
 /** The relationship ids the fixture's own parts already use, plus ours. */
 const idsFrom = async () => {
   const pkg = await readPptxPackage(await readFile(join(FIXTURES, 'empty.pptx')))
-  return parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '').size
+  return parseRelationships(getPartText(pkg, CONVENTIONAL_PRESENTATION_RELS_PART) ?? '').size
 }
 
 describe('a deck that carries its own fonts', () => {

@@ -6,7 +6,7 @@ import { addSlide } from './add-slide'
 import { inheritanceChain } from './placeholders'
 import { readThemes } from './theme-context'
 import { flatten } from './shape-tree'
-import { PRESENTATION_PART, readPptxPackage } from './parts'
+import { CONVENTIONAL_PRESENTATION_PART, readPptxPackage } from './parts'
 
 /**
  * The deck a new presentation starts from.
@@ -19,7 +19,7 @@ import { PRESENTATION_PART, readPptxPackage } from './parts'
 describe('a new deck', () => {
   it('is a package our own reader accepts', async () => {
     const pkg = await readPptxPackage(await createDeck())
-    expect(getPartText(pkg, PRESENTATION_PART)).toBeDefined()
+    expect(getPartText(pkg, CONVENTIONAL_PRESENTATION_PART)).toBeDefined()
   })
 
   it('opens with one slide on it', async () => {

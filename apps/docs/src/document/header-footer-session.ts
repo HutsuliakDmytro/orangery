@@ -29,7 +29,7 @@ import {
   HEADER_RELATIONSHIP,
 } from '../ooxml/header-footer'
 import type { SectionProperties } from '../ooxml/section'
-import { DOCUMENT_RELS_PART } from './media'
+import { documentRelsPart } from '../ooxml/parts'
 
 /**
  * Reading and writing a document's headers and footers.
@@ -66,7 +66,7 @@ export function readHeaderFooter(
   const reference = findReference(parseReferences(section.preserved), kind, type)
   if (!reference) return { kind, path: null, paragraphs: [] }
 
-  const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, documentRelsPart(pkg)) ?? '')
   const relationship = relationships.get(reference.relationshipId)
   if (!relationship) return { kind, path: null, paragraphs: [] }
 
@@ -124,13 +124,13 @@ export function writeHeaderFooter(
 
   ensureOverride(pkg, `/${path}`, kind === 'header' ? HEADER_CONTENT_TYPE : FOOTER_CONTENT_TYPE)
 
-  const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, documentRelsPart(pkg)) ?? '')
   const relationship = addRelationship(
     relationships,
     kind === 'header' ? HEADER_RELATIONSHIP : FOOTER_RELATIONSHIP,
     path.replace(/^word\//u, ''),
   )
-  writeRelationships(pkg, DOCUMENT_RELS_PART, relationships)
+  writeRelationships(pkg, documentRelsPart(pkg), relationships)
 
   // The reference joins the preserved children of `w:sectPr`, which is where
   // the parser found the ones the file already had.

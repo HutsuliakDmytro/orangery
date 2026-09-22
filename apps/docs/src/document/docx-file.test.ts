@@ -1,5 +1,6 @@
 import { compareXml, describeDifferences, getPartText } from '@orangery/ooxml-core'
-import { DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
+import { CONVENTIONAL_DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
+import JSZip from 'jszip'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -48,10 +49,10 @@ describe('saveDocx', () => {
 
   it('leaves document.xml structurally unchanged when nothing was edited', async () => {
     const document = await open('character-formatting')
-    const before = getPartText(document.pkg, DOCUMENT_PART) ?? ''
+    const before = getPartText(document.pkg, CONVENTIONAL_DOCUMENT_PART) ?? ''
 
     const saved = await saveDocx(document, document.doc)
-    const after = getPartText(await readDocxPackage(saved), DOCUMENT_PART) ?? ''
+    const after = getPartText(await readDocxPackage(saved), CONVENTIONAL_DOCUMENT_PART) ?? ''
 
     expect(describeDifferences(compareXml(before, after))).toBe('no differences')
   })
@@ -65,7 +66,7 @@ describe('saveDocx', () => {
     const saved = await readDocxPackage(await saveDocx(document, document.doc))
 
     for (const [path, bytes] of original) {
-      if (path === DOCUMENT_PART) continue
+      if (path === CONVENTIONAL_DOCUMENT_PART) continue
       expect(saved.parts.get(path)?.bytes, path).toStrictEqual(bytes)
     }
   })
@@ -85,7 +86,7 @@ describe('createNewDocx', () => {
   it('produces a real DOCX package from the first keystroke', async () => {
     const document = await createNewDocx()
 
-    expect(document.pkg.parts.has(DOCUMENT_PART)).toBe(true)
+    expect(document.pkg.parts.has(CONVENTIONAL_DOCUMENT_PART)).toBe(true)
     expect(document.pkg.parts.has('[Content_Types].xml')).toBe(true)
     expect(document.pkg.parts.has('word/styles.xml')).toBe(true)
     expect(document.pkg.parts.has('_rels/.rels')).toBe(true)
@@ -136,10 +137,12 @@ describe('createNewDocx', () => {
 
   it('round-trips a save with no edits', async () => {
     const document = await createNewDocx()
-    const before = getPartText(document.pkg, DOCUMENT_PART) ?? ''
+    const before = getPartText(document.pkg, CONVENTIONAL_DOCUMENT_PART) ?? ''
     const after =
-      getPartText(await readDocxPackage(await saveDocx(document, document.doc)), DOCUMENT_PART) ??
-      ''
+      getPartText(
+        await readDocxPackage(await saveDocx(document, document.doc)),
+        CONVENTIONAL_DOCUMENT_PART,
+      ) ?? ''
 
     expect(describeDifferences(compareXml(before, after))).toBe('no differences')
   })
@@ -169,5 +172,67 @@ describe('page numbering in the package', () => {
 
     expect(reopened.section.pageNumbering).toBeNull()
     expect(reopened.section.differentFirstPage).toBe(false)
+  })
+})
+
+/**
+ * A document whose main part is not called `word/document.xml`.
+ *
+ * The name is a convention: what makes a part the document is `_rels/.rels`
+ * pointing its `officeDocument` relationship at it. LibreOffice's
+ * `sw/qa/extras/ooxmlexport/data/tdf104713_undefinedStyles.docx` calls it
+ * `word/trial.xml`, Word opens it, and until this it was refused here with
+ * "word/document.xml is missing". The file itself is MPL-2.0 and cannot live
+ * in the repository, so the package here is the same shape built by hand.
+ *
+ * https://github.com/HutsuliakDmytro/orangery/issues/9
+ */
+describe('a document part called something else', () => {
+  const WORD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+  const trial = async (): Promise<Uint8Array> => {
+    const zip = new JSZip()
+    zip.file(
+      '[Content_Types].xml',
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/word/trial.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+        '</Types>',
+    )
+    zip.file(
+      '_rels/.rels',
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Target="word/trial.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/>' +
+        '</Relationships>',
+    )
+    zip.file(
+      'word/trial.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<w:document xmlns:w="${WORD}"><w:body><w:p><w:r><w:t>Trial</w:t></w:r></w:p></w:body></w:document>`,
+    )
+
+    return zip.generateAsync({ type: 'uint8array' })
+  }
+
+  it('opens, and reads the text out of the part the relationship names', async () => {
+    const open = await openDocx(await trial())
+
+    expect(open.pkg.main).toBe('word/trial.xml')
+    expect(JSON.stringify(open.doc)).toContain('Trial')
+  })
+
+  it('saves back into that part, and does not invent the conventional one', async () => {
+    const open = await openDocx(await trial())
+    const saved = await readDocxPackage(await saveDocx(open, open.doc))
+
+    expect(getPartText(saved, 'word/trial.xml')).toContain('Trial')
+    expect(saved.parts.has(CONVENTIONAL_DOCUMENT_PART)).toBe(false)
+  })
+
+  it('reopens to the same document', async () => {
+    const open = await openDocx(await trial())
+    const again = await openDocx(await saveDocx(open, open.doc))
+
+    expect(again.doc).toEqual(open.doc)
   })
 })

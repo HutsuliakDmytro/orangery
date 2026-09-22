@@ -20,11 +20,7 @@ import {
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import type { Slide } from './deck'
 import { relsPartFor } from './insert-picture'
-import {
-  COMMENT_AUTHORS_RELATIONSHIP,
-  COMMENTS_RELATIONSHIP,
-  PRESENTATION_RELS_PART,
-} from './parts'
+import { COMMENT_AUTHORS_RELATIONSHIP, COMMENTS_RELATIONSHIP, presentationRelsPart } from './parts'
 import { readPresentation } from './presentation'
 
 /**
@@ -220,13 +216,13 @@ function authorId(pkg: OoxmlPackage, author: CommentAuthor): string {
   setPartText(pkg, path, withDeclaration(buildXml(roots.includes(list) ? roots : [list])))
   ensureOverride(pkg, path, AUTHORS_TYPE)
 
-  const relationships = parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '')
+  const relationships = parseRelationships(getPartText(pkg, presentationRelsPart(pkg)) ?? '')
   const named_ = [...relationships.values()].some(
     (one) => one.type === COMMENT_AUTHORS_RELATIONSHIP,
   )
   if (!named_) {
     addRelationship(relationships, COMMENT_AUTHORS_RELATIONSHIP, 'commentAuthors.xml')
-    setPartText(pkg, PRESENTATION_RELS_PART, serializeRelationships(relationships))
+    setPartText(pkg, presentationRelsPart(pkg), serializeRelationships(relationships))
   }
 
   return id

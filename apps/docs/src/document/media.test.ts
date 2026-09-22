@@ -3,7 +3,12 @@ import { readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { addImage, DOCUMENT_RELS_PART, mediaDataUrl, UnsupportedImageError } from './media'
+import {
+  addImage,
+  CONVENTIONAL_DOCUMENT_RELS_PART,
+  mediaDataUrl,
+  UnsupportedImageError,
+} from './media'
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
@@ -29,7 +34,9 @@ describe('addImage', () => {
     const pkg = await fixture()
     const added = addImage(pkg, 'photo.png', PNG)
 
-    const relationships = parseRelationships(getPartText(pkg, DOCUMENT_RELS_PART) ?? '')
+    const relationships = parseRelationships(
+      getPartText(pkg, CONVENTIONAL_DOCUMENT_RELS_PART) ?? '',
+    )
     expect(relationships.get(added.relationshipId)?.target).toBe('media/image1.png')
   })
 

@@ -14,7 +14,7 @@ import {
   COMMENTS_RELATIONSHIP,
   HANDOUT_MASTER_RELATIONSHIP,
   MODERN_COMMENTS_RELATIONSHIP,
-  PRESENTATION_PART,
+  CONVENTIONAL_PRESENTATION_PART,
   readPptxPackage,
 } from './parts'
 import { readPresentation, referencedParts } from './presentation'
@@ -153,7 +153,12 @@ describe('the parts a deck reaches beyond its slides', () => {
 
   it('finds the handout master, which only a printed deck has', async () => {
     const pkg = await open('empty')
-    attach(pkg, PRESENTATION_PART, HANDOUT_MASTER_RELATIONSHIP, 'handoutMasters/handoutMaster1.xml')
+    attach(
+      pkg,
+      CONVENTIONAL_PRESENTATION_PART,
+      HANDOUT_MASTER_RELATIONSHIP,
+      'handoutMasters/handoutMaster1.xml',
+    )
 
     const map = readPresentation(pkg)
     expect(map.handoutMaster).toBe('ppt/handoutMasters/handoutMaster1.xml')
@@ -178,7 +183,7 @@ describe('the parts a deck reaches beyond its slides', () => {
 
   it('finds the people the comments belong to', async () => {
     const pkg = await open('empty')
-    attach(pkg, PRESENTATION_PART, COMMENT_AUTHORS_RELATIONSHIP, 'commentAuthors.xml')
+    attach(pkg, CONVENTIONAL_PRESENTATION_PART, COMMENT_AUTHORS_RELATIONSHIP, 'commentAuthors.xml')
 
     expect(readPresentation(pkg).commentAuthors).toEqual(['ppt/commentAuthors.xml'])
   })

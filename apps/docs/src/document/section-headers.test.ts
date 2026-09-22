@@ -1,5 +1,5 @@
 import { getPartText } from '@orangery/ooxml-core'
-import { DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
+import { CONVENTIONAL_DOCUMENT_PART, readDocxPackage } from '../ooxml/parts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -11,7 +11,7 @@ const FIXTURES = join(process.cwd(), 'tests/fixtures/docx/synthetic')
 
 async function open(name: string) {
   const pkg = await readDocxPackage(await readFile(join(FIXTURES, `${name}.docx`)))
-  const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
+  const parsed = parseDocument(getPartText(pkg, CONVENTIONAL_DOCUMENT_PART) ?? '')
   return { pkg, section: { ...parseSection(parsed.sectionProperties), preserved: [] as string[] } }
 }
 

@@ -2,6 +2,7 @@ import { attribute, attributes, children, parseXml, tagName, textValue } from '@
 import type { XmlNode } from '@orangery/ooxml-core'
 import { formatReference, parseRange } from './reference'
 import type { CellRange } from './reference'
+import { elementPattern, selfClosedPattern } from './patterns'
 
 /**
  * `<dataValidations>` — what a cell is allowed to hold.
@@ -268,7 +269,7 @@ export function writeValidations(validations: readonly DataValidation[]): string
  * Excel offers to repair.
  */
 export function replaceValidations(xml: string, written: string): string {
-  const existing = /<dataValidations(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/dataValidations>)/u.exec(xml)
+  const existing = elementPattern('dataValidations').exec(xml)
 
   if (existing !== null) {
     return xml.slice(0, existing.index) + written + xml.slice(existing.index + existing[0].length)
@@ -282,8 +283,10 @@ export function replaceValidations(xml: string, written: string): string {
     )
   if (before !== null) return xml.slice(0, before.index) + written + xml.slice(before.index)
 
-  const after =
-    /<\/conditionalFormatting>|<\/mergeCells>|<autoFilter(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/autoFilter>)|<\/sheetData>|<sheetData(?:\s[^>]*)?\/>/gu
+  const after = new RegExp(
+    `</conditionalFormatting>|</mergeCells>|${elementPattern('autoFilter').source}|</sheetData>|${selfClosedPattern('sheetData').source}`,
+    'gu',
+  )
 
   let last: RegExpExecArray | null = null
   for (const match of xml.matchAll(after)) last = match

@@ -1,5 +1,6 @@
 import { formatReference } from './reference'
 import type { CellRange } from './reference'
+import { elementPattern, selfClosedPattern } from './patterns'
 
 /**
  * `<mergeCells>` — the cells a sheet draws as one.
@@ -98,7 +99,7 @@ export function writeMerges(merges: readonly CellRange[]): string {
  */
 export function replaceMerges(xml: string, merges: readonly CellRange[]): string {
   const written = writeMerges(merges)
-  const existing = /<mergeCells(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/mergeCells>)/u.exec(xml)
+  const existing = elementPattern('mergeCells').exec(xml)
 
   if (existing !== null) {
     return xml.slice(0, existing.index) + written + xml.slice(existing.index + existing[0].length)
@@ -106,7 +107,7 @@ export function replaceMerges(xml: string, merges: readonly CellRange[]): string
 
   if (written === '') return xml
 
-  const data = /<\/sheetData>|<sheetData(?:\s[^>]*)?\/>/u.exec(xml)
+  const data = new RegExp(`</sheetData>|${selfClosedPattern('sheetData').source}`, 'u').exec(xml)
   if (data === null) return xml
 
   const after = data.index + data[0].length

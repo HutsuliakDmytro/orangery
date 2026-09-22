@@ -1,4 +1,5 @@
 import type { ColumnRange } from './worksheet'
+import { elementPattern, openingPattern } from './patterns'
 
 /**
  * `<cols>` — what a worksheet says about its columns.
@@ -137,7 +138,7 @@ export function writeColumns(columns: readonly ColumnRange[]): string {
  */
 export function replaceColumns(xml: string, columns: readonly ColumnRange[]): string {
   const written = writeColumns(columns)
-  const existing = /<cols(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/cols>)/u.exec(xml)
+  const existing = elementPattern('cols').exec(xml)
 
   if (existing !== null) {
     return xml.slice(0, existing.index) + written + xml.slice(existing.index + existing[0].length)
@@ -145,7 +146,7 @@ export function replaceColumns(xml: string, columns: readonly ColumnRange[]): st
 
   if (written === '') return xml
 
-  const data = /<sheetData(?:\s[^>]*)?(?:\/>|>)/u.exec(xml)
+  const data = openingPattern('sheetData').exec(xml)
   if (data === null) return xml
 
   return xml.slice(0, data.index) + written + xml.slice(data.index)

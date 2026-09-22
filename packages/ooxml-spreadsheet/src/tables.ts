@@ -9,6 +9,7 @@ import {
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { indexToColumn, parseRange } from './reference'
 import type { CellRange } from './reference'
+import { elementPattern } from './patterns'
 
 /**
  * A table — the thing Excel calls `Table1` and a formula calls by name.
@@ -234,7 +235,7 @@ export function replaceTableParts(xml: string, relationshipIds: readonly string[
           .map((id) => `<tablePart r:id="${escaped(id)}"/>`)
           .join('')}</tableParts>`
 
-  const existing = /<tableParts(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/tableParts>)/u.exec(xml)
+  const existing = elementPattern('tableParts').exec(xml)
   if (existing !== null) {
     return xml.slice(0, existing.index) + written + xml.slice(existing.index + existing[0].length)
   }

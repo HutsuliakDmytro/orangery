@@ -6,6 +6,7 @@ import { collapsedFormula, expandFormulas, sharedMasters } from './formulas'
 import type { SharedMaster } from './formulas'
 import { readRichText } from './rich-text'
 import type { RichText } from './rich-text'
+import { elementPattern } from './patterns'
 
 /**
  * `sheetData`, read without building a tree.
@@ -118,8 +119,8 @@ function textOfAll(fragment: string, tag: string): string | null {
 function richFrom(fragment: string): RichText | null {
   if (!fragment.includes('<r')) return null
 
-  const match = /<is(?:\s[^>]*)?>([\s\S]*?)<\/is>/u.exec(fragment)
-  const inside = match?.[1]
+  const match = elementPattern('is').exec(fragment)
+  const inside = match?.[2]
   if (inside === undefined || !/<r(?:\s|>)/u.test(inside)) return null
 
   const root = parseXml(`<is>${inside}</is>`).find((node) => tagName(node) === 'is')
@@ -127,7 +128,7 @@ function richFrom(fragment: string): RichText | null {
 }
 
 function formulaFrom(fragment: string): Formula | null {
-  const match = /<f(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/f>)/u.exec(fragment)
+  const match = elementPattern('f').exec(fragment)
   if (match === null) return null
 
   const attributes = attributesOf(match[1] ?? '')
@@ -159,8 +160,8 @@ export function scanSheetData(xml: string, handlers: SheetDataHandlers): void {
   const body = /<sheetData(?:\s[^>]*)?>([\s\S]*)<\/sheetData>/u.exec(xml)
   if (body === null) return
 
-  const rows = /<row(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/row>)/gu
-  const cells = /<c(\s[^>]*)?(?:\/>|>([\s\S]*?)<\/c>)/gu
+  const rows = elementPattern('row', 'gu')
+  const cells = elementPattern('c', 'gu')
   const text = body[1] ?? ''
 
   let rowIndex = 0
@@ -356,7 +357,7 @@ export function writeSheetData(sheet: SheetCells): string {
  * have to be told by every caller that ever parses a sheet.
  */
 export const withoutCells = (xml: string): string =>
-  xml.replace(/<sheetData(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/sheetData>)/u, '<sheetData/>')
+  xml.replace(elementPattern('sheetData'), '<sheetData/>')
 
 /**
  * A worksheet with its cells replaced and everything else left alone.
@@ -366,7 +367,7 @@ export const withoutCells = (xml: string): string =>
  * is the cells and nothing else.
  */
 export function replaceSheetData(xml: string, sheet: SheetCells): string {
-  const match = /<sheetData(?:\s[^>]*)?(?:\/>|>[\s\S]*?<\/sheetData>)/u.exec(xml)
+  const match = elementPattern('sheetData').exec(xml)
   if (match === null) return xml
 
   return (

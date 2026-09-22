@@ -221,4 +221,23 @@ describe('a row with table property exceptions', () => {
 
     expect(describeDifferences(compareXml(source, rewritten))).toBe('no differences')
   })
+
+  it('carries only what stands before the first cell', () => {
+    // A content control in a row wraps cells rather than preceding them, and
+    // "everything that is not a cell" swept one to the front — which
+    // `pnpm corpus:render` caught as half a percent of moved pixels in
+    // `word2010win-footnotes-01.docx`. A row-level `w:sdt` is not carried and
+    // not read either, which is its own bug and its own issue.
+    const withControl = document(
+      '<w:tr><w:trPr><w:trHeight w:val="454"/></w:trPr>' +
+        '<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>First</w:t></w:r></w:p></w:tc>' +
+        '<w:sdt><w:sdtContent><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Second</w:t></w:r></w:p></w:tc></w:sdtContent></w:sdt>' +
+        '</w:tr>',
+    )
+    const rewritten = serializeParsed(parseDocument(withControl), withControl)
+
+    expect(rewritten).toContain('<w:trHeight w:val="454"/>')
+    expect(rewritten.indexOf('w:trHeight')).toBeLessThan(rewritten.indexOf('First'))
+    expect(rewritten).not.toContain('w:sdtContent')
+  })
 })

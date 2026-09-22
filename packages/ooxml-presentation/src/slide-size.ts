@@ -15,7 +15,7 @@ import {
 } from '@orangery/ooxml-core'
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import type { Deck, SlidePart } from './deck'
-import { PRESENTATION_ORDER, PRESENTATION_PART } from './parts'
+import { PRESENTATION_ORDER, presentationPart } from './parts'
 import type { SlideSize } from './presentation'
 import { writePart } from './save'
 import { writeTransform } from './write-shape'
@@ -118,7 +118,7 @@ export function setSlideSize(
   const before = deck.slideSize
   if (before.width === width && before.height === height) return false
 
-  const roots = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '')
+  const roots = parseXml(getPartText(pkg, presentationPart(pkg)) ?? '')
   const root = roots.find((node) => tagName(node) === 'p:presentation')
   if (root === undefined) return false
 
@@ -131,7 +131,7 @@ export function setSlideSize(
   else setAttribute(stated, 'type', preset.type)
 
   upsertChild(root, stated, PRESENTATION_ORDER)
-  setPartText(pkg, PRESENTATION_PART, withDeclaration(buildXml(roots)))
+  setPartText(pkg, presentationPart(pkg), withDeclaration(buildXml(roots)))
 
   if (content === 'maximize') return true
 

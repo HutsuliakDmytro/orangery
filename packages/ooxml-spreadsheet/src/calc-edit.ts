@@ -1,4 +1,5 @@
 import { getPartText, setPartText } from '@orangery/ooxml-core'
+import { workbookPart } from './parts'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 
 /**
@@ -15,14 +16,12 @@ import type { OoxmlPackage } from '@orangery/ooxml-core'
  * from the one attribute modelled here would throw the rest away.
  */
 
-const WORKBOOK_PART = 'xl/workbook.xml'
-
 /** How a workbook is worked out, written back over what the file said. */
 export function writeCalculationMode(pkg: OoxmlPackage, manual: boolean): boolean {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return false
 
-  setPartText(pkg, WORKBOOK_PART, replaceCalculationMode(xml, manual))
+  setPartText(pkg, workbookPart(pkg), replaceCalculationMode(xml, manual))
   return true
 }
 

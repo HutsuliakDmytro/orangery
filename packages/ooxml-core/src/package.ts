@@ -46,6 +46,36 @@ export interface OoxmlPart {
 export interface OoxmlPackage {
   /** Insertion order mirrors the zip's entry order, which Word is sensitive to. */
   parts: Map<string, OoxmlPart>
+  /**
+   * The part the package is about, as `_rels/.rels` names it.
+   *
+   * `word/document.xml`, `xl/workbook.xml` and `ppt/presentation.xml` are
+   * conventions rather than rules: what makes a part the main one is the
+   * root relationship of type `officeDocument` pointing at it. Word writes
+   * the conventional name and almost everything else does too — and then
+   * LibreOffice's `tdf104713_undefinedStyles.docx` calls it `word/trial.xml`,
+   * Word opens it, and a reader that hardcoded the name does not.
+   *
+   * Null — or absent, for a package built in memory rather than read — where a
+   * caller that needs a main part falls back to the conventional name for its
+   * format. `mainPartOf` is that fallback, in one place.
+   */
+  main?: string | null
+}
+
+/** What a caller expects a package to be, for the error when it is not. */
+export interface PackageExpectation {
+  /** The conventional path, which is also what a new package is given. */
+  conventional: string
+  /**
+   * The content types the main part may be declared as.
+   *
+   * Checked rather than assumed: a `.docx` renamed from a `.pptx` has a main
+   * part and a root relationship, and the only thing that says it is the wrong
+   * one is `[Content_Types].xml`. A list because one format has several — a
+   * workbook with macros in it is a workbook, and says so differently.
+   */
+  contentType: readonly string[]
 }
 
 export class OoxmlFormatError extends Error {
@@ -66,7 +96,7 @@ export function isTextPart(path: string): boolean {
  */
 export async function readPackage(
   data: ArrayBuffer | Uint8Array,
-  requiredPart?: string,
+  expected?: string | PackageExpectation,
 ): Promise<OoxmlPackage> {
   let zip: JSZip
   try {
@@ -109,11 +139,74 @@ export async function readPackage(
     parts.set(name, part)
   }
 
-  if (requiredPart !== undefined && !parts.has(requiredPart)) {
-    throw new OoxmlFormatError(whyNotAPackage(parts, requiredPart))
+  const pkg: OoxmlPackage = { parts, main: mainPathOf(parts) }
+
+  if (expected === undefined) return pkg
+
+  if (typeof expected === 'string') {
+    if (!parts.has(expected)) throw new OoxmlFormatError(whyNotAPackage(parts, expected))
+    return pkg
   }
 
-  return { parts }
+  // The relationship first, the convention second: a package that names its
+  // main part is believed, and one that names nothing is assumed to have used
+  // the name everybody else uses.
+  const main = pkg.main ?? null
+  const path = main ?? (parts.has(expected.conventional) ? expected.conventional : null)
+
+  if (path === null) throw new OoxmlFormatError(whyNotAPackage(parts, expected.conventional))
+
+  // Only when the package says something: a `[Content_Types].xml` with no
+  // override for the main part is unusual and is not grounds for refusing a
+  // file whose relationship already said what it is.
+  const declared = contentTypeIn(parts, path)
+  if (declared !== null && !expected.contentType.includes(declared)) {
+    throw new OoxmlFormatError(
+      `this package's main part is ${path}, which calls itself ${declared}; what was being opened keeps its main part at ${expected.conventional}`,
+    )
+  }
+
+  return { ...pkg, main: path }
+}
+
+/** The `officeDocument` relationship's target, as a package path. */
+function mainPathOf(parts: ReadonlyMap<string, OoxmlPart>): string | null {
+  const found = OFFICE_DOCUMENT.exec(parts.get('_rels/.rels')?.text ?? '')
+  const target = (found?.[1] ?? found?.[2])?.replace(/^\//u, '')
+  return target !== undefined && parts.has(target) ? target : null
+}
+
+/**
+ * What `[Content_Types].xml` says a part is.
+ *
+ * A second, smaller reader than `contentTypeOf` in `media.ts`, and on purpose:
+ * this runs while the package is still a map of parts, before anything has a
+ * package to hand it, and it only ever needs the override for one path.
+ */
+function contentTypeIn(parts: ReadonlyMap<string, OoxmlPart>, path: string): string | null {
+  const types = parts.get(CONTENT_TYPES_PART)?.text ?? ''
+  const wanted = path.startsWith('/') ? path : `/${path}`
+
+  for (const match of types.matchAll(/<Override\s[^>]*\/?>/gu)) {
+    const tag = match[0]
+    const name = /PartName="([^"]+)"/u.exec(tag)?.[1]
+    if (name !== wanted) continue
+    return /ContentType="([^"]+)"/u.exec(tag)?.[1] ?? null
+  }
+
+  return null
+}
+
+/** The part a package is about, or the conventional name when it names none. */
+export function mainPartOf(pkg: OoxmlPackage, conventional: string): string {
+  return pkg.main ?? conventional
+}
+
+/** Where a part keeps its relationships: beside it, under `_rels`. */
+export function relsPartFor(path: string): string {
+  const cut = path.lastIndexOf('/')
+  const directory = cut === -1 ? '' : path.slice(0, cut + 1)
+  return `${directory}_rels/${path.slice(cut + 1)}.rels`
 }
 
 /**

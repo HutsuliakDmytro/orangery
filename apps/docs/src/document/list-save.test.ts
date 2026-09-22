@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { parseNumbering, resolveNumbering } from '../ooxml/numbering'
 import type { ProseMirrorNodeJson } from '../ooxml/prosemirror-json'
 import { createNewDocx, openDocx, saveDocx } from './docx-file'
-import { DOCUMENT_RELS_PART } from './media'
+import { CONVENTIONAL_DOCUMENT_RELS_PART } from './media'
 
 /**
  * A list created in a new document has to bring its numbering definition with
@@ -73,7 +73,9 @@ describe('saving a document with a new list', () => {
     const document = await createNewDocx()
     const saved = await readDocxPackage(await saveDocx(document, listDoc))
 
-    const relationships = parseRelationships(getPartText(saved, DOCUMENT_RELS_PART) ?? '')
+    const relationships = parseRelationships(
+      getPartText(saved, CONVENTIONAL_DOCUMENT_RELS_PART) ?? '',
+    )
     expect([...relationships.values()].some((entry) => entry.target === 'numbering.xml')).toBe(true)
     expect(getPartText(saved, CONTENT_TYPES_PART)).toContain('/word/numbering.xml')
   })
@@ -110,7 +112,9 @@ describe('saving a document with a new list', () => {
     await saveDocx(document, listDoc)
     const saved = await readDocxPackage(await saveDocx(document, listDoc))
 
-    const relationships = parseRelationships(getPartText(saved, DOCUMENT_RELS_PART) ?? '')
+    const relationships = parseRelationships(
+      getPartText(saved, CONVENTIONAL_DOCUMENT_RELS_PART) ?? '',
+    )
     const pointing = [...relationships.values()].filter((entry) => entry.target === 'numbering.xml')
     expect(pointing).toHaveLength(1)
   })

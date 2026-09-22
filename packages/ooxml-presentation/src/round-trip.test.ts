@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { XML_DECLARATION, getPartText } from '@orangery/ooxml-core'
 import { readDeck } from './deck'
-import { PRESENTATION_PART, readPptxPackage } from './parts'
+import { CONVENTIONAL_PRESENTATION_PART, readPptxPackage } from './parts'
 import { rewriteEveryPart, saveDeck } from './save'
 import { setSlideSize } from './slide-size'
 
@@ -71,7 +71,7 @@ describe.each(decks)('%s, once edited', (name) => {
 
     expect(setSlideSize(pkg, deck, bigger, 'maximize')).toBe(true)
 
-    const text = getPartText(pkg, PRESENTATION_PART) ?? ''
+    const text = getPartText(pkg, CONVENTIONAL_PRESENTATION_PART) ?? ''
     expect([...text.matchAll(/<\?xml/gu)]).toHaveLength(1)
     expect(text.startsWith(XML_DECLARATION)).toBe(true)
   })

@@ -19,7 +19,7 @@ import {
   MODERN_COMMENTS_RELATIONSHIPS,
   NOTES_MASTER_RELATIONSHIP,
   NOTES_SLIDE_RELATIONSHIP,
-  PRESENTATION_PART,
+  presentationPart,
   SLIDE_LAYOUT_RELATIONSHIP,
   THEME_RELATIONSHIP,
 } from './parts'
@@ -194,10 +194,10 @@ function orderedEntries(
 }
 
 export function readPresentation(pkg: OoxmlPackage): PresentationMap {
-  const root = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '').find(
+  const root = parseXml(getPartText(pkg, presentationPart(pkg)) ?? '').find(
     (node) => tagName(node) === 'p:presentation',
   )
-  const relationships = relationshipsOf(pkg, PRESENTATION_PART)
+  const relationships = relationshipsOf(pkg, presentationPart(pkg))
 
   const slides = orderedEntries(root, 'p:sldIdLst', 'p:sldId', relationships).map((entry) => {
     const path = entry.target
@@ -231,7 +231,7 @@ export function readPresentation(pkg: OoxmlPackage): PresentationMap {
   // Every part that can point at a picture: the slides and what they inherit
   // from, the notes and the two masters that are not slide masters.
   const carriers = [
-    PRESENTATION_PART,
+    presentationPart(pkg),
     ...slides.flatMap((slide) => [slide.path, ...(slide.notes === null ? [] : [slide.notes])]),
     ...masters.flatMap((master) => [master.path, ...master.layouts]),
     ...(notesMaster === null ? [] : [notesMaster]),

@@ -1,4 +1,5 @@
 import { getPartText, setPartText } from '@orangery/ooxml-core'
+import { workbookPart } from './parts'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import type { DefinedName } from './workbook'
 
@@ -15,8 +16,6 @@ import type { DefinedName } from './workbook'
  * after `<sheets>` and before `<calcPr>`, which is where the schema puts it:
  * an element out of order is a file Excel offers to repair.
  */
-
-const WORKBOOK_PART = 'xl/workbook.xml'
 
 const escaped = (text: string): string =>
   text
@@ -45,7 +44,7 @@ export function isValidName(name: string): boolean {
 
 /** The names of a workbook, written back in place of the ones it had. */
 export function writeDefinedNames(pkg: OoxmlPackage, names: readonly DefinedName[]): boolean {
-  const xml = getPartText(pkg, WORKBOOK_PART)
+  const xml = getPartText(pkg, workbookPart(pkg))
   if (xml === undefined) return false
 
   const written =
@@ -61,7 +60,7 @@ export function writeDefinedNames(pkg: OoxmlPackage, names: readonly DefinedName
           })
           .join('')}</definedNames>`
 
-  setPartText(pkg, WORKBOOK_PART, replaceDefinedNames(xml, written))
+  setPartText(pkg, workbookPart(pkg), replaceDefinedNames(xml, written))
   return true
 }
 

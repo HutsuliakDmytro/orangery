@@ -2,7 +2,7 @@ import { attribute, findChild, getPartText, parseXml, tagName } from '@orangery/
 import type { OoxmlPackage, XmlNode } from '@orangery/ooxml-core'
 import { readListStyle } from '@orangery/ooxml-drawingml'
 import type { ListStyle } from '@orangery/ooxml-drawingml'
-import { PRESENTATION_PART } from './parts'
+import { presentationPart } from './parts'
 import { readPresentation } from './presentation'
 import type { PresentationMap, SlideSize } from './presentation'
 import { parseShapeTree } from './shape-tree'
@@ -65,7 +65,7 @@ export interface Deck {
 }
 
 function readDefaultTextStyle(pkg: OoxmlPackage): ListStyle {
-  const root = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '').find(
+  const root = parseXml(getPartText(pkg, presentationPart(pkg)) ?? '').find(
     (node) => tagName(node) === 'p:presentation',
   )
   const style = root === undefined ? undefined : findChild(root, 'p:defaultTextStyle')

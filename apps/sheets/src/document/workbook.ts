@@ -1,6 +1,8 @@
 import { parseRelationships, partDirectory, readPackage, resolveTarget } from '@orangery/ooxml-core'
 import type { OoxmlPackage } from '@orangery/ooxml-core'
 import {
+  CONVENTIONAL_WORKBOOK_PART,
+  WORKBOOK_CONTENT_TYPES,
   drawingRelationshipId,
   paletteOf,
   noStyleChanges,
@@ -113,8 +115,12 @@ const THEME_PART = 'xl/theme/theme1.xml'
 
 export async function openWorkbook(bytes: Uint8Array): Promise<OpenWorkbook> {
   // The part that must be there: a zip without it is not a workbook, and
-  // failing here says so rather than three layers deeper.
-  const pkg = await readPackage(bytes, 'xl/workbook.xml')
+  // failing here says so rather than three layers deeper. Which part that is
+  // comes from `_rels/.rels` — the conventional name is a fallback, not a rule.
+  const pkg = await readPackage(bytes, {
+    conventional: CONVENTIONAL_WORKBOOK_PART,
+    contentType: WORKBOOK_CONTENT_TYPES,
+  })
   const workbook = readWorkbook(pkg)
 
   const theme = parseTheme(getPartText(pkg, THEME_PART) ?? '')

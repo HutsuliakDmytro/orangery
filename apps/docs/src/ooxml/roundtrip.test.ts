@@ -8,7 +8,7 @@ import {
   writePackage,
 } from '@orangery/ooxml-core'
 import { addImage } from '../document/media'
-import { DOCUMENT_PART, readDocxPackage } from './parts'
+import { CONVENTIONAL_DOCUMENT_PART, readDocxPackage } from './parts'
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -47,7 +47,7 @@ describe('document.xml round-trip', () => {
 
   it.each(files)('$label survives open → save unchanged', async ({ path }) => {
     const pkg = await readDocxPackage(await readFile(path))
-    const original = getPartText(pkg, DOCUMENT_PART) ?? ''
+    const original = getPartText(pkg, CONVENTIONAL_DOCUMENT_PART) ?? ''
 
     const rewritten = serializeParsed(parseDocument(original), original)
     const differences = compareXml(original, rewritten)
@@ -57,20 +57,20 @@ describe('document.xml round-trip', () => {
 
   it.each(files)('$label keeps every other part byte-identical', async ({ path }) => {
     const pkg = await readDocxPackage(await readFile(path))
-    const parsed = parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')
-    setPartText(pkg, DOCUMENT_PART, serializeParsed(parsed))
+    const parsed = parseDocument(getPartText(pkg, CONVENTIONAL_DOCUMENT_PART) ?? '')
+    setPartText(pkg, CONVENTIONAL_DOCUMENT_PART, serializeParsed(parsed))
 
     const rewritten = await readDocxPackage(await writePackage(pkg))
 
     for (const [partPath, part] of pkg.parts) {
-      if (partPath === DOCUMENT_PART) continue
+      if (partPath === CONVENTIONAL_DOCUMENT_PART) continue
       expect(rewritten.parts.get(partPath)?.bytes, partPath).toStrictEqual(part.bytes)
     }
   })
 
   it.each(files)('$label parses without losing text', async ({ path }) => {
     const pkg = await readDocxPackage(await readFile(path))
-    const original = getPartText(pkg, DOCUMENT_PART) ?? ''
+    const original = getPartText(pkg, CONVENTIONAL_DOCUMENT_PART) ?? ''
     const rewritten = serializeParsed(parseDocument(original))
 
     const textOf = (xml: string) =>
@@ -103,8 +103,8 @@ describe('the package itself', () => {
     addImage(pkg, 'pixel.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
     setPartText(
       pkg,
-      DOCUMENT_PART,
-      serializeParsed(parseDocument(getPartText(pkg, DOCUMENT_PART) ?? '')),
+      CONVENTIONAL_DOCUMENT_PART,
+      serializeParsed(parseDocument(getPartText(pkg, CONVENTIONAL_DOCUMENT_PART) ?? '')),
     )
 
     const saved = await readDocxPackage(await writePackage(pkg))

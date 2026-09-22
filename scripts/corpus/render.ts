@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getPartText, setPartText, writePackage } from '@orangery/ooxml-core'
 import { main } from '../../packages/render-diff/src/index'
-import { DOCUMENT_PART, readDocxPackage } from '../../apps/docs/src/ooxml/parts'
+import { documentPart, readDocxPackage } from '../../apps/docs/src/ooxml/parts'
 import { parseDocument } from '../../apps/docs/src/ooxml/parse-document'
 import { serializeParsed } from '../../apps/docs/src/ooxml/serialize-document'
 import {
@@ -48,8 +48,9 @@ async function roundTrip(input: string, output: string): Promise<void> {
 
   if (format === 'docx') {
     const pkg = await readDocxPackage(bytes)
-    const text = getPartText(pkg, DOCUMENT_PART) ?? ''
-    setPartText(pkg, DOCUMENT_PART, serializeParsed(parseDocument(text), text))
+    const part = documentPart(pkg)
+    const text = getPartText(pkg, part) ?? ''
+    setPartText(pkg, part, serializeParsed(parseDocument(text), text))
     await writeFile(output, await writePackage(pkg))
     return
   }

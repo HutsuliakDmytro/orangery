@@ -1,4 +1,5 @@
 import { IMAGE_RELATIONSHIP, addMedia } from '@orangery/ooxml-core'
+import { documentRelsPart } from '../ooxml/parts'
 import type { AddedMedia, OoxmlPackage } from '@orangery/ooxml-core'
 import { contentTypeFor } from '@orangery/ooxml-drawingml'
 import { dataUrlFrom } from './data-url'
@@ -13,7 +14,14 @@ import { dataUrlFrom } from './data-url'
  *   3. `[Content_Types].xml` declares how to read that extension.
  */
 
-export const DOCUMENT_RELS_PART = 'word/_rels/document.xml.rels'
+/**
+ * Where a document that was written the usual way keeps its relationships.
+ *
+ * Kept for a package being built rather than read. For one that was read, ask
+ * `documentRelsPart(pkg)`: the rels file's name follows the document part's,
+ * and that part is whatever `_rels/.rels` says it is.
+ */
+export const CONVENTIONAL_DOCUMENT_RELS_PART = 'word/_rels/document.xml.rels'
 
 export class UnsupportedImageError extends Error {
   override readonly name = 'UnsupportedImageError'
@@ -41,7 +49,7 @@ export function addImage(pkg: OoxmlPackage, fileName: string, bytes: Uint8Array)
 
   return addMedia(pkg, {
     directory: MEDIA_DIRECTORY,
-    relsPart: DOCUMENT_RELS_PART,
+    relsPart: documentRelsPart(pkg),
     relationshipType: IMAGE_RELATIONSHIP,
     fileName,
     contentType,

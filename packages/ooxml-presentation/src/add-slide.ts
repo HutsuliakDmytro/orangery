@@ -20,8 +20,8 @@ import type { Deck, SlidePart } from './deck'
 import { relsPartFor } from './insert-picture'
 import {
   NOTES_SLIDE_RELATIONSHIP,
-  PRESENTATION_PART,
-  PRESENTATION_RELS_PART,
+  presentationPart,
+  presentationRelsPart,
   SLIDE_LAYOUT_RELATIONSHIP,
   SLIDE_RELATIONSHIP,
 } from './parts'
@@ -53,13 +53,13 @@ export const SLIDE_CONTENT_TYPE =
 const FIRST_SLIDE_ID = 256
 
 export function presentationRoot(pkg: OoxmlPackage): { roots: XmlNode[]; root: XmlNode } | null {
-  const roots = parseXml(getPartText(pkg, PRESENTATION_PART) ?? '')
+  const roots = parseXml(getPartText(pkg, presentationPart(pkg)) ?? '')
   const root = roots.find((node) => tagName(node) === 'p:presentation')
   return root === undefined ? null : { roots, root }
 }
 
 export function writePresentation(pkg: OoxmlPackage, roots: XmlNode[]): void {
-  setPartText(pkg, PRESENTATION_PART, withDeclaration(buildXml(roots)))
+  setPartText(pkg, presentationPart(pkg), withDeclaration(buildXml(roots)))
 }
 
 /** The next free `slideN.xml`, so a new part never lands on an existing one. */
@@ -171,9 +171,9 @@ export function addSlide(
   ensureOverride(pkg, path, SLIDE_CONTENT_TYPE)
 
   // The presentation's relationship, and the entry that decides the order.
-  const presentationRels = parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '')
+  const presentationRels = parseRelationships(getPartText(pkg, presentationRelsPart(pkg)) ?? '')
   const relationship = addRelationship(presentationRels, SLIDE_RELATIONSHIP, `slides/${name}`)
-  setPartText(pkg, PRESENTATION_RELS_PART, serializeRelationships(presentationRels))
+  setPartText(pkg, presentationRelsPart(pkg), serializeRelationships(presentationRels))
 
   const entry = element('p:sldId', {
     id: String(nextSlideId(list)),
@@ -349,7 +349,7 @@ export function duplicateSlide(pkg: OoxmlPackage, index: number): AddedSlide | n
   if (entry === undefined) return null
 
   const id = attribute(entry, 'r:id') ?? null
-  const sourcePath = id === null ? null : relationshipTarget(pkg, PRESENTATION_PART, id)
+  const sourcePath = id === null ? null : relationshipTarget(pkg, presentationPart(pkg), id)
   const text = sourcePath === null ? undefined : getPartText(pkg, sourcePath)
   if (sourcePath === null || text === undefined) return null
 
@@ -369,9 +369,9 @@ export function duplicateSlide(pkg: OoxmlPackage, index: number): AddedSlide | n
   }
   setPartText(pkg, relsPartFor(path), serializeRelationships(relationships))
 
-  const presentationRels = parseRelationships(getPartText(pkg, PRESENTATION_RELS_PART) ?? '')
+  const presentationRels = parseRelationships(getPartText(pkg, presentationRelsPart(pkg)) ?? '')
   const relationship = addRelationship(presentationRels, SLIDE_RELATIONSHIP, `slides/${name}`)
-  setPartText(pkg, PRESENTATION_RELS_PART, serializeRelationships(presentationRels))
+  setPartText(pkg, presentationRelsPart(pkg), serializeRelationships(presentationRels))
 
   entries.splice(
     index + 1,

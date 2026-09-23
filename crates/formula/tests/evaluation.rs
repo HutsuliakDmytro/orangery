@@ -76,6 +76,7 @@ fn worked_out(formula: &str, sheet: &Sheet) -> Value {
         &Context {
             cells: sheet,
             at: (0, 0),
+            intersect: false,
         },
     )
 }

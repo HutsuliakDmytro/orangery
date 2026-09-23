@@ -185,3 +185,158 @@ fn randarray_is_a_rectangle_of_the_same_unpredictability() {
     assert_eq!(column("RANDARRAY(1,1,5,5,TRUE)"), ["5"]);
     assert_eq!(on(&sheet, "RANDARRAY(0)"), Value::Error(Error::Value));
 }
+
+/// Implicit intersection: what a range means in a formula written before
+/// dynamic arrays, which is every formula in every file that does not say
+/// `cm="1"` or `t="array"`.
+///
+/// Every expectation here is a cell out of the corpus, checked against the
+/// value the workbook's own writer cached beside the formula.
+mod implicit_intersection {
+    use super::*;
+    use common::intersecting;
+
+    /// `Spill.xlsx`, column A: 10, 20, 30, 40 in rows 2 to 5.
+    fn column() -> Sheet {
+        Sheet::with(&[
+            ("A2", Value::Number(10.0)),
+            ("A3", Value::Number(20.0)),
+            ("A4", Value::Number(30.0)),
+            ("A5", Value::Number(40.0)),
+        ])
+    }
+
+    #[test]
+    fn a_range_gives_the_cell_in_the_formulas_own_row() {
+        // `=$A$2:$A$5` in F3 is `=A3`, which is 20.
+        assert_eq!(
+            intersecting(&column(), "$A$2:$A$5", (2, 5)),
+            Value::Number(20.0)
+        );
+        assert_eq!(
+            intersecting(&column(), "$A$2:$A$5", (4, 5)),
+            Value::Number(40.0)
+        );
+    }
+
+    #[test]
+    fn a_row_of_cells_gives_the_one_in_the_formulas_own_column() {
+        let sheet = Sheet::with(&[
+            ("A1", Value::Number(1.0)),
+            ("B1", Value::Number(2.0)),
+            ("C1", Value::Number(3.0)),
+        ]);
+
+        assert_eq!(intersecting(&sheet, "A1:C1", (5, 1)), Value::Number(2.0));
+    }
+
+    #[test]
+    fn a_range_the_formula_does_not_line_up_with_is_a_value_error() {
+        // Excel's answer for `=$A$2:$A$5` written in a row the range does not
+        // reach: the formula is pointing at cells it has no line to.
+        assert_eq!(
+            intersecting(&column(), "$A$2:$A$5", (9, 5)),
+            Value::Error(Error::Value)
+        );
+    }
+
+    #[test]
+    fn a_rectangle_takes_the_row_and_the_column() {
+        let sheet = Sheet::with(&[
+            ("B1", Value::Number(1.0)),
+            ("C1", Value::Number(2.0)),
+            ("B2", Value::Number(11.0)),
+            ("C2", Value::Number(12.0)),
+            ("B3", Value::Number(21.0)),
+            ("C3", Value::Number(22.0)),
+        ]);
+
+        // The cell of B1:C3 that shares both the formula's row and its column.
+        assert_eq!(intersecting(&sheet, "B1:C3", (1, 1)), Value::Number(11.0));
+        assert_eq!(
+            intersecting(&sheet, "B1:C3", (1, 9)),
+            Value::Error(Error::Value)
+        );
+    }
+
+    #[test]
+    fn one_cell_is_itself_wherever_the_formula_is() {
+        assert_eq!(intersecting(&column(), "A2", (9, 9)), Value::Number(10.0));
+    }
+
+    /// `tdf138744.xlsx`, sheet `sqrt`: `SQRT(B2:F2)` in B6 is Excel's 1.
+    #[test]
+    fn a_function_that_takes_a_value_gets_the_intersection() {
+        let sheet = Sheet::with(&[
+            ("B2", Value::Number(1.0)),
+            ("C2", Value::Number(4.0)),
+            ("D2", Value::Number(9.0)),
+            ("E2", Value::Number(16.0)),
+            ("F2", Value::Number(25.0)),
+        ]);
+
+        // Written in column B, so the range gives B2, and the root of 1 is 1.
+        assert_eq!(
+            intersecting(&sheet, "SQRT(B2:F2)", (5, 1)),
+            Value::Number(1.0)
+        );
+        assert_eq!(
+            intersecting(&sheet, "SQRT(B2:F2)", (5, 3)),
+            Value::Number(3.0)
+        );
+    }
+
+    #[test]
+    fn a_function_that_takes_a_range_still_gets_the_range() {
+        // The rule is about where a value is wanted. `SUM` wants the five.
+        assert_eq!(
+            intersecting(&column(), "SUM($A$2:$A$5)", (2, 5)),
+            Value::Number(100.0)
+        );
+        assert_eq!(
+            intersecting(&column(), "COUNT($A$2:$A$5)", (9, 9)),
+            Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn arithmetic_on_two_ranges_intersects_both() {
+        let sheet = Sheet::with(&[
+            ("A1", Value::Number(1.0)),
+            ("A2", Value::Number(2.0)),
+            ("A3", Value::Number(3.0)),
+            ("B1", Value::Number(10.0)),
+            ("B2", Value::Number(20.0)),
+            ("B3", Value::Number(30.0)),
+        ]);
+
+        assert_eq!(
+            intersecting(&sheet, "A1:A3+B1:B3", (1, 5)),
+            Value::Number(22.0)
+        );
+    }
+
+    #[test]
+    fn a_comparison_of_two_ranges_intersects_both() {
+        let sheet = Sheet::with(&[
+            ("A2", Value::Text("aaa".into())),
+            ("F2", Value::Text("aaa".into())),
+        ]);
+
+        assert_eq!(
+            intersecting(&sheet, "IF($A$2:$A$9 = $F$2:$F$9, TRUE, FALSE)", (1, 6)),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn a_whole_column_intersects_with_the_formulas_row() {
+        let sheet = Sheet::with(&[
+            ("B1", Value::Number(5.0)),
+            ("B2", Value::Number(6.0)),
+            ("B3", Value::Number(7.0)),
+        ]);
+
+        assert_eq!(intersecting(&sheet, "B:B", (1, 4)), Value::Number(6.0));
+    }
+}

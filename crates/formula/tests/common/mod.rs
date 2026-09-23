@@ -131,6 +131,9 @@ pub fn on(sheet: &Sheet, formula: &str) -> Value {
         &Context {
             cells: sheet,
             at: (0, 0),
+            // Ranges whole, which is what these tests are about; the ones
+            // about implicit intersection ask for it by name.
+            intersect: false,
         },
     )
 }
@@ -168,5 +171,28 @@ pub fn column() -> Sheet {
 /// is the only way to ask what `ROW()` and `COLUMN()` answer.
 pub fn on_cell(sheet: &Sheet, formula: &str, at: (i64, i64)) -> Value {
     let tree = parse(formula).unwrap_or_else(|error| panic!("{formula} did not parse: {error}"));
-    evaluate(&tree, &Context { cells: sheet, at })
+    evaluate(
+        &tree,
+        &Context {
+            cells: sheet,
+            at,
+            intersect: false,
+        },
+    )
+}
+
+/// A formula worked out the way a file written before dynamic arrays meant it.
+///
+/// Implicit intersection on: a range used where a value is wanted gives the
+/// cell of it that lines up with `at`.
+pub fn intersecting(sheet: &Sheet, formula: &str, at: (i64, i64)) -> Value {
+    let tree = parse(formula).unwrap_or_else(|error| panic!("{formula} did not parse: {error}"));
+    evaluate(
+        &tree,
+        &Context {
+            cells: sheet,
+            at,
+            intersect: true,
+        },
+    )
 }

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
+import { ownFormula } from '../../apps/sheets/src/document/formula'
 import { openWorkbook } from '../../apps/sheets/src/document/workbook'
 import type { OpenWorkbook } from '../../apps/sheets/src/document/workbook'
 import { formatReference } from '../../packages/ooxml-spreadsheet/src/reference'
@@ -268,7 +269,10 @@ async function recalculate(file: string): Promise<Outcome> {
       for (const [, cell] of cells) {
         outcome.cells += 1
         const expected = stated(open, cell)
-        const formula = cell.formula?.text ?? ''
+        // The same rule the app uses: the cells under an array formula carry
+        // its text so anything can ask them what their formula is, but only
+        // the corner computes it.
+        const formula = ownFormula(cell) ?? ''
 
         if (formula === '') {
           lines.push(
@@ -277,8 +281,14 @@ async function recalculate(file: string): Promise<Outcome> {
           continue
         }
 
+        // An array formula — `t="array"`, or a cell carrying `cm="1"` —
+        // means its ranges whole; anything else means the implicit
+        // intersection every file written before dynamic arrays meant.
+        const array =
+          cell.formula?.kind === 'array' || cell.carried?.['cm'] !== undefined ? '1' : '0'
+
         lines.push(
-          `formula\t${escape(sheet.name)}\t${String(cell.row)}\t${String(cell.column)}\t${escape(formula)}\t${expected.kind}\t${expected.payload}`,
+          `formula\t${escape(sheet.name)}\t${String(cell.row)}\t${String(cell.column)}\t${escape(formula)}\t${expected.kind}\t${expected.payload}\t${array}`,
         )
 
         // A formula that reaches into another workbook is answered from a file

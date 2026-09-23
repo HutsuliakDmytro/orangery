@@ -83,6 +83,12 @@ pub struct CellInput {
     /// The formula without its `=`, or nothing for a cell somebody typed into.
     #[serde(default)]
     pub formula: Option<String>,
+    /// Whether the file marked it as an array formula — `t="array"` or `cm="1"`.
+    ///
+    /// The one that is not means implicit intersection: a range used where a
+    /// value is wanted is the cell of it that lines up with the formula.
+    #[serde(default)]
+    pub array: bool,
     /// What the cell shows: the file's cached value for a formula.
     pub value: Held,
 }
@@ -283,7 +289,11 @@ pub fn formula_open(
                 // it: a workbook using something unimplemented must not
                 // become a workbook this program has damaged.
                 Some(text) => {
-                    let _ = engine.load_formula(&sheet.sheet, cell.row, cell.column, &text, value);
+                    let _ = if cell.array {
+                        engine.load_array_formula(&sheet.sheet, cell.row, cell.column, &text, value)
+                    } else {
+                        engine.load_formula(&sheet.sheet, cell.row, cell.column, &text, value)
+                    };
                 }
                 None => engine.load_value(&sheet.sheet, cell.row, cell.column, value),
             }

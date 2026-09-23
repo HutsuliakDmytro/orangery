@@ -176,6 +176,41 @@ pub struct Context<'a> {
     pub cells: &'a dyn Cells,
     /// Where the formula is, which is what a relative reference is relative to.
     pub at: (i64, i64),
+    /// Whether a range used here is reduced to the one cell that lines up.
+    ///
+    /// True inside a formula the file did not mark as an array — no `cm="1"`,
+    /// no `t="array"` — and only where a single value is what is wanted. That
+    /// is implicit intersection, the rule every spreadsheet used before
+    /// dynamic arrays: `=A2:A5` in `F3` is `=A3`, and `=A2:A5` in a cell no
+    /// row of it lines up with is `#VALUE!`.
+    ///
+    /// False for an array formula, for a dynamic one, and inside any function
+    /// that takes a range — `SUM(A1:A5)` wants the five cells, not the one
+    /// beside it.
+    pub intersect: bool,
+}
+
+impl<'a> Context<'a> {
+    /// The same context, with ranges left whole.
+    ///
+    /// What a function that takes a range is given. The default is the other
+    /// way around because the default is what the formula itself is: a value.
+    pub fn for_range(&self) -> Context<'a> {
+        Context {
+            cells: self.cells,
+            at: self.at,
+            intersect: false,
+        }
+    }
+
+    /// The same context, with ranges reduced to the cell that lines up.
+    pub fn for_value(&self) -> Context<'a> {
+        Context {
+            cells: self.cells,
+            at: self.at,
+            intersect: true,
+        }
+    }
 }
 
 /// The value of a formula, with every error it met on the way included.
@@ -376,7 +411,58 @@ fn subtract(left: f64, right: f64) -> f64 {
 
 /// The value of a reference: one cell, or the rectangle it names.
 fn resolve(reference: &Reference, context: &Context<'_>) -> Value {
-    rect_of(reference, context).value(context)
+    let rect = rect_of(reference, context);
+
+    match intersected(&rect, context) {
+        Intersection::Whole => rect.value(context),
+        Intersection::At(one) => one.value(context),
+        Intersection::None => Value::Error(Error::Value),
+    }
+}
+
+/// What implicit intersection makes of a rectangle.
+enum Intersection {
+    /// Left as it is: an array formula, or a function that wants the range.
+    Whole,
+    /// The one cell of it that lines up with the formula.
+    At(Rect),
+    /// Nothing lines up, which Excel answers `#VALUE!`.
+    None,
+}
+
+/// A range reduced to the cell in the formula's own row or column.
+///
+/// The rule is Excel's, from before dynamic arrays and still what a file
+/// written without `cm="1"` means: a range used where one value is wanted
+/// gives the cell of it that shares the formula's row, or its column, or both.
+/// A range that shares neither is `#VALUE!` — the formula is pointing at cells
+/// it has no line to.
+fn intersected(rect: &Rect, context: &Context<'_>) -> Intersection {
+    if !context.intersect || (rect.height() <= 1 && rect.width() <= 1) {
+        return Intersection::Whole;
+    }
+
+    let (row, column) = context.at;
+
+    let taken_row = if rect.height() > 1 {
+        if row < rect.top || row > rect.bottom {
+            return Intersection::None;
+        }
+        row
+    } else {
+        rect.top
+    };
+
+    let taken_column = if rect.width() > 1 {
+        if column < rect.left || column > rect.right {
+            return Intersection::None;
+        }
+        column
+    } else {
+        rect.left
+    };
+
+    Intersection::At(Rect::cell(rect.sheet.clone(), taken_row, taken_column))
 }
 
 /// The rectangle a reference names, before anything has been read.

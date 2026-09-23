@@ -32,7 +32,17 @@ use crate::value::{Error, Value};
 #[derive(Debug, Clone)]
 enum Content {
     Value(Value),
-    Formula { text: String, tree: Arc<Expr> },
+    Formula {
+        text: String,
+        tree: Arc<Expr>,
+        /// Whether the file marked it as an array formula.
+        ///
+        /// `t="array"` or `cm="1"` in the cell it was read from, which is what
+        /// tells a formula written for dynamic arrays from one written before
+        /// them. The one that came before means implicit intersection where a
+        /// range is used as a value, and never spills.
+        array: bool,
+    },
 }
 
 #[derive(Default)]
@@ -282,6 +292,9 @@ impl Engine {
             Content::Formula {
                 text: text.to_string(),
                 tree: Arc::new(tree),
+                // Typed, not read: a formula somebody enters now is the modern
+                // kind, and a range in it spills rather than intersecting.
+                array: true,
             },
         );
         self.grow(sheet, row, column);
@@ -318,6 +331,35 @@ impl Engine {
         text: &str,
         cached: Value,
     ) -> Result<(), ParseError> {
+        self.load_formula_of(sheet, row, column, text, cached, false)
+    }
+
+    /// The same, for a formula the file marked as an array.
+    ///
+    /// `t="array"` or `cm="1"` in the cell: a formula written for dynamic
+    /// arrays, or entered over a range with Ctrl-Shift-Enter. Either way a
+    /// range in it is a range, where in an ordinary formula it would be the
+    /// one cell that lines up.
+    pub fn load_array_formula(
+        &mut self,
+        sheet: &str,
+        row: i64,
+        column: i64,
+        text: &str,
+        cached: Value,
+    ) -> Result<(), ParseError> {
+        self.load_formula_of(sheet, row, column, text, cached, true)
+    }
+
+    fn load_formula_of(
+        &mut self,
+        sheet: &str,
+        row: i64,
+        column: i64,
+        text: &str,
+        cached: Value,
+        array: bool,
+    ) -> Result<(), ParseError> {
         let tree = parse(text)?;
         let cell = (sheet.to_string(), row, column);
 
@@ -327,6 +369,7 @@ impl Engine {
             Content::Formula {
                 text: text.to_string(),
                 tree: Arc::new(tree),
+                array,
             },
         );
         self.values.insert(cell, cached);
@@ -368,6 +411,7 @@ impl Engine {
                             Content::Formula {
                                 text,
                                 tree: Arc::new(tree),
+                                array: true,
                             },
                         );
                         self.grow(&cell.0, cell.1, cell.2);
@@ -781,7 +825,8 @@ impl Engine {
             for cell in plan.order {
                 // A formula the graph knows about but the sheet does not is
                 // one that was just taken out; skipping it is not an error.
-                let Some(Content::Formula { tree, .. }) = self.contents.get(&cell).cloned() else {
+                let Some(Content::Formula { tree, array, .. }) = self.contents.get(&cell).cloned()
+                else {
                     continue;
                 };
 
@@ -808,8 +853,23 @@ impl Engine {
                         &Context {
                             cells: &view,
                             at: (cell.1, cell.2),
+                            // A formula the file did not mark as an array is
+                            // one from before dynamic arrays, and means what
+                            // it meant then.
+                            intersect: !array,
                         },
                     )
+                };
+
+                // A formula from before dynamic arrays does not spill. Where
+                // one comes out with an array anyway — `TRANSPOSE` of a range,
+                // say — the cell shows its first value, which is what every
+                // spreadsheet did with it until 2018.
+                let value = match (array, value) {
+                    (false, Value::Array(rows)) => {
+                        rows.values.first().cloned().unwrap_or(Value::Blank)
+                    }
+                    (_, value) => value,
                 };
 
                 let (shown, moved) = self.spill(&cell, value);

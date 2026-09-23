@@ -175,12 +175,12 @@ Eight of the eleven that differed after the first run now render identically,
 `word2007win-inlineimage-01.docx` among them — it was 5.9% of a page — and
 `unknown-freeze-01.xlsx` has its third page back. What is left:
 
-| File                             | What happens                                                    | Whose fault                                            |
-| -------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------ |
-| `word2013win-cjk-01.docx`        | LibreOffice converts the original and refuses the file we saved | ours — [#7](../../issues/7)                            |
-| `unknown-sdt-01.docx`            | 0.185% of page 1                                                | ours — [#28](../../issues/28), a cell inside a `w:sdt` |
-| `libreoffice-plain-01.docx`      | LibreOffice cannot convert the _original_ either                | LibreOffice's                                          |
-| `excel2016win-customxml-01.xlsx` | 0.765% of page 1, down from 7.3%                                | ours, cause not yet found                              |
+| File                             | What happens                                                    | Whose fault                                                             |
+| -------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `word2013win-cjk-01.docx`        | LibreOffice converts the original and refuses the file we saved | ours — [#7](../../issues/7)                                             |
+| `unknown-sdt-01.docx`            | 0.185% of page 1                                                | ours — [#33](../../issues/33), a content control that is not in a table |
+| `libreoffice-plain-01.docx`      | LibreOffice cannot convert the _original_ either                | LibreOffice's                                                           |
+| `excel2016win-customxml-01.xlsx` | 0.765% of page 1, down from 7.3%                                | ours, cause not yet found                                               |
 
 ## What has moved
 

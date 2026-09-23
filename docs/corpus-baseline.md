@@ -24,19 +24,19 @@ pnpm --filter charts corpus                  # what the charts are
 
 | Format  |   Files |     ok |   diff | crash | timeout |   oom |
 | ------- | ------: | -----: | -----: | ----: | ------: | ----: |
-| docx    |      37 |     22 |     15 |     0 |       0 |     0 |
+| docx    |      37 |     24 |     13 |     0 |       0 |     0 |
 | pptx    |      42 | **42** |      0 |     0 |       0 |     0 |
 | xlsx    |      61 |     21 |     40 |     0 |       0 |     0 |
-| **all** | **140** | **85** | **55** | **0** |   **0** | **0** |
+| **all** | **140** | **87** | **53** | **0** |   **0** | **0** |
 
 **Everything openable — 2,669 files, 77 seconds.**
 
 | Format  |     Files |        ok |    diff |  crash | timeout |   oom |
 | ------- | --------: | --------: | ------: | -----: | ------: | ----: |
-| docx    |     1,461 |     1,036 |     401 |     24 |       0 |     0 |
+| docx    |     1,461 |     1,051 |     386 |     24 |       0 |     0 |
 | pptx    |       550 |       535 |       0 |     15 |       0 |     0 |
-| xlsx    |       658 |       321 |     318 |     19 |       0 |     0 |
-| **all** | **2,669** | **1,892** | **719** | **58** |   **0** | **0** |
+| xlsx    |       658 |       324 |     315 |     19 |       0 |     0 |
+| **all** | **2,669** | **1,910** | **701** | **58** |   **0** | **0** |
 
 Of the 58 `crash`, 54 are the `hostile/` pile — encrypted packages, POI's
 fuzzer fixtures, LibreOffice's CVE samples — and failing to open them is the
@@ -85,50 +85,54 @@ a document (15 of 15), and `w:tblPrEx` with `w:gridSpan` (13).
 Every `<f>` loaded into `crates/formula`, recalculated, and compared against the
 `<v>` its own writer cached beside it.
 
-**Public corpus: 27 workbooks with formulas, 1,942 cells compared, 227 matched.**
-**Full corpus: 163 workbooks, 36,054 cells compared, 32,222 matched — 89%.**
+**Public corpus: 27 workbooks with formulas, 1,709 cells compared, 210 matched.**
+**Full corpus: 163 workbooks, 35,949 cells compared, 32,359 matched — 90.0%.**
 
 The public number is two workbooks: `excel2007mac-charts-01.xlsx` is 1,440
 cells of `SIN(RADIANS(…))` and `excel2016win-arrayformulas-02.xlsx` is 266 of
-`MMULT`/`MINVERSE`/`MDETERM`, and neither family is implemented. The other 25
-agree on 209 of 236.
+`MMULT`/`MINVERSE`/`MDETERM`, and neither family is implemented.
+
+Fewer cells are compared than before because the harness stopped asking every
+cell under an array formula for its own answer — the app never did: the covered
+cells carry the text so something can ask them what their formula is, and the
+corner computes it.
 
 ### What the mismatches are
 
-Cells whose formula names a function the engine does not have — 2,109 across
+Cells whose formula names a function the engine does not have — 2,052 across
 both corpora, grouped by the family a fix would be:
 
 | Cells | Files | Family                  | Names                                                                                                            |
 | ----: | ----: | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1,598 |     4 | trigonometry            | `RADIANS`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `DEGREES`, `ASINH`                                       |
+| 1,598 |     4 | trigonometry            | `RADIANS`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `DEGREES`                                                |
 |   151 |     5 | rounding and integers   | `FLOOR.MATH`, `CEILING.MATH`, `FLOOR.PRECISE`, `CEILING.PRECISE`, `ISO.CEILING`, `EVEN`, `ODD`, `MROUND`, `FACT` |
 |   147 |     3 | statistics              | `FORECAST.ETS`, `FORECAST.ETS.CONFINT`, `FREQUENCY`, `AVEDEV`, `DEVSQ`, `MAXA`, `MINA`                           |
-|    80 |     6 | distributions and other | `BETA.DIST`, `BINOM.DIST`, `COMBIN`, `DCOUNT`, `DAYS360`, `ANCHORARRAY`                                          |
-|    43 |     2 | matrix                  | `MMULT`, `MINVERSE`, `MDETERM`                                                                                   |
+|    79 |     5 | distributions and other | `BETA.DIST`, `BINOM.DIST`, `COMBIN`, `DCOUNT`, `DAYS360`                                                         |
 |    32 |     2 | engineering             | `HEX2DEC`, `DELTA`                                                                                               |
 |    32 |     1 | information and text    | `ISNONTEXT`, `DOLLAR`, `ISREF`, `ERROR.TYPE`                                                                     |
-|    25 |     1 | modern array            | `LET`, `CHOOSEROWS`                                                                                              |
+|     9 |     2 | matrix                  | `MMULT`, `MINVERSE`, `MDETERM`                                                                                   |
+|     3 |     2 | modern array            | `LET`, `CHOOSEROWS`, `ANCHORARRAY`                                                                               |
 |     1 |     1 | pivots                  | `GETPIVOTDATA`                                                                                                   |
 
 And the cells where the engine answered and was wrong:
 
-| Cells | Files | What                                                | Example                                 | Excel        | Us        |
-| ----: | ----: | --------------------------------------------------- | --------------------------------------- | ------------ | --------- |
-| 1,238 |    16 | a range where a value was expected                  | `$A$2:$A$5`                             | `40`         | `10`      |
-|   544 |     7 | `TEXT` and its format codes                         | `TEXT(C4, B4)`                          | `271433.376` | `271433`  |
-|    68 |     2 | `ROUND` at high precision                           | `ROUND(B2,12)=ROUND(C2,12)`             | `TRUE`       | `FALSE`   |
-|    55 |     2 | `TRANSPOSE` of a `TRANSPOSE`                        | `TRANSPOSE(TRANSPOSE($A$2:$A$5))`       | `40`         | `10`      |
-|    21 |     7 | a three-dimensional reference                       | `SUM(Sheet1:Sheet3!B1)`                 | —            | `0`       |
-|    18 |     4 | an array formula spilling where it should intersect | `IF($A2 = $F2, TRUE, FALSE)`            | `TRUE`       | `#SPILL!` |
-|     5 |     3 | a whole column in an arithmetic expression          | `SUMPRODUCT((B:B<>"")/COUNTIF(A:A,K2))` | `1.8`        | `0.2`     |
-|     5 |     2 | an array handed to a scalar function                | `SQRT(B2:F3)`                           | `1`          | `0`       |
+| Cells | Files | What                                                 | Example                                 | Excel        | Us        |
+| ----: | ----: | ---------------------------------------------------- | --------------------------------------- | ------------ | --------- |
+|   986 |    10 | a plain reference to a cell whose own answer differs | `Local1`                                | `3`          | `5`       |
+|   546 |     8 | `TEXT` and its format codes                          | `TEXT(C4, B4)`                          | `271433.376` | `271433`  |
+|    66 |     1 | `ROUND` at high precision                            | `ROUND(B2,12)=ROUND(C2,12)`             | `TRUE`       | `FALSE`   |
+|    29 |     7 | a range where a value was expected                   | `AVERAGEIF(A2:B2)`                      | `#NAME?`     | `#VALUE!` |
+|    16 |     4 | a three-dimensional reference                        | `SUM(Sheet1:Sheet3!B1)`                 | —            | `0`       |
+|    15 |     3 | `IF` over values that differ upstream                | `IF($A3 = $F3, TRUE, FALSE)`            | `TRUE`       | `FALSE`   |
+|     6 |     1 | `TRANSPOSE` in an array formula                      | `TRANSPOSE(B6:D8)`                      | `0`          | `#SPILL!` |
+|     5 |     3 | a whole column in an arithmetic expression           | `SUMPRODUCT((B:B<>"")/COUNTIF(A:A,K2))` | `1.8`        | `0.2`     |
 
-Rows one and four are the same thing — implicit intersection,
-[#13](../../issues/13) — and with the three-dimensional references they are
-1,300 cells in sixteen files: more than every missing function outside
-trigonometry put together.
+The first row is not arithmetic: those cells point at other cells whose answers
+differ for one of the reasons below them, and they inherit it. Take it out and
+the engine disagrees with Excel about 2,500 cells in 36,000, nearly all of them
+a function it has never heard of.
 
-96 mismatches are excused as the harness's fault rather than the engine's —
+81 mismatches are excused as the harness's fault rather than the engine's —
 macros, spilled ranges, hidden rows — and `docs/corpus.md` says why.
 
 ## Charts
@@ -181,7 +185,7 @@ Eight of the eleven that differed after the first run now render identically,
 ## What has moved
 
 Each row is one fix, measured on the same files before and after it. The whole
-of step 4 so far: **ok 1,429 → 1,892, diff 1,178 → 719, crash 62 → 58** on the
+of step 4 so far: **ok 1,429 → 1,910, diff 1,178 → 701, crash 62 → 58** on the
 full corpus, with pptx unmoved at 535 and 0.
 
 | Fix                                                                                                                | Corpus                                                     | Before               | After                        |

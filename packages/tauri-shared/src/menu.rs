@@ -58,6 +58,10 @@ pub struct CommandState {
     pub active: Option<bool>,
 }
 
+/// A menu bar and the item of each command in it, which is what building one
+/// answers with.
+type BuiltMenu<R> = (Menu<R>, HashMap<String, MenuItemKind<R>>);
+
 /// The items of each window's menu bar, by command id.
 ///
 /// Kept so that a change of state is `set_enabled` on the item that changed
@@ -172,7 +176,7 @@ pub fn build<R: Runtime>(
 fn build_with_items<R: Runtime>(
     app: &AppHandle<R>,
     descriptors: &[CommandDescriptor],
-) -> Result<(Menu<R>, HashMap<String, MenuItemKind<R>>), AppError> {
+) -> Result<BuiltMenu<R>, AppError> {
     let mut items: HashMap<String, MenuItemKind<R>> = HashMap::new();
     let grouped = group_items(descriptors);
 

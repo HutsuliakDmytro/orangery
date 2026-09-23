@@ -16,7 +16,7 @@
 //! name      <name>     <formula>
 //! table     <name>     <sheet>  <top>  <bottom>  <left>  <right>  <headers>  <totals>  <column>…
 //! value     <sheet>    <row>  <column>  <n|s|b|e|blank>  <payload>
-//! formula   <sheet>    <row>  <column>  <text>           <cached kind>  <cached payload>
+//! formula   <sheet>    <row>  <column>  <text>  <cached kind>  <cached payload>  <array>
 //! recalc
 //! get       <sheet>    <row>  <column>
 //! ```
@@ -111,7 +111,9 @@ fn main() {
 
     for line in input.lines() {
         let mut fields = line.split('\t');
-        let Some(record) = fields.next() else { continue };
+        let Some(record) = fields.next() else {
+            continue;
+        };
 
         match record {
             "moment" => {
@@ -147,14 +149,21 @@ fn main() {
                 let text = unescape(fields.next().unwrap_or_default());
                 let kind = fields.next().unwrap_or("z");
                 let payload = fields.next().unwrap_or_default();
+                // Whether the cell said `t="array"` or carried `cm="1"`, which
+                // is what decides implicit intersection.
+                let array = fields.next() == Some("1");
+
+                let cached = value_of(kind, payload);
+                let loaded = if array {
+                    engine.load_array_formula(&sheet, row, column, &text, cached.clone())
+                } else {
+                    engine.load_formula(&sheet, row, column, &text, cached.clone())
+                };
 
                 // A formula the parser will not take is not an error here: the
                 // question the run asks is what the engine makes of the ones it
                 // does take, and a cell it cannot read keeps the file's value.
-                if engine
-                    .load_formula(&sheet, row, column, &text, value_of(kind, payload))
-                    .is_err()
-                {
+                if loaded.is_err() {
                     engine.load_value(&sheet, row, column, value_of(kind, payload));
                     let _ = writeln!(out, "unparsed\t{}\t{row}\t{column}", escape(&sheet));
                 }

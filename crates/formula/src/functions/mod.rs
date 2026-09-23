@@ -54,6 +54,68 @@ pub fn lookup(name: &str) -> Option<&'static Function> {
         .find(|function| function.name == plain)
 }
 
+/// Functions whose arguments are single values rather than ranges.
+///
+/// Excel decides this per parameter, from the function's signature: `SQRT`
+/// takes a number, `SUM` takes any number of ranges, and `VLOOKUP` takes a
+/// value and then a range. The table here has no parameter kinds in it, so
+/// this is a list of the functions every one of whose arguments is a value —
+/// which is what decides whether a range handed to one is reduced to the cell
+/// that lines up with the formula.
+///
+/// Wrong in one direction only: a function missing from this list is given
+/// the whole range, which is what every function got before. It is written
+/// out rather than inferred because guessing would be wrong quietly.
+const VALUE_ARGUMENTS: &[&str] = &[
+    // `IF` tests a value and gives back one of two, and all three intersect in
+    // a formula written before dynamic arrays. `AND` and `OR` are not here:
+    // they take ranges, and `AND(A1:A5)` means all five.
+    "IF",
+    "IFERROR",
+    "IFNA",
+    "ABS",
+    "SQRT",
+    "INT",
+    "TRUNC",
+    "SIGN",
+    "EXP",
+    "LN",
+    "LOG",
+    "LOG10",
+    "MOD",
+    "POWER",
+    "ROUND",
+    "ROUNDUP",
+    "ROUNDDOWN",
+    "UPPER",
+    "LOWER",
+    "PROPER",
+    "TRIM",
+    "LEN",
+    "LEFT",
+    "RIGHT",
+    "MID",
+    "VALUE",
+    "CHAR",
+    "CODE",
+    "T",
+    "N",
+    "REPT",
+    "FIND",
+    "SEARCH",
+    "SUBSTITUTE",
+    "REPLACE",
+    "YEAR",
+    "MONTH",
+    "DAY",
+    "HOUR",
+    "MINUTE",
+    "SECOND",
+    "WEEKDAY",
+    "EDATE",
+    "EOMONTH",
+];
+
 /// Calls a function, or says why it could not.
 pub fn call(name: &str, arguments: &[Expr], context: &Context<'_>) -> Value {
     let Some(function) = lookup(name) else {
@@ -71,7 +133,16 @@ pub fn call(name: &str, arguments: &[Expr], context: &Context<'_>) -> Value {
         }
     }
 
-    (function.call)(arguments, context)
+    // A function that takes ranges is given them whole; one that takes values
+    // gets the implicit intersection, if the formula is in a position to have
+    // one. Which of the two it is comes from the list above.
+    let inner = if VALUE_ARGUMENTS.contains(&function.name) {
+        context.for_value()
+    } else {
+        context.for_range()
+    };
+
+    (function.call)(arguments, &inner)
 }
 
 /// The rectangle a function names, for the few that answer with a place

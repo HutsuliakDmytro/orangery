@@ -44,6 +44,15 @@ export interface CellInput {
   column: number
   /** Without the leading `=`; absent for a cell somebody typed a value into. */
   formula?: string
+  /**
+   * Whether the file marked the formula as an array.
+   *
+   * `t="array"` on the `<f>`, or `cm="1"` on the cell. It is what tells a
+   * formula written for dynamic arrays from one written before them, and the
+   * one written before means a range used as a value is the cell of it that
+   * lines up with the formula rather than all of it.
+   */
+  array?: boolean
   value: Held
 }
 
@@ -250,7 +259,12 @@ function inputsOf(open: OpenWorkbook, sheet: OpenSheet): CellInput[] {
     for (const cell of row.values()) {
       const input: CellInput = { row: cell.row, column: cell.column, value: heldOf(open, cell) }
       const formula = ownFormula(cell)
-      if (formula !== null) input.formula = formula
+      if (formula !== null) {
+        input.formula = formula
+        if (cell.formula?.kind === 'array' || cell.carried?.['cm'] !== undefined) {
+          input.array = true
+        }
+      }
       cells.push(input)
     }
   }

@@ -8,6 +8,7 @@
 mod formula;
 
 use orangery_tauri_shared::{diagnostics, document, menu};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +21,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             menu::set_command_menu,
+            menu::sync_command_menu,
+            menu::focus_command_menu,
             document::read_document,
             document::write_document,
             document::document_key,
@@ -47,6 +50,10 @@ pub fn run() {
         ])
         .setup(|app| {
             document::emit_launch_paths(app.handle());
+
+            // Where each window's menu items are kept, so a command becoming
+            // available is `set_enabled` on one item rather than a new menu bar.
+            app.manage(menu::MenuBars::<tauri::Wry>::new());
 
             // A placeholder menu so the window never appears bare; the frontend
             // replaces it with the registry-driven one as soon as it mounts.

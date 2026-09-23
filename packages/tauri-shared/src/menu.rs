@@ -9,10 +9,13 @@
 //! side because they need OS wiring the webview cannot provide.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use serde::Deserialize;
-use tauri::menu::{AboutMetadata, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Runtime};
+use tauri::menu::{
+    AboutMetadata, CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu,
+};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::AppError;
 
@@ -23,11 +26,64 @@ pub struct CommandDescriptor {
     pub label: String,
     pub group: String,
     pub shortcut: Option<String>,
+    /// Whether the command can be run right now.
+    ///
+    /// Absent means yes. A command says when it cannot be run, not when it
+    /// can, and a descriptor that forgot to say is a command with nothing
+    /// standing in its way — the opposite default greys out the menu bar of an
+    /// app whose registry never said anything was wrong.
+    #[serde(default = "yes")]
     pub enabled: bool,
     /// `Some` for a command that is a toggle, and says whether it is on. A
     /// toggle without a tick in the menu gives no way to tell.
     #[serde(default)]
     pub active: Option<bool>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// What a command's menu item should show, without rebuilding anything.
+///
+/// The small half of a descriptor: everything that changes as somebody works,
+/// and nothing that decides what the menu bar looks like. Sent many times a
+/// second where the descriptors are sent once.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommandState {
+    pub id: String,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub active: Option<bool>,
+}
+
+/// The items of each window's menu bar, by command id.
+///
+/// Kept so that a change of state is `set_enabled` on the item that changed
+/// rather than a new menu bar. Rebuilding one is visible on macOS — the bar
+/// blinks — and it happened on every selection move.
+///
+/// By window, because each window has its own document and its own idea of
+/// what can be done to it. On macOS the menu bar belongs to the application
+/// rather than to a window, so the one on screen is the focused window's and
+/// `focus_menu` is what swaps it.
+#[derive(Default)]
+pub struct MenuBars<R: Runtime> {
+    windows: Mutex<HashMap<String, WindowMenu<R>>>,
+}
+
+struct WindowMenu<R: Runtime> {
+    menu: Menu<R>,
+    items: HashMap<String, MenuItemKind<R>>,
+}
+
+impl<R: Runtime> MenuBars<R> {
+    pub fn new() -> Self {
+        Self {
+            windows: Mutex::new(HashMap::new()),
+        }
+    }
 }
 
 /// Menu-bar order. A group with no commands is still rendered when it carries
@@ -106,6 +162,18 @@ pub fn build<R: Runtime>(
     app: &AppHandle<R>,
     descriptors: &[CommandDescriptor],
 ) -> Result<Menu<R>, AppError> {
+    Ok(build_with_items(app, descriptors)?.0)
+}
+
+/// The menu bar, and the item of each command in it.
+///
+/// The items are what makes a state change cheap: `set_enabled` on the one
+/// that changed, rather than a new menu bar for the whole application.
+fn build_with_items<R: Runtime>(
+    app: &AppHandle<R>,
+    descriptors: &[CommandDescriptor],
+) -> Result<(Menu<R>, HashMap<String, MenuItemKind<R>>), AppError> {
+    let mut items: HashMap<String, MenuItemKind<R>> = HashMap::new();
     let grouped = group_items(descriptors);
 
     // The submenu named after the application is a macOS convention, and the
@@ -175,6 +243,7 @@ pub fn build<R: Runtime>(
                         accelerator(descriptor),
                     )?;
                     submenu.append(&item)?;
+                    items.insert(descriptor.id.clone(), MenuItemKind::Check(item));
                 }
                 None => {
                     let item = MenuItem::with_id(
@@ -185,6 +254,7 @@ pub fn build<R: Runtime>(
                         accelerator(descriptor),
                     )?;
                     submenu.append(&item)?;
+                    items.insert(descriptor.id.clone(), MenuItemKind::MenuItem(item));
                 }
             }
         }
@@ -213,19 +283,130 @@ pub fn build<R: Runtime>(
     );
     refs.push(&help_menu);
 
-    Menu::with_items(app, &refs).map_err(Into::into)
+    let menu = Menu::with_items(app, &refs)?;
+    Ok((menu, items))
 }
 
-/// Rebuilds the menu bar from the registry. Called on startup and whenever the
-/// frontend's enabled-state changes (selection moved, history became non-empty).
+/// Builds this window's menu bar from the registry.
+///
+/// Called when the shape changes — a window opens, a document brings different
+/// commands with it — and not when a command merely becomes available:
+/// `sync_command_menu` does that without building anything.
+///
+/// Not `async`: a command declared async is run on a worker thread, and a menu
+/// bar is the main thread's. The work is a few hundred microseconds.
 #[tauri::command]
-pub async fn set_command_menu<R: Runtime>(
+pub fn set_command_menu<R: Runtime>(
     app: AppHandle<R>,
+    window: tauri::Window<R>,
     descriptors: Vec<CommandDescriptor>,
 ) -> Result<(), AppError> {
-    let menu = build(&app, &descriptors)?;
-    app.set_menu(menu)?;
+    let (menu, items) = build_with_items(&app, &descriptors)?;
+
+    if let Some(bars) = app.try_state::<MenuBars<R>>() {
+        if let Ok(mut windows) = bars.windows.lock() {
+            windows.insert(
+                window.label().to_string(),
+                WindowMenu {
+                    menu: menu.clone(),
+                    items,
+                },
+            );
+        }
+    }
+
+    show(&app, &window, &menu)
+}
+
+/// Puts a menu on screen for the window it belongs to.
+///
+/// On macOS the menu bar belongs to the application and shows whatever the
+/// focused window last put there; everywhere else it belongs to the window and
+/// is set on it.
+fn show<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &tauri::Window<R>,
+    menu: &Menu<R>,
+) -> Result<(), AppError> {
+    if ON_MACOS {
+        if window.is_focused().unwrap_or(true) {
+            app.set_menu(menu.clone())?;
+        }
+    } else {
+        window.set_menu(menu.clone())?;
+    }
+
     Ok(())
+}
+
+/// Brings the items of a window's menu up to date, without rebuilding it.
+///
+/// `false` means the menu bar does not have these commands in it — the window
+/// has not built one yet, or the registry has changed shape since it did — and
+/// the caller should send descriptors instead.
+#[tauri::command]
+pub fn sync_command_menu<R: Runtime>(
+    app: AppHandle<R>,
+    window: tauri::Window<R>,
+    states: Vec<CommandState>,
+) -> Result<bool, AppError> {
+    let Some(bars) = app.try_state::<MenuBars<R>>() else {
+        return Ok(false);
+    };
+    let Ok(windows) = bars.windows.lock() else {
+        return Ok(false);
+    };
+    let Some(built) = windows.get(window.label()) else {
+        return Ok(false);
+    };
+
+    for state in &states {
+        let Some(item) = built.items.get(&state.id) else {
+            // A command the menu bar has never heard of: its shape has changed
+            // and the states are about a bar that no longer exists.
+            return Ok(false);
+        };
+
+        match item {
+            MenuItemKind::MenuItem(item) => item.set_enabled(state.enabled)?,
+            MenuItemKind::Check(item) => {
+                item.set_enabled(state.enabled)?;
+                if let Some(active) = state.active {
+                    item.set_checked(active)?;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(true)
+}
+
+/// Shows the menu bar of the window that has just been focused.
+///
+/// macOS only in effect: elsewhere each window carries its own bar and nothing
+/// needs swapping. Two windows of the same app hold different documents, and
+/// the bar has to say what can be done to the one in front.
+#[tauri::command]
+pub fn focus_command_menu<R: Runtime>(
+    app: AppHandle<R>,
+    window: tauri::Window<R>,
+) -> Result<bool, AppError> {
+    let Some(bars) = app.try_state::<MenuBars<R>>() else {
+        return Ok(false);
+    };
+    let Ok(windows) = bars.windows.lock() else {
+        return Ok(false);
+    };
+    let Some(built) = windows.get(window.label()) else {
+        return Ok(false);
+    };
+
+    if ON_MACOS {
+        app.set_menu(built.menu.clone())?;
+    }
+
+    Ok(true)
 }
 
 /// Minimal menu shown before the frontend has reported its commands, so the

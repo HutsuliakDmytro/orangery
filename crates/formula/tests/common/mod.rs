@@ -134,6 +134,7 @@ pub fn on(sheet: &Sheet, formula: &str) -> Value {
             // Ranges whole, which is what these tests are about; the ones
             // about implicit intersection ask for it by name.
             intersect: false,
+            ranges_wanted: false,
         },
     )
 }
@@ -177,6 +178,7 @@ pub fn on_cell(sheet: &Sheet, formula: &str, at: (i64, i64)) -> Value {
             cells: sheet,
             at,
             intersect: false,
+            ranges_wanted: false,
         },
     )
 }
@@ -193,6 +195,7 @@ pub fn intersecting(sheet: &Sheet, formula: &str, at: (i64, i64)) -> Value {
             cells: sheet,
             at,
             intersect: true,
+            ranges_wanted: false,
         },
     )
 }

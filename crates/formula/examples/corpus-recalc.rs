@@ -15,6 +15,7 @@
 //! date1904  <0|1>
 //! name      <name>     <formula>
 //! table     <name>     <sheet>  <top>  <bottom>  <left>  <right>  <headers>  <totals>  <column>…
+//! sheets    <name>…                                    the workbook's tabs, in order
 //! value     <sheet>    <row>  <column>  <n|s|b|e|blank>  <payload>
 //! formula   <sheet>    <row>  <column>  <text>  <cached kind>  <cached payload>  <array>
 //! recalc
@@ -167,6 +168,9 @@ fn main() {
                     engine.load_value(&sheet, row, column, value_of(kind, payload));
                     let _ = writeln!(out, "unparsed\t{}\t{row}\t{column}", escape(&sheet));
                 }
+            }
+            "sheets" => {
+                engine.set_sheet_order(fields.map(unescape).collect());
             }
             "table" => {
                 let mut next = || fields.next().unwrap_or_default().to_string();

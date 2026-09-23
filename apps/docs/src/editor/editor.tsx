@@ -1,6 +1,7 @@
 import { EditorContext, useEditor } from '@tiptap/react'
 import { useEffect, useMemo } from 'react'
 import { CommandSourceProvider } from '@orangery/ui-kit'
+import { useViewStore } from '../store/view-store'
 import type { CommandSource } from '@orangery/ui-kit'
 import { registerBuiltinCommands } from './commands/definitions'
 import { buildExtensions, setCurrentEditor } from './extension-set'
@@ -48,7 +49,12 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     () => ({
       read: () => (editor ? { editor } : null),
       subscribe: (listener) => {
-        if (!editor) return () => {}
+        // The view store first, and whether or not there is an editor: a
+        // command can be a toggle on something the document carries rather
+        // than on the selection — tracked changes, numbered headings — and the
+        // menu bar has to follow those too.
+        const unsubscribe = useViewStore.subscribe(listener)
+        if (!editor) return unsubscribe
 
         // Selection moves without a transaction, and focus decides whether an
         // edit command applies at all.
@@ -58,6 +64,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
         editor.on('blur', listener)
 
         return () => {
+          unsubscribe()
           editor.off('transaction', listener)
           editor.off('selectionUpdate', listener)
           editor.off('focus', listener)

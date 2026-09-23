@@ -78,6 +78,8 @@ export interface OpenDocx {
   documentAttributes: Record<string, string>
   /** The `w:document` children that are not the body, kept as the file wrote them. */
   documentPrelude: string | null
+  /** The reference run each comment had, by id, so its style id survives a save. */
+  commentAnchors: Record<string, string>
 }
 
 /**
@@ -152,6 +154,7 @@ export async function openDocx(bytes: Uint8Array): Promise<OpenDocx> {
     section: parseSection(parsed.sectionProperties),
     documentAttributes: parsed.documentAttributes,
     documentPrelude: parsed.documentPrelude,
+    commentAnchors: parsed.commentAnchors,
   }
 }
 
@@ -183,6 +186,7 @@ export async function saveDocx(
   const xml = serializeDocument(doc, {
     documentAttributes: open.documentAttributes,
     documentPrelude: open.documentPrelude,
+    commentAnchors: open.commentAnchors,
     // The part as it was read: its declaration and its root come back as they
     // were, and only the body is rebuilt.
     previous: getPartText(open.pkg, documentPart(open.pkg)),

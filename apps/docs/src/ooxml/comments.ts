@@ -1,5 +1,6 @@
 import {
   attribute,
+  attributes,
   children,
   element,
   parseIntAttribute,
@@ -33,13 +34,38 @@ export interface Comment {
   /** ISO timestamp, or empty when the file states none. */
   date: string
   text: string
+  /**
+   * The comment's paragraphs as the file wrote them.
+   *
+   * Kept for the same reason a footnote's are: a comment is a stretch of
+   * WordprocessingML, and the panel edits the words in it. Rebuilding one from
+   * its text writes our idea of a comment — `w:pStyle w:val="CommentText"`,
+   * `w:rStyle w:val="CommentReference"` — over the file's own, and a document
+   * whose styles are called `a5` and `a6`, which is what LibreOffice and Word
+   * in several locales write, comes back renamed with any formatting inside
+   * the comment flattened.
+   *
+   * Written back untouched while the text is what it was. Absent for a
+   * comment somebody has just made, which has no original to keep.
+   */
+  paragraphs?: XmlNode[]
+  /** Attributes of `w:comment` this does not model, kept so they survive. */
+  carried?: Record<string, string> | null
 }
+
+/** What `w:comment` states that this models; the rest is carried. */
+const MODELLED_COMMENT = new Set(['w:id', 'w:author', 'w:initials', 'w:date'])
 
 /** Text of a comment's paragraphs, with the runs flattened into lines. */
 function textOf(comment: XmlNode): string {
+  return textOfParagraphs(children(comment))
+}
+
+/** The same, for paragraphs already taken out of the comment that held them. */
+function textOfParagraphs(nodes: readonly XmlNode[]): string {
   const lines: string[] = []
 
-  for (const paragraph of children(comment)) {
+  for (const paragraph of nodes) {
     if (tagName(paragraph) !== 'w:p') continue
 
     let line = ''
@@ -73,30 +99,50 @@ export function parseComments(xml: string): Map<number, Comment> {
     const id = parseIntAttribute(attribute(child, 'w:id'))
     if (id === null) continue
 
+    const rest = Object.entries(attributes(child)).filter(([name]) => !MODELLED_COMMENT.has(name))
+
     comments.set(id, {
       id,
       author: attribute(child, 'w:author') ?? '',
       initials: attribute(child, 'w:initials') ?? '',
       date: attribute(child, 'w:date') ?? '',
       text: textOf(child),
+      paragraphs: children(child).filter((node) => tagName(node) === 'w:p'),
+      carried: rest.length === 0 ? null : Object.fromEntries(rest),
     })
   }
 
   return comments
 }
 
-/** A comment as the part stores it: one paragraph per line, styled as Word does. */
+/**
+ * A comment as the part stores it.
+ *
+ * Untouched while the words are the ones the file had: the paragraphs go back
+ * exactly as they came, with whatever styles, formatting and markup nobody
+ * here models. Only a comment somebody edited is rebuilt, and then it is
+ * rebuilt as Word writes one — which is the best guess available once the
+ * original paragraphs no longer say the right thing.
+ */
 function buildComment(comment: Comment): XmlNode {
   const lines = comment.text.split('\n')
 
+  const stated = {
+    'w:id': String(comment.id),
+    'w:author': comment.author,
+    ...(comment.initials === '' ? {} : { 'w:initials': comment.initials }),
+    ...(comment.date === '' ? {} : { 'w:date': comment.date }),
+    ...(comment.carried ?? {}),
+  }
+
+  const original = comment.paragraphs ?? []
+  if (original.length > 0 && textOfParagraphs(original) === comment.text) {
+    return element('w:comment', stated, original)
+  }
+
   return element(
     'w:comment',
-    {
-      'w:id': String(comment.id),
-      'w:author': comment.author,
-      ...(comment.initials === '' ? {} : { 'w:initials': comment.initials }),
-      ...(comment.date === '' ? {} : { 'w:date': comment.date }),
-    },
+    stated,
     lines.map((line) =>
       element('w:p', {}, [
         element('w:pPr', {}, [element('w:pStyle', { 'w:val': 'CommentText' })]),
@@ -144,7 +190,15 @@ export function rangeEnd(id: number): XmlNode {
  * It comes after the range end, and without it Word shows no bubble at all —
  * the range alone marks text that belongs to a comment nobody can open.
  */
-export function referenceRun(id: number): XmlNode {
+export function referenceRun(id: number, original?: string): XmlNode {
+  // The file's own run where there was one: its `w:rStyle` names a style in
+  // this document's `styles.xml`, which is `CommentReference` in a Word
+  // document written in English and `a5` in plenty of others.
+  if (original !== undefined && original !== '') {
+    const parsed = parseXml(original).find((node) => tagName(node) === 'w:r')
+    if (parsed !== undefined) return parsed
+  }
+
   return element('w:r', {}, [
     element('w:rPr', {}, [element('w:rStyle', { 'w:val': 'CommentReference' })]),
     element('w:commentReference', { 'w:id': String(id) }),

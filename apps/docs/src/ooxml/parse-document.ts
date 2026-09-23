@@ -60,6 +60,15 @@ export interface ParsedDocument {
    * thing to write back.
    */
   documentPrelude: string | null
+  /**
+   * The run that carried each comment's reference, by comment id.
+   *
+   * The run is not content — Word draws the bubble from it and shows nothing
+   * inline — so it is dropped on the way in and rebuilt on the way out, which
+   * meant rebuilt with our idea of what it says: `w:rStyle w:val` of
+   * `CommentReference`, written over whatever this document calls that style.
+   */
+  commentAnchors: Record<string, string>
 }
 
 export type { ProseMirrorMarkJson, ProseMirrorNodeJson } from './prosemirror-json'
@@ -533,6 +542,9 @@ function parseRun(
  */
 let openComments: number[] = []
 
+/** The reference run of each comment, by id, as the document wrote it. */
+let commentAnchors: Record<string, string> = {}
+
 function commentMarks(): ProseMirrorMarkJson[] {
   return openComments.map((id) => ({ type: 'comment', attrs: { commentId: id } }))
 }
@@ -593,7 +605,12 @@ function parseParagraph(
 
         // The run that only carries the reference is the marker itself, not
         // text: Word draws the bubble from it and shows nothing for it inline.
-        if (findChild(child, 'w:commentReference') !== undefined) break
+        const reference = findChild(child, 'w:commentReference')
+        if (reference !== undefined) {
+          const referenced = attribute(reference, 'w:id')
+          if (referenced !== undefined) commentAnchors[referenced] = serializeNode(child)
+          break
+        }
 
         for (const node of runs) {
           if (marks.length > 0) node.marks = [...(node.marks ?? []), ...marks]
@@ -810,6 +827,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
   const footnoteText = context.footnoteText
   runKeyCounter = 0
   openComments = []
+  commentAnchors = {}
   const warnings: ParseWarning[] = []
   const roots = parseXml(xml)
 
@@ -821,6 +839,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
       sectionProperties: null,
       documentAttributes: {},
       documentPrelude: null,
+      commentAnchors: {},
     }
   }
 
@@ -882,6 +901,7 @@ export function parseDocument(xml: string, context: ParseContext = {}): ParsedDo
     sectionProperties,
     documentAttributes: attributesOf(document),
     documentPrelude: prelude === '' ? null : prelude,
+    commentAnchors,
   }
 }
 

@@ -42,6 +42,8 @@ export interface SerializeOptions {
   documentPrelude?: string | null
   /** The part as it was read, so its declaration and root survive the rewrite. */
   previous?: string
+  /** The reference run each comment had, by id, so its style id survives. */
+  commentAnchors?: Record<string, string>
   /** Original `w:sectPr`, appended to the body unchanged. */
   sectionProperties: string | null
   /** Match the source's `xml:space` convention — see `detectSpaceConvention`. */
@@ -453,9 +455,11 @@ function attributesOf(node: XmlNode): Record<string, string> {
 interface CommentState {
   open: number[]
   ahead: readonly number[]
+  /** The reference run each comment had, by id, or nothing for a new one. */
+  anchors: Record<string, string>
 }
 
-const NO_COMMENTS: CommentState = { open: [], ahead: [] }
+const NO_COMMENTS: CommentState = { open: [], ahead: [], anchors: {} }
 
 function commentIdsOf(marks: Mark[] | undefined): number[] {
   return (marks ?? [])
@@ -513,7 +517,7 @@ function buildParagraph(
   const syncComments = (ids: readonly number[]) => {
     for (const id of [...open]) {
       if (ids.includes(id)) continue
-      paragraphChildren.push(rangeEnd(id), referenceRun(id))
+      paragraphChildren.push(rangeEnd(id), referenceRun(id, comments.anchors[String(id)]))
       open.splice(open.indexOf(id), 1)
     }
 
@@ -803,7 +807,11 @@ export function serializeDocument(doc: ProseMirrorNodeJson, options: SerializeOp
 
   // Shared across the whole body, so a comment starting in one paragraph and
   // ending in another is written as the single range OOXML expects.
-  const commentState: CommentState = { open: [], ahead: [] }
+  const commentState: CommentState = {
+    open: [],
+    ahead: [],
+    anchors: options.commentAnchors ?? {},
+  }
 
   const context: BlockContext = {
     captions,
@@ -872,6 +880,7 @@ export function serializeParsed(parsed: ParsedDocument, previous?: string): stri
   return serializeDocument(parsed.doc, {
     documentAttributes: parsed.documentAttributes,
     documentPrelude: parsed.documentPrelude,
+    commentAnchors: parsed.commentAnchors,
     sectionProperties: parsed.sectionProperties,
     previous,
   })

@@ -780,3 +780,112 @@ mod on_manual {
         assert_eq!(changed.circular.len(), 2);
     }
 }
+
+/// References that reach across sheets — Excel calls them 3-D.
+///
+/// `SUM(Sheet1:Sheet3!B1)` adds B1 of every sheet from the first tab to the
+/// third, and which sheets those are is a fact about the workbook rather than
+/// about the formula. The engine used to read the first of them and stop, so
+/// a total across a workbook of monthly sheets was January's figure.
+///
+/// Every expectation here is from `FormulaEvalTestData.xlsx` in Apache POI's
+/// test data, where the three sheets hold 11, 11 and 11 and the answers Excel
+/// cached are 33, 22 and 3.
+mod across_sheets {
+    use super::*;
+
+    /// Three sheets, each with a number in A1 and B1.
+    fn workbook() -> Engine {
+        let mut engine = engine();
+        engine.set_sheet_order(vec![
+            "Sheet1".to_string(),
+            "Sheet2".to_string(),
+            "Sheet3".to_string(),
+        ]);
+
+        for (sheet, value) in [("Sheet1", 11.0), ("Sheet2", 11.0), ("Sheet3", 11.0)] {
+            engine.load_value(sheet, 0, 0, Value::Number(value));
+            engine.load_value(sheet, 0, 1, Value::Number(value));
+        }
+
+        engine
+    }
+
+    fn answer(formula: &str) -> Value {
+        let mut engine = workbook();
+        engine
+            .set_formula("Sheet1", 4, 4, formula)
+            .expect("the formula parses");
+        engine.value("Sheet1", 4, 4)
+    }
+
+    #[test]
+    fn sum_adds_the_cell_from_every_sheet_of_the_span() {
+        assert_eq!(answer("SUM(Sheet1:Sheet3!A1)"), Value::Number(33.0));
+    }
+
+    #[test]
+    fn average_divides_by_the_sheets_it_read() {
+        assert_eq!(answer("AVERAGE(Sheet1:Sheet3!A1)"), Value::Number(11.0));
+    }
+
+    #[test]
+    fn count_counts_one_cell_per_sheet() {
+        assert_eq!(answer("COUNT(Sheet1:Sheet3!A1)"), Value::Number(3.0));
+    }
+
+    #[test]
+    fn min_and_max_look_at_all_three() {
+        let mut engine = workbook();
+        engine.load_value("Sheet2", 0, 0, Value::Number(4.0));
+        engine.load_value("Sheet3", 0, 0, Value::Number(30.0));
+
+        engine
+            .set_formula("Sheet1", 4, 4, "MAX(Sheet1:Sheet3!A1)")
+            .expect("the formula parses");
+        engine
+            .set_formula("Sheet1", 5, 4, "MIN(Sheet1:Sheet3!A1)")
+            .expect("the formula parses");
+
+        assert_eq!(engine.value("Sheet1", 4, 4), Value::Number(30.0));
+        assert_eq!(engine.value("Sheet1", 5, 4), Value::Number(4.0));
+    }
+
+    #[test]
+    fn a_span_of_one_sheet_is_that_sheet() {
+        assert_eq!(answer("SUM(Sheet2:Sheet2!A1)"), Value::Number(11.0));
+    }
+
+    #[test]
+    fn a_range_on_every_sheet_is_read_from_every_sheet() {
+        // Two cells across three sheets is six numbers.
+        assert_eq!(answer("SUM(Sheet1:Sheet3!A1:B1)"), Value::Number(66.0));
+    }
+
+    #[test]
+    fn the_span_is_the_tabs_between_the_two_named() {
+        // Whichever way round they are written.
+        assert_eq!(answer("SUM(Sheet3:Sheet1!A1)"), Value::Number(33.0));
+    }
+
+    #[test]
+    fn a_sheet_in_the_middle_changing_reaches_the_formula() {
+        // The dependency graph has to know about every sheet of the span, not
+        // only the two named ends, or the total stays as it was.
+        let mut engine = workbook();
+        engine
+            .set_formula("Sheet1", 4, 4, "SUM(Sheet1:Sheet3!A1)")
+            .expect("the formula parses");
+        assert_eq!(engine.value("Sheet1", 4, 4), Value::Number(33.0));
+
+        engine.set_value("Sheet2", 0, 0, Value::Number(100.0));
+
+        assert_eq!(engine.value("Sheet1", 4, 4), Value::Number(122.0));
+    }
+
+    #[test]
+    fn written_in_a_cell_of_its_own_it_is_an_error() {
+        // Excel's answer: three values and no way to choose between them.
+        assert_eq!(answer("Sheet1:Sheet3!A1"), Value::Error(Error::Value));
+    }
+}

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use crate::ast::Expr;
 use crate::date::DateSystem;
 use crate::eval::{evaluate, Cells, Context, Rect, Standing};
-use crate::graph::{precedents_of, Area, CellId, Graph};
+use crate::graph::{precedents_across, Area, CellId, Graph};
 use crate::parser::{parse, ParseError};
 use crate::table::Table;
 use crate::value::{Error, Value};
@@ -53,6 +53,12 @@ pub struct Engine {
     graph: Graph,
     /// How far each sheet reaches, for `A:A` and its kind.
     extents: FastMap<String, (i64, i64)>,
+    /// The sheets of the workbook, in the order its tabs are in.
+    ///
+    /// What `Sheet1:Sheet3!B1` means: every sheet from the first to the last,
+    /// which is a fact about the workbook rather than about the formula. An
+    /// engine nobody has told falls back to the two ends.
+    order: Vec<String>,
     /// What time it is, as the workbook counts time.
     moment: f64,
     /// Which morning the workbook counts days from.
@@ -213,6 +219,16 @@ impl Engine {
     ///
     /// Told rather than worked out: a table moves when rows are put in around
     /// it, and only whoever holds the workbook knows where it is now.
+    /// The sheets of the workbook, in tab order.
+    ///
+    /// Told rather than worked out: the engine sees a sheet when a cell on it
+    /// arrives, which is not an order and not even a complete list — an empty
+    /// sheet between two full ones is still part of what
+    /// `Sheet1:Sheet3!B1` reaches across.
+    pub fn set_sheet_order(&mut self, order: Vec<String>) {
+        self.order = order;
+    }
+
     pub fn set_tables(&mut self, tables: Vec<Table>) {
         self.tables = tables;
     }
@@ -286,7 +302,8 @@ impl Engine {
         let tree = parse(text)?;
         let cell = (sheet.to_string(), row, column);
 
-        self.graph.set(cell.clone(), precedents_of(&tree, sheet));
+        self.graph
+            .set(cell.clone(), precedents_across(&tree, sheet, &self.order));
         self.contents.insert(
             cell.clone(),
             Content::Formula {
@@ -363,7 +380,8 @@ impl Engine {
         let tree = parse(text)?;
         let cell = (sheet.to_string(), row, column);
 
-        self.graph.set(cell.clone(), precedents_of(&tree, sheet));
+        self.graph
+            .set(cell.clone(), precedents_across(&tree, sheet, &self.order));
         self.contents.insert(
             cell.clone(),
             Content::Formula {
@@ -405,7 +423,8 @@ impl Engine {
 
                 Edit::Formula(text) => match parse(&text) {
                     Ok(tree) => {
-                        self.graph.set(cell.clone(), precedents_of(&tree, &cell.0));
+                        self.graph
+                            .set(cell.clone(), precedents_across(&tree, &cell.0, &self.order));
                         self.contents.insert(
                             cell.clone(),
                             Content::Formula {
@@ -857,6 +876,8 @@ impl Engine {
                             // one from before dynamic arrays, and means what
                             // it meant then.
                             intersect: !array,
+                            // The formula itself, not a function's argument.
+                            ranges_wanted: false,
                         },
                     )
                 };
@@ -1041,6 +1062,10 @@ impl Cells for View<'_> {
     fn extent(&self, sheet: Option<&str>) -> (i64, i64) {
         let on = sheet.unwrap_or(&self.sheet);
         self.engine.extents.get(on).copied().unwrap_or((0, 0))
+    }
+
+    fn sheets_across(&self, first: &str, last: &str) -> Vec<String> {
+        crate::graph::sheets_across(first, last, &self.engine.order)
     }
 
     fn defined(&self, name: &str) -> Option<Arc<Expr>> {

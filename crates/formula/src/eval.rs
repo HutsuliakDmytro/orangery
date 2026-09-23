@@ -28,6 +28,20 @@ pub trait Cells {
     /// What is in a cell of a sheet. `None` for the sheet the formula is on.
     fn value_at(&self, sheet: Option<&str>, row: i64, column: i64) -> Value;
 
+    /// The sheets a 3-D reference covers, in the workbook's own order.
+    ///
+    /// `Sheet1:Sheet3!B1` is one reference over every sheet from the first to
+    /// the last, and which those are is a fact about the workbook. A caller
+    /// that has not been told the order says so by leaving this alone, and
+    /// what is left is the two ends — which is what can be read without it.
+    fn sheets_across(&self, first: &str, last: &str) -> Vec<String> {
+        if first.eq_ignore_ascii_case(last) {
+            vec![first.to_string()]
+        } else {
+            vec![first.to_string(), last.to_string()]
+        }
+    }
+
     /// How far a sheet reaches, for `A:A` and the rest.
     ///
     /// A whole column is not a million cells: it is the cells that are there,
@@ -150,6 +164,12 @@ impl Rect {
         }
     }
 
+    /// The same rectangle, read from another sheet.
+    pub fn on(mut self, sheet: String) -> Self {
+        self.sheet = Some(sheet);
+        self
+    }
+
     pub fn height(&self) -> i64 {
         self.bottom - self.top + 1
     }
@@ -188,6 +208,13 @@ pub struct Context<'a> {
     /// that takes a range — `SUM(A1:A5)` wants the five cells, not the one
     /// beside it.
     pub intersect: bool,
+    /// Whether what is being worked out is a function's range argument.
+    ///
+    /// Only there is a reference across sheets a thing that can be read:
+    /// `SUM(Sheet1:Sheet3!A1)` adds three cells, and `=Sheet1:Sheet3!A1` in a
+    /// cell of its own is three answers with no way to choose between them,
+    /// which Excel calls `#VALUE!`.
+    pub ranges_wanted: bool,
 }
 
 impl<'a> Context<'a> {
@@ -200,6 +227,7 @@ impl<'a> Context<'a> {
             cells: self.cells,
             at: self.at,
             intersect: false,
+            ranges_wanted: true,
         }
     }
 
@@ -209,6 +237,7 @@ impl<'a> Context<'a> {
             cells: self.cells,
             at: self.at,
             intersect: true,
+            ranges_wanted: false,
         }
     }
 }
@@ -411,6 +440,17 @@ fn subtract(left: f64, right: f64) -> f64 {
 
 /// The value of a reference: one cell, or the rectangle it names.
 fn resolve(reference: &Reference, context: &Context<'_>) -> Value {
+    // A reference that reaches across sheets is read from each of them, and
+    // the values come back as one array — which is what `SUM`, `COUNT`, `MIN`
+    // and the rest of the functions that take one are given.
+    if let Some((first, last)) = &reference.sheet {
+        let across = context.cells.sheets_across(first, last);
+
+        if across.len() > 1 {
+            return across_sheets(reference, &across, context);
+        }
+    }
+
     let rect = rect_of(reference, context);
 
     match intersected(&rect, context) {
@@ -418,6 +458,33 @@ fn resolve(reference: &Reference, context: &Context<'_>) -> Value {
         Intersection::At(one) => one.value(context),
         Intersection::None => Value::Error(Error::Value),
     }
+}
+
+/// A 3-D reference's values, sheet by sheet, as one array.
+///
+/// Handed to `SUM`, the values of the three sheets are what it adds. Anywhere
+/// else it is `#VALUE!`, as Excel has it: `=Sheet1:Sheet3!B1` written in a
+/// cell has three answers and no way to choose between them.
+fn across_sheets(reference: &Reference, sheets: &[String], context: &Context<'_>) -> Value {
+    // Anywhere but a function's range argument, three sheets' worth of answers
+    // is not an answer.
+    if !context.ranges_wanted {
+        return Value::Error(Error::Value);
+    }
+
+    let mut values = Vec::new();
+
+    for sheet in sheets {
+        let rect = rect_of(reference, context).on(sheet.clone());
+
+        match rect.value(context) {
+            Value::Array(array) => values.extend(array.values),
+            one => values.push(one),
+        }
+    }
+
+    let rows = values.len();
+    Value::Array(Array::new(rows, 1, values))
 }
 
 /// What implicit intersection makes of a rectangle.

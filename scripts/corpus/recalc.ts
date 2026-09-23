@@ -233,6 +233,9 @@ async function recalculate(file: string): Promise<Outcome> {
     lines.push(`name\t${escape(name.name)}\t${escape(name.formula)}`)
   }
 
+  // Tab order, for the references that reach across sheets.
+  lines.push(['sheets', ...open.sheets.map((sheet) => escape(sheet.name))].join('\t'))
+
   // Structured references — `tblExpenses[Amount]` — are resolved against the
   // tables, and an engine that was never told about them answers `#REF!`.
   for (const sheet of open.sheets) {

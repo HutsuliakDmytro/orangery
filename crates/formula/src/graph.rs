@@ -68,23 +68,59 @@ pub struct Precedents {
 /// The sheet a reference has no name for is the one the formula is on, which
 /// is why the tree alone is not enough to answer this.
 pub fn precedents_of(expression: &Expr, sheet: &str) -> Precedents {
+    precedents_across(expression, sheet, &[])
+}
+
+/// The same, told which sheets the workbook has and in what order.
+///
+/// `Sheet1:Sheet3!B1` is one reference over every sheet from the first to the
+/// last — Excel calls it 3-D — and which those are is a fact about the
+/// workbook rather than about the formula. Without the order only the two ends
+/// can be depended on, and a change in the middle of the span would not reach
+/// the formula that reads across it.
+pub fn precedents_across(expression: &Expr, sheet: &str, order: &[String]) -> Precedents {
     let mut found = Precedents::default();
-    walk(expression, sheet, &mut found);
+    walk(expression, sheet, order, &mut found);
     found
 }
 
-fn walk(expression: &Expr, sheet: &str, found: &mut Precedents) {
+/// The sheets a 3-D reference covers, in the order the workbook has them.
+///
+/// Both ends and everything between. An end the workbook does not have — a
+/// sheet somebody deleted, or an order nobody told us — leaves the two names
+/// themselves, which is what can be said without the order.
+pub fn sheets_across(first: &str, last: &str, order: &[String]) -> Vec<String> {
+    if first.eq_ignore_ascii_case(last) {
+        return vec![first.to_string()];
+    }
+
+    let at = |name: &str| {
+        order
+            .iter()
+            .position(|sheet| sheet.eq_ignore_ascii_case(name))
+    };
+
+    match (at(first), at(last)) {
+        (Some(from), Some(to)) => {
+            let (from, to) = if from <= to { (from, to) } else { (to, from) };
+            order[from..=to].to_vec()
+        }
+        _ => vec![first.to_string(), last.to_string()],
+    }
+}
+
+fn walk(expression: &Expr, sheet: &str, order: &[String], found: &mut Precedents) {
     match expression {
-        Expr::Reference(reference) => add(reference, sheet, found),
+        Expr::Reference(reference) => add(reference, sheet, order, found),
 
         Expr::Binary { left, right, .. } => {
-            walk(left, sheet, found);
-            walk(right, sheet, found);
+            walk(left, sheet, order, found);
+            walk(right, sheet, order, found);
         }
         Expr::Unary { operand, .. }
         | Expr::Percent(operand)
         | Expr::Parenthesised(operand)
-        | Expr::Implicit(operand) => walk(operand, sheet, found),
+        | Expr::Implicit(operand) => walk(operand, sheet, order, found),
 
         // Where a table's column is depends on where the table is, and the
         // table moves when rows are put in around it — which is the reason
@@ -100,13 +136,13 @@ fn walk(expression: &Expr, sheet: &str, found: &mut Precedents) {
                 found.volatile = true;
             }
             for argument in arguments {
-                walk(argument, sheet, found);
+                walk(argument, sheet, order, found);
             }
         }
         Expr::Array(rows) => {
             for row in rows {
                 for value in row {
-                    walk(value, sheet, found);
+                    walk(value, sheet, order, found);
                 }
             }
         }
@@ -115,12 +151,20 @@ fn walk(expression: &Expr, sheet: &str, found: &mut Precedents) {
     }
 }
 
-fn add(reference: &Reference, sheet: &str, found: &mut Precedents) {
-    let on = reference
-        .sheet
-        .as_ref()
-        .map_or_else(|| sheet.to_string(), |(first, _)| first.clone());
+fn add(reference: &Reference, sheet: &str, order: &[String], found: &mut Precedents) {
+    // Every sheet the reference reaches across, which is one for all but a
+    // 3-D reference.
+    let across = match &reference.sheet {
+        Some((first, last)) => sheets_across(first, last, order),
+        None => vec![sheet.to_string()],
+    };
 
+    for on in across {
+        add_on(reference, on, found);
+    }
+}
+
+fn add_on(reference: &Reference, on: String, found: &mut Precedents) {
     // `[Book.xlsx]Sheet1` — a sheet in a file this program has not been given.
     if on.starts_with('[') {
         found.external = true;

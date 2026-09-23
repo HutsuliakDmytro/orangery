@@ -275,6 +275,17 @@ pub fn formula_open(
     engine.seed_random(workbook.seed);
     engine.calculate_manually(workbook.manual);
     engine.set_tables(workbook.tables.into_iter().map(Into::into).collect());
+
+    // Tab order, which is what `Sheet1:Sheet3!B1` reaches across. The cells
+    // arrive sheet by sheet and would give an order of their own, but an empty
+    // sheet between two full ones has no cells and is still part of the span.
+    engine.set_sheet_order(
+        workbook
+            .sheets
+            .iter()
+            .map(|one| one.sheet.clone())
+            .collect(),
+    );
     for defined in workbook.names {
         engine.set_name(&defined.name, &defined.formula);
     }

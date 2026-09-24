@@ -245,12 +245,54 @@ fn digits_of(value: f64, decimals: usize) -> (String, String) {
     }
 }
 
+/// How wide `General` is allowed to be.
+///
+/// Eleven characters, counting the decimal point and not the minus sign. It
+/// is a width and not a count of significant digits, which is why 0.000000001
+/// is shown in full — one significant digit in eleven characters — while
+/// 1.2345678912 loses its last digit and 1e-10 is not shown this way at all.
+const GENERAL_WIDTH: i32 = 11;
+
+/// The plain decimal picture of a number, if it fits.
+///
+/// `None` where it does not: either the digits before the point already fill
+/// the width, or the number is so small that everything inside the width is a
+/// zero. Both are the cases Excel answers with scientific notation instead.
+fn fitted(magnitude: f64) -> Option<String> {
+    let integer_width = (magnitude.log10().floor() as i32 + 1).max(1);
+    if integer_width > GENERAL_WIDTH {
+        return None;
+    }
+
+    // What is left of the width once the integer digits and the point have
+    // had their share; a number with no room for a point keeps none.
+    let decimals = (GENERAL_WIDTH - integer_width - 1).clamp(0, 100) as usize;
+    let text = format!("{:.*}", decimals, magnitude);
+
+    // Rounding can carry: 99999999999.5 in eleven characters is a twelfth
+    // digit, and Excel writes that as an exponent rather than shortening it.
+    let whole = text
+        .split_once('.')
+        .map_or(text.as_str(), |(whole, _)| whole);
+    if whole.len() as i32 > GENERAL_WIDTH || text.parse::<f64>().unwrap_or(0.0) == 0.0 {
+        return None;
+    }
+
+    Some(trim_zeros(&text))
+}
+
 /// `General` — the format a cell has when it has none.
 ///
-/// Excel fits the number into about eleven characters: plain where it can,
-/// scientific where the number is too big or too small to show otherwise. The
-/// exact rule involves the column's width, which nothing here knows, so this
-/// is the width-independent part of it.
+/// Excel fits the number into eleven characters and reaches for an exponent
+/// only when it cannot: 0.000000001 is written out, 0.0000000001 would need a
+/// twelfth character and becomes `1E-10`. The rule is about width rather than
+/// about digits, which is the part that is easy to get wrong — eleven
+/// significant digits would show both of those numbers the same way, and
+/// Excel does not.
+///
+/// Excel's real `General` also narrows itself to the column, which nothing
+/// here knows about; this is the width-independent part, and the one `TEXT`
+/// uses.
 pub fn format_general(value: f64) -> String {
     if !value.is_finite() {
         return "#NUM!".to_string();
@@ -259,23 +301,23 @@ pub fn format_general(value: f64) -> String {
         return "0".to_string();
     }
 
-    let magnitude = value.abs();
-    if !(1e-10..1e11).contains(&magnitude) {
-        let written = format!("{:E}", value);
-        let (mantissa, power) = written.split_once('E').unwrap_or((written.as_str(), "0"));
-        let trimmed = trim_zeros(mantissa);
-        let exponent: i32 = power.parse().unwrap_or(0);
-
-        return format!(
-            "{trimmed}E{}{:02}",
-            if exponent < 0 { '-' } else { '+' },
-            exponent.abs()
-        );
+    let sign = if value < 0.0 { "-" } else { "" };
+    if let Some(plain) = fitted(value.abs()) {
+        return format!("{sign}{plain}");
     }
 
-    // Eleven significant digits, with the trailing zeros a rounding leaves.
-    let places = (10 - magnitude.log10().floor() as i32).clamp(0, 17);
-    trim_zeros(&format!("{:.*}", places as usize, value))
+    // Five places of mantissa, with whatever trailing zeros that leaves taken
+    // off again: 1.1e-10 is `1.1E-10` and not `1.10000E-10`.
+    let written = format!("{:.5E}", value.abs());
+    let (mantissa, power) = written.split_once('E').unwrap_or((written.as_str(), "0"));
+    let exponent: i32 = power.parse().unwrap_or(0);
+
+    format!(
+        "{sign}{}E{}{:02}",
+        trim_zeros(mantissa),
+        if exponent < 0 { '-' } else { '+' },
+        exponent.abs()
+    )
 }
 
 fn trim_zeros(text: &str) -> String {

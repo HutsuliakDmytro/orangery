@@ -6,7 +6,7 @@
 //! the wrong way is a column that disagrees with the invoice.
 
 use super::criteria::{all_matching, pairs};
-use super::{done, number, numbers_given, table, Function};
+use super::{done, number, numbers_given, strict_number, table, Function};
 use crate::value::{Error, Value};
 
 macro_rules! function {
@@ -354,3 +354,286 @@ fn rounded(value: f64, digits: f64, how: Rounding) -> f64 {
 
     result / factor
 }
+
+/// The angle functions, and the two that convert between the units they use.
+///
+/// Every one of them reads its argument the strict way: a boolean or a string
+/// out of a cell is `#VALUE!`, and the same written into the formula is a
+/// number. `SIN(B18)` where B18 holds TRUE is an error in Excel, and
+/// `COS("1")` is 0.5403 — both of those are cells of POI's
+/// `FormulaEvalTestData.xlsx`, with the answers Excel cached beside them.
+macro_rules! angle {
+    ($constant:ident, $name:literal, $body:expr) => {
+        function!($constant, $name, 1, Some(1), |arguments, context| {
+            done(strict_number(arguments.first(), context).and_then($body))
+        });
+    };
+}
+
+angle!(SIN, "SIN", |value: f64| Ok(Value::Number(value.sin())));
+angle!(COS, "COS", |value: f64| Ok(Value::Number(value.cos())));
+angle!(TAN, "TAN", |value: f64| Ok(Value::Number(value.tan())));
+
+// Outside −1 to 1 there is no angle, and Excel says so with `#NUM!`.
+angle!(ASIN, "ASIN", |value: f64| if value.abs() > 1.0 {
+    Ok(Value::Error(Error::Number))
+} else {
+    Ok(Value::Number(value.asin()))
+});
+
+angle!(ACOS, "ACOS", |value: f64| if value.abs() > 1.0 {
+    Ok(Value::Error(Error::Number))
+} else {
+    Ok(Value::Number(value.acos()))
+});
+
+angle!(ATAN, "ATAN", |value: f64| Ok(Value::Number(value.atan())));
+
+// The hyperbolic ones. Three take anything; two have an edge.
+angle!(ASINH, "ASINH", |value: f64| Ok(Value::Number(
+    value.asinh()
+)));
+angle!(SINH, "SINH", |value: f64| Ok(Value::Number(value.sinh())));
+angle!(COSH, "COSH", |value: f64| Ok(Value::Number(value.cosh())));
+angle!(TANH, "TANH", |value: f64| Ok(Value::Number(value.tanh())));
+
+// Below 1 there is no answer: `cosh` never goes under it.
+angle!(ACOSH, "ACOSH", |value: f64| if value < 1.0 {
+    Ok(Value::Error(Error::Number))
+} else {
+    Ok(Value::Number(value.acosh()))
+});
+
+// And `tanh` never reaches 1, so its inverse stops short of it.
+angle!(ATANH, "ATANH", |value: f64| if value.abs() >= 1.0 {
+    Ok(Value::Error(Error::Number))
+} else {
+    Ok(Value::Number(value.atanh()))
+});
+
+// The angle to a point, with Excel's argument order and Excel's one quirk.
+//
+// `x` first and `y` second, which is the other way round from every
+// programming language there is. Both of them nothing is `#DIV/0!` rather
+// than nought: there is no angle to the origin, and that error is what the
+// file holds for `ATAN2(B7,B7)`.
+function!(ATAN2, "ATAN2", 2, Some(2), |arguments, context| {
+    done((|| {
+        let x = strict_number(arguments.first(), context)?;
+        let y = strict_number(arguments.get(1), context)?;
+
+        if x == 0.0 && y == 0.0 {
+            return Ok(Value::Error(Error::DivideByZero));
+        }
+
+        Ok(Value::Number(y.atan2(x)))
+    })())
+});
+
+angle!(RADIANS, "RADIANS", |value: f64| Ok(Value::Number(
+    value.to_radians()
+)));
+angle!(DEGREES, "DEGREES", |value: f64| Ok(Value::Number(
+    value.to_degrees()
+)));
+
+/// Which way a number is moved when it does not sit on a multiple.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// Down the number line: 23.5 to 23, and −23.5 to −24.
+    Down,
+    /// Up it: 23.5 to 24, and −23.5 to −23.
+    Up,
+}
+
+/// A number moved to a multiple of another, with the sign rules Excel has.
+///
+/// The significance's own sign is ignored — `FLOOR.MATH(23.5, -1)` is 23, the
+/// same as with 1 — and a significance of nothing is nothing, which is the
+/// answer `CEILING` gives to the same question and `FLOOR` does not. Both of
+/// those are in `ceiling-floor.xlsx`, which is a sheet of nothing but these
+/// cases with Excel's answers written beside them.
+fn stepped(value: f64, significance: f64, step: Step) -> Value {
+    if significance == 0.0 {
+        return Value::Number(0.0);
+    }
+
+    let size = significance.abs();
+    let quotient = value / size;
+
+    // Snapped first, so that a number a hundredth away from a multiple by the
+    // width of a double is on it. `ROUND` does the same and says why.
+    let quotient = crate::value::round_to_significant(quotient, 15);
+
+    let moved = match step {
+        Step::Down => quotient.floor(),
+        Step::Up => quotient.ceil(),
+    };
+
+    Value::Number(moved * size)
+}
+
+/// `mode` decides what a negative number does, and only a negative one.
+///
+/// Zero — or nothing at all — keeps it on the number line: `FLOOR.MATH(-23.5)`
+/// is −24, further from zero. Anything else turns it round to face zero, so
+/// the same call with a mode of 1 is −23. `CEILING.MATH` is the mirror of it.
+fn toward_zero(mode: f64, value: f64) -> bool {
+    mode != 0.0 && value < 0.0
+}
+
+function!(
+    FLOOR_MATH,
+    "FLOOR.MATH",
+    1,
+    Some(3),
+    |arguments, context| {
+        done((|| {
+            let value = strict_number(arguments.first(), context)?;
+            let significance = match arguments.get(1) {
+                Some(argument) => strict_number(Some(argument), context)?,
+                None => 1.0,
+            };
+            let mode = strict_number(arguments.get(2), context)?;
+
+            Ok(stepped(
+                value,
+                significance,
+                if toward_zero(mode, value) {
+                    Step::Up
+                } else {
+                    Step::Down
+                },
+            ))
+        })())
+    }
+);
+
+function!(
+    CEILING_MATH,
+    "CEILING.MATH",
+    1,
+    Some(3),
+    |arguments, context| {
+        done((|| {
+            let value = strict_number(arguments.first(), context)?;
+            let significance = match arguments.get(1) {
+                Some(argument) => strict_number(Some(argument), context)?,
+                None => 1.0,
+            };
+            let mode = strict_number(arguments.get(2), context)?;
+
+            Ok(stepped(
+                value,
+                significance,
+                if toward_zero(mode, value) {
+                    Step::Down
+                } else {
+                    Step::Up
+                },
+            ))
+        })())
+    }
+);
+
+/// The pair that have no mode at all: down the number line, and up it.
+///
+/// `ISO.CEILING` is `CEILING.PRECISE` under the name the standard gave it, and
+/// Excel keeps both.
+macro_rules! precise {
+    ($constant:ident, $name:literal, $step:expr) => {
+        function!($constant, $name, 1, Some(2), |arguments, context| {
+            done((|| {
+                let value = strict_number(arguments.first(), context)?;
+                let significance = match arguments.get(1) {
+                    Some(argument) => strict_number(Some(argument), context)?,
+                    None => 1.0,
+                };
+
+                Ok(stepped(value, significance, $step))
+            })())
+        });
+    };
+}
+
+precise!(FLOOR_PRECISE, "FLOOR.PRECISE", Step::Down);
+precise!(CEILING_PRECISE, "CEILING.PRECISE", Step::Up);
+precise!(ISO_CEILING, "ISO.CEILING", Step::Up);
+
+// Away from zero to the next even number, or the next odd one.
+//
+// `EVEN(0)` is 0 and `ODD(0)` is 1, which is the pair's one asymmetry:
+// nothing is already even and is not already odd.
+function!(EVEN, "EVEN", 1, Some(1), |arguments, context| {
+    done(strict_number(arguments.first(), context).map(|value| {
+        if value == 0.0 {
+            return Value::Number(0.0);
+        }
+
+        let steps = crate::value::round_to_significant(value.abs() / 2.0, 15).ceil();
+        Value::Number(steps * 2.0 * value.signum())
+    }))
+});
+
+function!(ODD, "ODD", 1, Some(1), |arguments, context| {
+    done(strict_number(arguments.first(), context).map(|value| {
+        if value == 0.0 {
+            return Value::Number(1.0);
+        }
+
+        let steps = crate::value::round_to_significant((value.abs() + 1.0) / 2.0, 15).ceil();
+        Value::Number((steps * 2.0 - 1.0) * value.signum())
+    }))
+});
+
+// The nearest multiple, with a half going away from zero.
+//
+// A multiple of nothing is nothing. A multiple whose sign disagrees with the
+// number's is `#NUM!`: there is no multiple of −3 near 10.
+function!(MROUND, "MROUND", 2, Some(2), |arguments, context| {
+    done((|| {
+        let value = strict_number(arguments.first(), context)?;
+        let multiple = strict_number(arguments.get(1), context)?;
+
+        if multiple == 0.0 {
+            return Ok(Value::Number(0.0));
+        }
+        if value != 0.0 && value.signum() != multiple.signum() {
+            return Ok(Value::Error(Error::Number));
+        }
+
+        let quotient = crate::value::round_to_significant(value / multiple, 15);
+        // Half away from zero, the way a spreadsheet rounds and Rust does not.
+        let steps = quotient.abs().floor()
+            + if quotient.abs().fract() >= 0.5 {
+                1.0
+            } else {
+                0.0
+            };
+
+        Ok(Value::Number(steps * quotient.signum() * multiple))
+    })())
+});
+
+// The factorial of a number with its fraction thrown away.
+//
+// `FACT(2.99999)` is 2, which is `FACT(2)`. Above 170 the answer is larger
+// than a double can hold and Excel says `#NUM!` rather than infinity.
+function!(FACT, "FACT", 1, Some(1), |arguments, context| {
+    done(strict_number(arguments.first(), context).map(|value| {
+        let whole = value.trunc();
+
+        if whole < 0.0 || whole > 170.0 {
+            return Value::Error(Error::Number);
+        }
+
+        let mut total = 1.0_f64;
+        let mut step = 2.0_f64;
+        while step <= whole {
+            total *= step;
+            step += 1.0;
+        }
+
+        Value::Number(total)
+    }))
+});

@@ -162,6 +162,32 @@ pub fn reference(name: &str, arguments: &[Expr], context: &Context<'_>) -> Optio
 /// Every function this engine has, in one list for looking up.
 static FUNCTIONS: &[&Function] = &[
     &math::SUM,
+    // Angles, and the two that convert between the units they are measured in.
+    &math::SIN,
+    &math::COS,
+    &math::TAN,
+    &math::ASIN,
+    &math::ACOS,
+    &math::ATAN,
+    &math::ASINH,
+    &math::SINH,
+    &math::COSH,
+    &math::TANH,
+    &math::ACOSH,
+    &math::ATANH,
+    &math::ATAN2,
+    &math::RADIANS,
+    &math::DEGREES,
+    // Moving a number to a multiple of another, in the six ways Excel has.
+    &math::FLOOR_MATH,
+    &math::CEILING_MATH,
+    &math::FLOOR_PRECISE,
+    &math::CEILING_PRECISE,
+    &math::ISO_CEILING,
+    &math::MROUND,
+    &math::EVEN,
+    &math::ODD,
+    &math::FACT,
     &math::PRODUCT,
     &math::ABS,
     &math::ROUND,
@@ -365,6 +391,44 @@ pub fn number(argument: Option<&Expr>, context: &Context<'_>) -> Result<f64, Err
     match argument {
         None => Ok(0.0),
         Some(expression) => evaluate(expression, context).to_number(),
+    }
+}
+
+/// One argument as a number, the way the maths functions read one.
+///
+/// Stricter than `number`, and the difference is Excel's: a boolean or a
+/// string *written into the formula* is a number — `COS("1")` is 0.5403 — and
+/// the same value read out of a cell is `#VALUE!`. `SIN(B18)` where B18 holds
+/// TRUE is an error in every version of Excel there has been.
+///
+/// The looser reading stays where it is for the functions that already had it;
+/// changing `SUM` to this would be a different piece of work with its own
+/// corpus to answer to.
+pub fn strict_number(argument: Option<&Expr>, context: &Context<'_>) -> Result<f64, Error> {
+    let Some(expression) = argument else {
+        return Ok(0.0);
+    };
+
+    // Written down rather than pointed at: what a person typed means what it
+    // says, including `TRUE` and `"1"`.
+    if matches!(
+        expression,
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Blank
+    ) {
+        return evaluate(expression, context).to_number();
+    }
+
+    match evaluate(expression, context) {
+        Value::Number(value) => Ok(value),
+        Value::Blank => Ok(0.0),
+        Value::Error(error) => Err(error),
+        Value::Bool(_) | Value::Text(_) => Err(Error::Value),
+        Value::Array(array) => match array.only() {
+            Some(Value::Number(value)) => Ok(*value),
+            Some(Value::Blank) | None => Ok(0.0),
+            Some(Value::Error(error)) => Err(*error),
+            Some(_) => Err(Error::Value),
+        },
     }
 }
 

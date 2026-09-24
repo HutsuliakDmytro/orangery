@@ -32,8 +32,12 @@ pub enum Token {
     Pad(char),
     /// `@` — where the text goes in a text section.
     Text,
-    /// `E+` or `E-`, and which of the two.
-    Exponent(bool),
+    /// `E+` or `e-`: which of the two, and the letter, because Excel echoes
+    /// the case it was given.
+    Exponent {
+        plus: bool,
+        letter: char,
+    },
     Fraction,
     Date(String),
     /// `[h]`, `[mm]`, `[ss]` — a unit that counts past its own wrap.
@@ -411,7 +415,10 @@ fn tokenise(body: &str, kind: Kind, currency: Option<String>) -> Vec<Token> {
         }
 
         if matches!(letter, 'E' | 'e') && matches!(letters.get(at + 1), Some('+') | Some('-')) {
-            tokens.push(Token::Exponent(letters[at + 1] == '+'));
+            tokens.push(Token::Exponent {
+                plus: letters[at + 1] == '+',
+                letter,
+            });
             at += 2;
             continue;
         }

@@ -33,7 +33,8 @@ export type Token =
   | { kind: 'pad'; char: string }
   /** `@` — where the text goes in a text section. */
   | { kind: 'text' }
-  | { kind: 'exponent'; sign: '+' | '-' }
+  /** `E+` or `e-`: the letter is kept because Excel echoes the case it was given. */
+  | { kind: 'exponent'; sign: '+' | '-'; letter: 'e' | 'E' }
   | { kind: 'fraction' }
   | { kind: 'date'; code: string }
   /** `[h]`, `[mm]`, `[ss]` — a unit that counts past its own wrap. */
@@ -258,7 +259,7 @@ function tokenise(body: string, kind: Section['kind'], currency: string | null):
     }
 
     if ((char === 'E' || char === 'e') && (body[at + 1] === '+' || body[at + 1] === '-')) {
-      push({ kind: 'exponent', sign: body[at + 1] === '+' ? '+' : '-' })
+      push({ kind: 'exponent', sign: body[at + 1] === '+' ? '+' : '-', letter: char })
       at += 1
       continue
     }

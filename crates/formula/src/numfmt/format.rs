@@ -542,6 +542,17 @@ fn format_number(value: f64, section: &Section, signed: bool) -> String {
     let tokens = &section.tokens;
     let counts = digit_counts(tokens);
 
+    // A format in scientific notation has an exponent to move the point
+    // with, and Excel does not move it twice: the per-cent sign and the
+    // trailing comma are drawn where they stand and multiply nothing.
+    // `#%e+#` on 123456 is `1%e+5`, not `1%e+7`.
+    if tokens
+        .iter()
+        .any(|token| matches!(token, Token::Exponent { .. }))
+    {
+        return scientific(value, section);
+    }
+
     let percent = tokens
         .iter()
         .filter(|token| **token == Token::Percent)
@@ -552,12 +563,6 @@ fn format_number(value: f64, section: &Section, signed: bool) -> String {
     });
     let scaled = value * 100_f64.powi(percent as i32) / scale;
 
-    if tokens
-        .iter()
-        .any(|token| matches!(token, Token::Exponent(_)))
-    {
-        return scientific(scaled, section);
-    }
     if tokens.contains(&Token::Fraction) {
         return fractional(scaled, section);
     }
@@ -618,51 +623,252 @@ fn pad_start(text: &str, length: usize, with: char) -> String {
     out
 }
 
+/// The digit placeholders of a run of tokens, in the order they are written.
+fn placeholders_of(tokens: &[Token]) -> Vec<char> {
+    tokens
+        .iter()
+        .filter_map(|token| match token {
+            Token::Digit(place) => Some(*place),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Digits laid into placeholders that there are too many of.
+///
+/// The digits are right-aligned and the places left over on the left are what
+/// the placeholder says an absent digit looks like: `0` writes a zero, `?`
+/// writes a space to line the column up, and `#` writes nothing at all. A
+/// thousands separator that falls in the empty part goes the same way as the
+/// digit beside it — `?,??????` on six digits is two spaces and then the
+/// number, not a space and a stranded comma.
+fn laid_out(digits: &str, places: &[char], grouped: bool) -> String {
+    let blanks = places.len().saturating_sub(digits.chars().count());
+    let padded = pad_start(digits, places.len(), '0');
+    let characters: Vec<char> = padded.chars().collect();
+
+    /// What an empty place is written as, which is the whole of the difference.
+    fn blank(places: &[char], at: usize, character: char) -> String {
+        match places.get(at) {
+            Some('0') => character.to_string(),
+            Some('?') => " ".to_string(),
+            _ => String::new(),
+        }
+    }
+
+    let mut text = String::new();
+
+    for (at, character) in characters.iter().enumerate() {
+        // A separator stands before every third digit counted from the right,
+        // and goes the way the place to its left went: kept beside a zero, a
+        // space beside a `?`, gone beside a `#`.
+        if grouped && at > 0 && (characters.len() - at) % 3 == 0 {
+            if at - 1 < blanks {
+                text.push_str(&blank(places, at - 1, ','));
+            } else {
+                text.push(',');
+            }
+        }
+
+        if at < blanks {
+            text.push_str(&blank(places, at, *character));
+        } else {
+            text.push(*character);
+        }
+    }
+
+    text
+}
+
+/// The places after the point, cut where the format stops asking for them.
+///
+/// A `0` holds its place whatever the digit is; past the last of them a `#`
+/// drops a trailing zero and a `?` turns it into a space.
+fn decimals_laid_out(digits: &str, places: &[char]) -> String {
+    let significant = digits.trim_end_matches('0').chars().count();
+    let required = places
+        .iter()
+        .rposition(|place| *place == '0')
+        .map_or(0, |at| at + 1);
+    let kept = significant.max(required);
+    let characters: Vec<char> = digits.chars().collect();
+
+    places
+        .iter()
+        .enumerate()
+        .map(|(at, place)| {
+            if at < kept {
+                characters.get(at).copied().unwrap_or('0').to_string()
+            } else if *place == '?' {
+                " ".to_string()
+            } else if *place == '0' {
+                "0".to_string()
+            } else {
+                String::new()
+            }
+        })
+        .collect()
+}
+
+/// The power of ten a mantissa is written against.
+///
+/// Not always the one that leaves a single digit before the point. The
+/// exponent steps by however many integer placeholders the format has, so
+/// `##0.0E+0` counts in thousands the way an engineer writes them and
+/// `####.####e+#` counts in ten-thousands. One placeholder gives the ordinary
+/// kind, which is why the rule is invisible until somebody writes two.
+fn exponent_for(magnitude: f64, step: i32) -> i32 {
+    if magnitude == 0.0 {
+        return 0;
+    }
+
+    // Read off the written form rather than `log10`, which answers
+    // 2.9999999999999996 for a thousand and would put the point in the wrong
+    // place once in a while.
+    let written = format!("{:e}", magnitude);
+    let power: i32 = written
+        .split_once('e')
+        .and_then(|(_, power)| power.parse().ok())
+        .unwrap_or(0);
+
+    step * power.div_euclid(step)
+}
+
+/// A magnitude divided by a power of ten, in two steps where one would overflow.
+fn shifted(magnitude: f64, exponent: i32) -> f64 {
+    if exponent.abs() <= 300 {
+        return magnitude / 10_f64.powi(exponent);
+    }
+
+    let half = exponent / 2;
+    magnitude / 10_f64.powi(half) / 10_f64.powi(exponent - half)
+}
+
 /// A number in the shape `0.00E+00` asks for.
 ///
-/// Two widths, both counted from the format rather than from the number: how
-/// many places the mantissa shows, and how many digits the exponent is padded
-/// to. `E+` writes the sign of a positive exponent and `E-` leaves it off,
-/// which is the only difference between them.
+/// Everything about it is counted from the format rather than from the
+/// number: how many digits stand before the point, how many after, how wide
+/// the exponent is, and — the part that is easy to miss — how far the
+/// exponent moves at a time. Four integer placeholders mean the exponent is a
+/// multiple of four, so 123456.789 through `####.####e+#` is 12.3457e+4
+/// rather than 1.2346e+5.
+///
+/// Written by walking the tokens, because everything between them belongs to
+/// the answer: `#%e+#` shows a per-cent sign that multiplies nothing, `#e+#,`
+/// shows a comma that divides nothing, and a format that puts its own
+/// punctuation around the exponent keeps it.
 fn scientific(value: f64, section: &Section) -> String {
     let tokens = &section.tokens;
     let at = tokens
         .iter()
-        .position(|token| matches!(token, Token::Exponent(_)))
+        .position(|token| matches!(token, Token::Exponent { .. }))
         .unwrap_or(0);
 
-    let point = tokens.iter().position(|token| *token == Token::Decimal);
-    let mantissa_decimals = match point {
-        Some(place) if place < at => tokens[place + 1..at]
-            .iter()
-            .filter(|token| matches!(token, Token::Digit(_)))
-            .count(),
-        _ => 0,
+    let mantissa_tokens = &tokens[..at];
+    let exponent_tokens = &tokens[at + 1..];
+
+    let point = mantissa_tokens
+        .iter()
+        .position(|token| *token == Token::Decimal);
+    let integer_places = placeholders_of(match point {
+        Some(place) => &mantissa_tokens[..place],
+        None => mantissa_tokens,
+    });
+    let decimal_places = match point {
+        Some(place) => placeholders_of(&mantissa_tokens[place + 1..]),
+        None => Vec::new(),
+    };
+    let exponent_places = placeholders_of(exponent_tokens);
+
+    let magnitude = value.abs();
+    let step = integer_places.len().max(1) as i32;
+    let exponent = exponent_for(magnitude, step);
+    let (whole, fraction) = digits_of(shifted(magnitude, exponent), decimal_places.len());
+
+    let grouped = tokens.contains(&Token::Group);
+
+    // Zero has no digits to lay out, and Excel fills every place it was given
+    // rather than leaving them blank: `####.####e+#` shows `0000.e+0`.
+    let integer_text = if magnitude == 0.0 {
+        laid_out(&"0".repeat(step as usize), &integer_places, grouped)
+    } else {
+        laid_out(&whole, &integer_places, grouped)
     };
 
-    let width = tokens[at + 1..]
-        .iter()
-        .filter(|token| matches!(token, Token::Digit(_)))
-        .count()
-        .max(1);
-
-    let written = format!("{:.*e}", mantissa_decimals, value.abs());
-    let (mantissa, power) = written.split_once('e').unwrap_or((written.as_str(), "0"));
-    let exponent: i32 = power.parse().unwrap_or(0);
-
+    let (plus, letter) = match tokens.get(at) {
+        Some(Token::Exponent { plus, letter }) => (*plus, *letter),
+        _ => (false, 'E'),
+    };
     let sign = if exponent < 0 {
         "-"
-    } else if matches!(tokens.get(at), Some(Token::Exponent(true))) {
+    } else if plus {
         "+"
     } else {
         ""
     };
 
-    format!(
-        "{}{mantissa}E{sign}{}",
-        if value < 0.0 { "-" } else { "" },
-        padded(i64::from(exponent.abs()), width)
-    )
+    let mut body = String::new();
+    let mut written = false;
+
+    for token in mantissa_tokens {
+        match token {
+            Token::Digit(_) => {
+                if !written {
+                    body.push_str(&integer_text);
+                    written = true;
+                }
+            }
+            Token::Decimal => {
+                if !written {
+                    body.push_str(&integer_text);
+                    written = true;
+                }
+                // The point stands whether or not anything follows it:
+                // `#.#e+#` on nothing is `0.e+0`, which looks like a typo and
+                // is not one.
+                body.push('.');
+                body.push_str(&decimals_laid_out(&fraction, &decimal_places));
+            }
+            Token::Literal(text) => body.push_str(text),
+            Token::Pad(_) => body.push(' '),
+            Token::Percent => body.push('%'),
+            _ => {}
+        }
+    }
+
+    if !written {
+        body.push_str(&integer_text);
+    }
+
+    let digits = laid_out(&exponent.abs().to_string(), &exponent_places, false);
+    let mut tail = String::new();
+    let mut placed = false;
+
+    for token in exponent_tokens {
+        match token {
+            Token::Digit(_) => {
+                if !placed {
+                    // The sign belongs to the digits rather than to the
+                    // letter: a format that puts something of its own between
+                    // the two — `e+|#|` — writes it as `e|+5`.
+                    tail.push_str(sign);
+                    tail.push_str(&digits);
+                    placed = true;
+                }
+            }
+            Token::Literal(text) => tail.push_str(text),
+            Token::Pad(_) => tail.push(' '),
+            Token::Percent => tail.push('%'),
+            _ => {}
+        }
+    }
+
+    if !placed {
+        tail.push_str(sign);
+        tail.push_str(&digits);
+    }
+
+    format!("{}{body}{letter}{tail}", if value < 0.0 { "-" } else { "" })
 }
 
 /// The shortest fraction within the denominator the format allows.

@@ -41,7 +41,10 @@ describe('places and padding', () => {
   it('keeps the zeros a format asks for and drops the ones it does not', () => {
     expect(shown(1.5, '0.00')).toBe('1.50')
     expect(shown(1.5, '0.##')).toBe('1.5')
-    expect(shown(1, '0.##')).toBe('1')
+    // The point stays even with nothing after it, which surprises everybody
+    // and is what Excel does: NumberFormatTests.xlsx has `#,##.#` on
+    // 1234567 as `1,234,567.`.
+    expect(shown(1, '0.##')).toBe('1.')
   })
 
   it('shows every digit a number has, however few the format states', () => {

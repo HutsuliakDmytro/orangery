@@ -297,39 +297,53 @@ function tokenise(body: string, kind: Section['kind'], currency: string | null):
   }
 
   if (currency !== null) tokens.unshift({ kind: 'literal', text: currency })
-  return foldScaling(tokens)
+  return settleCommas(tokens)
 }
 
 /**
- * Commas that come after every digit, turned into division.
+ * What each comma in a number turns out to be.
  *
- * `#,##0,` shows thousands and `#,##0,,` shows millions. The trailing ones are
- * the scaling; the ones between digits are grouping, and telling them apart is
- * a matter of what comes after.
+ * Three different things wear the same character, and only their neighbours
+ * tell them apart:
+ *
+ * - **a separator**, between two places — `#,##0` shows thousands;
+ * - **a divisor**, anywhere else among the places — `#,##0,` shows thousands
+ *   of thousands, and `#,.#,` divides twice on its way to the point;
+ * - **a comma**, where no place has come yet — `,#` on a million and a bit is
+ *   `,1234567`, which is a literal comma and a number with no grouping at all.
+ *
+ * The first of those is the only one anybody writes on purpose, which is why
+ * the other two are easy to get wrong.
  */
-function foldScaling(tokens: readonly Token[]): Token[] {
-  const folded: Token[] = []
+function settleCommas(tokens: readonly Token[]): Token[] {
+  const settled: Token[] = []
+  let seenPlace = false
 
   for (const [index, token] of tokens.entries()) {
     if (token.kind !== 'group') {
-      folded.push(token)
+      if (token.kind === 'digit') seenPlace = true
+      settled.push(token)
       continue
     }
 
-    const later = tokens.slice(index + 1)
-    const trailing = !later.some((one) => one.kind === 'digit' || one.kind === 'decimal')
-
-    if (!trailing) {
-      folded.push(token)
+    if (!seenPlace) {
+      settled.push({ kind: 'literal', text: ',' })
       continue
     }
 
-    const last = folded[folded.length - 1]
+    const before = tokens[index - 1]
+    const after = tokens[index + 1]
+    if (before?.kind === 'digit' && after?.kind === 'digit') {
+      settled.push(token)
+      continue
+    }
+
+    const last = settled[settled.length - 1]
     if (last?.kind === 'scale') last.by *= 1000
-    else folded.push({ kind: 'scale', by: 1000 })
+    else settled.push({ kind: 'scale', by: 1000 })
   }
 
-  return folded
+  return settled
 }
 
 /**

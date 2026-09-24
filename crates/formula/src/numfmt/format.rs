@@ -159,25 +159,17 @@ fn matches_condition(condition: Option<&Condition>, value: f64) -> bool {
     }
 }
 
-/// How many digits a section asks for on each side of the point.
+/// How many places a section asks for on each side of the point.
 struct Counts {
     integer: usize,
-    /// How many integer places must show a digit even when there is none.
-    minimum_integer: usize,
-    /// How many must show a space instead, to line the column up.
-    padded_integer: usize,
     decimals: usize,
-    minimum_decimals: usize,
     grouped: bool,
 }
 
 fn digit_counts(tokens: &[Token]) -> Counts {
     let mut counts = Counts {
         integer: 0,
-        minimum_integer: 0,
-        padded_integer: 0,
         decimals: 0,
-        minimum_decimals: 0,
         grouped: false,
     };
     let mut after_point = false;
@@ -186,20 +178,11 @@ fn digit_counts(tokens: &[Token]) -> Counts {
         match token {
             Token::Decimal => after_point = true,
             Token::Group => counts.grouped = true,
-            Token::Digit(placeholder) => {
+            Token::Digit(_) => {
                 if after_point {
                     counts.decimals += 1;
-                    if *placeholder == '0' {
-                        counts.minimum_decimals = counts.decimals;
-                    }
                 } else {
                     counts.integer += 1;
-                    if *placeholder == '0' {
-                        counts.minimum_integer += 1;
-                    }
-                    if *placeholder == '?' {
-                        counts.padded_integer += 1;
-                    }
                 }
             }
             _ => {}
@@ -207,26 +190,6 @@ fn digit_counts(tokens: &[Token]) -> Counts {
     }
 
     counts
-}
-
-fn group_thousands(digits: &str) -> String {
-    let letters: Vec<char> = digits.chars().collect();
-    let leading = letters
-        .iter()
-        .position(|letter| letter.is_ascii_digit())
-        .unwrap_or(letters.len());
-
-    let (head, body) = letters.split_at(leading);
-    let mut out: String = head.iter().collect();
-
-    for (at, letter) in body.iter().enumerate() {
-        if at > 0 && (body.len() - at) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(*letter);
-    }
-
-    out
 }
 
 /// The digits of a number, rounded to the places the format asks for.
@@ -427,10 +390,17 @@ fn date_text(code: &str, parts: &Parts, twelve_hour: bool, fraction: usize) -> S
             }
         }
         Some('a') => {
-            if parts.hours < 12 {
-                "AM".to_string()
+            let marker = if parts.hours < 12 { "AM" } else { "PM" };
+            // `AM/PM` is two letters and always capitals, however the format
+            // spelled it. `A/P` is one letter and takes the case it was
+            // written in, which is the only place in this language where the
+            // case of the code survives into the answer.
+            if lower != "a/p" {
+                marker.to_string()
+            } else if code.starts_with('a') {
+                marker[..1].to_lowercase()
             } else {
-                "PM".to_string()
+                marker[..1].to_string()
             }
         }
         _ => String::new(),
@@ -464,7 +434,10 @@ fn minute_tokens(tokens: &[Token]) -> Vec<usize> {
         let before = tokens[..index].iter().rev().find_map(unit_of);
         let after = tokens[index + 1..].iter().find_map(unit_of);
 
-        if before == Some('h') || after == Some('s') {
+        // Excel's own rule is an hour before or a second after. A second
+        // *before* counts as well, which is in no documentation and is in
+        // ElapsedFormatTests.xlsx: `s:m" @ hour "[hh]` on 3.14159 is `53:23`.
+        if before == Some('h') || before == Some('s') || after == Some('s') {
             minutes.push(index);
         }
     }
@@ -475,7 +448,9 @@ fn minute_tokens(tokens: &[Token]) -> Vec<usize> {
 /// How many decimal places a `ss.00` asks of the seconds.
 fn second_fraction(tokens: &[Token]) -> usize {
     let Some(at) = tokens.iter().position(|token| match token {
-        Token::Date(code) => code.chars().all(|letter| letter.eq_ignore_ascii_case(&'s')),
+        Token::Date(code) | Token::Elapsed(code) => {
+            code.chars().all(|letter| letter.eq_ignore_ascii_case(&'s'))
+        }
         _ => false,
     }) else {
         return 0;
@@ -492,8 +467,30 @@ fn second_fraction(tokens: &[Token]) -> usize {
         .min(3)
 }
 
+/// The units a section counts past their own wrap.
+///
+/// `[h]` says hours do not stop at 24, and it says it about every hour in the
+/// format rather than only about itself: `"It was "[h]" [yes, "h"] hours"` on
+/// three and an eighth days is 75 both times. So this is asked of the section
+/// and not of the token.
+fn elapsed_units(tokens: &[Token]) -> Vec<char> {
+    tokens
+        .iter()
+        .filter_map(|token| match token {
+            Token::Elapsed(code) => code.chars().next().map(|one| one.to_ascii_lowercase()),
+            _ => None,
+        })
+        .collect()
+}
+
 fn format_date(value: f64, section: &Section, system: DateSystem) -> String {
-    let Some(parts) = parts_of(value, system) else {
+    let units = elapsed_units(&section.tokens);
+
+    // A duration can be negative and a date cannot. `[h]:mm` on minus an hour
+    // and a half is `-1:30`, so the sign is taken off at the front and the
+    // rest is read off the length of it.
+    let reading = if units.is_empty() { value } else { value.abs() };
+    let Some(parts) = parts_of(reading, system) else {
         return format_general(value);
     };
 
@@ -502,30 +499,67 @@ fn format_date(value: f64, section: &Section, system: DateSystem) -> String {
     let fraction = second_fraction(&section.tokens);
     let elapsed = elapsed_of(value);
 
+    /// An hour, minute or second that does not stop where the clock does.
+    fn counting(
+        elapsed: &crate::date::Elapsed,
+        unit: char,
+        length: usize,
+        fraction: usize,
+    ) -> String {
+        let total = match unit {
+            'h' => elapsed.hours,
+            'm' => elapsed.minutes,
+            _ => elapsed.seconds,
+        };
+        let text = padded(total, length);
+
+        if unit == 's' && fraction > 0 {
+            let places = 10_i64.pow(3 - fraction as u32);
+            format!(
+                "{text}.{}",
+                padded(
+                    (elapsed.milliseconds as f64 / places as f64).round() as i64,
+                    fraction
+                )
+            )
+        } else {
+            text
+        }
+    }
+
     let mut text = String::new();
     for (index, token) in section.tokens.iter().enumerate() {
         match token {
             Token::Date(code) => {
+                let unit = code
+                    .chars()
+                    .next()
+                    .map(|one| one.to_ascii_lowercase())
+                    .unwrap_or(' ');
+
                 if minutes.contains(&index) {
-                    text.push_str(&if code.chars().count() == 1 {
+                    text.push_str(&if units.contains(&'m') {
+                        counting(&elapsed, 'm', code.chars().count(), fraction)
+                    } else if code.chars().count() == 1 {
                         parts.minutes.to_string()
                     } else {
                         padded(parts.minutes, 2)
                     });
+                } else if units.contains(&unit) {
+                    // An hour in a format that counts hours is one of the
+                    // hours being counted, however it was spelled.
+                    text.push_str(&counting(&elapsed, unit, code.chars().count(), fraction));
                 } else {
                     text.push_str(&date_text(code, &parts, twelve_hour, fraction));
                 }
             }
             Token::Elapsed(code) => {
-                let total = match code.chars().next().map(|l| l.to_ascii_lowercase()) {
-                    Some('h') => elapsed.hours,
-                    Some('m') => elapsed.minutes,
-                    _ => elapsed.seconds,
-                };
-                if elapsed.negative {
-                    text.push('-');
-                }
-                text.push_str(&padded(total, code.chars().count()));
+                let unit = code
+                    .chars()
+                    .next()
+                    .map(|one| one.to_ascii_lowercase())
+                    .unwrap_or('s');
+                text.push_str(&counting(&elapsed, unit, code.chars().count(), fraction));
             }
             Token::Literal(written) => text.push_str(written),
             Token::Pad(_) => text.push(' '),
@@ -535,7 +569,14 @@ fn format_date(value: f64, section: &Section, system: DateSystem) -> String {
         }
     }
 
-    text
+    format!(
+        "{}{text}",
+        if elapsed.negative && !units.is_empty() {
+            "-"
+        } else {
+            ""
+        }
+    )
 }
 
 fn format_number(value: f64, section: &Section, signed: bool) -> String {
@@ -573,38 +614,31 @@ fn format_number(value: f64, section: &Section, signed: bool) -> String {
         return assemble(tokens, "", "", false);
     }
 
-    let (whole, places) = digits_of(scaled, counts.decimals);
-    let trimmed = places.trim_end_matches('0');
-    let kept: String = places
-        .chars()
-        .take(counts.minimum_decimals.max(trimmed.chars().count()))
-        .collect();
+    // The same laying-out as scientific notation, which is the same language:
+    // `#` a digit if there is one, `0` one whether or not, `?` a space where
+    // there is none. So `#.##` on a half is `.5` while `0.##` is `0.5`, and
+    // `??.??` on 1.1 is ` 1.1 ` — the places it was not given still stand.
+    let point = tokens.iter().position(|token| *token == Token::Decimal);
+    let integer_places = placeholders_of(match point {
+        Some(at) => &tokens[..at],
+        None => tokens,
+    });
+    let decimal_places = match point {
+        Some(at) => placeholders_of(&tokens[at + 1..]),
+        None => Vec::new(),
+    };
 
-    // `#` means a digit if there is one, `0` means one whether or not, and
-    // `?` means a space where there is none. So `#.##` on a half is `.5`
-    // while `0.##` is `0.5` — the difference every spreadsheet person knows
-    // by sight and nobody can explain from the code alone.
-    let required = if whole == "0" && counts.minimum_integer == 0 {
+    let (whole, places) = digits_of(scaled, decimal_places.len());
+    let kept = decimals_laid_out(&places, &decimal_places);
+
+    // A number with more digits than the format has room for keeps them all:
+    // `0` on 1234 is 1234, not 4.
+    let required = if whole == "0" && !integer_places.contains(&'0') {
         String::new()
     } else {
         whole
     };
-    let filled = pad_start(&required, counts.minimum_integer, '0');
-    let spaced = pad_start(
-        &filled,
-        (counts.minimum_integer + counts.padded_integer).max(filled.chars().count()),
-        ' ',
-    );
-
-    // A number with more digits than the format has room for keeps them all:
-    // `0` on 1234 is 1234, not 4.
-    let body = if spaced.is_empty() {
-        String::new()
-    } else if counts.grouped {
-        group_thousands(&spaced)
-    } else {
-        spaced
-    };
+    let body = laid_out(&required, &integer_places, counts.grouped);
 
     // The sign belongs to whoever chose the section: a negative section was
     // handed the value without one, because the section is what the sign
@@ -1178,10 +1212,11 @@ fn assemble(tokens: &[Token], whole: &str, decimals: &str, negative: bool) -> St
                     text.push_str(whole);
                     written = true;
                 }
-                if !decimals.is_empty() {
-                    text.push('.');
-                    text.push_str(decimals);
-                }
+                // The point stands whether or not anything follows it:
+                // `#,##.#` on a round million is `1,234,567.`, which looks
+                // like a typo and is what the format asked for.
+                text.push('.');
+                text.push_str(decimals);
             }
             Token::Literal(written_text) => text.push_str(written_text),
             Token::Pad(_) => text.push(' '),

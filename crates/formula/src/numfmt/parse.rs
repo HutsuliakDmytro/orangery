@@ -472,39 +472,54 @@ fn tokenise(body: &str, kind: Kind, currency: Option<String>) -> Vec<Token> {
         tokens.insert(0, Token::Literal(symbol));
     }
 
-    fold_scaling(tokens)
+    settle_commas(tokens)
 }
 
-/// Commas that come after every digit, turned into division.
+/// What each comma in a number turns out to be.
 ///
-/// `#,##0,` shows thousands and `#,##0,,` shows millions. The trailing ones
-/// are the scaling; the ones between digits are grouping, and telling them
-/// apart is a matter of what comes after.
-fn fold_scaling(tokens: Vec<Token>) -> Vec<Token> {
-    let mut folded: Vec<Token> = Vec::new();
+/// Three different things wear the same character, and only their neighbours
+/// tell them apart:
+///
+/// - **a separator**, between two places — `#,##0` shows thousands;
+/// - **a divisor**, anywhere else among the places — `#,##0,` shows thousands
+///   of thousands, and `#,.#,` divides twice on its way to the point;
+/// - **a comma**, where no place has come yet — `,#` on a million and a bit
+///   is `,1234567`, a literal comma and a number with no grouping at all.
+///
+/// The first of those is the only one anybody writes on purpose, which is why
+/// the other two are easy to get wrong.
+fn settle_commas(tokens: Vec<Token>) -> Vec<Token> {
+    let mut settled: Vec<Token> = Vec::new();
+    let mut seen_place = false;
 
     for (index, token) in tokens.iter().enumerate() {
         if *token != Token::Group {
-            folded.push(token.clone());
+            if matches!(token, Token::Digit(_)) {
+                seen_place = true;
+            }
+            settled.push(token.clone());
             continue;
         }
 
-        let trailing = !tokens[index + 1..]
-            .iter()
-            .any(|later| matches!(later, Token::Digit(_) | Token::Decimal));
-
-        if !trailing {
-            folded.push(Token::Group);
+        if !seen_place {
+            settled.push(Token::Literal(",".to_string()));
             continue;
         }
 
-        match folded.last_mut() {
+        let before = index.checked_sub(1).and_then(|at| tokens.get(at));
+        let after = tokens.get(index + 1);
+        if matches!(before, Some(Token::Digit(_))) && matches!(after, Some(Token::Digit(_))) {
+            settled.push(Token::Group);
+            continue;
+        }
+
+        match settled.last_mut() {
             Some(Token::Scale(by)) => *by *= 1000.0,
-            _ => folded.push(Token::Scale(1000.0)),
+            _ => settled.push(Token::Scale(1000.0)),
         }
     }
 
-    folded
+    settled
 }
 
 /// The AM/PM marker turns a 24-hour format into a 12-hour one.

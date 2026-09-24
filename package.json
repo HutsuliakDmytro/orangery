@@ -23,7 +23,8 @@
     "corpus:recalc": "vite-node scripts/corpus/recalc.ts --",
     "corpus:render": "vite-node scripts/corpus/render.ts --",
     "corpus:charts": "vite-node scripts/corpus/charts-svg.ts --",
-    "corpus:formats": "vite-node scripts/corpus/number-formats.ts --"
+    "corpus:formats": "vite-node scripts/corpus/number-formats.ts --",
+    "corpus:cells": "vite-node scripts/corpus/peek-cells.ts --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

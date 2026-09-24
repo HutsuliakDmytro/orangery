@@ -424,18 +424,15 @@ fn subtract(left: f64, right: f64) -> f64 {
         return 0.0;
     }
 
-    let largest = left.abs().max(right.abs());
-    if largest == 0.0 {
-        return result;
-    }
-
     // Fifteen significant digits is what a spreadsheet keeps; anything below
     // the last of them is the representation talking rather than the numbers.
-    if (result.abs() / largest) < 1e-15 {
+    // The same rule totals a column in `SUM`, which is where people meet it.
+    let settled = crate::value::settled(result, left.abs().max(right.abs()));
+    if settled == 0.0 {
         return 0.0;
     }
 
-    round_to_significant(result, 15)
+    round_to_significant(settled, 15)
 }
 
 /// The value of a reference: one cell, or the rectangle it names.

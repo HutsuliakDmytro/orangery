@@ -33,7 +33,7 @@ Same tokens. Grid itself: white cells, grey `#DADADA` gridlines, selection borde
 - Cell = `{ value, formula?, styleIdx, type: n|s|b|e|d|str|inlineStr, cachedValue }`. On save we write both `<f>` and the cached `<v>` like Excel does, so other apps show numbers without recalculating.
 - On open: trust cached values until the first edit triggers recalculation of the dependency graph (or the user hits Recalculate). `fullCalcOnLoad` respected.
 - Dates are serial numbers; the workbook's date system (`date1904`) is honored everywhere. Never store JS `Date` in cells.
-- Number precision follows Excel: 15 significant digits displayed, IEEE 754 doubles internally, Excel's "close to zero" rounding rules for subtraction (see `docs/adr/precision.md`).
+- Number precision follows Excel: 15 significant digits displayed, IEEE 754 doubles internally, Excel's "close to zero" rounding rules for subtraction (see `docs/adr/0004-precision.md`).
 - Styles are deduplicated into `cellXfs` on save exactly as Excel does; never write one `xf` per cell.
 - Shared formulas (`t="shared"`) and array formulas (`t="array"`) are expanded in the model and re-collapsed on save when unchanged.
 - Dynamic arrays (spill, `_xlfn.` prefixes, `cm="1"` metadata) supported in engine and written the Excel 365 way.

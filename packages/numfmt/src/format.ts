@@ -121,22 +121,14 @@ function matches(condition: Section['condition'], value: number): boolean {
   }
 }
 
-/** How many digits a section asks for on each side of the point. */
+/** How many places a section asks for on each side of the point. */
 function digitCounts(tokens: readonly Token[]): {
   integer: number
-  /** How many of the integer places must show a digit even when there is none. */
-  minimumInteger: number
-  /** How many must show a space instead, to line the column up. */
-  paddedInteger: number
   decimals: number
-  minimumDecimals: number
   grouped: boolean
 } {
   let integer = 0
-  let minimumInteger = 0
-  let paddedInteger = 0
   let decimals = 0
-  let minimumDecimals = 0
   let afterPoint = false
   let grouped = false
 
@@ -151,20 +143,12 @@ function digitCounts(tokens: readonly Token[]): {
     }
     if (token.kind !== 'digit') continue
 
-    if (afterPoint) {
-      decimals += 1
-      if (token.placeholder === '0') minimumDecimals = decimals
-    } else {
-      integer += 1
-      if (token.placeholder === '0') minimumInteger += 1
-      if (token.placeholder === '?') paddedInteger += 1
-    }
+    if (afterPoint) decimals += 1
+    else integer += 1
   }
 
-  return { integer, minimumInteger, paddedInteger, decimals, minimumDecimals, grouped }
+  return { integer, decimals, grouped }
 }
-
-const groupThousands = (digits: string): string => digits.replace(/\B(?=(?:\d{3})+(?!\d))/gu, ',')
 
 /**
  * The digits of a number, rounded to the places the format asks for.
@@ -316,8 +300,15 @@ function dateText(
         ? `${text}.${padded(Math.round(parts.milliseconds / 10 ** (3 - fraction)), fraction)}`
         : text
     }
-    case 'a':
-      return parts.hours < 12 ? names.am : names.pm
+    case 'a': {
+      const marker = parts.hours < 12 ? names.am : names.pm
+      // `AM/PM` is two letters and always capitals, however the format spelled
+      // it. `A/P` is one letter and takes the case it was written in, which is
+      // the only place in this language where the case of the code survives
+      // into the answer.
+      if (lower !== 'a/p') return marker
+      return code.startsWith('a') ? marker.slice(0, 1).toLowerCase() : marker.slice(0, 1)
+    }
     default:
       return ''
   }
@@ -363,7 +354,10 @@ function minuteTokens(tokens: readonly Token[]): Set<number> {
 
     const before = previousUnit(tokens, index)
     const after = nextUnit(tokens, index)
-    if (before === 'h' || after === 's') minutes.add(index)
+    // Excel's own rule is an hour before or a second after. A second *before*
+    // counts as well, which is not in any documentation and is in
+    // ElapsedFormatTests.xlsx: `s:m" @ hour "[hh]` on 3.14159 is `53:23`.
+    if (before === 'h' || before === 's' || after === 's') minutes.add(index)
   }
 
   return minutes
@@ -394,7 +388,9 @@ function nextUnit(tokens: readonly Token[], index: number): string | null {
 
 /** How many decimal places a `ss.00` asks of the seconds. */
 function secondFraction(tokens: readonly Token[]): number {
-  const at = tokens.findIndex((token) => token.kind === 'date' && /^s+$/iu.test(token.code))
+  const at = tokens.findIndex(
+    (token) => (token.kind === 'date' || token.kind === 'elapsed') && /^s+$/iu.test(token.code),
+  )
   if (at === -1) return 0
 
   const decimal = tokens[at + 1]
@@ -409,9 +405,30 @@ function secondFraction(tokens: readonly Token[]): number {
   return places
 }
 
+/**
+ * The units a section counts past their own wrap.
+ *
+ * `[h]` says hours do not stop at 24, and it says it about every hour in the
+ * format rather than only about itself: `"It was "[h]" [yes, "h"] hours"` on
+ * three and an eighth days is 75 both times. So this is asked of the section
+ * and not of the token.
+ */
+function elapsedUnits(tokens: readonly Token[]): Set<string> {
+  const units = new Set<string>()
+  for (const token of tokens) {
+    if (token.kind === 'elapsed') units.add(token.code[0]?.toLowerCase() ?? '')
+  }
+  return units
+}
+
 function formatDate(value: number, section: Section, options: FormatOptions): string {
   const names = options.locale ?? ENGLISH
-  const parts = serialToDate(value, options.date1904 ?? false)
+  const units = elapsedUnits(section.tokens)
+
+  // A duration can be negative and a date cannot. `[h]:mm` on minus an hour
+  // and a half is `-1:30`, so the sign is taken off at the front and the rest
+  // is read off the length of it.
+  const parts = serialToDate(units.size > 0 ? Math.abs(value) : value, options.date1904 ?? false)
   if (parts === null) return formatGeneral(value)
 
   const twelveHour = isTwelveHour(section)
@@ -419,22 +436,34 @@ function formatDate(value: number, section: Section, options: FormatOptions): st
   const fraction = secondFraction(section.tokens)
   const elapsed = elapsedOf(value)
 
-  return section.tokens
+  /** An hour, minute or second that does not stop where the clock does. */
+  const counting = (unit: string, length: number): string => {
+    const total = unit === 'h' ? elapsed.hours : unit === 'm' ? elapsed.minutes : elapsed.seconds
+    const text = padded(total, length)
+    return unit === 's' && fraction > 0
+      ? `${text}.${padded(Math.round(elapsed.milliseconds / 10 ** (3 - fraction)), fraction)}`
+      : text
+  }
+
+  const body = section.tokens
     .map((token, index) => {
       switch (token.kind) {
         case 'date': {
+          const unit = token.code[0]?.toLowerCase() ?? ''
           if (minutes.has(index)) {
-            const code = token.code
-            return code.length === 1 ? String(parts.minutes) : padded(parts.minutes, 2)
+            return units.has('m')
+              ? counting('m', token.code.length)
+              : token.code.length === 1
+                ? String(parts.minutes)
+                : padded(parts.minutes, 2)
           }
+          // An hour in a format that counts hours is one of the hours being
+          // counted, however it was spelled.
+          if (units.has(unit)) return counting(unit, token.code.length)
           return dateText(token.code, parts, twelveHour, names, fraction)
         }
-        case 'elapsed': {
-          const unit = token.code[0]?.toLowerCase()
-          const total =
-            unit === 'h' ? elapsed.hours : unit === 'm' ? elapsed.minutes : elapsed.seconds
-          return `${elapsed.negative ? '-' : ''}${padded(total, token.code.length)}`
-        }
+        case 'elapsed':
+          return counting(token.code[0]?.toLowerCase() ?? '', token.code.length)
         case 'literal':
           return token.text
         case 'pad':
@@ -449,55 +478,8 @@ function formatDate(value: number, section: Section, options: FormatOptions): st
       }
     })
     .join('')
-}
 
-function formatNumber(value: number, section: Section, signed: boolean): string {
-  const tokens = section.tokens
-  const counts = digitCounts(tokens)
-
-  // A format in scientific notation has an exponent to move the point with,
-  // and Excel does not move it twice: the per-cent sign and the trailing
-  // comma are drawn where they stand and multiply nothing. `#%e+#` on 123456
-  // is `1%e+5`, not `1%e+7`.
-  const exponent = tokens.find((token) => token.kind === 'exponent')
-  if (exponent !== undefined) return scientific(value, section)
-
-  const percent = tokens.filter((token) => token.kind === 'percent').length
-  const scale = tokens.reduce((by, token) => (token.kind === 'scale' ? by * token.by : by), 1)
-  const scaled = (value * 100 ** percent) / scale
-
-  const fraction = tokens.find((token) => token.kind === 'fraction')
-  if (fraction !== undefined) return fractional(scaled, section)
-
-  // A section with no digits at all is a word standing in for a number —
-  // `[>=100]"big"` — and appending the digits to it would show "big150".
-  if (counts.integer === 0 && counts.decimals === 0 && !holds(section, 'decimal')) {
-    return assemble(tokens, { whole: '', decimals: '', negative: false })
-  }
-
-  const { whole, fraction: places } = digitsOf(scaled, counts.decimals)
-  const trimmed = places.replace(/0+$/u, '')
-  const kept = places.slice(0, Math.max(counts.minimumDecimals, trimmed.length))
-
-  // `#` means a digit if there is one, `0` means one whether or not, and `?`
-  // means a space where there is none. So `#.##` on a half is `.5` while
-  // `0.##` is `0.5` — the difference every spreadsheet person knows by sight
-  // and nobody can explain from the code alone.
-  const required = whole === '0' && counts.minimumInteger === 0 ? '' : whole
-  const filled = required.padStart(counts.minimumInteger, '0')
-  const spaced = filled.padStart(
-    Math.max(counts.minimumInteger + counts.paddedInteger, filled.length),
-    ' ',
-  )
-
-  // A number with more digits than the format has room for keeps them all:
-  // `0` on 1234 is 1234, not 4.
-  const body = spaced === '' ? '' : counts.grouped ? groupThousands(spaced) : spaced
-
-  // The sign belongs to whoever chose the section: a negative section was
-  // handed the value without one, because the section is what the sign looks
-  // like — often brackets rather than a dash.
-  return assemble(tokens, { whole: body, decimals: kept, negative: scaled < 0 && !signed })
+  return `${elapsed.negative && units.size > 0 ? '-' : ''}${body}`
 }
 
 type Placeholder = '0' | '#' | '?'
@@ -929,6 +911,52 @@ function fractional(value: number, section: Section): string {
   return `${value < 0 ? '-' : ''}${text}`
 }
 
+function formatNumber(value: number, section: Section, signed: boolean): string {
+  const tokens = section.tokens
+  const counts = digitCounts(tokens)
+
+  // A format in scientific notation has an exponent to move the point with,
+  // and Excel does not move it twice: the per-cent sign and the trailing
+  // comma are drawn where they stand and multiply nothing. `#%e+#` on 123456
+  // is `1%e+5`, not `1%e+7`.
+  const exponent = tokens.find((token) => token.kind === 'exponent')
+  if (exponent !== undefined) return scientific(value, section)
+
+  const percent = tokens.filter((token) => token.kind === 'percent').length
+  const scale = tokens.reduce((by, token) => (token.kind === 'scale' ? by * token.by : by), 1)
+  const scaled = (value * 100 ** percent) / scale
+
+  const fraction = tokens.find((token) => token.kind === 'fraction')
+  if (fraction !== undefined) return fractional(scaled, section)
+
+  // A section with no digits at all is a word standing in for a number —
+  // `[>=100]"big"` — and appending the digits to it would show "big150".
+  if (counts.integer === 0 && counts.decimals === 0 && !holds(section, 'decimal')) {
+    return assemble(tokens, { whole: '', decimals: '', negative: false })
+  }
+
+  // The same laying-out as scientific notation, which is the same language:
+  // `#` a digit if there is one, `0` one whether or not, `?` a space where
+  // there is none. So `#.##` on a half is `.5` while `0.##` is `0.5`, and
+  // `??.??` on 1.1 is ` 1.1 ` — the places it was not given still stand.
+  const point = tokens.findIndex((token) => token.kind === 'decimal')
+  const integerPlaces = placeholdersOf(point === -1 ? tokens : tokens.slice(0, point))
+  const decimalPlaces = point === -1 ? [] : placeholdersOf(tokens.slice(point + 1))
+
+  const { whole, fraction: places } = digitsOf(scaled, decimalPlaces.length)
+  const kept = decimalsLaidOut(places, decimalPlaces)
+
+  // A number with more digits than the format has room for keeps them all:
+  // `0` on 1234 is 1234, not 4.
+  const required = whole === '0' && !integerPlaces.includes('0') ? '' : whole
+  const body = laidOut(required, integerPlaces, counts.grouped)
+
+  // The sign belongs to whoever chose the section: a negative section was
+  // handed the value without one, because the section is what the sign looks
+  // like — often brackets rather than a dash.
+  return assemble(tokens, { whole: body, decimals: kept, negative: scaled < 0 && !signed })
+}
+
 /** Puts the digits back among the literals the format states. */
 function assemble(
   tokens: readonly Token[],
@@ -951,7 +979,10 @@ function assemble(
           text += digits.whole
           written = true
         }
-        if (digits.decimals !== '') text += `.${digits.decimals}`
+        // The point stands whether or not anything follows it: `#,##.#` on a
+        // round million is `1,234,567.`, which looks like a typo and is what
+        // the format asked for.
+        text += `.${digits.decimals}`
         break
       case 'literal':
         text += token.text

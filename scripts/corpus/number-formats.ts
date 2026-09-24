@@ -14,6 +14,7 @@ import { FULL_ROOT, walk } from './lib'
  * answer Excel cached when the file was last saved. They are, in other words,
  * exactly the table both our implementations of the format language are meant
  * to be judged by — written by the program we are copying rather than by us.
+ * Excel's own test files turn out to hold a few sheets of the same shape.
  *
  * This reads them out. It does not decide anything: a row is a value, a code
  * and what Excel put on screen, and a row this script cannot resolve is left
@@ -24,9 +25,6 @@ import { FULL_ROOT, walk } from './lib'
 
 /** `TEXT(C2, B2)` — the only shape these sheets use. */
 const CALL = /^TEXT\(\s*(\$?[A-Z]{1,3}\$?\d+)\s*,\s*(\$?[A-Z]{1,3}\$?\d+)\s*\)$/u
-
-/** The workbooks worth reading: POI's, by the names POI gives them. */
-const WANTED = /NumberFormatTests|NumberFormatApproxTests|ElapsedFormatTests|GeneralFormatTests/u
 
 export interface Row {
   /** The value as the file holds it: a number, or a quoted string. */
@@ -113,8 +111,12 @@ async function main(): Promise<void> {
 
   const root = argument('--corpus', FULL_ROOT)
 
+  // Any workbook at all: a sheet that is a column of `TEXT(value, code)`
+  // gives rows and one that is not gives none, so there is nothing to select
+  // for. Apache POI keeps four of them on purpose; Excel's own test files
+  // turn out to hold a few more.
   const files: string[] = []
-  for await (const path of walk(root)) if (WANTED.test(path)) files.push(path)
+  for await (const path of walk(root)) if (path.endsWith('.xlsx')) files.push(path)
 
   const rows: Row[] = []
   for (const file of files) rows.push(...(await rowsOf(file)))

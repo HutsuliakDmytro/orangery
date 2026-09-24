@@ -189,7 +189,9 @@ describe('fractions', () => {
   it('finds the nearest fraction the denominator allows', () => {
     // One digit cannot say a third of a third; two can.
     expect(shown(1.3333, '# ?/?')).toBe('1 1/3')
-    expect(shown(0.3333, '# ??/??')).toBe('1/3')
+    // And two places keep the width of two, filled or not: `?` is a space
+    // where there is no digit, which is what it is for.
+    expect(shown(0.3333, '# ??/??')).toBe('  1/ 3')
   })
 
   it('carries the whole number in the fraction where there is no whole part', () => {
@@ -197,12 +199,15 @@ describe('fractions', () => {
   })
 
   it('uses the denominator the format states', () => {
-    expect(shown(0.3125, '# ?/16')).toBe('5/16')
+    // The leading space is the whole number that is not there, holding the
+    // place it would have had.
+    expect(shown(0.3125, '# ?/16')).toBe(' 5/16')
     expect(shown(2.5, '# ?/8')).toBe('2 4/8')
   })
 
   it('shows a whole number without a fraction beside it', () => {
-    expect(shown(3, '# ?/?')).toBe('3')
+    // The fraction is gone and its width is not: a column of these lines up.
+    expect(shown(3, '# ?/?')).toBe('3    ')
   })
 
   it('keeps the sign outside the fraction', () => {

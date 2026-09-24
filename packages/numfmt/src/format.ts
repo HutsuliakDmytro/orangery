@@ -702,6 +702,92 @@ function scientific(value: number, section: Section): string {
 }
 
 /**
+ * Digits laid one to a place, for a format that puts something between them.
+ *
+ * `laidOut` answers with a string because the places it fills are next to each
+ * other. A fraction's are not: `#-#-#\:#/#` has literals in among the whole
+ * number's places, and each one has to be written where the format put it. So
+ * this answers per place instead — the same right-aligned digits, the same
+ * blanks, handed back one at a time.
+ */
+function placeText(digits: string, places: readonly Placeholder[]): string[] {
+  const blanks = Math.max(0, places.length - digits.length)
+  const spare = Math.max(0, digits.length - places.length)
+  const padded = digits.padStart(places.length, '0')
+
+  return places.map((place, at) => {
+    // A number with more digits than the format has room for keeps them all,
+    // and they pile up in the first place rather than being cut off.
+    const char = at === 0 ? padded.slice(0, spare + 1) : (padded[at + spare] ?? '0')
+    return at < blanks ? (place === '0' ? char : place === '?' ? ' ' : '') : char
+  })
+}
+
+/**
+ * The shape a fraction format is in.
+ *
+ * Three runs of places and whatever the format wove between them: the whole
+ * number, the numerator, the denominator. Which is which falls out of where
+ * the stroke is — the numerator is the run of places nearest it on the left,
+ * the denominator the run nearest on the right, and anything further left
+ * again is the whole number. `#\:#=/=#` puts an equals sign on either side of
+ * the stroke, and the run is still the run.
+ */
+function fractionShape(tokens: readonly Token[]): {
+  whole: number[]
+  numerator: number[]
+  denominator: number[]
+  stroke: number
+} {
+  const stroke = tokens.findIndex((token) => token.kind === 'fraction')
+  const digit = (at: number) => tokens[at]?.kind === 'digit'
+
+  let left = stroke - 1
+  while (left >= 0 && !digit(left)) left -= 1
+  const numerator: number[] = []
+  while (left >= 0 && digit(left)) {
+    numerator.unshift(left)
+    left -= 1
+  }
+
+  let right = stroke + 1
+  while (right < tokens.length && !digit(right)) right += 1
+  const denominator: number[] = []
+  while (right < tokens.length && digit(right)) {
+    denominator.push(right)
+    right += 1
+  }
+
+  const whole: number[] = []
+  for (let at = 0; at < (numerator[0] ?? stroke); at += 1) if (digit(at)) whole.push(at)
+
+  return { whole, numerator, denominator, stroke }
+}
+
+/** The places of a run of token positions. */
+const placesAt = (tokens: readonly Token[], where: readonly number[]): Placeholder[] =>
+  where.map((at) => {
+    const token = tokens[at]
+    return token?.kind === 'digit' ? token.placeholder : '#'
+  })
+
+/** How wide a token is on the page, for a part that is dropped but holds its place. */
+function widthOf(token: Token): number {
+  switch (token.kind) {
+    case 'literal':
+      return token.text.length
+    case 'digit':
+    case 'decimal':
+    case 'fraction':
+    case 'percent':
+    case 'pad':
+      return 1
+    default:
+      return 0
+  }
+}
+
+/**
  * A number as a fraction, the way a format asks for one.
  *
  * Three shapes, and they mean different things:
@@ -711,50 +797,136 @@ function scientific(value: number, section: Section): string {
  * - `?/16` — the denominator is stated, and the numerator is whatever comes
  *   nearest: 0.3 is `5/16`.
  *
- * Which one it is falls out of where the digits are. Anything before the
- * separator that precedes the numerator is the whole part; a run of literal
- * digits after the stroke is a denominator somebody chose.
+ * What makes this harder than it looks is that either half can be absent and
+ * the format still has to read as a number. A whole number with nothing left
+ * over drops its fraction — `# ?/?` on three is `3`, not `3 0/1` — and a value
+ * under one drops its whole number. Whatever the format put *between* them
+ * goes with it, which is why `#\:#/#` on three quarters is `3/4` and not
+ * `:3/4`, while the dashes of `#-#-#\:#/#` stay where they are: they are
+ * inside the whole number rather than between the two halves.
+ *
+ * Unless the format asked for `?` somewhere. `?` is a space where there is no
+ * digit, and a format that asks for one is asking for a column that lines up,
+ * so a part dropped out of such a format leaves its own width behind in
+ * spaces. `?\:?=/=?` on one is `1` followed by six of them.
  */
 function fractional(value: number, section: Section): string {
   const tokens = section.tokens
-  const stroke = tokens.findIndex((token) => token.kind === 'fraction')
+  const shape = fractionShape(tokens)
 
-  const before = tokens.slice(0, stroke)
-  const after = tokens.slice(stroke + 1)
+  const wholePlaces = placesAt(tokens, shape.whole)
+  const numeratorPlaces = placesAt(tokens, shape.numerator)
+  const denominatorPlaces = placesAt(tokens, shape.denominator)
 
-  // The numerator's placeholders are the run of digits right before the
-  // stroke; anything further left, past a space or another literal, is the
-  // whole part.
-  const separator = before.map((token) => token.kind).lastIndexOf('literal')
-  const wholePlaceholders =
-    separator === -1 ? [] : before.slice(0, separator).filter((token) => token.kind === 'digit')
-
-  const stated = after
+  // A denominator written out rather than asked for: `?/16` fixes it at
+  // sixteenths however badly they fit.
+  const stated = tokens
+    .slice(shape.stroke + 1)
     .filter((token) => token.kind === 'literal')
     .map((token) => token.text)
     .join('')
-  const fixed = /^\d+$/u.test(stated) ? Number(stated) : null
+  const fixed = denominatorPlaces.length === 0 && /^\d+$/u.test(stated) ? Number(stated) : null
 
-  const denominatorDigits = after.filter((token) => token.kind === 'digit').length
-  const { whole, numerator, denominator } = fractionOf(
-    wholePlaceholders.length > 0 ? value : 0 + value,
-    Math.max(denominatorDigits, 1),
-    fixed,
-  )
+  const magnitude = Math.abs(value)
+  const carries = wholePlaces.length > 0
+  const whole = carries ? Math.trunc(magnitude) : 0
+  const found = fractionOf(magnitude - whole, Math.max(denominatorPlaces.length, 1), fixed)
+  const denominator = fixed ?? found.denominator
+  // With no whole number to carry it, the fraction carries the lot: 3.75
+  // through `#/#` is fifteen quarters.
+  const numerator = carries ? found.numerator : Math.round(magnitude * denominator)
 
-  const sign = value < 0 ? '-' : ''
-  const showsWhole = wholePlaceholders.length > 0
+  // A `0` is a digit whether or not there is one to show, so a numerator
+  // spelled with one keeps the fraction alive where a `#` would let it go.
+  // The denominator has no say in it: `#\\:#=/=0` on one is `1`.
+  const showsFraction = !carries || numerator !== 0 || numeratorPlaces.includes('0')
 
-  if (!showsWhole) {
-    // No whole part: the fraction carries the lot, so 1.25 is five quarters.
-    const improper = fixed ?? denominator
-    return `${sign}${String(Math.round(Math.abs(value) * improper))}/${String(improper)}`
+  // A whole number of nothing is not written beside a fraction — three
+  // quarters is `3/4`, not `0 3/4` — but it is written when there is no
+  // fraction to write instead, because something has to stand for the value.
+  const wholeDigits =
+    !carries || (showsFraction && magnitude !== 0 && whole === 0) ? '' : String(whole)
+
+  // A zero with nowhere but `#` to go is the one place the placeholders differ
+  // about zero: `#` shows nothing, `?` and `0` show the digit.
+  const hides = showsFraction && wholeDigits === '0' && wholePlaces.every((place) => place === '#')
+
+  // A part dropped out of a format that asked for columns holds its width in
+  // spaces, so the numbers under it still line up. Which `?` counts depends
+  // on which part went: what stood between the two halves lines up with the
+  // halves beside it, and a fraction that is not written lines up with the
+  // fraction that would have been.
+  const asksColumns = (places: readonly Placeholder[]) => places.includes('?')
+  const holds = {
+    separator: asksColumns(wholePlaces) || asksColumns(numeratorPlaces),
+    fraction:
+      asksColumns(wholePlaces) || asksColumns(numeratorPlaces) || asksColumns(denominatorPlaces),
+  }
+  const gone = (token: Token, part: 'separator' | 'fraction') =>
+    holds[part] ? ' '.repeat(widthOf(token)) : ''
+
+  const wholeText = placeText(hides ? '' : wholeDigits, wholePlaces)
+  // What stands between the two halves belongs to whichever of them wrote
+  // something; a column of spaces is not something.
+  const showsWhole = wholeText.join('').trim() !== ''
+  const numeratorText = placeText(String(numerator), numeratorPlaces)
+  const denominatorText = placeText(String(denominator), denominatorPlaces)
+
+  // Where each half begins and ends, so the punctuation around them can be
+  // told from the punctuation between them.
+  const opens = shape.numerator[0] ?? shape.stroke
+  const closes = shape.denominator[shape.denominator.length - 1] ?? shape.stroke
+  const wholeEnds = shape.whole[shape.whole.length - 1] ?? -1
+
+  let text = ''
+
+  for (const [at, token] of tokens.entries()) {
+    const between = carries && at > wholeEnds && at < opens
+    const inFraction = at >= opens && at <= closes
+    const dropped = !showsFraction
+      ? between || inFraction
+        ? 'fraction'
+        : null
+      : between && !showsWhole
+        ? 'separator'
+        : null
+
+    if (dropped !== null) {
+      text += gone(token, dropped)
+      continue
+    }
+
+    switch (token.kind) {
+      case 'digit': {
+        const whereWhole = shape.whole.indexOf(at)
+        const whereNumerator = shape.numerator.indexOf(at)
+        const whereDenominator = shape.denominator.indexOf(at)
+        text +=
+          whereWhole !== -1
+            ? (wholeText[whereWhole] ?? '')
+            : whereNumerator !== -1
+              ? (numeratorText[whereNumerator] ?? '')
+              : (denominatorText[whereDenominator] ?? '')
+        break
+      }
+      case 'fraction':
+        text += '/'
+        break
+      case 'literal':
+        text += token.text
+        break
+      case 'pad':
+        text += ' '
+        break
+      case 'percent':
+        text += '%'
+        break
+      default:
+        break
+    }
   }
 
-  if (numerator === 0) return `${sign}${String(Math.abs(whole))}`
-
-  const head = whole === 0 ? '' : `${String(Math.abs(whole))} `
-  return `${sign}${head}${String(numerator)}/${String(denominator)}`
+  return `${value < 0 ? '-' : ''}${text}`
 }
 
 /** Puts the digits back among the literals the format states. */

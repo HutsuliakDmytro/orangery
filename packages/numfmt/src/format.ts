@@ -455,12 +455,16 @@ function formatNumber(value: number, section: Section, signed: boolean): string 
   const tokens = section.tokens
   const counts = digitCounts(tokens)
 
+  // A format in scientific notation has an exponent to move the point with,
+  // and Excel does not move it twice: the per-cent sign and the trailing
+  // comma are drawn where they stand and multiply nothing. `#%e+#` on 123456
+  // is `1%e+5`, not `1%e+7`.
+  const exponent = tokens.find((token) => token.kind === 'exponent')
+  if (exponent !== undefined) return scientific(value, section)
+
   const percent = tokens.filter((token) => token.kind === 'percent').length
   const scale = tokens.reduce((by, token) => (token.kind === 'scale' ? by * token.by : by), 1)
   const scaled = (value * 100 ** percent) / scale
-
-  const exponent = tokens.find((token) => token.kind === 'exponent')
-  if (exponent !== undefined) return scientific(scaled, section)
 
   const fraction = tokens.find((token) => token.kind === 'fraction')
   if (fraction !== undefined) return fractional(scaled, section)
@@ -496,37 +500,205 @@ function formatNumber(value: number, section: Section, signed: boolean): string 
   return assemble(tokens, { whole: body, decimals: kept, negative: scaled < 0 && !signed })
 }
 
+type Placeholder = '0' | '#' | '?'
+
+/** The digit placeholders of a run of tokens, in the order they are written. */
+const placeholdersOf = (tokens: readonly Token[]): Placeholder[] =>
+  tokens.filter((token) => token.kind === 'digit').map((token) => token.placeholder)
+
+/**
+ * Digits laid into placeholders that there are too many of.
+ *
+ * The digits are right-aligned and the places left over on the left are what
+ * the placeholder says an absent digit looks like: `0` writes a zero, `?`
+ * writes a space to line the column up, and `#` writes nothing at all. A
+ * thousands separator that falls in the empty part goes the same way as the
+ * digit beside it — `?,??????` on six digits is two spaces and then the
+ * number, not a space and a stranded comma.
+ */
+function laidOut(digits: string, places: readonly Placeholder[], grouped: boolean): string {
+  const blanks = Math.max(0, places.length - digits.length)
+  const padded = digits.padStart(places.length, '0')
+
+  /** What an empty place is written as, which is the whole of the difference. */
+  const blank = (at: number, char: string): string => {
+    const place = places[at] ?? '#'
+    return place === '0' ? char : place === '?' ? ' ' : ''
+  }
+
+  let text = ''
+
+  for (let at = 0; at < padded.length; at += 1) {
+    // A separator stands before every third digit counted from the right, and
+    // goes the way the place to its left went: kept beside a zero, a space
+    // beside a `?`, gone beside a `#`.
+    if (grouped && at > 0 && (padded.length - at) % 3 === 0) {
+      text += at - 1 < blanks ? blank(at - 1, ',') : ','
+    }
+
+    const char = padded[at] ?? '0'
+    text += at < blanks ? blank(at, char) : char
+  }
+
+  return text
+}
+
+/**
+ * The places after the point, cut where the format stops asking for them.
+ *
+ * A `0` holds its place whatever the digit is; past the last of them a `#`
+ * drops a trailing zero and a `?` turns it into a space.
+ */
+function decimalsLaidOut(digits: string, places: readonly Placeholder[]): string {
+  const significant = digits.replace(/0+$/u, '').length
+  const required = places.map((place) => place === '0').lastIndexOf(true) + 1
+  const kept = Math.max(significant, required)
+
+  return places
+    .map((place, index) =>
+      index < kept ? (digits[index] ?? '0') : place === '?' ? ' ' : place === '0' ? '0' : '',
+    )
+    .join('')
+}
+
+/**
+ * The power of ten a mantissa is written against.
+ *
+ * Not always the one that leaves a single digit before the point. The
+ * exponent steps by however many integer placeholders the format has, so
+ * `##0.0E+0` counts in thousands the way an engineer writes them and
+ * `####.####e+#` counts in ten-thousands. One placeholder gives the ordinary
+ * kind, which is why the rule is invisible until somebody writes two.
+ *
+ * Read off `toExponential` rather than `log10`, which answers 2.9999999999999996
+ * for a thousand and would put the point in the wrong place once in a while.
+ */
+function exponentFor(magnitude: number, step: number): number {
+  if (magnitude === 0) return 0
+
+  const power = Number(magnitude.toExponential().split('e')[1] ?? '0')
+  return step * Math.floor(power / step)
+}
+
+/** A magnitude divided by a power of ten, in two steps where one would overflow. */
+function shifted(magnitude: number, exponent: number): number {
+  if (Math.abs(exponent) <= 300) return magnitude / 10 ** exponent
+
+  const half = Math.trunc(exponent / 2)
+  return magnitude / 10 ** half / 10 ** (exponent - half)
+}
+
 /**
  * A number in the shape `0.00E+00` asks for.
  *
- * Two widths, both counted from the format rather than from the number: how
- * many places the mantissa shows, and how many digits the exponent is padded
- * to. `E+` writes the sign of a positive exponent and `E-` leaves it off,
- * which is the only difference between them.
+ * Everything about it is counted from the format rather than from the number:
+ * how many digits stand before the point, how many after, how wide the
+ * exponent is, and — the part that is easy to miss — how far the exponent
+ * moves at a time. Four integer placeholders mean the exponent is a multiple
+ * of four, so 123456.789 through `####.####e+#` is 12.3457e+4 rather than
+ * 1.2346e+5.
+ *
+ * Written by walking the tokens, because everything between them belongs to
+ * the answer: `#%e+#` shows a per-cent sign that multiplies nothing, `#e+#,`
+ * shows a comma that divides nothing, and a format that puts its own
+ * punctuation around the exponent keeps it.
  */
 function scientific(value: number, section: Section): string {
   const tokens = section.tokens
   const at = tokens.findIndex((token) => token.kind === 'exponent')
+  const mantissaTokens = tokens.slice(0, at)
+  const exponentTokens = tokens.slice(at + 1)
+
+  const point = mantissaTokens.findIndex((token) => token.kind === 'decimal')
+  const integerPlaces = placeholdersOf(
+    point === -1 ? mantissaTokens : mantissaTokens.slice(0, point),
+  )
+  const decimalPlaces = point === -1 ? [] : placeholdersOf(mantissaTokens.slice(point + 1))
+  const exponentPlaces = placeholdersOf(exponentTokens)
+
+  const magnitude = Math.abs(value)
+  const step = Math.max(integerPlaces.length, 1)
+  const exponent = exponentFor(magnitude, step)
+  const { whole, fraction } = digitsOf(shifted(magnitude, exponent), decimalPlaces.length)
+
+  // Zero has no digits to lay out, and Excel fills every place it was given
+  // rather than leaving them blank: `####.####e+#` shows `0000.e+0`.
+  const integerText =
+    magnitude === 0
+      ? laidOut('0'.repeat(step), integerPlaces, holds(section, 'group'))
+      : laidOut(whole, integerPlaces, holds(section, 'group'))
+
   const exponentToken = tokens[at]
+  const letter = exponentToken?.kind === 'exponent' ? exponentToken.letter : 'E'
+  const sign =
+    exponent < 0 ? '-' : exponentToken?.kind === 'exponent' && exponentToken.sign === '+' ? '+' : ''
 
-  const point = tokens.findIndex((token) => token.kind === 'decimal')
-  const mantissaDecimals =
-    point === -1 || point > at
-      ? 0
-      : tokens.slice(point + 1, at).filter((token) => token.kind === 'digit').length
+  let written = false
+  let body = ''
 
-  const width = tokens.slice(at + 1).filter((token) => token.kind === 'digit').length
+  for (const token of mantissaTokens) {
+    switch (token.kind) {
+      case 'digit':
+        if (!written) {
+          body += integerText
+          written = true
+        }
+        break
+      case 'decimal':
+        if (!written) {
+          body += integerText
+          written = true
+        }
+        // The point stands whether or not anything follows it: `#.#e+#` on
+        // nothing is `0.e+0`, which looks like a typo and is not one.
+        body += `.${decimalsLaidOut(fraction, decimalPlaces)}`
+        break
+      case 'literal':
+        body += token.text
+        break
+      case 'pad':
+        body += ' '
+        break
+      case 'percent':
+        body += '%'
+        break
+      default:
+        break
+    }
+  }
 
-  const text = Math.abs(value).toExponential(mantissaDecimals)
-  const [mantissa = '0', power = '+0'] = text.split('e')
-  const negativePower = power.startsWith('-')
-  const sign = negativePower
-    ? '-'
-    : exponentToken?.kind === 'exponent' && exponentToken.sign === '+'
-      ? '+'
-      : ''
+  if (!written) body += integerText
 
-  return `${value < 0 ? '-' : ''}${mantissa}E${sign}${padded(Math.abs(Number(power)), Math.max(width, 1))}`
+  let tail = ''
+  let placed = false
+  for (const token of exponentTokens) {
+    switch (token.kind) {
+      case 'digit':
+        if (!placed) {
+          // The sign belongs to the digits rather than to the letter: a
+          // format that puts something of its own between the two — `e+|#|` —
+          // writes it as `e|+5`.
+          tail += sign + laidOut(String(Math.abs(exponent)), exponentPlaces, false)
+          placed = true
+        }
+        break
+      case 'literal':
+        tail += token.text
+        break
+      case 'pad':
+        tail += ' '
+        break
+      case 'percent':
+        tail += '%'
+        break
+      default:
+        break
+    }
+  }
+
+  if (!placed) tail += sign + laidOut(String(Math.abs(exponent)), exponentPlaces, false)
+
+  return `${value < 0 ? '-' : ''}${body}${letter}${tail}`
 }
 
 /**

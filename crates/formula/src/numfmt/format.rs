@@ -897,79 +897,267 @@ fn fraction_of(value: f64, denominator_digits: usize, fixed: Option<i64>) -> (i6
     (whole, best.0, best.1)
 }
 
-/// A number as a fraction, the way a format asks for one.
+/// Digits laid one to a place, for a format that puts something between them.
 ///
-/// Three shapes, and they mean different things: `# ?/?` has a whole part
-/// beside the fraction, `?/?` has none and the fraction carries all of it,
-/// and `?/16` states the denominator. Which one it is falls out of where the
-/// digits are.
-fn fractional(value: f64, section: &Section) -> String {
-    let tokens = &section.tokens;
+/// `laid_out` answers with a string because the places it fills are next to
+/// each other. A fraction's are not: `#-#-#\:#/#` has literals in among the
+/// whole number's places, and each one has to be written where the format put
+/// it. So this answers per place instead — the same right-aligned digits, the
+/// same blanks, handed back one at a time.
+fn place_text(digits: &str, places: &[char]) -> Vec<String> {
+    let length = digits.chars().count();
+    let blanks = places.len().saturating_sub(length);
+    let spare = length.saturating_sub(places.len());
+    let padded: Vec<char> = pad_start(digits, places.len(), '0').chars().collect();
+
+    places
+        .iter()
+        .enumerate()
+        .map(|(at, place)| {
+            // A number with more digits than the format has room for keeps
+            // them all, and they pile up in the first place rather than being
+            // cut off.
+            let character: String = if at == 0 {
+                padded.iter().take(spare + 1).collect()
+            } else {
+                padded.get(at + spare).copied().unwrap_or('0').to_string()
+            };
+
+            if at >= blanks {
+                character
+            } else {
+                match place {
+                    '0' => character,
+                    '?' => " ".to_string(),
+                    _ => String::new(),
+                }
+            }
+        })
+        .collect()
+}
+
+/// The shape a fraction format is in.
+///
+/// Three runs of places and whatever the format wove between them: the whole
+/// number, the numerator, the denominator. Which is which falls out of where
+/// the stroke is — the numerator is the run of places nearest it on the left,
+/// the denominator the run nearest on the right, and anything further left
+/// again is the whole number. `#\:#=/=#` puts an equals sign on either side
+/// of the stroke, and the run is still the run.
+struct Shape {
+    whole: Vec<usize>,
+    numerator: Vec<usize>,
+    denominator: Vec<usize>,
+    stroke: usize,
+}
+
+fn fraction_shape(tokens: &[Token]) -> Shape {
     let stroke = tokens
         .iter()
         .position(|token| *token == Token::Fraction)
         .unwrap_or(0);
+    let digit = |at: usize| matches!(tokens.get(at), Some(Token::Digit(_)));
 
-    let before = &tokens[..stroke];
-    let after = &tokens[stroke + 1..];
+    let mut left = stroke as i64 - 1;
+    while left >= 0 && !digit(left as usize) {
+        left -= 1;
+    }
+    let mut numerator = Vec::new();
+    while left >= 0 && digit(left as usize) {
+        numerator.insert(0, left as usize);
+        left -= 1;
+    }
 
-    // The numerator's placeholders are the run of digits right before the
-    // stroke; anything further left, past a space or another literal, is the
-    // whole part.
-    let separator = before
+    let mut right = stroke + 1;
+    while right < tokens.len() && !digit(right) {
+        right += 1;
+    }
+    let mut denominator = Vec::new();
+    while right < tokens.len() && digit(right) {
+        denominator.push(right);
+        right += 1;
+    }
+
+    let limit = numerator.first().copied().unwrap_or(stroke);
+    let whole = (0..limit).filter(|at| digit(*at)).collect();
+
+    Shape {
+        whole,
+        numerator,
+        denominator,
+        stroke,
+    }
+}
+
+/// The places of a run of token positions.
+fn places_at(tokens: &[Token], where_: &[usize]) -> Vec<char> {
+    where_
         .iter()
-        .rposition(|token| matches!(token, Token::Literal(_)));
-    let whole_places = match separator {
-        None => 0,
-        Some(at) => before[..at]
-            .iter()
-            .filter(|token| matches!(token, Token::Digit(_)))
-            .count(),
-    };
+        .map(|at| match tokens.get(*at) {
+            Some(Token::Digit(place)) => *place,
+            _ => '#',
+        })
+        .collect()
+}
 
-    let stated: String = after
+/// How wide a token is on the page, for a part dropped but holding its place.
+fn width_of(token: &Token) -> usize {
+    match token {
+        Token::Literal(text) => text.chars().count(),
+        Token::Digit(_) | Token::Decimal | Token::Fraction | Token::Percent | Token::Pad(_) => 1,
+        _ => 0,
+    }
+}
+
+/// A number as a fraction, the way a format asks for one.
+///
+/// Three shapes, and they mean different things:
+///
+/// - `# ?/?` — a whole part and a fraction beside it: 1.25 is `1 1/4`;
+/// - `?/?` — no whole part, so the fraction carries all of it: 1.25 is `5/4`;
+/// - `?/16` — the denominator is stated, and the numerator is whatever comes
+///   nearest: 0.3 is `5/16`.
+///
+/// What makes this harder than it looks is that either half can be absent and
+/// the format still has to read as a number. A whole number with nothing left
+/// over drops its fraction — `# ?/?` on three is `3`, not `3 0/1` — and a
+/// value under one drops its whole number. Whatever the format put *between*
+/// them goes with it, which is why `#\:#/#` on three quarters is `3/4` and
+/// not `:3/4`, while the dashes of `#-#-#\:#/#` stay where they are: they are
+/// inside the whole number rather than between the two halves.
+///
+/// Unless the format asked for `?` somewhere. `?` is a space where there is
+/// no digit, and a format that asks for one is asking for a column that lines
+/// up, so a part dropped out of such a format leaves its own width behind in
+/// spaces. `?\:?=/=?` on one is `1` followed by six of them.
+fn fractional(value: f64, section: &Section) -> String {
+    let tokens = &section.tokens;
+    let shape = fraction_shape(tokens);
+
+    let whole_places = places_at(tokens, &shape.whole);
+    let numerator_places = places_at(tokens, &shape.numerator);
+    let denominator_places = places_at(tokens, &shape.denominator);
+
+    // A denominator written out rather than asked for: `?/16` fixes it at
+    // sixteenths however badly they fit.
+    let stated: String = tokens[shape.stroke + 1..]
         .iter()
         .filter_map(|token| match token {
             Token::Literal(text) => Some(text.clone()),
             _ => None,
         })
         .collect();
-    let fixed = if !stated.is_empty() && stated.chars().all(|letter| letter.is_ascii_digit()) {
+    let fixed = if denominator_places.is_empty()
+        && !stated.is_empty()
+        && stated.chars().all(|letter| letter.is_ascii_digit())
+    {
         stated.parse::<i64>().ok()
     } else {
         None
     };
 
-    let denominator_digits = after
-        .iter()
-        .filter(|token| matches!(token, Token::Digit(_)))
-        .count()
-        .max(1);
-
-    let (whole, numerator, denominator) = fraction_of(value, denominator_digits, fixed);
-    let sign = if value < 0.0 { "-" } else { "" };
-
-    if whole_places == 0 {
-        // No whole part: the fraction carries the lot, so 1.25 is five
-        // quarters.
-        let improper = fixed.unwrap_or(denominator);
-        return format!(
-            "{sign}{}/{improper}",
-            (value.abs() * improper as f64).round() as i64
-        );
-    }
-
-    if numerator == 0 {
-        return format!("{sign}{}", whole.abs());
-    }
-
-    let head = if whole == 0 {
-        String::new()
+    let magnitude = value.abs();
+    let carries = !whole_places.is_empty();
+    let whole = if carries { magnitude.trunc() } else { 0.0 };
+    let (_, found, denominator) =
+        fraction_of(magnitude - whole, denominator_places.len().max(1), fixed);
+    let denominator = fixed.unwrap_or(denominator);
+    // With no whole number to carry it, the fraction carries the lot: 3.75
+    // through `#/#` is fifteen quarters.
+    let numerator = if carries {
+        found
     } else {
-        format!("{} ", whole.abs())
+        (magnitude * denominator as f64).round() as i64
     };
 
-    format!("{sign}{head}{numerator}/{denominator}")
+    // A `0` is a digit whether or not there is one to show, so a numerator
+    // spelled with one keeps the fraction alive where a `#` would let it go.
+    // The denominator has no say in it: `#\:#=/=0` on one is `1`.
+    let shows_fraction = !carries || numerator != 0 || numerator_places.contains(&'0');
+
+    // A whole number of nothing is not written beside a fraction — three
+    // quarters is `3/4`, not `0 3/4` — but it is written when there is no
+    // fraction to write instead, because something has to stand for the value.
+    let whole_digits = if !carries || (shows_fraction && magnitude != 0.0 && whole == 0.0) {
+        String::new()
+    } else {
+        format!("{}", whole as i64)
+    };
+
+    // A zero with nowhere but `#` to go is the one place the placeholders
+    // differ about zero: `#` shows nothing, `?` and `0` show the digit.
+    let hides =
+        shows_fraction && whole_digits == "0" && whole_places.iter().all(|place| *place == '#');
+
+    // A part dropped out of a format that asked for columns holds its width
+    // in spaces, so the numbers under it still line up. Which `?` counts
+    // depends on which part went: what stood between the two halves lines up
+    // with the halves beside it, and a fraction that is not written lines up
+    // with the fraction that would have been.
+    let asks = |places: &[char]| places.contains(&'?');
+    let holds_separator = asks(&whole_places) || asks(&numerator_places);
+    let holds_fraction =
+        asks(&whole_places) || asks(&numerator_places) || asks(&denominator_places);
+
+    let whole_text = place_text(if hides { "" } else { &whole_digits }, &whole_places);
+    let numerator_text = place_text(&numerator.to_string(), &numerator_places);
+    let denominator_text = place_text(&denominator.to_string(), &denominator_places);
+
+    // What stands between the two halves belongs to whichever of them wrote
+    // something; a column of spaces is not something.
+    let shows_whole = whole_text.concat().trim() != "";
+
+    let opens = shape.numerator.first().copied().unwrap_or(shape.stroke);
+    let closes = shape.denominator.last().copied().unwrap_or(shape.stroke);
+    let whole_ends = shape.whole.last().map(|at| *at as i64).unwrap_or(-1);
+
+    let mut text = String::new();
+
+    for (at, token) in tokens.iter().enumerate() {
+        let between = carries && at as i64 > whole_ends && at < opens;
+        let in_fraction = at >= opens && at <= closes;
+
+        let dropped = if !shows_fraction {
+            if between || in_fraction {
+                Some(holds_fraction)
+            } else {
+                None
+            }
+        } else if between && !shows_whole {
+            Some(holds_separator)
+        } else {
+            None
+        };
+
+        if let Some(holds) = dropped {
+            if holds {
+                text.push_str(&" ".repeat(width_of(token)));
+            }
+            continue;
+        }
+
+        match token {
+            Token::Digit(_) => {
+                let written = if let Some(where_) = shape.whole.iter().position(|one| *one == at) {
+                    whole_text.get(where_).cloned().unwrap_or_default()
+                } else if let Some(where_) = shape.numerator.iter().position(|one| *one == at) {
+                    numerator_text.get(where_).cloned().unwrap_or_default()
+                } else if let Some(where_) = shape.denominator.iter().position(|one| *one == at) {
+                    denominator_text.get(where_).cloned().unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                text.push_str(&written);
+            }
+            Token::Fraction => text.push('/'),
+            Token::Literal(written) => text.push_str(written),
+            Token::Pad(_) => text.push(' '),
+            Token::Percent => text.push('%'),
+            _ => {}
+        }
+    }
+
+    format!("{}{text}", if value < 0.0 { "-" } else { "" })
 }
 
 /// Puts the digits back among the literals the format states.

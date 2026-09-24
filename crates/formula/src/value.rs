@@ -296,6 +296,30 @@ pub fn format_number(value: f64) -> String {
     written
 }
 
+/// A subtraction with the error the representation left in it taken back out.
+///
+/// `=0.1+0.2-0.3` is nought on screen in every spreadsheet and 5.55e-17 in
+/// every language. Excel gets there by looking at what a subtraction leaves:
+/// if it is smaller than the fifteenth significant digit of the larger
+/// operand, it is nothing but the error the representation itself introduced,
+/// and it is nothing.
+///
+/// This is about the subtraction operator and nothing else. Excel does not
+/// apply it to a column added up by `SUM` or `AVERAGE`, which the corpus
+/// settles rather than leaves to argument — see
+/// `apps/sheets/docs/adr/0004-precision.md`.
+pub fn settled(result: f64, largest: f64) -> f64 {
+    if result == 0.0 || largest == 0.0 || !result.is_finite() {
+        return result;
+    }
+
+    if (result.abs() / largest) < 1e-15 {
+        0.0
+    } else {
+        result
+    }
+}
+
 /// A number kept to as many significant digits as a spreadsheet keeps.
 pub fn round_to_significant(value: f64, digits: i32) -> f64 {
     if value == 0.0 || !value.is_finite() {

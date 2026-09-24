@@ -2,7 +2,8 @@
 
 What every corpus run answers, on the corpus described in `docs/corpus.md`. The
 first run was 22 September 2026 and fixed nothing: the point of it was to have
-a number to be better than. Every number below is the current one, and
+a number to be better than. This is the run after step 4 finished — 24
+September 2026. Every number below is the current one, and
 [what has moved](#what-has-moved) says which fix moved it.
 
 The rule the baseline exists for: **no number here may get worse**. A change
@@ -85,52 +86,40 @@ a document (15 of 15), and `w:tblPrEx` with `w:gridSpan` (13).
 Every `<f>` loaded into `crates/formula`, recalculated, and compared against the
 `<v>` its own writer cached beside it.
 
-**Public corpus: 27 workbooks with formulas, 1,709 cells compared, 210 matched.**
-**Full corpus: 163 workbooks, 35,949 cells compared, 32,359 matched — 90.0%.**
+**Public corpus: 27 workbooks with formulas, 1,709 cells compared, 1,659 matched.**
+**Full corpus: 166 workbooks, 35,980 cells compared, 33,353 matched — 92.7%.**
 
-The public number is two workbooks: `excel2007mac-charts-01.xlsx` is 1,440
-cells of `SIN(RADIANS(…))` and `excel2016win-arrayformulas-02.xlsx` is 266 of
-`MMULT`/`MINVERSE`/`MDETERM`, and neither family is implemented.
-
-Fewer cells are compared than before because the harness stopped asking every
-cell under an array formula for its own answer — the app never did: the covered
-cells carry the text so something can ask them what their formula is, and the
-corner computes it.
+The public corpus was 210 when step 4 began. One workbook is most of the
+difference: `excel2007mac-charts-01.xlsx` is 1,440 cells of `SIN(RADIANS(…))`,
+and until [#40](../../pull/40) the engine had neither function.
 
 ### What the mismatches are
 
-Cells whose formula names a function the engine does not have — 2,052 across
-both corpora, grouped by the family a fix would be:
+2,591 across both corpora, and they divide in two.
 
-| Cells | Files | Family                  | Names                                                                                                            |
-| ----: | ----: | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1,598 |     4 | trigonometry            | `RADIANS`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `DEGREES`                                                |
-|   151 |     5 | rounding and integers   | `FLOOR.MATH`, `CEILING.MATH`, `FLOOR.PRECISE`, `CEILING.PRECISE`, `ISO.CEILING`, `EVEN`, `ODD`, `MROUND`, `FACT` |
-|   147 |     3 | statistics              | `FORECAST.ETS`, `FORECAST.ETS.CONFINT`, `FREQUENCY`, `AVEDEV`, `DEVSQ`, `MAXA`, `MINA`                           |
-|    79 |     5 | distributions and other | `BETA.DIST`, `BINOM.DIST`, `COMBIN`, `DCOUNT`, `DAYS360`                                                         |
-|    32 |     2 | engineering             | `HEX2DEC`, `DELTA`                                                                                               |
-|    32 |     1 | information and text    | `ISNONTEXT`, `DOLLAR`, `ISREF`, `ERROR.TYPE`                                                                     |
-|     9 |     2 | matrix                  | `MMULT`, `MINVERSE`, `MDETERM`                                                                                   |
-|     3 |     2 | modern array            | `LET`, `CHOOSEROWS`, `ANCHORARRAY`                                                                               |
-|     1 |     1 | pivots                  | `GETPIVOTDATA`                                                                                                   |
+**355 cells name a function the engine does not have** — 78 names, listed and
+grouped in [#47](../../issues/47). 41 of the 78 are one cell each. The
+largest single name left is `FREQUENCY` at 45.
 
-And the cells where the engine answered and was wrong:
+**2,236 answer and are wrong**, and two thirds of those are one file:
 
-| Cells | Files | What                                                 | Example                                 | Excel        | Us        |
-| ----: | ----: | ---------------------------------------------------- | --------------------------------------- | ------------ | --------- |
-|   986 |    10 | a plain reference to a cell whose own answer differs | `Local1`                                | `3`          | `5`       |
-|   546 |     8 | `TEXT` and its format codes                          | `TEXT(C4, B4)`                          | `271433.376` | `271433`  |
-|    66 |     1 | `ROUND` at high precision                            | `ROUND(B2,12)=ROUND(C2,12)`             | `TRUE`       | `FALSE`   |
-|    29 |     7 | a range where a value was expected                   | `AVERAGEIF(A2:B2)`                      | `#NAME?`     | `#VALUE!` |
-|    16 |     4 | a three-dimensional reference                        | `SUM(Sheet1:Sheet3!B1)`                 | —            | `0`       |
-|    15 |     3 | `IF` over values that differ upstream                | `IF($A3 = $F3, TRUE, FALSE)`            | `TRUE`       | `FALSE`   |
-|     6 |     1 | `TRANSPOSE` in an array formula                      | `TRANSPOSE(B6:D8)`                      | `0`          | `#SPILL!` |
-|     5 |     3 | a whole column in an arithmetic expression           | `SUMPRODUCT((B:B<>"")/COUNTIF(A:A,K2))` | `1.8`        | `0.2`     |
+| Cells | Files | What                                                                     |
+| ----: | ----: | ------------------------------------------------------------------------ |
+| 1,523 |     1 | `tdf171828_fail_to_import_file.xlsx` — named ranges spelled `zeige.Jahr` |
+|   413 |     1 | `forum-mso-en4-134670.xlsx` — everything downstream of `FREQUENCY`       |
+|   300 |    26 | everything else                                                          |
 
-The first row is not arithmetic: those cells point at other cells whose answers
-differ for one of the reasons below them, and they inherit it. Take it out and
-the engine disagrees with Excel about 2,500 cells in 36,000, nearly all of them
-a function it has never heard of.
+The first is a German mortgage workbook LibreOffice keeps because it does not
+import either. Its named ranges have dots in them — `zeige.Jahr`,
+`Tilgungsverlauf_rechnen` — and we resolve them to blank, which then walks
+through every formula on the sheet. One cause, 1,523 cells, and worth its own
+look before anything else on this list.
+
+The second is the same shape with a different cause: one missing function at
+the top of a dependency chain, and 413 cells that point at it.
+
+Take those two files out and the engine disagrees with Excel about **300 cells
+in 36,000**, spread over 26 files.
 
 81 mismatches are excused as the harness's fault rather than the engine's —
 macros, spilled ranges, hidden rows — and `docs/corpus.md` says why.
@@ -185,8 +174,14 @@ Eight of the eleven that differed after the first run now render identically,
 ## What has moved
 
 Each row is one fix, measured on the same files before and after it. The whole
-of step 4 so far: **ok 1,429 → 1,910, diff 1,178 → 701, crash 62 → 58** on the
-full corpus, with pptx unmoved at 535 and 0.
+of step 4: **ok 1,429 → 1,910, diff 1,178 → 701, crash 62 → 58** on the full
+corpus, with pptx unmoved at 535 and 0 — and, once the work moved from the
+serialisers to the engine, **formula cells 32,150 → 33,353 of 35,980**.
+
+The round-trip numbers stop moving after [#26](../../pull/26), which is not a
+plateau: items 5 to 8 were the formula engine and the number-format language,
+and neither of those touches what a package looks like when it is written
+back.
 
 | Fix                                                                                                                | Corpus                                                     | Before               | After                        |
 | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | -------------------- | ---------------------------- |
@@ -206,6 +201,16 @@ full corpus, with pptx unmoved at 535 and 0.
 | [#6](../../issues/6), [#16](../../issues/16) a page keeping its paper, a row its exceptions ([#26](../../pull/26)) | 1,461 documents                                            | ok 832, diff 604     | **ok 1,036**, diff **401**   |
 |                                                                                                                    | — files losing `w:pgSz/@w:code`                            | 261                  | **0**                        |
 |                                                                                                                    | — files losing `w:tblPrEx` or changing `w:gridSpan`        | 13                   | **0**                        |
+
+| [#13](../../issues/13) a range used as a value is the cell that lines up ([#37](../../pull/37)) | 36,000 formula cells | matched 32,150 | **32,359** |
+| [#11](../../issues/11) a reference that reaches across sheets reads all of them ([#39](../../pull/39)) | 36,000 formula cells | matched 32,359 | **32,403** |
+| [#11](../../issues/11) angles, and moving a number to a multiple of another ([#40](../../pull/40)) | 36,000 formula cells | matched 32,403 | **32,826** |
+| | — public corpus | 210 of 1,709 | **1,650** |
+| | — cells naming a function the engine lacks | 2,052 | **356** |
+| [#12](../../issues/12) the number-format language, four causes ([#41](../../pull/41)–[#44](../../pull/44)) | 36,000 formula cells | matched 32,826 | **33,353** |
+| | — POI's four number-format workbooks | 166 of 695 | **695 of 695** |
+| | — the table both implementations are held to | 141 rows | **779 rows** |
+| the precision rules, written down and tested ([#46](../../pull/46)) | 36,000 formula cells | matched 33,353 | 33,353 |
 
 The one expectation step 4 did not meet is worth writing down. The serialiser
 fix was expected to halve the `diff` count and moved it by 13%, because the
@@ -250,8 +255,14 @@ Round-trip and reading:
 
 Formulas:
 
-- [#11](../../issues/11) — `RADIANS`, `MMULT`, `MINVERSE`, `MDETERM`, `GETPIVOTDATA` and others are missing
-- [#12](../../issues/12) — `TEXT` and the `A/P` format codes
-- [#13](../../issues/13) — array expressions in `SUM` and `COUNTIFS`, implicit intersection
+- [#11](../../issues/11) — `RADIANS`, `MMULT`, `MINVERSE`, `MDETERM`, `GETPIVOTDATA` and others are missing — the trigonometry and rounding half is fixed, [#40](../../pull/40); the rest is now counted in [#47](../../issues/47)
+- [#12](../../issues/12) — `TEXT` and the `A/P` format codes — fixed, [#41](../../pull/41)–[#44](../../pull/44)
+- [#13](../../issues/13) — array expressions in `SUM` and `COUNTIFS`, implicit intersection — fixed, [#37](../../pull/37)
 - [#14](../../issues/14) — a circular reference comes out as `0`
 - [#15](../../issues/15) — `SUBTOTAL`, `TRANSPOSE`, `SUMPRODUCT`, `INDEX`, `VLOOKUP` on the full corpus
+- [#47](../../issues/47) — the 78 functions the corpus asks for and the engine does not have
+
+Found by this run and not yet an issue of its own: a named range with a dot in
+it — `zeige.Jahr` — resolves to blank, which is 1,523 cells of
+`tdf171828_fail_to_import_file.xlsx` and the largest single cause left in the
+formula numbers.

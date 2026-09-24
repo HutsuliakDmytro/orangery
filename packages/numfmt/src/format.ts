@@ -218,29 +218,69 @@ function fractionOf(
 }
 
 /**
+ * How wide `General` is allowed to be.
+ *
+ * Eleven characters, counting the decimal point and not the minus sign. It is
+ * a width and not a count of significant digits, which is why 0.000000001 is
+ * shown in full — one significant digit in eleven characters — while
+ * 1.2345678912 loses its last digit and 1e-10 is not shown this way at all.
+ */
+const GENERAL_WIDTH = 11
+
+/**
+ * The plain decimal picture of a number, if it fits.
+ *
+ * `null` where it does not: either the digits before the point already fill
+ * the width, or the number is so small that everything inside the width is a
+ * zero. Both are the cases Excel answers with scientific notation instead.
+ */
+function fitted(magnitude: number): string | null {
+  const integerWidth = Math.max(1, Math.floor(Math.log10(magnitude)) + 1)
+  if (integerWidth > GENERAL_WIDTH) return null
+
+  // What is left of the width once the integer digits and the point have had
+  // their share; a number with no room for a point keeps none.
+  const decimals = Math.max(0, GENERAL_WIDTH - integerWidth - 1)
+  const text = magnitude.toFixed(Math.min(decimals, 100))
+
+  // Rounding can carry: 99999999999.5 in eleven characters is a twelfth
+  // digit, and Excel writes that as an exponent rather than shortening it.
+  const [whole = '', fraction = ''] = text.split('.')
+  if (whole.length > GENERAL_WIDTH) return null
+  if (Number(text) === 0) return null
+
+  const kept = fraction.replace(/0+$/u, '')
+  return kept === '' ? whole : `${whole}.${kept}`
+}
+
+/**
  * `General` — the format a cell has when it has none.
  *
- * Excel fits the number into about eleven characters: plain where it can,
- * scientific where the number is too big or too small to show otherwise. The
- * exact rule involves the column's width, which nothing here knows, so this is
- * the width-independent part of it.
+ * Excel fits the number into eleven characters and reaches for an exponent
+ * only when it cannot: 0.000000001 is written out, 0.0000000001 would need a
+ * twelfth character and becomes `1E-10`. The rule is about width rather than
+ * about digits, which is the part that is easy to get wrong — eleven
+ * significant digits would show both of those numbers the same way, and Excel
+ * does not.
+ *
+ * Excel's real `General` also narrows itself to the column, which nothing here
+ * knows about; this is the width-independent part, and the one `TEXT` uses.
  */
 export function formatGeneral(value: number): string {
   if (!Number.isFinite(value)) return String(value)
   if (value === 0) return '0'
 
-  const magnitude = Math.abs(value)
-  if (magnitude >= 1e11 || magnitude < 1e-10) {
-    const text = value
-      .toExponential(5)
-      .replace(/e([+-])(\d)$/u, 'E$10$2')
-      .replace(/e/u, 'E')
-    return text.replace(/(\.\d*?)0+E/u, '$1E').replace(/\.E/u, 'E')
-  }
+  const sign = value < 0 ? '-' : ''
+  const plain = fitted(Math.abs(value))
+  if (plain !== null) return `${sign}${plain}`
 
-  // Eleven significant digits, with the trailing zeros a rounding leaves.
-  const text = value.toPrecision(11)
-  return text.includes('.') ? text.replace(/\.?0+$/u, '') : text
+  // Five places of mantissa, with whatever trailing zeros that leaves taken
+  // off again: 1.1e-10 is `1.1E-10` and not `1.10000E-10`.
+  const [mantissa = '0', power = '0'] = Math.abs(value).toExponential(5).split('e')
+  const exponent = Number(power)
+  const trimmed = mantissa.includes('.') ? mantissa.replace(/\.?0+$/u, '') : mantissa
+
+  return `${sign}${trimmed}E${exponent < 0 ? '-' : '+'}${padded(Math.abs(exponent), 2)}`
 }
 
 const padded = (value: number, length: number): string => String(value).padStart(length, '0')

@@ -139,3 +139,74 @@
 -1.5	General	-1.5
 1234.5678	General	1234.5678
 "text"	General	text
+
+# General, from the workbook Apache POI keeps for it
+#
+# GeneralFormatTests.xlsx: a column of values against a column of
+# =TEXT(value, "General"), each carrying the answer Excel cached. The
+# width is the thing being pinned down — 0.000000001 fits in eleven
+# characters and 0.0000000001 does not, and that is the whole of the
+# difference between the two rows that show it.
+"FALSE"	General	FALSE
+"TRUE"	General	TRUE
+"hello"	General	hello
+-0.01	General	-0.01
+-0.1	General	-0.1
+-1	General	-1
+-1.0000000000000001E-9	General	-0.000000001
+-1.0999999999999999E-10	General	-1.1E-10
+-1.1234509999999999E-10	General	-1.12345E-10
+-1.123459E-10	General	-1.12346E-10
+-1.12345E-10	General	-1.12345E-10
+-1.123E-10	General	-1.123E-10
+-1.12E-10	General	-1.12E-10
+-1.2	General	-1.2
+-1.23	General	-1.23
+-1.234	General	-1.234
+-1.2345678899999999	General	-1.23456789
+-1.234567891	General	-1.234567891
+-1.2345678912	General	-1.234567891
+-1.2345678919	General	-1.234567892
+-10000000000	General	-10000000000
+-100000000000	General	-1E+11
+-110000000000	General	-1.1E+11
+-112000000000	General	-1.12E+11
+-112300000000	General	-1.123E+11
+-112345000000	General	-1.12345E+11
+-112345100000	General	-1.12345E+11
+-112345900000	General	-1.12346E+11
+-12	General	-12
+-123	General	-123
+-1234	General	-1234
+-12345	General	-12345
+-1E-10	General	-1E-10
+0.01	General	0.01
+0.1	General	0.1
+1.0000000000000001E-9	General	0.000000001
+1.0999999999999999E-10	General	1.1E-10
+1.1234509999999999E-10	General	1.12345E-10
+1.123459E-10	General	1.12346E-10
+1.12345E-10	General	1.12345E-10
+1.123E-10	General	1.123E-10
+1.12E-10	General	1.12E-10
+1.2	General	1.2
+1.23	General	1.23
+1.234	General	1.234
+1.2345678899999999	General	1.23456789
+1.234567891	General	1.234567891
+1.2345678912	General	1.234567891
+1.2345678919	General	1.234567892
+10	General	10
+10000000000	General	10000000000
+100000000000	General	1E+11
+110000000000	General	1.1E+11
+112000000000	General	1.12E+11
+112300000000	General	1.123E+11
+112345000000	General	1.12345E+11
+112345100000	General	1.12345E+11
+112345900000	General	1.12346E+11
+12	General	12
+123	General	123
+1234	General	1234
+12345	General	12345
+1E-10	General	1E-10

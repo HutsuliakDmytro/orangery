@@ -2,7 +2,7 @@
   "name": "orangery",
   "private": true,
   "type": "module",
-  "description": "Orangery \u2014 an office suite with OOXML as its native format.",
+  "description": "Orangery — an office suite with OOXML as its native format.",
   "license": "MIT",
   "author": "Dmytro Hutsuliak <dmytro.hutsuliak.dev@gmail.com>",
   "repository": {
@@ -22,7 +22,8 @@
     "corpus:run": "vite-node scripts/corpus/run.ts --",
     "corpus:recalc": "vite-node scripts/corpus/recalc.ts --",
     "corpus:render": "vite-node scripts/corpus/render.ts --",
-    "corpus:charts": "vite-node scripts/corpus/charts-svg.ts --"
+    "corpus:charts": "vite-node scripts/corpus/charts-svg.ts --",
+    "corpus:formats": "vite-node scripts/corpus/number-formats.ts --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

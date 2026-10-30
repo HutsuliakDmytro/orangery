@@ -28,7 +28,7 @@ use std::sync::Mutex;
 
 use tauri::Manager;
 
-use crate::AppError;
+use crate::{trail, AppError};
 
 /// The label Tauri gives the window `tauri.conf.json` describes, which in
 /// every Orangery app is the only one that exists at launch.
@@ -236,7 +236,13 @@ pub fn install<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<
         },
     ));
 
-    builder.manage(LaunchState::default())
+    builder
+        .manage(LaunchState::default())
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                trail::event(&format!("webview {} loaded", webview.label()));
+            }
+        })
 }
 
 /// Reads the paths this process was started with. Called once, from `setup`.
@@ -245,7 +251,9 @@ pub fn install<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<
 /// binary from a terminal does, so it is read everywhere.
 pub fn start<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let directory = std::env::current_dir().unwrap_or_default();
-    for path in paths_from_arguments(std::env::args(), &directory) {
+    let paths = paths_from_arguments(std::env::args(), &directory);
+    trail::event(&format!("setup; argv carries {} file(s)", paths.len()));
+    for path in paths {
         arrive(app, path);
     }
 }
@@ -253,8 +261,24 @@ pub fn start<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// For the app's `run` callback: the Apple Event, and windows closing.
 pub fn on_run_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: &tauri::RunEvent) {
     match event {
+        tauri::RunEvent::Ready => trail::event("ready"),
+        tauri::RunEvent::ExitRequested { code, .. } => {
+            trail::ending(&format!("exit requested, code {code:?}"));
+        }
+        tauri::RunEvent::Exit => trail::clean_exit(),
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { .. },
+            ..
+        } => trail::ending(&format!("window {label}: close requested")),
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } => trail::event(&format!("reopen, visible windows: {has_visible_windows}")),
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         tauri::RunEvent::Opened { urls } => {
+            trail::event(&format!("opened (Apple Event), {} url(s)", urls.len()));
             for url in urls {
                 // A file URL is a file. Anything else — a custom scheme — is
                 // not a document and is not ours to open.
@@ -268,6 +292,7 @@ pub fn on_run_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: &tauri:
             event: tauri::WindowEvent::Destroyed,
             ..
         } => {
+            trail::ending(&format!("window {label}: destroyed"));
             if let Some(state) = app.try_state::<LaunchState>() {
                 state.0.lock().expect("launch state").closed(label);
             }
@@ -282,6 +307,7 @@ pub fn arrive<R: tauri::Runtime>(app: &tauri::AppHandle<R>, path: String) {
         return;
     };
     let route = state.0.lock().expect("launch state").arrive(path);
+    trail::event(&format!("arrive → {route:?}"));
 
     match route {
         Route::Queued { .. } => {}
@@ -334,6 +360,7 @@ pub fn new_window<R: tauri::Runtime>(
 
     match built {
         Ok(window) => {
+            trail::event(&format!("window {label} created"));
             bring_forward(&window);
             Ok(label)
         }
@@ -367,13 +394,20 @@ pub fn claim_open_requests(
     window: tauri::Window,
     state: tauri::State<'_, LaunchState>,
 ) -> Vec<String> {
-    state.0.lock().expect("launch state").claim(window.label())
+    let paths = state.0.lock().expect("launch state").claim(window.label());
+    trail::event(&format!(
+        "window {} claimed {} file(s)",
+        window.label(),
+        paths.len()
+    ));
+    paths
 }
 
 /// The page says whether it holds a document, so a file arriving while it
 /// shows the welcome screen goes into it rather than into a new window.
 #[tauri::command]
 pub fn report_vacancy(window: tauri::Window, state: tauri::State<'_, LaunchState>, vacant: bool) {
+    trail::event(&format!("window {} vacant: {vacant}", window.label()));
     state
         .0
         .lock()

@@ -13,5 +13,6 @@ pub mod document;
 mod error;
 pub mod launch;
 pub mod menu;
+pub mod trail;
 
 pub use error::AppError;

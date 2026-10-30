@@ -243,6 +243,7 @@
       — `Mod` уже розкривається в Ctrl; меню розведене по платформах (Quit у File, без Services/Hide Others/Full Screen). Лишились `Alt`-меню й bootstrapper
 - [ ] Windows: NSIS/MSI інсталятор, підпис коду (Azure Trusted Signing або сертифікат), реєстрація `.docx`/`.odt` як "Open with" (не за замовчуванням, щоб не бісити людей з Word)
 - [ ] Linux: AppImage + .deb, WebKitGTK, перевірка на Ubuntu 24.04 і Fedora
+- [ ] Відкриття файлу з Explorer / файлового менеджера — Windows і Linux (macOS закрито в #49). Гілка вже написана й компілюється на обох (`packages/tauri-shared/src/launch.rs`), але жодного разу не запускалась руками: (1) апп закритий, подвійний клік на `.docx` → шлях приходить через **argv**, файл відкривається одразу, без кадру welcome; (2) апп відкритий → другий процес зупиняє **tauri-plugin-single-instance** і передає argv першому: у панелі задач одна копія, файл у новому вікні (або у вікні з welcome); (3) відносний шлях з `cmd` / термінала розв'язується від теки, де запустили, а не від теки першого процесу; (4) запуск без файлу при відкритому аппі лише виводить вікно наперед. Пункти в `docs/qa-checklist.md` → «Windows / Linux». Слід у `<appdata>/logs/launch.log` покаже, що прийшло й куди
 - [x] Bundled fonts (Inter, Liberation Sans/Serif/Mono) — однаковий вигляд документа на всіх ОС
 - [ ] Друк/PDF на Windows та Linux — перевірити webview-друк, за потреби Rust-fallback
 - [x] Тема: Windows title bar / Linux CSD — рішення, ADR (`docs/adr/0004-window-chrome.md`)

@@ -90,8 +90,33 @@ These are the ones that matter most. Take them seriously.
 
 ## Windows and files
 
-- [ ] Double-clicking a `.docx` in Finder opens it in the app.
-- [ ] Opening a second file from Finder opens a second window, not a replacement.
+- [ ] **App closed.** Quit it (`Cmd+Q`, not just the window). Double-click a
+      `.docx` in Finder. The app starts **on the file** — at no point does the
+      welcome screen appear first, not even for a frame.
+- [ ] **App open, on the welcome screen.** Double-click a `.docx`. It opens in
+      that window; no second window appears.
+- [ ] **App open, a file in it with unsaved changes.** Double-click another
+      `.docx`. It opens in a **new** window; the first is untouched, edits
+      and all, and nothing asks anything.
+- [ ] **App open, a file in it, saved.** Double-click another. New window too.
+- [ ] Select three `.docx` files in Finder and press `Cmd+O`. Three windows,
+      one file each.
+- [ ] Right-click a `.pptx` → Open With → Orangery Docs. The window says Orangery Docs could
+      not open it and why, with Open Another… — not a bare welcome screen. (It
+      should not have been offered: Orangery Docs does not claim `.pptx`. If it
+      was, that is a bug in `tauri.conf.json`.)
+- [ ] A file the app may not read. `chmod 000` a copy of a `.docx` — but do
+      **not** double-click it: macOS refuses that itself (error -5000) before
+      the app is ever asked, which is the system's answer and not ours. Start
+      the app with it instead:
+      `"/Applications/Orangery Docs.app/Contents/MacOS/orangery-docs" locked.docx`.
+      The window says there is no permission to read it. Put the permissions
+      back after.
+- [ ] Double-click a `.docx` that is not one — a text file renamed. The window
+      says why it would not open.
+- [ ] **Windows / Linux:** the same five, plus — with the app running, open a
+      file from Explorer / the file manager. No second copy of the app appears
+      in the taskbar; the file arrives in the first.
 - [ ] Dropping a file onto a window with unsaved changes opens it in a new window.
 - [ ] Recent files lists what you actually opened, most recent first.
 

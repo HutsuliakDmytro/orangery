@@ -18,3 +18,8 @@ tokio = { version = "1.53.1", features = ["time"] }
 
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
+
+# A second process started to open a file hands its arguments to the first and
+# exits. macOS does this itself, through `RunEvent::Opened`.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-single-instance = "2"

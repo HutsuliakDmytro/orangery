@@ -79,11 +79,18 @@
         "mimeType": "application/rtf"
       },
       {
-        "ext": ["txt", "md"],
+        "ext": ["txt"],
         "name": "Text Document",
         "description": "Plain Text Document",
         "role": "Editor",
         "mimeType": "text/plain"
+      },
+      {
+        "ext": ["md"],
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
       }
     ],
     "category": "Productivity",

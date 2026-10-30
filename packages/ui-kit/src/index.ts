@@ -57,3 +57,14 @@ export { RecentFilesMenu } from './components/recent-files-menu'
 export type { RecentEntry } from './components/recent-files-menu'
 export { ToolbarButton, ToolbarSeparator } from './components/toolbar-button'
 export { useRovingFocus } from './components/use-roving-focus'
+
+export {
+  dismissLaunchFailure,
+  fileNameOf,
+  resetLaunchState,
+  useLaunchRequests,
+  useLaunchScreenShown,
+  useLaunchState,
+} from './launch/use-launch-requests'
+export type { LaunchFailure, LaunchState, OpenForLaunch } from './launch/use-launch-requests'
+export { LaunchScreen } from './launch/launch-screen'

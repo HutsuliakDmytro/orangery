@@ -44,10 +44,32 @@ fn modified_ms(path: &Path) -> Option<u64> {
         .map(|duration| duration.as_millis() as u64)
 }
 
+/// Why a file could not be read, in words a person can act on.
+///
+/// The message goes straight onto the screen of somebody who double-clicked a
+/// file and got a window instead of it; "io error: Permission denied (os error
+/// 13)" tells them that something is wrong and not what to do about it.
+fn unreadable(path: &Path, error: &std::io::Error) -> AppError {
+    use std::io::ErrorKind;
+
+    let reason = match error.kind() {
+        ErrorKind::NotFound => {
+            "The file is not there any more. It may have been moved, renamed or deleted.".to_string()
+        }
+        ErrorKind::PermissionDenied => {
+            "You do not have permission to read this file. Check its sharing and permissions, or copy it somewhere you own.".to_string()
+        }
+        _ if path.is_dir() => "This is a folder, not a file.".to_string(),
+        _ => format!("It could not be read: {error}."),
+    };
+
+    AppError::Other(reason)
+}
+
 #[tauri::command]
 pub async fn read_document(path: String) -> Result<LoadedDocument, AppError> {
     let path = PathBuf::from(path);
-    let bytes = fs::read(&path)?;
+    let bytes = fs::read(&path).map_err(|error| unreadable(&path, &error))?;
 
     Ok(LoadedDocument {
         bytes,
@@ -397,71 +419,4 @@ mod close_tests {
         assert!(close_is_confirmed("main-test"));
         assert!(!close_is_confirmed("other-test"));
     }
-}
-
-/// Paths the OS handed the app at launch: a double-click, "Open With", or a
-/// path typed on the command line.
-///
-/// Emitted rather than acted on, because opening one means parsing OOXML and
-/// that lives in the frontend. The delay is not politeness: the event is sent
-/// during setup, when there is no webview yet to receive it.
-pub fn emit_launch_paths<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let opened: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|argument| !argument.starts_with('-'))
-        .collect();
-
-    if opened.is_empty() {
-        return;
-    }
-
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-        let _ = tauri::Emitter::emit(&handle, "document:open-path", opened);
-    });
-}
-
-/// Opens a new window, optionally on a given file.
-///
-/// One window holds one document (CLAUDE.md), so "New Window" and "open a second
-/// file" are the same operation. The label has to be unique per window; a counter
-/// is enough, and it keeps labels short for the close-confirmation bookkeeping.
-#[tauri::command]
-pub async fn open_window<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    path: Option<String>,
-) -> Result<String, AppError> {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static NEXT_LABEL: AtomicU32 = AtomicU32::new(1);
-
-    let label = format!("win-{}", NEXT_LABEL.fetch_add(1, Ordering::Relaxed));
-
-    let window =
-        tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
-            .title(app.package_info().name.as_str())
-            .inner_size(1280.0, 840.0)
-            .min_inner_size(720.0, 480.0)
-            .build()?;
-
-    if let Some(path) = path {
-        // The webview has to exist before it can receive this.
-        let target = window.clone();
-        let addressee = label.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            // To the new window and no other. Emitted at large, this would also
-            // reach the window that asked for it — which, on being told to open
-            // a file it had just handed away, would open another window for it,
-            // and another, for as long as anyone watched.
-            let _ = tauri::Emitter::emit_to(
-                &target,
-                tauri::EventTarget::labeled(&addressee),
-                "document:open-path",
-                vec![path],
-            );
-        });
-    }
-
-    Ok(label)
 }

@@ -63,11 +63,18 @@
     "publisher": "Dmytro Hutsuliak",
     "fileAssociations": [
       {
-        "ext": ["xlsx", "xlsm"],
+        "ext": ["xlsx"],
         "name": "Excel Workbook",
         "description": "Excel workbook",
         "role": "Editor",
         "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      },
+      {
+        "ext": ["xlsm"],
+        "name": "Excel Macro-Enabled Workbook",
+        "description": "Excel macro-enabled workbook",
+        "role": "Editor",
+        "mimeType": "application/vnd.ms-excel.sheet.macroEnabled.12"
       },
       {
         "ext": ["ods"],

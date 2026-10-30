@@ -6,7 +6,12 @@ import { serializeSection } from '../ooxml/section'
 import type { SectionProperties } from '../ooxml/section'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CommandPalette } from '@orangery/ui-kit'
+import {
+  CommandPalette,
+  LaunchScreen,
+  useLaunchScreenShown,
+  useLaunchState,
+} from '@orangery/ui-kit'
 import { ConfirmDialog } from '@orangery/ui-kit'
 import { FindReplacePanel } from '../components/find-replace-panel'
 import { FootnotesPanel } from '../components/footnotes-panel'
@@ -146,13 +151,17 @@ function Shell() {
 
   const closeGuard = useCloseGuard()
   const recovery = useCrashRecovery()
+  const launch = useLaunchState()
+  const launchShown = useLaunchScreenShown()
 
   // A new document is a real DOCX package from the first keystroke, so there is
   // never a moment where the app holds something that is not the native format.
+  // Not before the window knows whether it was opened on a file: the two would
+  // race for the editor, and `guardBusy` would quietly drop whichever was second.
   useEffect(() => {
-    if (!editor || getSession() !== null) return
+    if (!editor || !launch.settled || getSession() !== null) return
     void fileOperations.newDocument(editor)
-  }, [editor])
+  }, [editor, launch.settled])
 
   const title = windowTitle({ path, dirty })
 
@@ -188,7 +197,16 @@ function Shell() {
       />
       <WarningsBanner />
 
-      {showWelcome ? (
+      {launchShown ? (
+        <main className="min-h-0 flex-1">
+          <LaunchScreen
+            appName={t('app.name')}
+            onOpenAnother={() => {
+              if (editor) void fileOperations.open(editor)
+            }}
+          />
+        </main>
+      ) : showWelcome ? (
         <main className="min-h-0 flex-1">
           <WelcomeScreen
             onDismiss={() => {

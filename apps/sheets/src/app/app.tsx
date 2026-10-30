@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CellAddress } from '@orangery/grid'
-import { CommandPalette, CommandSourceProvider, useNativeMenu } from '@orangery/ui-kit'
+import {
+  CommandPalette,
+  CommandSourceProvider,
+  LaunchScreen,
+  useLaunchScreenShown,
+  useNativeMenu,
+} from '@orangery/ui-kit'
 import { baseName } from '@orangery/platform'
 import { boundsOf, selectedCount, singleCell } from '@orangery/grid'
 import {
@@ -73,6 +79,7 @@ function Shell() {
   useAutosave()
 
   const open = useWorkbookStore((state) => state.open)
+  const launching = useLaunchScreenShown()
   const path = useWorkbookStore((state) => state.path)
   const current = useWorkbookStore((state) => state.current)
   const problem = useWorkbookStore((state) => state.problem)
@@ -477,7 +484,16 @@ function Shell() {
       )}
 
       <main className="min-h-0 flex-1 print:hidden">
-        {sheet === null || open === null ? (
+        {launching && open === null ? (
+          // Before the welcome screen: while the window does not yet know
+          // whether it was opened on a file, it shows neither.
+          <LaunchScreen
+            appName="Orangery Sheets"
+            onOpenAnother={() => {
+              void openWorkbookFromDialog()
+            }}
+          />
+        ) : sheet === null || open === null ? (
           <Welcome />
         ) : (
           <SheetView

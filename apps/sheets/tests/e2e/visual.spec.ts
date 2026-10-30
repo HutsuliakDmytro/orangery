@@ -54,7 +54,22 @@ async function prepare(page: Page, section: string): Promise<void> {
   if (section === 'launch-failure') await expect(page.getByRole('alert')).toBeVisible()
   if (section === 'launch-opening') await expect(page.getByRole('status')).toBeVisible()
   if (section === 'previous-run') await expect(page.getByRole('status')).toBeVisible()
-  if (section === 'error') await expect(page.getByRole('alert')).toBeVisible()
+  if (section === 'error') {
+    await expect(page.getByRole('alert')).toBeVisible()
+    // The boundary prints the stack it caught, and a stack is the paths of
+    // the machine it ran on — this one's are not CI's, and they wrap
+    // differently. A fixed stack in their place keeps the box, its text and
+    // its layout compared, and nothing in it that depends on the machine.
+    await page.locator('pre').evaluate((element) => {
+      element.textContent = [
+        'a chart nobody could draw',
+        '',
+        'Error: a chart nobody could draw',
+        '    at Thrown (gallery.tsx:49:9)',
+        '    at ErrorBoundary (error-boundary.tsx:3:8)',
+      ].join('\n')
+    })
+  }
 }
 
 for (const theme of THEMES) {

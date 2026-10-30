@@ -7,11 +7,16 @@
 
 mod formula;
 
-use orangery_tauri_shared::{diagnostics, document, launch, menu};
+use orangery_tauri_shared::{diagnostics, document, launch, menu, trail};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // Before anything that could fail: the panic hook, and whether the last
+    // run ended cleanly, are read from here.
+    trail::begin(&context.config().identifier);
+
     // First, because the single-instance plugin has to be: a second process
     // started to open a file must hand it over before anything else starts.
     launch::install(tauri::Builder::default())
@@ -36,6 +41,8 @@ pub fn run() {
             launch::open_window,
             launch::claim_open_requests,
             launch::report_vacancy,
+            trail::previous_run,
+            trail::reveal_log,
             diagnostics::write_diagnostic,
             diagnostics::read_diagnostics,
             diagnostics::clear_diagnostics,
@@ -80,7 +87,7 @@ pub fn run() {
             // and runs them, so the logic lives in exactly one place.
             let _ = tauri::Emitter::emit(app, "menu:command", event.id().0.as_str());
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Orangery Sheets")
         // The run loop is where macOS delivers a Finder double-click, and
         // without a callback here it is dropped on the floor.

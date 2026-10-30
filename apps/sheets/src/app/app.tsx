@@ -4,6 +4,7 @@ import {
   CommandPalette,
   CommandSourceProvider,
   LaunchScreen,
+  PreviousRunBanner,
   useLaunchScreenShown,
   useNativeMenu,
 } from '@orangery/ui-kit'
@@ -383,6 +384,7 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
+      <PreviousRunBanner appName="Orangery Sheets" />
       {lost.map((one) => (
         <div
           key={one.key}

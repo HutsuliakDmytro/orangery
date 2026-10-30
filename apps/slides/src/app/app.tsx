@@ -29,6 +29,7 @@ import { InkPrompt } from '../components/ink-prompt'
 import { VideoProgress } from '../components/video-progress'
 import { TemplatePicker } from '../components/template-picker'
 import { RecoveryBanner } from '../components/recovery-banner'
+import { PreviousRunBanner } from '@orangery/ui-kit'
 import { Show } from '../components/show'
 import { WarningsBanner } from '../components/warnings-banner'
 import { registerBuiltinCommands } from '../commands/definitions'
@@ -114,6 +115,7 @@ function Shell() {
         />
       )}
 
+      <PreviousRunBanner appName="Orangery Slides" />
       <RecoveryBanner
         candidates={recovery.candidates}
         onRecover={recovery.recover}

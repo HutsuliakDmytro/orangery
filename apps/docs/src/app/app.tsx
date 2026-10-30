@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import {
   CommandPalette,
   LaunchScreen,
+  PreviousRunBanner,
   useLaunchScreenShown,
   useLaunchState,
 } from '@orangery/ui-kit'
@@ -189,6 +190,7 @@ function Shell() {
         </div>
       </header>
 
+      <PreviousRunBanner appName={t('app.name')} />
       <RecoveryBanner
         candidates={recovery.candidates}
         onRecover={recovery.recover}

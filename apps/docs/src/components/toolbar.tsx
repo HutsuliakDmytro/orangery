@@ -108,7 +108,7 @@ export function Toolbar() {
       role="toolbar"
       aria-label={t('toolbar.formatting')}
       aria-orientation="horizontal"
-      className="flex items-center gap-0.5 overflow-x-auto border-b border-border bg-surface px-2 py-1"
+      className="flex items-center overflow-x-auto border-b border-border bg-surface px-2 py-1"
     >
       <ToolbarButton id="edit.undo" icon={Undo2} />
       <ToolbarButton id="edit.redo" icon={Redo2} />
@@ -124,7 +124,7 @@ export function Toolbar() {
         onChange={(event) => {
           setZoom(Number.parseFloat(event.target.value))
         }}
-        className="h-7 rounded bg-transparent px-1 text-xs text-text outline-none"
+        className="h-7 shrink-0 rounded bg-transparent px-1 text-xs text-text outline-none"
       >
         {ZOOM_LEVELS.map((level) => (
           <option key={level} value={String(level)}>
@@ -144,7 +144,7 @@ export function Toolbar() {
         onChange={(event) => {
           applyStyle(event.target.value)
         }}
-        className="h-7 w-32 rounded bg-transparent px-1 text-xs text-text outline-none"
+        className="h-7 w-32 shrink-0 rounded bg-transparent px-1 text-xs text-text outline-none"
       >
         {styleOptions.map((option) => (
           <option key={option.id} value={option.id}>
@@ -160,7 +160,7 @@ export function Toolbar() {
         onClick={() => {
           requestPicker('font-family')
         }}
-        className="h-7 w-28 truncate rounded px-2 text-left text-xs text-text hover:bg-surface-2"
+        className="h-7 w-28 shrink-0 truncate rounded px-2 text-left text-xs text-text hover:bg-surface-2"
         title={t('toolbar.font')}
       >
         {current?.fontFamily === '' || current?.fontFamily === undefined
@@ -174,7 +174,7 @@ export function Toolbar() {
         onClick={() => {
           requestPicker('font-size')
         }}
-        className="h-7 w-10 rounded text-center text-xs text-text hover:bg-surface-2"
+        className="h-7 w-10 shrink-0 rounded text-center text-xs text-text hover:bg-surface-2"
         title={t('toolbar.fontSize')}
       >
         {String(current?.fontSize ?? DEFAULT_FONT_SIZE)}

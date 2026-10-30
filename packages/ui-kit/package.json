@@ -6,7 +6,9 @@
   "description": "The command registry and the chrome around it: theme tokens, dialogs, pickers, palette.",
   "exports": {
     ".": "./src/index.ts",
-    "./tokens.css": "./src/tokens.css"
+    "./tokens.css": "./src/tokens.css",
+    "./gallery": "./src/gallery/gallery.tsx",
+    "./gallery/fake-shell": "./src/gallery/fake-shell.ts"
   },
   "scripts": {
     "check": "pnpm lint && pnpm typecheck && pnpm test:unit",

@@ -188,7 +188,14 @@ async function one(file: string): Promise<Result> {
   } catch (error) {
     base.status = 'crash'
     base.error = {
-      message: error instanceof Error ? error.message : String(error),
+      // The cause too: the message is written for the person who opened the
+      // file, and what JSZip said about it is what a report wants.
+      message:
+        error instanceof Error
+          ? error.cause instanceof Error
+            ? `${error.message} (${error.cause.message})`
+            : error.message
+          : String(error),
       stack: error instanceof Error ? (error.stack ?? '') : '',
     }
   }

@@ -2,6 +2,11 @@
 @import '@orangery/fonts/fonts.css';
 @import '@orangery/ui-kit/tokens.css';
 
+/* The components in ui-kit are styled with utilities too, and Tailwind only
+   writes the ones it finds: a workspace package reached through
+   node_modules is not looked in unless it is named here. */
+@source '../../../../packages/ui-kit/src';
+
 /*
  * The grid is white in both themes unless somebody turns on a dark sheet
  * (CLAUDE.md): a spreadsheet is looked at for hours, and the page it prints to

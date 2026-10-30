@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { runCommand } from '@orangery/ui-kit'
+import { resetLaunchState, runCommand } from '@orangery/ui-kit'
 import { moveShape } from '@orangery/ooxml-presentation'
 import { App } from './app'
 import { useDeckStore } from '../store/deck-store'
@@ -27,6 +27,9 @@ const appData = new Map<string, string>()
 /** Paths the app asked the shell to open in a window of their own. */
 const windows: (string | null)[] = []
 
+/** What the shell has waiting for this window when it asks. */
+const atLaunch: string[] = []
+
 /** Handlers registered by the window, so a test can play the shell's part. */
 const listeners = new Map<string, (event: { payload: unknown }) => void>()
 
@@ -41,7 +44,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (command: string, args: Record<string, string>) => {
+  invoke: (command: string, args: Record<string, string> = {}) => {
     const key = `${args['directory'] ?? ''}/${args['name'] ?? ''}`
     if (command === 'write_autosave') {
       appData.set(key, args['contents'] ?? '')
@@ -50,6 +53,7 @@ vi.mock('@tauri-apps/api/core', () => ({
     if (command === 'read_autosave') return Promise.resolve(appData.get(key) ?? null)
     if (command === 'list_autosaves') return Promise.resolve([])
     if (command === 'open_window') windows.push(args['path'] ?? null)
+    if (command === 'claim_open_requests') return Promise.resolve(atLaunch.splice(0))
     return Promise.resolve(null)
   },
 }))
@@ -100,6 +104,10 @@ beforeEach(() => {
   // and written inside `@orangery/platform`, which asks the window directly, so
   // a mock of the package's own export would not reach it.
   ;(window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {}
+
+  // One window's worth of launch state per test, as a fresh page would have.
+  resetLaunchState()
+  atLaunch.length = 0
 
   appData.clear()
   listeners.clear()
@@ -228,12 +236,48 @@ describe('a file the window is handed', () => {
   })
 
   it('opens one the OS hands over at launch', async () => {
+    // A double-click in Finder with the app closed: the path is waiting in
+    // Rust before the page exists, and the page asks for it.
+    atLaunch.push('/decks/from-finder.pptx')
     render(<App />)
-    deliver('document:open-path', ['/decks/from-finder.pptx'])
 
     await waitFor(() => {
       expect(opened).toEqual(['/decks/from-finder.pptx'])
     })
+  })
+
+  it('does not show the welcome screen first', async () => {
+    atLaunch.push('/decks/from-finder.pptx')
+    render(<App />)
+
+    // Neither the welcome screen nor its buttons, at any point before the
+    // deck: that flash was half of the bug.
+    expect(screen.queryByText(/new presentation/iu)).toBeNull()
+    await waitFor(() => {
+      expect(useDeckStore.getState().open).not.toBeNull()
+    })
+  })
+
+  it('opens one the OS hands over while it is running', async () => {
+    render(<App />)
+    await waitFor(() => {
+      expect(listeners.has('launch:open')).toBe(true)
+    })
+
+    deliver('launch:open', '/decks/second-double-click.pptx')
+
+    await waitFor(() => {
+      expect(opened).toEqual(['/decks/second-double-click.pptx'])
+    })
+  })
+
+  it('says so in the window when what it is handed is not a deck', async () => {
+    atLaunch.push('/letters/to-somebody.docx')
+    render(<App />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('could not open “to-somebody.docx”')
+    expect(opened).toEqual([])
   })
 
   it('gives a window of its own rather than displacing unsaved work', async () => {

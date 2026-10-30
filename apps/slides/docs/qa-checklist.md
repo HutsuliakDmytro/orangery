@@ -269,7 +269,33 @@ These are the ones that matter most. Take them seriously.
 
 ## Getting a deck in
 
-- [ ] Double-clicking a `.pptx` in Finder opens it in the app.
+- [ ] **App closed.** Quit it (`Cmd+Q`, not just the window). Double-click a
+      `.pptx` in Finder. The app starts **on the file** — at no point does the
+      welcome screen appear first, not even for a frame.
+- [ ] **App open, on the welcome screen.** Double-click a `.pptx`. It opens in
+      that window; no second window appears.
+- [ ] **App open, a file in it with unsaved changes.** Double-click another
+      `.pptx`. It opens in a **new** window; the first is untouched, edits
+      and all, and nothing asks anything.
+- [ ] **App open, a file in it, saved.** Double-click another. New window too.
+- [ ] Select three `.pptx` files in Finder and press `Cmd+O`. Three windows,
+      one file each.
+- [ ] Right-click a `.docx` → Open With → Orangery Slides. The window says Orangery Slides could
+      not open it and why, with Open Another… — not a bare welcome screen. (It
+      should not have been offered: Orangery Slides does not claim `.docx`. If it
+      was, that is a bug in `tauri.conf.json`.)
+- [ ] A file the app may not read. `chmod 000` a copy of a `.pptx` — but do
+      **not** double-click it: macOS refuses that itself (error -5000) before
+      the app is ever asked, which is the system's answer and not ours. Start
+      the app with it instead:
+      `"/Applications/Orangery Slides.app/Contents/MacOS/orangery-slides" locked.pptx`.
+      The window says there is no permission to read it. Put the permissions
+      back after.
+- [ ] Double-click a `.pptx` that is not one — a text file renamed. The window
+      says why it would not open.
+- [ ] **Windows / Linux:** the same five, plus — with the app running, open a
+      file from Explorer / the file manager. No second copy of the app appears
+      in the taskbar; the file arrives in the first.
 - [ ] Double-clicking a `.odp` does too, and the banner says it was converted.
 - [ ] Dropping a file onto a clean window opens it there.
 - [ ] Dropping a file onto a window with unsaved changes opens it in a **new**

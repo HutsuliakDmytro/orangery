@@ -11,6 +11,7 @@
 pub mod diagnostics;
 pub mod document;
 mod error;
+pub mod launch;
 pub mod menu;
 
 pub use error::AppError;

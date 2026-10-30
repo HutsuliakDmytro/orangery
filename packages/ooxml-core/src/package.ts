@@ -104,11 +104,11 @@ export async function readPackage(
   } catch (error) {
     // JSZip says things like "Bug : uncompressed data size mismatch", which is
     // an accurate description of a file somebody fuzzed and no use at all to
-    // the person who double-clicked it.
+    // the person who double-clicked it. So it is kept as the cause, for a
+    // report, and the message is the sentence that goes on the screen.
     throw new OoxmlFormatError(
-      `this file is not a readable zip, so it is not an Office package: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      'This file is not a readable zip, so it is not an Office package. It may be damaged, or not the kind of file its name says.',
+      { cause: error },
     )
   }
 
@@ -126,11 +126,9 @@ export async function readPackage(
     } catch (error) {
       // A zip whose directory reads and whose entries do not: the archive is
       // damaged, and which part it stopped on is the useful half of that.
-      throw new OoxmlFormatError(
-        `this package is damaged: ${name} could not be read out of it (${
-          error instanceof Error ? error.message : String(error)
-        })`,
-      )
+      throw new OoxmlFormatError(`This file is damaged: ${name} could not be read out of it.`, {
+        cause: error,
+      })
     }
 
     const part: OoxmlPart = { path: name, bytes, date: entry.date }

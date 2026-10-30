@@ -5,12 +5,14 @@
 //! from here. What is left is this app's own wiring: which plugins it loads,
 //! which files it answers to, and what it does when a window is asked to close.
 
-use orangery_tauri_shared::{diagnostics, document, menu};
+use orangery_tauri_shared::{diagnostics, document, launch, menu};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    // First, because the single-instance plugin has to be: a second process
+    // started to open a file must hand it over before anything else starts.
+    launch::install(tauri::Builder::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
@@ -25,13 +27,17 @@ pub fn run() {
             document::clear_autosave,
             document::list_autosaves,
             document::confirm_close,
-            document::open_window,
+            launch::open_window,
+            launch::claim_open_requests,
+            launch::report_vacancy,
             diagnostics::write_diagnostic,
             diagnostics::read_diagnostics,
             diagnostics::clear_diagnostics,
         ])
         .setup(|app| {
-            document::emit_launch_paths(app.handle());
+            // Windows and Linux put the file in `argv`. macOS does not — its
+            // double-click arrives as `RunEvent::Opened`, below.
+            launch::start(app.handle());
 
             // Where each window's menu items are kept, so a command becoming
             // available is `set_enabled` on one item rather than a new menu bar.
@@ -57,6 +63,9 @@ pub fn run() {
             // runs them, so the logic lives in exactly one place.
             let _ = tauri::Emitter::emit(app, "menu:command", event.id().0.as_str());
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Orangery Docs");
+        .build(tauri::generate_context!())
+        .expect("error while building Orangery Docs")
+        // The run loop is where macOS delivers a Finder double-click, and
+        // without a callback here it is dropped on the floor.
+        .run(|app, event| launch::on_run_event(app, &event));
 }

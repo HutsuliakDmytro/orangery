@@ -23,6 +23,8 @@ import { currentSlide, useDeckStore } from '../store/deck-store'
 import { useViewStore } from '../store/view-store'
 import { Guides } from './guides'
 import { WelcomeScreen } from './welcome-screen'
+import { LaunchScreen, useLaunchScreenShown } from '@orangery/ui-kit'
+import { openDeck } from '../document/file-operations'
 
 /** The slide being edited, centred with room around it. */
 export function Canvas() {
@@ -47,6 +49,20 @@ export function Canvas() {
   const setCropping = useDeckStore((state) => state.setCropping)
   const openGroup = useDeckStore((state) => state.openGroup)
   const setOpenGroup = useDeckStore((state) => state.setOpenGroup)
+  const launching = useLaunchScreenShown()
+
+  // Before the welcome screen and before the deck: while the window does not
+  // yet know whether it was opened on a file, it shows neither.
+  if (launching && open === null) {
+    return (
+      <LaunchScreen
+        appName="Orangery Slides"
+        onOpenAnother={() => {
+          void openDeck()
+        }}
+      />
+    )
+  }
 
   if (error !== null) {
     return (

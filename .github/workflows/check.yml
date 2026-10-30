@@ -67,7 +67,12 @@ jobs:
         if: failure()
         with:
           name: playwright-report-${{ matrix.app }}-${{ matrix.os }}
-          path: apps/${{ matrix.app }}/playwright-report
+          # `test-results` as well: the CI reporter is `github`, which writes
+          # no HTML report, and a failed screenshot comparison leaves its
+          # expected, actual and diff images there and nowhere else.
+          path: |
+            apps/${{ matrix.app }}/playwright-report
+            apps/${{ matrix.app }}/test-results
           if-no-files-found: ignore
 
   render-diff:
